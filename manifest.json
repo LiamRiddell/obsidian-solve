@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "solve",
+	"name": "Solve",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "This is a sample plugin for Obsidian. This plugin demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Solve Math as You Type: Your human-curated assistant, no ChatGPT or AI, just straightforward calculations. More features coming soon!",
+	"author": "Liam Riddell",
+	"authorUrl": "https://github.com/LiamRiddell",
+	"fundingUrl": "https://github.com/sponsors/LiamRiddell",
 	"isDesktopOnly": false
 }
