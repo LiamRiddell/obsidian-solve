@@ -17,6 +17,7 @@
 		"@typescript-eslint/parser": "5.29.0",
 		"builtin-modules": "3.3.0",
 		"esbuild": "0.17.3",
+		"eslint": "8.45.0",
 		"obsidian": "latest",
 		"prettier": "3.0.0",
 		"tslib": "2.4.0",
