@@ -20,7 +20,7 @@
 		"eslint": "8.45.0",
 		"obsidian": "latest",
 		"prettier": "3.0.0",
-		"tslib": "2.4.0",
+		"tslib": "2.6.1",
 		"typescript": "5.1.6"
 	}
 }
