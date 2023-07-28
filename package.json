@@ -12,9 +12,9 @@
 	"author": "Liam Riddell",
 	"license": "MIT",
 	"devDependencies": {
-		"@types/node": "^16.11.6",
-		"@typescript-eslint/eslint-plugin": "^6.2.0",
-		"@typescript-eslint/parser": "^6.2.0",
+		"@types/node": "16.18.39",
+		"@typescript-eslint/eslint-plugin": "6.2.0",
+		"@typescript-eslint/parser": "6.2.0",
 		"builtin-modules": "3.3.0",
 		"esbuild": "0.18.17",
 		"eslint": "8.45.0",
