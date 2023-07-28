@@ -1,6 +1,10 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { solveViewPlugin } from '@/view/SolveViewPlugin';
 
-// Remember to rename these classes and interfaces!
+
+// https://marcus.se.net/obsidian-plugin-docs/editor/extensions/decorations
+
+
 
 interface SolvePluginSettings {
 	mySetting: string;
@@ -10,19 +14,22 @@ const DEFAULT_SETTINGS: SolvePluginSettings = {
 	mySetting: 'default'
 }
 
+
 export default class MyPlugin extends Plugin {
 	settings: SolvePluginSettings;
 
 	async onload() {
 		await this.loadSettings();
-
 		console.log("Solve Loaded")
+
+		this.registerEditorExtension(solveViewPlugin);
 
 		// This creates an icon in the left ribbon.
 		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
 			new Notice('This is a notice!');
 		});
+
 		// Perform additional things with the ribbon
 		ribbonIconEl.addClass('my-plugin-ribbon-class');
 
