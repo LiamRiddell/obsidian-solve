@@ -36,64 +36,73 @@ export class SolveViewPlugin implements PluginValue {
 
 		const markdownDocumentSyntaxTree = syntaxTree(view.state);
 
-		if (!markdownDocumentSyntaxTree.length) {
+		if (markdownDocumentSyntaxTree.length === 0) {
 			return builder.finish();
 		}
+
+		// const lastNode = markdownDocumentSyntaxTree.topNode.lastChild;
 
 		const visibleRanges = view.visibleRanges;
 
 		for (const { from, to } of visibleRanges) {
-			let nodeIndex = 0;
-			let documentSize = 0;
-			let previousNode: SyntaxNodeRef | undefined = undefined;
+			// Create Solve Ignore Mask
+			const solveIgnoreRangesMask = new Array<
+				[from: number, to: number]
+			>();
 
-			const lastNode = markdownDocumentSyntaxTree.topNode.lastChild;
+			let previousNode: SyntaxNodeRef | undefined = undefined;
 
 			markdownDocumentSyntaxTree.iterate({
 				from,
 				to,
 				enter: (node: SyntaxNodeRef) => {
-					// Capture the size of the full view syntaxTree and return.
-					if (node.type.id === SyntaxNodeType.Document) {
-						console.debug("Document size set to", node.to);
-						documentSize = node.to;
-						return;
-					}
+					if (node.type.id === SyntaxNodeType.Document) return;
 
-					// Check for text region between the first node and start of document.
-					if (nodeIndex === 0 && node.from > 0) {
-						this.processTextRegion(view, 0, node.from - 1);
-					}
-					// Check for text region between the last node and end of document
-					if (
-						// @ts-expect-error
-						lastNode?.index === node.node?.index &&
-						node.to < documentSize
-					) {
-						this.processTextRegion(view, node.to + 1, documentSize);
-					}
-					// Check for text regions between nodes
-					else if (previousNode !== undefined) {
-						const isChildNode =
+					if (previousNode !== undefined) {
+						if (
 							node.from >= previousNode.from &&
-							node.to <= previousNode.to;
+							node.to <= previousNode.to
+						) {
+							console.log(
+								"Child",
+								node.node?.index,
+								node.type.name,
+								node.type.id,
+								node.from,
+								node.to
+							);
+						} else {
+							console.log(
+								"Parent",
+								node.node?.index,
+								node.type.name,
+								node.type.id,
+								node.from,
+								node.to
+							);
 
-						if (isChildNode) return;
+							solveIgnoreRangesMask.push([node.from, node.to]);
 
-						const textFrom = previousNode.to + 1;
-						const textTo = node.from - 1;
-
-						if (textFrom < node.from && textTo < node.from) {
-							this.processTextRegion(view, textFrom, textTo);
+							previousNode = { ...node };
 						}
-					}
+					} else {
+						console.log(
+							"Parent",
+							node.node?.index,
+							node.type.name,
+							node.type.id,
+							node.from,
+							node.to
+						);
 
-					nodeIndex += 1;
-					previousNode = { ...node };
+						solveIgnoreRangesMask.push([node.from, node.to]);
+
+						previousNode = { ...node };
+					}
 				},
 			});
 
-			// console.log(markdownDocumentSyntaxTree, nodeIndex);
+			console.log(solveIgnoreRangesMask);
 
 			// We need to essentially cut out all of the unwanted regions
 
@@ -131,12 +140,6 @@ export class SolveViewPlugin implements PluginValue {
 		}
 
 		return builder.finish();
-	}
-
-	processTextRegion(view: EditorView, from: number, to: number) {
-		// TODO: Change this to line parser
-		const content = view?.state.sliceDoc(from, to);
-		console.debug(`Detected Text: ${from} -> ${to} = ${content}`);
 	}
 
 	// buildDecorations(view: EditorView): DecorationSet {
