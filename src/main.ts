@@ -1,4 +1,5 @@
-import { solveViewPlugin } from "@/plugins/SolveViewPlugin";
+import { SolveViewPlugin } from "@/plugins/SolveViewPlugin";
+import { PluginSpec, ViewPlugin } from "@codemirror/view";
 import { Plugin } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
@@ -13,7 +14,7 @@ export default class MyPlugin extends Plugin {
 	statusBarItemEl: HTMLElement;
 
 	async onload() {
-		console.group("[Solve] onload()");
+		console.debug("[Solve] onload()");
 
 		await this.loadSettings();
 		await this.registerSettings();
@@ -22,6 +23,14 @@ export default class MyPlugin extends Plugin {
 		this.app.workspace.trigger("parse-style-settings");
 		console.debug("[Solve] Triggered Event: parse-style-setting");
 
+		const pluginSpec: PluginSpec<SolveViewPlugin> = {
+			decorations: (value: SolveViewPlugin) => value.decorations,
+		};
+
+		const solveViewPlugin = ViewPlugin.fromClass(
+			SolveViewPlugin,
+			pluginSpec
+		);
 		this.registerEditorExtension(solveViewPlugin);
 		console.debug(`[Solve] Registered Editor Extension: SolveViewPlugin`);
 
@@ -49,8 +58,6 @@ export default class MyPlugin extends Plugin {
 		// this.registerInterval(
 		// 	window.setInterval(() => console.log("setInterval"), 5 * 60 * 1000)
 		// );
-
-		console.groupEnd();
 	}
 
 	onunload() {}

@@ -7,13 +7,11 @@ import {
 	Decoration,
 	DecorationSet,
 	EditorView,
-	PluginSpec,
 	PluginValue,
-	ViewPlugin,
 	ViewUpdate,
 } from "@codemirror/view";
 
-class SolveViewPlugin implements PluginValue {
+export class SolveViewPlugin implements PluginValue {
 	decorations: DecorationSet;
 
 	constructor(view: EditorView) {
@@ -34,17 +32,41 @@ class SolveViewPlugin implements PluginValue {
 
 	buildDecorations(view: EditorView): DecorationSet {
 		const builder = new RangeSetBuilder<Decoration>();
+		const visibleRanges = view.visibleRanges;
+		const solvedLines = new Set();
 
-		for (const { from, to } of view.visibleRanges) {
-			console.debug(from, to);
+		for (const { from, to } of visibleRanges) {
+			let nextLineTextOffset = 0;
 
-			builder.add(
-				from,
-				from,
-				Decoration.replace({
-					widget: new SolveResultWidget("2001"),
-				})
-			);
+			const range = view.state.doc.iterRange(from, to);
+
+			for (const lineTextRaw of range) {
+				const linePositionOffset = from + nextLineTextOffset;
+
+				const line = view.state.doc.lineAt(linePositionOffset);
+
+				const lineText = line.text.trim();
+
+				if (
+					lineText &&
+					lineText.length &&
+					solvedLines.has(line.number) === false
+				) {
+					// TODO: Parse the line text with ANTLR4
+
+					builder.add(
+						line.to,
+						line.to,
+						Decoration.widget({
+							widget: new SolveResultWidget("2001"),
+						})
+					);
+
+					solvedLines.add(line.number);
+				}
+
+				nextLineTextOffset += lineTextRaw.length;
+			}
 		}
 
 		return builder.finish();
@@ -77,12 +99,3 @@ class SolveViewPlugin implements PluginValue {
 	// 	return builder.finish();
 	// }
 }
-
-const pluginSpec: PluginSpec<SolveViewPlugin> = {
-	decorations: (value: SolveViewPlugin) => value.decorations,
-};
-
-export const solveViewPlugin = ViewPlugin.fromClass(
-	SolveViewPlugin,
-	pluginSpec
-);

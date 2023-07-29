@@ -34,7 +34,7 @@ settings:
 
 .os-result {
 	display: inline-flex;
-	margin: 0 4px 0 0;
+	margin: 0 0 0 8px;
 	padding: 0 4px;
 	line-height: var(--line-height-normal);
 
@@ -51,5 +51,6 @@ settings:
 		sans-serif
 	);
 
-	border-radius: 4px;
+	/* Border Style Settings */
+	border-radius: var(--solve-result-border-radius, 4px);
 }
