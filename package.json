@@ -12,6 +12,7 @@
 	"author": "Liam Riddell",
 	"license": "MIT",
 	"devDependencies": {
+		"@lezer/common": "^1.0.3",
 		"@types/node": "16.18.39",
 		"@typescript-eslint/eslint-plugin": "6.2.0",
 		"@typescript-eslint/parser": "6.2.0",

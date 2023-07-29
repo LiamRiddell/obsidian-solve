@@ -1,7 +1,6 @@
-//// @ts-expect-error
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-// import { syntaxTree } from "@codemirror/language";
-import { SolveResultWidget } from "@/widgets/SolveResultWidget";
+// @ts-expect-error
+import { SyntaxNodeType } from "@/constants/SyntaxNodeType";
+import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -10,6 +9,7 @@ import {
 	PluginValue,
 	ViewUpdate,
 } from "@codemirror/view";
+import { SyntaxNodeRef } from "@lezer/common";
 
 export class SolveViewPlugin implements PluginValue {
 	decorations: DecorationSet;
@@ -31,45 +31,112 @@ export class SolveViewPlugin implements PluginValue {
 	}
 
 	buildDecorations(view: EditorView): DecorationSet {
+		console.log(`--------------- BUILD DECORATIONS ---------------`);
 		const builder = new RangeSetBuilder<Decoration>();
+
+		const markdownDocumentSyntaxTree = syntaxTree(view.state);
+
+		if (!markdownDocumentSyntaxTree.length) {
+			return builder.finish();
+		}
+
 		const visibleRanges = view.visibleRanges;
-		const solvedLines = new Set();
 
 		for (const { from, to } of visibleRanges) {
-			let nextLineTextOffset = 0;
+			let nodeIndex = 0;
+			let documentSize = 0;
+			let previousNode: SyntaxNodeRef | undefined = undefined;
 
-			const range = view.state.doc.iterRange(from, to);
+			const lastNode = markdownDocumentSyntaxTree.topNode.lastChild;
 
-			for (const lineTextRaw of range) {
-				const linePositionOffset = from + nextLineTextOffset;
+			markdownDocumentSyntaxTree.iterate({
+				from,
+				to,
+				enter: (node: SyntaxNodeRef) => {
+					// Capture the size of the full view syntaxTree and return.
+					if (node.type.id === SyntaxNodeType.Document) {
+						console.debug("Document size set to", node.to);
+						documentSize = node.to;
+						return;
+					}
 
-				const line = view.state.doc.lineAt(linePositionOffset);
+					// Check for text region between the first node and start of document.
+					if (nodeIndex === 0 && node.from > 0) {
+						this.processTextRegion(view, 0, node.from - 1);
+					}
+					// Check for text region between the last node and end of document
+					if (
+						// @ts-expect-error
+						lastNode?.index === node.node?.index &&
+						node.to < documentSize
+					) {
+						this.processTextRegion(view, node.to + 1, documentSize);
+					}
+					// Check for text regions between nodes
+					else if (previousNode !== undefined) {
+						const isChildNode =
+							node.from >= previousNode.from &&
+							node.to <= previousNode.to;
 
-				const lineText = line.text.trim();
+						if (isChildNode) return;
 
-				if (
-					lineText &&
-					lineText.length &&
-					solvedLines.has(line.number) === false
-				) {
-					// TODO: Parse the line text with ANTLR4
+						const textFrom = previousNode.to + 1;
+						const textTo = node.from - 1;
 
-					builder.add(
-						line.to,
-						line.to,
-						Decoration.widget({
-							widget: new SolveResultWidget("2001"),
-						})
-					);
+						if (textFrom < node.from && textTo < node.from) {
+							this.processTextRegion(view, textFrom, textTo);
+						}
+					}
 
-					solvedLines.add(line.number);
-				}
+					nodeIndex += 1;
+					previousNode = { ...node };
+				},
+			});
 
-				nextLineTextOffset += lineTextRaw.length;
-			}
+			// console.log(markdownDocumentSyntaxTree, nodeIndex);
+
+			// We need to essentially cut out all of the unwanted regions
+
+			// let nextLineTextOffset = 0;
+
+			// const range = view.state.doc.iterRange(from, to);
+
+			// for (const lineTextRaw of range) {
+			// 	const linePositionOffset = from + nextLineTextOffset;
+
+			// 	const line = view.state.doc.lineAt(linePositionOffset);
+
+			// 	const lineText = line.text.trim();
+
+			// 	if (
+			// 		lineText &&
+			// 		lineText.length &&
+			// 		solvedLines.has(line.number) === false
+			// 	) {
+			// 		// TODO: Parse the line text with ANTLR4
+
+			// 		builder.add(
+			// 			line.to,
+			// 			line.to,
+			// 			Decoration.widget({
+			// 				widget: new SolveResultWidget("2001"),
+			// 			})
+			// 		);
+
+			// 		solvedLines.add(line.number);
+			// 	}
+
+			// 	nextLineTextOffset += lineTextRaw.length;
+			// }
 		}
 
 		return builder.finish();
+	}
+
+	processTextRegion(view: EditorView, from: number, to: number) {
+		// TODO: Change this to line parser
+		const content = view?.state.sliceDoc(from, to);
+		console.debug(`Detected Text: ${from} -> ${to} = ${content}`);
 	}
 
 	// buildDecorations(view: EditorView): DecorationSet {
