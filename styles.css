@@ -3,12 +3,6 @@ name: Solve
 id: obsdian-solve
 settings:
     - 
-        id: solve-result-styling
-        title: Result Styling
-        description: "You can adjust solve results to help fit within your theme."
-        type: info-text
-        markdown: true
-    - 
         id: solve-result-font
         title: Font
         description: Font used for the solve results.
@@ -30,6 +24,12 @@ settings:
         format: hex
         default-light: '#22CE9930'
         default-dark: '#22CE9930'
+    - 
+        id: solve-result-border-radius
+        title: Border Radius
+        type: variable-number
+        default: 8
+        format: px
 */
 
 .os-result {
