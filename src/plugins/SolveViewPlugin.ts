@@ -45,7 +45,9 @@ export class SolveViewPlugin implements PluginValue {
 		const seenLines = new Set();
 		const ignoreNodeTypes = [
 			SyntaxNodeType.Document,
-			SyntaxNodeType.List,
+			SyntaxNodeType.List1,
+			SyntaxNodeType.List2,
+			SyntaxNodeType.List3,
 			SyntaxNodeType.BlockQuote,
 		];
 
@@ -79,23 +81,13 @@ export class SolveViewPlugin implements PluginValue {
 					console.debug(node.type);
 
 					if (node.to <= previousTo || isNextTo) {
-						// console.log(
-						// 	"Child: ",
-						// 	isNextTo,
-						// 	node.from,
-						// 	", ",
-						// 	node.to
-						// );
-
 						if (isNextTo) {
-							previousTo = node.to; // Let it continue to the new node.to
+							previousTo = node.to;
 						}
 
 						wasLastChild = true;
 					} else {
 						solveIgnoreRangesMask.push([previousFrom, previousTo]);
-
-						console.log("Parent: ", node.from, ", ", node.to);
 
 						previousFrom = node.from;
 						previousTo = node.to;
