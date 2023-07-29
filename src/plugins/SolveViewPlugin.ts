@@ -1,5 +1,6 @@
 // @ts-expect-error
 import { SyntaxNodeType } from "@/constants/SyntaxNodeType";
+import { SolveResultWidget } from "@/widgets/SolveResultWidget";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -40,9 +41,8 @@ export class SolveViewPlugin implements PluginValue {
 			return builder.finish();
 		}
 
-		const lastNode = markdownDocumentSyntaxTree.topNode.lastChild;
-
 		const visibleRanges = view.visibleRanges;
+		const seenLines = new Set();
 
 		let firstNode = true;
 		let previousTo = 0;
@@ -54,6 +54,7 @@ export class SolveViewPlugin implements PluginValue {
 				[from: number, to: number]
 			>();
 
+			// Create Node Mask
 			markdownDocumentSyntaxTree.iterate({
 				from,
 				to,
@@ -66,18 +67,16 @@ export class SolveViewPlugin implements PluginValue {
 						previousFrom = node.from;
 					}
 
-					//console.log("Prev: ", previousTo);
-
-					let isNextTo = node.from - previousTo == 1;
+					const isNextTo = node.from - previousTo <= 1;
 
 					if (node.to <= previousTo || isNextTo) {
-						console.log(
-							"Child: ",
-							isNextTo,
-							node.from,
-							", ",
-							node.to
-						);
+						// console.log(
+						// 	"Child: ",
+						// 	isNextTo,
+						// 	node.from,
+						// 	", ",
+						// 	node.to
+						// );
 
 						if (isNextTo) {
 							previousTo = node.to; // Let it continue to the new node.to
@@ -100,71 +99,63 @@ export class SolveViewPlugin implements PluginValue {
 			if (wasLastChild)
 				solveIgnoreRangesMask.push([previousFrom, previousTo]);
 
-			console.log(wasLastChild);
 			console.log(solveIgnoreRangesMask);
 
-			// We need to essentially cut out all of the unwanted regions
+			// Parse the lines
+			let nextLineTextOffset = 0;
+			const range = view.state.doc.iterRange(from, to);
 
-			// let nextLineTextOffset = 0;
+			for (const lineTextRaw of range) {
+				const linePositionOffset = from + nextLineTextOffset;
 
-			// const range = view.state.doc.iterRange(from, to);
+				const line = view.state.doc.lineAt(linePositionOffset);
 
-			// for (const lineTextRaw of range) {
-			// 	const linePositionOffset = from + nextLineTextOffset;
+				const lineText = line.text.trim();
 
-			// 	const line = view.state.doc.lineAt(linePositionOffset);
+				if (
+					lineText &&
+					lineText.length &&
+					seenLines.has(line.number) === false
+				) {
+					// TODO: Parse the line text with ANTLR4
+					const isInMask = this.isInMask(
+						solveIgnoreRangesMask,
+						line.from,
+						line.to
+					);
 
-			// 	const lineText = line.text.trim();
+					if (isInMask === false) {
+						console.log(line, isInMask);
+						builder.add(
+							line.to,
+							line.to,
+							Decoration.widget({
+								widget: new SolveResultWidget("2001"),
+							})
+						);
+					}
 
-			// 	if (
-			// 		lineText &&
-			// 		lineText.length &&
-			// 		solvedLines.has(line.number) === false
-			// 	) {
-			// 		// TODO: Parse the line text with ANTLR4
+					seenLines.add(line.number);
+				}
 
-			// 		builder.add(
-			// 			line.to,
-			// 			line.to,
-			// 			Decoration.widget({
-			// 				widget: new SolveResultWidget("2001"),
-			// 			})
-			// 		);
-
-			// 		solvedLines.add(line.number);
-			// 	}
-
-			// 	nextLineTextOffset += lineTextRaw.length;
-			// }
+				nextLineTextOffset += lineTextRaw.length;
+			}
 		}
 
 		return builder.finish();
 	}
 
-	// buildDecorations(view: EditorView): DecorationSet {
-	// 	const builder = new RangeSetBuilder<Decoration>();
+	isInMask(
+		mask: [from: number, to: number][],
+		from: number,
+		to: number
+	): boolean {
+		for (let i = 0; i < mask.length; i++) {
+			const [maskFrom, maskTo] = mask[i];
 
-	// 	for (const { from, to } of view.visibleRanges) {
-	// 		syntaxTree(view.state).iterate({
-	// 			from,
-	// 			to,
-	// 			enter(node: any) {
-	// 				if (node.type.name.startsWith("list")) {
-	// 					// Position of the '-' or the '*'.
-	// 					const listCharFrom = node.from - 2;
+			if (from >= maskFrom && to <= maskTo) return true;
+		}
 
-	// 					builder.add(
-	// 						listCharFrom,
-	// 						listCharFrom + 1,
-	// 						Decoration.widget({
-	// 							widget: new EmojiWidget(),
-	// 						})
-	// 					);
-	// 				}
-	// 			},
-	// 		});
-	// 	}
-
-	// 	return builder.finish();
-	// }
+		return false;
+	}
 }
