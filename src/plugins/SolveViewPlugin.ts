@@ -43,6 +43,11 @@ export class SolveViewPlugin implements PluginValue {
 
 		const visibleRanges = view.visibleRanges;
 		const seenLines = new Set();
+		const ignoreNodeTypes = [
+			SyntaxNodeType.Document,
+			SyntaxNodeType.List,
+			SyntaxNodeType.BlockQuote,
+		];
 
 		let firstNode = true;
 		let previousTo = 0;
@@ -59,7 +64,9 @@ export class SolveViewPlugin implements PluginValue {
 				from,
 				to,
 				enter: (node: SyntaxNodeRef) => {
-					if (node.type.id === SyntaxNodeType.Document) return;
+					if (ignoreNodeTypes.contains(node.type.id)) {
+						return;
+					}
 
 					if (firstNode) {
 						firstNode = false;
@@ -68,6 +75,8 @@ export class SolveViewPlugin implements PluginValue {
 					}
 
 					const isNextTo = node.from - previousTo <= 1;
+
+					console.debug(node.type);
 
 					if (node.to <= previousTo || isNextTo) {
 						// console.log(
