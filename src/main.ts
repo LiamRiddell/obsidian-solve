@@ -27,6 +27,8 @@ export default class MyPlugin extends Plugin {
 		await this.loadSettings();
 		console.log("Solve Loaded");
 
+		this.app.workspace.trigger("parse-style-settings");
+
 		this.registerEditorExtension(solveViewPlugin);
 
 		// This creates an icon in the left ribbon.

@@ -1,0 +1,55 @@
+/* @settings
+name: Solve
+id: obsdian-solve
+settings:
+    - 
+        id: solve-result-styling
+        title: Result Styling
+        description: "You can adjust solve results to help fit within your theme."
+        type: info-text
+        markdown: true
+    - 
+        id: solve-result-font
+        title: Font
+        description: Font used for the solve results.
+        type: variable-text
+        default: Helvetica, Arial, sans-serif  
+    - 
+        id: solve-result-text
+        title: Text Color
+        type: variable-themed-color
+        opacity: false
+        format: hex
+        default-light: '#22CE99'
+        default-dark: '#22CE99'
+    -
+        id: solve-result-background
+        title: Background Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#22CE9930'
+        default-dark: '#22CE9930'
+*/
+
+.os-result {
+	display: inline-flex;
+	margin: 0 4px 0 0;
+	padding: 0 4px;
+	line-height: var(--line-height-normal);
+
+	/* Color Style Settings */
+	color: var(--solve-result-text, #22ce99);
+	background-color: var(--solve-result-background, #22ce9930);
+
+	/* Font Style Settings */
+	font-family: var(
+		--solve-result-font,
+		-apple-system,
+		Helvetica,
+		Arial,
+		sans-serif
+	);
+
+	border-radius: 4px;
+}
