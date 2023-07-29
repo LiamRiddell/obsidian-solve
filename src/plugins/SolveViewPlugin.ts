@@ -40,7 +40,7 @@ export class SolveViewPlugin implements PluginValue {
 			return builder.finish();
 		}
 
-		// const lastNode = markdownDocumentSyntaxTree.topNode.lastChild;
+		const lastNode = markdownDocumentSyntaxTree.topNode.lastChild;
 
 		const visibleRanges = view.visibleRanges;
 
@@ -51,6 +51,8 @@ export class SolveViewPlugin implements PluginValue {
 			>();
 
 			let previousNode: SyntaxNodeRef | undefined = undefined;
+			let previousMaskFrom: number | undefined = undefined;
+			let previousMaskTo: number | undefined = undefined;
 
 			markdownDocumentSyntaxTree.iterate({
 				from,
@@ -72,16 +74,47 @@ export class SolveViewPlugin implements PluginValue {
 								node.to
 							);
 						} else {
+							const isNextTo = node.from - previousNode.to <= 1;
+
 							console.log(
 								"Parent",
 								node.node?.index,
 								node.type.name,
 								node.type.id,
 								node.from,
-								node.to
+								node.to,
+								isNextTo
 							);
 
-							solveIgnoreRangesMask.push([node.from, node.to]);
+							if (isNextTo) {
+								previousMaskTo = node.to;
+							}
+							// Check for text region between the last node and end of document
+							if (
+								// @ts-expect-error
+								lastNode?.index === node.node?.index &&
+								previousMaskFrom !== undefined &&
+								previousMaskTo !== undefined
+							) {
+								solveIgnoreRangesMask.push([
+									previousMaskFrom,
+									previousMaskTo,
+								]);
+							} else if (
+								!isNextTo &&
+								previousMaskFrom !== undefined &&
+								previousMaskTo !== undefined
+							) {
+								// No longer next to each other so save the longest mask
+								solveIgnoreRangesMask.push([
+									previousMaskFrom,
+									previousMaskTo,
+								]);
+
+								// Reset the mask this this node
+								previousMaskFrom = node.from;
+								previousMaskTo = node.to;
+							}
 
 							previousNode = { ...node };
 						}
@@ -95,7 +128,14 @@ export class SolveViewPlugin implements PluginValue {
 							node.to
 						);
 
-						solveIgnoreRangesMask.push([node.from, node.to]);
+						if (
+							previousMaskFrom === undefined &&
+							previousMaskTo === undefined
+						) {
+							previousMaskFrom = node.from;
+							previousMaskTo = node.to;
+							console.log(previousMaskFrom, previousMaskTo);
+						}
 
 						previousNode = { ...node };
 					}
