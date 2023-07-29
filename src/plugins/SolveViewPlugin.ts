@@ -44,15 +44,15 @@ export class SolveViewPlugin implements PluginValue {
 
 		const visibleRanges = view.visibleRanges;
 
+		let firstNode = true;
+		let previousTo = 0;
+		let previousFrom = 0;
+		let wasLastChild = false;
+
 		for (const { from, to } of visibleRanges) {
-			// Create Solve Ignore Mask
 			const solveIgnoreRangesMask = new Array<
 				[from: number, to: number]
 			>();
-
-			let previousNode: SyntaxNodeRef | undefined = undefined;
-			let previousMaskFrom: number | undefined = undefined;
-			let previousMaskTo: number | undefined = undefined;
 
 			markdownDocumentSyntaxTree.iterate({
 				from,
@@ -60,88 +60,47 @@ export class SolveViewPlugin implements PluginValue {
 				enter: (node: SyntaxNodeRef) => {
 					if (node.type.id === SyntaxNodeType.Document) return;
 
-					if (previousNode !== undefined) {
-						if (
-							node.from >= previousNode.from &&
-							node.to <= previousNode.to
-						) {
-							console.log(
-								"Child",
-								node.node?.index,
-								node.type.name,
-								node.type.id,
-								node.from,
-								node.to
-							);
-						} else {
-							const isNextTo = node.from - previousNode.to <= 1;
+					if (firstNode) {
+						firstNode = false;
+						previousTo = node.to;
+						previousFrom = node.from;
+					}
 
-							console.log(
-								"Parent",
-								node.node?.index,
-								node.type.name,
-								node.type.id,
-								node.from,
-								node.to,
-								isNextTo
-							);
+					//console.log("Prev: ", previousTo);
 
-							if (isNextTo) {
-								previousMaskTo = node.to;
-							}
-							// Check for text region between the last node and end of document
-							if (
-								// @ts-expect-error
-								lastNode?.index === node.node?.index &&
-								previousMaskFrom !== undefined &&
-								previousMaskTo !== undefined
-							) {
-								solveIgnoreRangesMask.push([
-									previousMaskFrom,
-									previousMaskTo,
-								]);
-							} else if (
-								!isNextTo &&
-								previousMaskFrom !== undefined &&
-								previousMaskTo !== undefined
-							) {
-								// No longer next to each other so save the longest mask
-								solveIgnoreRangesMask.push([
-									previousMaskFrom,
-									previousMaskTo,
-								]);
+					let isNextTo = node.from - previousTo == 1;
 
-								// Reset the mask this this node
-								previousMaskFrom = node.from;
-								previousMaskTo = node.to;
-							}
-
-							previousNode = { ...node };
-						}
-					} else {
+					if (node.to <= previousTo || isNextTo) {
 						console.log(
-							"Parent",
-							node.node?.index,
-							node.type.name,
-							node.type.id,
+							"Child: ",
+							isNextTo,
 							node.from,
+							", ",
 							node.to
 						);
 
-						if (
-							previousMaskFrom === undefined &&
-							previousMaskTo === undefined
-						) {
-							previousMaskFrom = node.from;
-							previousMaskTo = node.to;
-							console.log(previousMaskFrom, previousMaskTo);
+						if (isNextTo) {
+							previousTo = node.to; // Let it continue to the new node.to
 						}
 
-						previousNode = { ...node };
+						wasLastChild = true;
+					} else {
+						solveIgnoreRangesMask.push([previousFrom, previousTo]);
+
+						console.log("Parent: ", node.from, ", ", node.to);
+
+						previousFrom = node.from;
+						previousTo = node.to;
+
+						wasLastChild = false;
 					}
 				},
 			});
 
+			if (wasLastChild)
+				solveIgnoreRangesMask.push([previousFrom, previousTo]);
+
+			console.log(wasLastChild);
 			console.log(solveIgnoreRangesMask);
 
 			// We need to essentially cut out all of the unwanted regions
