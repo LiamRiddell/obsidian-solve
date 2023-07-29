@@ -1,6 +1,6 @@
-// @ts-expect-error
 import { SyntaxNodeType } from "@/constants/SyntaxNodeType";
 import { SolveResultWidget } from "@/widgets/SolveResultWidget";
+// @ts-expect-error
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
