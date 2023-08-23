@@ -1,5 +1,5 @@
 {
-	"name": "obsidian-solve",
+	"name": "solve",
 	"version": "0.3.2",
 	"description": "Level Up Your Notes: Introducing Solve – Your Math Maestro! Real-time calculations without AI fuss. From date magic ('Now + 20 days') to arithmetic flair ('10 + 5'), your trusted sidekick in every note. More brilliance on the way!",
 	"main": "main.js",
