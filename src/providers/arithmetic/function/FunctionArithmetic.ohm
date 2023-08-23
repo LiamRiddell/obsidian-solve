@@ -1,0 +1,51 @@
+include '../basic/BasicArithmetic.ohm'
+
+FunctionArithmetic <: BasicArithmetic {
+  P
+    := "(" Expression ")"  -- parenthesis
+    | Function
+    | Primitive
+
+  Function
+    = function "(" ListOf<Expression, ","> ")" -- function
+
+  // IMPORTANT: https://ohmjs.org/docs/patterns-and-pitfalls#reserved-words--keywords 
+  function 
+ 	  = caseInsensitive<"degToRad">
+    | caseInsensitive<"radToDeg">
+    | caseInsensitive<"sinh">
+    | caseInsensitive<"sin">
+    | caseInsensitive<"abs">
+    | caseInsensitive<"acosh">
+    | caseInsensitive<"acos">
+    | caseInsensitive<"asinh">
+    | caseInsensitive<"asin">
+    | caseInsensitive<"atan2">
+    | caseInsensitive<"atanh">
+    | caseInsensitive<"atan">
+    | caseInsensitive<"cbrt">
+    | caseInsensitive<"ceil">
+    | caseInsensitive<"clz32">
+    | caseInsensitive<"cosh">
+    | caseInsensitive<"cos">
+    | caseInsensitive<"expm1">
+    | caseInsensitive<"exp">
+    | caseInsensitive<"floor">
+    | caseInsensitive<"fround">
+    | caseInsensitive<"hypot">
+    | caseInsensitive<"imul">
+    | caseInsensitive<"log10">
+    | caseInsensitive<"log1p">
+    | caseInsensitive<"log2">
+    | caseInsensitive<"log">
+    | caseInsensitive<"max">
+    | caseInsensitive<"min">
+    | caseInsensitive<"pow">
+    | caseInsensitive<"random">
+    | caseInsensitive<"round">
+    | caseInsensitive<"sign">
+    | caseInsensitive<"sqrt">
+    | caseInsensitive<"tanh">
+    | caseInsensitive<"tan">
+    | caseInsensitive<"trunc">
+} 

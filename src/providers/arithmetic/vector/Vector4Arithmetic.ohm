@@ -1,0 +1,73 @@
+include '../basic/BasicArithmetic.ohm'
+
+Vector4Arithmetic <: BasicArithmetic {
+  // Remove support for logical shift
+  Expression 
+  	:=  AS
+
+  P
+    := "(" Expression ")"  -- parenthesis
+    | Vector4
+    | Function
+    | Primitive
+
+  // Remove modulo support for vector
+  MD
+    := MD multiply E  -- multiplication
+    | MD divide E  -- division
+    | E
+
+  Vector4
+    = vector4? "(" Expression "," Expression "," Expression "," Expression ")" -- parse
+
+  Function
+   = LengthSq
+   | DistanceSq
+   | Length
+   | Distance
+   | Normalise
+   | Dot
+   | AngleBetween
+   | Lerp
+
+  LengthSq  = lengthSq "(" Vector4 ")" -- function
+  DistanceSq  = distanceSq "(" Vector4 "," Vector4 ")" -- function
+  Length  = length "(" Vector4 ")" -- function
+  Distance  = distance "(" Vector4 "," Vector4 ")" -- function
+  Normalise = normalise "(" Vector4 ")" -- function
+  Dot = dot "(" Vector4 "," Vector4 ")" -- function
+  AngleBetween = angleBetween "(" Vector4 "," Vector4 ")" -- function
+  Lerp = lerp "(" Vector4 "," Vector4 "," number ")" -- function
+
+  vector4 
+ 	  = caseInsensitive<"Vector4">
+    | caseInsensitive<"Vec4">
+
+  lengthSq 
+ 	  = caseInsensitive<"lengthSq">
+    | caseInsensitive<"magnitudeSq">
+
+  distanceSq
+    = caseInsensitive<"distanceSq">
+
+  length
+ 	  = caseInsensitive<"length">
+    | caseInsensitive<"magnitude">
+
+  distance
+    = caseInsensitive<"distance">
+
+  normalise 
+ 	  = caseInsensitive<"normalise">
+ 	  | caseInsensitive<"normalize">
+
+  dot
+    = caseInsensitive<"dotproduct">
+    | caseInsensitive<"dot">
+
+  angleBetween
+    = caseInsensitive<"angleBetween">
+
+  lerp
+    = caseInsensitive<"lerp">
+} 

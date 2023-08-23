@@ -1,0 +1,89 @@
+BasicArithmetic {
+  Expression
+    = LogicalShift
+
+  LogicalShift
+    = LogicalShift "<<" LogicalShift -- left
+    | LogicalShift ">>" LogicalShift -- right
+    | AS 
+
+  // Addition or Subtraction
+  AS
+    = AS add MD  -- addition
+    | AS subtract MD  -- subtraction
+    | MD
+
+  // Multiply or Divide
+  MD
+    = MD multiply E  -- multiplication
+    | MD divide E  -- division
+    | MD modulo E  -- modulo
+    | E
+
+  // Exponent
+  E
+    = P exponent E  -- exponent
+    | P
+
+  // Parenthesis
+  P
+    = "(" Expression ")"  -- parenthesis
+    | Primitive
+    
+  Primitive
+    = "+" Primitive -- positive
+    | "-" Primitive -- negative
+    | constant
+    | hex
+    | number
+ 
+  // Lexical Rules
+  add 
+  	= "+"
+    | caseInsensitive<"plus">
+  	| caseInsensitive<"add">
+    | caseInsensitive<"and">
+    
+  subtract 
+    = "-"
+    | caseInsensitive<"minus">
+    | caseInsensitive<"subtract">
+    | caseInsensitive<"remove">
+    | caseInsensitive<"take">
+      
+  multiply 
+    = "*"
+    | caseInsensitive<"times by">
+    | caseInsensitive<"times">
+    | caseInsensitive<"multiply by">
+    | caseInsensitive<"multiply">
+      
+  divide
+    = "/"
+    | caseInsensitive<"divide by">
+    | caseInsensitive<"divide">
+
+  modulo
+    = "%"
+    | caseInsensitive<"modulo">
+    | caseInsensitive<"mod">
+
+  exponent
+    = "^"
+    | caseInsensitive<"to the power of">
+    | caseInsensitive<"power of">
+    | caseInsensitive<"exponent">
+    | caseInsensitive<"prime">
+
+  constant  
+  	= caseInsensitive<"PI"> 
+    | caseInsensitive<"E">
+
+  number
+    = digit* "." digit+  -- fract
+    | digit+             -- whole
+  
+  hex
+    = "0x" hexDigit+
+    | hexDigit+ "h"
+} 

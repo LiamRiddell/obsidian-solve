@@ -1,0 +1,21 @@
+{
+    "prettier.configPath": "",
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+    },
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnPaste": true,
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+    },
+    "javascript.preferences.importModuleSpecifier": "non-relative",
+    "typescript.preferences.importModuleSpecifier": "non-relative",
+    "jest.jestCommandLine": "npm run test --",
+    "jest.rootPath": "."
+}
