@@ -1,3 +1,5 @@
+import moment from "moment";
+
 export const dayOfWeekToIndex = (dayName: string) => {
 	switch (dayName) {
 		case "sunday":
@@ -26,8 +28,8 @@ export const dayOfWeekToIndex = (dayName: string) => {
 };
 
 export const getNextDayOfWeek = (dayIndex: number) => {
-	const today = window.moment().startOf("day");
-	const targetDay = window.moment().isoWeekday(dayIndex);
+	const today = moment().startOf("day");
+	const targetDay = moment().isoWeekday(dayIndex);
 
 	if (targetDay.isSame(today, "day")) {
 		return targetDay.add(1, "week");
@@ -39,8 +41,8 @@ export const getNextDayOfWeek = (dayIndex: number) => {
 };
 
 export const getPreviousDayOfWeek = (dayIndex: number) => {
-	const today = window.moment().startOf("day");
-	const targetDay = window.moment().isoWeekday(dayIndex);
+	const today = moment().startOf("day");
+	const targetDay = moment().isoWeekday(dayIndex);
 
 	if (targetDay.isSame(today, "day")) {
 		return targetDay.subtract(1, "week");

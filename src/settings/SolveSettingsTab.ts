@@ -20,14 +20,10 @@ export class SolveSettingTab extends PluginSettingTab {
 	}
 
 	displayIntroduction() {
-		const introductionSetting = new Setting(this.containerEl)
-			.setName("Welcome to Solve")
-			.setHeading();
-
-		introductionSetting.infoEl.classList.add("os--beta-tag");
+		new Setting(this.containerEl).setName("Introduction").setHeading();
 
 		new Setting(this.containerEl).setDesc(
-			`Introducing Solve: an unobtrusive Obsidian plugin that quietly processes equations and patterns in real time, inspired by NoteMaster's Smart Mode. With solid engineering at its core, Solve enhances note-taking without relying on ChatGPT. For instance, effortlessly calculates date and time expressions (e.g., 'Now + 20 days'), performs arithmetic (e.g., '10 + 5'), and more features are coming soon.`
+			`Solve is an unobtrusive Obsidian plugin that quietly processes equations and patterns in real time, inspired by NoteMaster's Smart Mode. With solid engineering at its core, Solve enhances note-taking without relying on ChatGPT. For instance, effortlessly calculates date and time expressions (e.g., 'Now + 20 days'), performs arithmetic (e.g., '10 + 5'), and more features are coming soon.`
 		);
 	}
 

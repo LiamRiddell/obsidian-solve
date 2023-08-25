@@ -1,10 +1,13 @@
 import { BaseSolveProvider } from "@/providers/BaseSolveProvider";
+import grammar, {
+	DatetimeSemantics,
+} from "@/providers/datetime/Datetime.ohm-bundle";
 import {
 	dayOfWeekToIndex,
 	getNextDayOfWeek,
 	getPreviousDayOfWeek,
 } from "@/utilities/Datetime";
-import grammar, { DatetimeSemantics } from "./Datetime.ohm-bundle";
+import moment from "moment";
 
 export class DatetimeProvider extends BaseSolveProvider {
 	name: string = "DatetimeProvider";
@@ -42,21 +45,21 @@ export class DatetimeProvider extends BaseSolveProvider {
 				return node.eval();
 			},
 			Now(_) {
-				return window.moment();
+				return moment();
 			},
 			Today(_) {
-				return window.moment().startOf("day");
+				return moment().startOf("day");
 			},
 			Tomorrow(_) {
-				return window.moment().add(1, "day").startOf("day");
+				return moment().add(1, "day").startOf("day");
 			},
 			Yesterday(_) {
-				return window.moment().subtract(1, "day").startOf("day");
+				return moment().subtract(1, "day").startOf("day");
 			},
 			Datetime(dOrM, _2, mOrD, _4, year, time) {
 				const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
 
-				return window.moment(dateString, [
+				return moment(dateString, [
 					"DD/MM/YYYY HH:mm:ss",
 					"YYYY/MM/DD HH:mm:ss",
 				]);
@@ -78,7 +81,7 @@ export class DatetimeProvider extends BaseSolveProvider {
 			TimeUnitSinceDate(unitNode, _, dateNode) {
 				const date = dateNode.eval();
 
-				const timeUntil = window.moment().startOf("day").diff(
+				const timeUntil = moment().startOf("day").diff(
 					date,
 					// @ts-expect-error
 					unitNode.sourceString
@@ -90,7 +93,7 @@ export class DatetimeProvider extends BaseSolveProvider {
 				const date = dateNode.eval();
 
 				const timeUntil = date.diff(
-					window.moment().startOf("day"),
+					moment().startOf("day"),
 					unitNode.sourceString
 				);
 
@@ -115,7 +118,7 @@ export class DatetimeProvider extends BaseSolveProvider {
 
 			const result = this.semantics(matchResult).eval();
 
-			// if (window.moment.isMoment(result)) {
+			// if (moment.isMoment(result)) {
 			// 	console.log("IT'S A MOMENT OBJECT");
 			// }
 

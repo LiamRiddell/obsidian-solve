@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
+    "esModuleInterop": false,
     "baseUrl": ".",
     "inlineSourceMap": true,
     "inlineSources": true,

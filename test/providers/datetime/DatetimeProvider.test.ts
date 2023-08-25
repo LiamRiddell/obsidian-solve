@@ -5,10 +5,6 @@ import moment from "moment";
 let datetimeProvider: DatetimeProvider;
 
 beforeAll(() => {
-	// @ts-expect-error
-	global.window = global;
-	global.moment = moment;
-
 	datetimeProvider = new DatetimeProvider();
 });
 
@@ -125,24 +121,24 @@ describe("Date", () => {
 
 describe("Addition & Subtraction", () => {
 	test("Now + 2 days", () => {
-		const nowTwoDaysAhead = window.moment().add(2, "days");
+		const nowTwoDaysAhead = moment().add(2, "days");
 
 		const result = datetimeProvider.provide("Now + 2 days");
 		expect(result).toBeDefined();
 
-		const resultMoment = window.moment(result);
+		const resultMoment = moment(result);
 		expect(resultMoment).toBeDefined();
 
 		expect(resultMoment.isSameOrAfter(nowTwoDaysAhead)).toBeTruthy();
 	});
 
 	test("Now - 2 days", () => {
-		const nowTwoDaysAgo = window.moment().subtract(2, "days");
+		const nowTwoDaysAgo = moment().subtract(2, "days");
 
 		const result = datetimeProvider.provide("Now - 2 days");
 		expect(result).toBeDefined();
 
-		const resultMoment = window.moment(result);
+		const resultMoment = moment(result);
 		expect(resultMoment).toBeDefined();
 
 		expect(resultMoment.isSameOrAfter(nowTwoDaysAgo)).toBeTruthy();
@@ -151,7 +147,7 @@ describe("Addition & Subtraction", () => {
 
 describe("Functions", () => {
 	test("years until (1 year from now)", () => {
-		const inFuture = window.moment().add(1, "year");
+		const inFuture = moment().add(1, "year");
 
 		const prompt = `years until ${inFuture.format("DD/MM/YYYY")}`;
 
@@ -163,7 +159,7 @@ describe("Functions", () => {
 	});
 
 	test("months until (3 months from now)", () => {
-		const inFuture = window.moment().add(3, "months");
+		const inFuture = moment().add(3, "months");
 
 		const prompt = `months until ${inFuture.format("DD/MM/YYYY")}`;
 
@@ -175,7 +171,7 @@ describe("Functions", () => {
 	});
 
 	test("weeks until (9 weeks from now)", () => {
-		const inFuture = window.moment().add(9, "weeks");
+		const inFuture = moment().add(9, "weeks");
 
 		const prompt = `weeks until ${inFuture.format("DD/MM/YYYY")}`;
 
@@ -187,7 +183,7 @@ describe("Functions", () => {
 	});
 
 	test("days until (10 days from now)", () => {
-		const inFuture = window.moment().add(10, "days");
+		const inFuture = moment().add(10, "days");
 
 		const prompt = `days until ${inFuture.format("DD/MM/YYYY")}`;
 
@@ -199,7 +195,7 @@ describe("Functions", () => {
 	});
 
 	test("years since (1 year from now)", () => {
-		const inFuture = window.moment().subtract(1, "year");
+		const inFuture = moment().subtract(1, "year");
 
 		const prompt = `years since ${inFuture.format("DD/MM/YYYY")}`;
 
@@ -211,7 +207,7 @@ describe("Functions", () => {
 	});
 
 	test("months since (3 months from now)", () => {
-		const inFuture = window.moment().subtract(3, "months");
+		const inFuture = moment().subtract(3, "months");
 
 		const prompt = `months since ${inFuture.format("DD/MM/YYYY")}`;
 
@@ -223,7 +219,7 @@ describe("Functions", () => {
 	});
 
 	test("weeks since (9 weeks from now)", () => {
-		const inFuture = window.moment().subtract(9, "weeks");
+		const inFuture = moment().subtract(9, "weeks");
 
 		const prompt = `weeks since ${inFuture.format("DD/MM/YYYY")}`;
 
@@ -235,7 +231,7 @@ describe("Functions", () => {
 	});
 
 	test("days since (100 days from now)", () => {
-		const inPast = window.moment().subtract(100, "days");
+		const inPast = moment().subtract(100, "days");
 
 		const prompt = `days since ${inPast.format("DD/MM/YYYY")}`;
 

@@ -11,13 +11,7 @@ import { SolveSettingTab } from "@/settings/SolveSettingsTab";
 import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";
 import { SolveObsidianEvents } from "@/utilities/SolveObsidianEvents";
 import { ViewPlugin } from "@codemirror/view";
-import type moment from "moment";
 import { Plugin } from "obsidian";
-declare global {
-	interface Window {
-		moment: typeof moment;
-	}
-}
 
 export default class SolveObsidianPlugin extends Plugin {
 	settings: SolvePluginSettings;
