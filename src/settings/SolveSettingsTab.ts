@@ -1,5 +1,6 @@
+import { DatetimeFormat } from "@/constants/DatetimeFormat";
 import SolveObsidianPlugin from "@/main";
-import { DEFAULT_SETTINGS } from "@/settings/SolvePluginSettings";
+import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";
 import { App, PluginSettingTab, Setting } from "obsidian";
 
@@ -16,6 +17,7 @@ export class SolveSettingTab extends PluginSettingTab {
 		this.displayIntroduction();
 		this.displayVisualSettings();
 		this.displayArithmeticSettings();
+		this.displayDatetimeSettings();
 		this.displayStyleSettings();
 	}
 
@@ -106,6 +108,48 @@ export class SolveSettingTab extends PluginSettingTab {
 					this.plugin.settings.decimalPoints = value;
 
 					slider.showTooltip();
+
+					await this.plugin.saveSettings();
+				});
+			});
+	}
+
+	displayDatetimeSettings() {
+		new Setting(this.containerEl).setName("Datetime").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Format")
+			.setDesc("Set the format to use when recognising dates.")
+			.addDropdown((dropdown) => {
+				const value = this.plugin.settings.datetimeFormat;
+
+				switch (value) {
+					case DatetimeFormat.EU:
+						dropdown.setValue("European DD/MM/YYYY");
+						break;
+
+					case DatetimeFormat.US:
+						dropdown.setValue("American - MM/DD/YYYY");
+						break;
+				}
+
+				dropdown.addOptions({
+					EU: "European DD/MM/YYYY",
+					US: "American - MM/DD/YYYY",
+				});
+
+				dropdown.onChange(async (value) => {
+					switch (value) {
+						case "EU":
+							this.plugin.settings.datetimeFormat =
+								DatetimeFormat.EU;
+							break;
+
+						case "US":
+							this.plugin.settings.datetimeFormat =
+								DatetimeFormat.US;
+							break;
+					}
 
 					await this.plugin.saveSettings();
 				});

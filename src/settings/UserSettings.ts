@@ -1,7 +1,5 @@
-import {
-	DEFAULT_SETTINGS,
-	PluginSettings,
-} from "@/settings/SolvePluginSettings";
+import { DatetimeFormat } from "@/constants/DatetimeFormat";
+import { DEFAULT_SETTINGS, PluginSettings } from "@/settings/PluginSettings";
 
 export default class UserSettings {
 	private static instance: UserSettings | null = null;
@@ -61,5 +59,18 @@ export default class UserSettings {
 	set decimalPoints(value: number) {
 		this.settings.arithmetic.decimalPoints = value;
 	}
+	//#endregion
+
+	//#region Datetime
+	get datetimeFormat(): DatetimeFormat {
+		return (
+			this.settings.datetime.format || DEFAULT_SETTINGS.datetime.format
+		);
+	}
+
+	set datetimeFormat(value: DatetimeFormat) {
+		this.settings.datetime.format = value;
+	}
+
 	//#endregion
 }

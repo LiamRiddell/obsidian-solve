@@ -1,7 +1,9 @@
+import { DatetimeFormat } from "@/constants/DatetimeFormat";
 import { BaseSolveProvider } from "@/providers/BaseSolveProvider";
 import grammar, {
 	DatetimeSemantics,
 } from "@/providers/datetime/Datetime.ohm-bundle";
+import UserSettings from "@/settings/UserSettings";
 import {
 	dayOfWeekToIndex,
 	getNextDayOfWeek,
@@ -56,14 +58,6 @@ export class DatetimeProvider extends BaseSolveProvider {
 			Yesterday(_) {
 				return moment().subtract(1, "day").startOf("day");
 			},
-			Datetime(dOrM, _2, mOrD, _4, year, time) {
-				const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
-
-				return moment(dateString, [
-					"DD/MM/YYYY HH:mm:ss",
-					"YYYY/MM/DD HH:mm:ss",
-				]);
-			},
 			NextDayOfWeek(_, dayOfWeekNode) {
 				const dayOfWeek = dayOfWeekNode.sourceString.toLowerCase();
 
@@ -98,6 +92,20 @@ export class DatetimeProvider extends BaseSolveProvider {
 				);
 
 				return `${Math.max(timeUntil, 0)} ${unitNode.sourceString}`;
+			},
+			datetimeFormatIso(year, _, month, _1, day, time) {
+				const dateString = `${year.sourceString}/${month.sourceString}/${day.sourceString} ${time.sourceString}`;
+				return moment(dateString, ["DD/MM/YYYY HH:mm:ss"]);
+			},
+			datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
+				const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
+				switch (UserSettings.getInstance().datetimeFormat) {
+					case DatetimeFormat.EU:
+						return moment(dateString, ["DD/MM/YYYY HH:mm:ss"]);
+
+					case DatetimeFormat.US:
+						return moment(dateString, ["MM/DD/YYYY HH:mm:ss"]);
+				}
 			},
 			integer(_) {
 				return parseInt(this.sourceString);

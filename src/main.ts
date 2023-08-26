@@ -3,7 +3,7 @@ import { pluginEventBus } from "@/PluginEventBus";
 import { solveProviderManager } from "@/SolveProviderManager";
 import { PluginEvents } from "@/constants/PluginEvents";
 import { PluginStatus } from "@/constants/PluginStatus";
-import { DEFAULT_SETTINGS } from "@/settings/SolvePluginSettings";
+import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { SolveSettingTab } from "@/settings/SolveSettingsTab";
 import UserSettings from "@/settings/UserSettings";
 import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";

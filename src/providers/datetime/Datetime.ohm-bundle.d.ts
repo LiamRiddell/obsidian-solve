@@ -21,7 +21,7 @@ export interface DatetimeActionDict<T> extends BaseActionDict<T> {
   Today?: (this: NonterminalNode, arg0: NonterminalNode) => T;
   Tomorrow?: (this: NonterminalNode, arg0: NonterminalNode) => T;
   Yesterday?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  Datetime?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode) => T;
+  Datetime?: (this: NonterminalNode, arg0: NonterminalNode) => T;
   NextDayOfWeek?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode) => T;
   LastDayOfWeek?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode) => T;
   TimeUnitUntilDate?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
@@ -30,6 +30,8 @@ export interface DatetimeActionDict<T> extends BaseActionDict<T> {
   twoDigit?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode) => T;
   fourDigit?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode, arg3: NonterminalNode) => T;
   time?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode) => T;
+  datetimeFormatIso?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode) => T;
+  datetimeFormatEuropeanOrUs?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode) => T;
   add?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode) => T;
   subtract?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode) => T;
   now?: (this: NonterminalNode, arg0: NonterminalNode) => T;

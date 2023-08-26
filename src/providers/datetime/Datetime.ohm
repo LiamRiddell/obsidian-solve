@@ -38,9 +38,8 @@ Datetime {
   
   // e.g. 1/10/23 or 01.10.2023
   Datetime 
-  	= (twoDigit | oneDigit) "/" (twoDigit | oneDigit) "/" (fourDigit | twoDigit) time?
-    | (twoDigit | oneDigit) "-" (twoDigit | oneDigit) "-" (fourDigit | twoDigit) time?
-    | (twoDigit | oneDigit) "." (twoDigit | oneDigit) "." (fourDigit | twoDigit) time?
+  	= datetimeFormatIso
+    | datetimeFormatEuropeanOrUs
   
   // e.g. Next Monday
   NextDayOfWeek
@@ -67,7 +66,17 @@ Datetime {
     = digit digit digit digit
 
   time
-  =  (twoDigit | oneDigit) ":" (twoDigit | oneDigit) ":" (twoDigit | oneDigit)
+    =  (twoDigit | oneDigit) ":" (twoDigit | oneDigit) ":" (twoDigit | oneDigit)
+
+  datetimeFormatIso
+    = fourDigit "/" (twoDigit | oneDigit) "/" (twoDigit | oneDigit)  time?
+    | fourDigit "-" (twoDigit | oneDigit) "-" (twoDigit | oneDigit)  time?
+    | fourDigit "." (twoDigit | oneDigit) "." (twoDigit | oneDigit)  time?
+
+  datetimeFormatEuropeanOrUs
+    = (twoDigit | oneDigit) "/" (twoDigit | oneDigit) "/" (fourDigit | twoDigit) time?
+    | (twoDigit | oneDigit) "-" (twoDigit | oneDigit) "-" (fourDigit | twoDigit) time?
+    | (twoDigit | oneDigit) "." (twoDigit | oneDigit) "." (fourDigit | twoDigit) time?
 
   add 
   	= "+"
