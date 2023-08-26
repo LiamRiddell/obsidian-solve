@@ -1,4 +1,4 @@
-import { DatetimeFormat } from "@/constants/DatetimeFormat";
+import { DatetimeParsingFormat } from "@/constants/DatetimeFormat";
 import { BaseSolveProvider } from "@/providers/BaseSolveProvider";
 import grammar, {
 	DatetimeSemantics,
@@ -99,11 +99,11 @@ export class DatetimeProvider extends BaseSolveProvider {
 			},
 			datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
 				const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
-				switch (UserSettings.getInstance().datetimeFormat) {
-					case DatetimeFormat.EU:
+				switch (UserSettings.getInstance().datetimeParsingFormat) {
+					case DatetimeParsingFormat.EU:
 						return moment(dateString, ["DD/MM/YYYY HH:mm:ss"]);
 
-					case DatetimeFormat.US:
+					case DatetimeParsingFormat.US:
 						return moment(dateString, ["MM/DD/YYYY HH:mm:ss"]);
 				}
 			},

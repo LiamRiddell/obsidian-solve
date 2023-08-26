@@ -1,4 +1,4 @@
-export enum DatetimeFormat {
+export enum DatetimeParsingFormat {
 	EU,
 	US,
 }

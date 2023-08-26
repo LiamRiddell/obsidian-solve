@@ -1,4 +1,4 @@
-import { DatetimeFormat } from "@/constants/DatetimeFormat";
+import { DatetimeParsingFormat } from "@/constants/DatetimeFormat";
 import SolveObsidianPlugin from "@/main";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";
@@ -118,17 +118,19 @@ export class SolveSettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Datetime").setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Format")
-			.setDesc("Set the format to use when recognising dates.")
+			.setName("Parsing Format")
+			.setDesc(
+				"Specify the format to be used for parsing datetime values."
+			)
 			.addDropdown((dropdown) => {
-				const value = this.plugin.settings.datetimeFormat;
+				const value = this.plugin.settings.datetimeParsingFormat;
 
 				switch (value) {
-					case DatetimeFormat.EU:
+					case DatetimeParsingFormat.EU:
 						dropdown.setValue("European DD/MM/YYYY");
 						break;
 
-					case DatetimeFormat.US:
+					case DatetimeParsingFormat.US:
 						dropdown.setValue("American - MM/DD/YYYY");
 						break;
 				}
@@ -141,13 +143,13 @@ export class SolveSettingTab extends PluginSettingTab {
 				dropdown.onChange(async (value) => {
 					switch (value) {
 						case "EU":
-							this.plugin.settings.datetimeFormat =
-								DatetimeFormat.EU;
+							this.plugin.settings.datetimeParsingFormat =
+								DatetimeParsingFormat.EU;
 							break;
 
 						case "US":
-							this.plugin.settings.datetimeFormat =
-								DatetimeFormat.US;
+							this.plugin.settings.datetimeParsingFormat =
+								DatetimeParsingFormat.US;
 							break;
 					}
 

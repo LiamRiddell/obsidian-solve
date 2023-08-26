@@ -1,4 +1,4 @@
-import { DatetimeFormat } from "@/constants/DatetimeFormat";
+import { DatetimeParsingFormat } from "@/constants/DatetimeFormat";
 import { DEFAULT_SETTINGS, PluginSettings } from "@/settings/PluginSettings";
 
 export default class UserSettings {
@@ -62,14 +62,15 @@ export default class UserSettings {
 	//#endregion
 
 	//#region Datetime
-	get datetimeFormat(): DatetimeFormat {
+	get datetimeParsingFormat(): DatetimeParsingFormat {
 		return (
-			this.settings.datetime.format || DEFAULT_SETTINGS.datetime.format
+			this.settings.datetime.parsingFormat ||
+			DEFAULT_SETTINGS.datetime.parsingFormat
 		);
 	}
 
-	set datetimeFormat(value: DatetimeFormat) {
-		this.settings.datetime.format = value;
+	set datetimeParsingFormat(value: DatetimeParsingFormat) {
+		this.settings.datetime.parsingFormat = value;
 	}
 
 	//#endregion
