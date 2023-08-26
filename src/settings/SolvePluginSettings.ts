@@ -5,12 +5,12 @@ export interface SolveArithmeticSettings {
 
 export interface SolvePluginSettings {
 	renderResultEndOfLine: boolean;
-	arithmeticSettings: SolveArithmeticSettings;
+	arithmetic: SolveArithmeticSettings;
 }
 
 export const DEFAULT_SETTINGS: SolvePluginSettings = {
 	renderResultEndOfLine: false,
-	arithmeticSettings: {
+	arithmetic: {
 		renderEqualsBeforeResult: true,
 		decimalPoints: 4,
 	},

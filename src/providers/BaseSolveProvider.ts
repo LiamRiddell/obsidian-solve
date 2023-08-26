@@ -1,25 +1,13 @@
-import { PluginEventBus, pluginEventBus } from "@/PluginEventBus";
-import { PluginEvents } from "@/constants/PluginEvents";
+import { PluginEventBus } from "@/PluginEventBus";
 import { ISolveProvider } from "@/providers/ISolveProvider";
-import { SolvePluginSettings } from "@/settings/SolvePluginSettings";
 
 export class BaseSolveProvider implements ISolveProvider {
 	name: string;
 	eventBus: PluginEventBus;
-	settings: SolvePluginSettings | undefined;
 
-	constructor() {
-		pluginEventBus.on(
-			PluginEvents.SettingsUpdated,
-			this.onSettingsUpdate.bind(this)
-		);
-	}
+	constructor() {}
 
-	provide(sentence: string, raw: boolean): string | undefined {
+	public provide(sentence: string, raw: boolean): string | undefined {
 		throw new Error("Method not implemented.");
-	}
-
-	private async onSettingsUpdate(settings: SolvePluginSettings) {
-		this.settings = settings;
 	}
 }

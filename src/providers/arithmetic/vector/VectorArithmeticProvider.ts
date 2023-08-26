@@ -11,6 +11,7 @@ import { Vector4 } from "@/providers/arithmetic/vector/Vector4";
 import vector4Grammar, {
 	Vector4ArithmeticSemantics,
 } from "@/providers/arithmetic/vector/Vector4Arithmetic.ohm-bundle";
+import UserSettings from "@/settings/UserSettings";
 export class VectorArithmeticProvider extends BaseSolveProvider {
 	name: string = "VectorArithmeticProvider";
 
@@ -632,27 +633,24 @@ export class VectorArithmeticProvider extends BaseSolveProvider {
 
 	provide(sentence: string, raw: boolean = true): string | undefined {
 		try {
+			const userSettings = UserSettings.getInstance();
+
 			const result = this.tryParseVectorArithmetic(sentence);
 
 			if (!result) return undefined;
-
-			const precision =
-				this.settings?.arithmeticSettings.decimalPoints || 4;
 
 			if (
 				result instanceof Vector2 ||
 				result instanceof Vector3 ||
 				result instanceof Vector4
 			) {
-				const output = result.toString(precision);
+				const output = result.toString(userSettings.decimalPoints);
 
 				if (raw) {
 					return output;
 				}
 
-				if (
-					this.settings?.arithmeticSettings.renderEqualsBeforeResult
-				) {
+				if (userSettings.renderResultEndOfLine) {
 					return `= ${output}`;
 				}
 
@@ -661,7 +659,7 @@ export class VectorArithmeticProvider extends BaseSolveProvider {
 
 			if (Number.isNaN(result)) return undefined;
 
-			return result.toPrecision(precision);
+			return result.toPrecision(userSettings.decimalPoints);
 		} catch (e) {
 			// console.error(e);
 			return undefined;
