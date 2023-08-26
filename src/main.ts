@@ -3,18 +3,16 @@ import { pluginEventBus } from "@/PluginEventBus";
 import { solveProviderManager } from "@/SolveProviderManager";
 import { PluginEvents } from "@/constants/PluginEvents";
 import { PluginStatus } from "@/constants/PluginStatus";
-import {
-	DEFAULT_SETTINGS,
-	SolvePluginSettings,
-} from "@/settings/SolvePluginSettings";
+import { DEFAULT_SETTINGS } from "@/settings/SolvePluginSettings";
 import { SolveSettingTab } from "@/settings/SolveSettingsTab";
+import UserSettings from "@/settings/UserSettings";
 import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";
 import { SolveObsidianEvents } from "@/utilities/SolveObsidianEvents";
 import { ViewPlugin } from "@codemirror/view";
 import { Plugin } from "obsidian";
 
 export default class SolveObsidianPlugin extends Plugin {
-	settings: SolvePluginSettings;
+	settings: UserSettings;
 	statusBarItemEl: HTMLElement;
 
 	public async onload() {
@@ -63,11 +61,11 @@ export default class SolveObsidianPlugin extends Plugin {
 	}
 
 	public async saveSettings() {
-		console.debug("[Solve] Settings Saved", this.settings);
+		const rawSettings = this.settings.getRaw();
 
-		await this.saveData(this.settings);
+		console.debug("[Solve] Settings Saved", rawSettings);
 
-		pluginEventBus.emit(PluginEvents.SettingsUpdated, this.settings);
+		await this.saveData(rawSettings);
 
 		this.app.workspace.updateOptions();
 	}
@@ -80,10 +78,10 @@ export default class SolveObsidianPlugin extends Plugin {
 	}
 
 	private async restoreUserSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData()
+		this.settings = UserSettings.getInstance();
+
+		this.settings.updateSettings(
+			Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
 		);
 
 		await this.restoreFeatureFlags();
@@ -98,8 +96,6 @@ export default class SolveObsidianPlugin extends Plugin {
 			await this.buildMarkdownEditorViewPlugin();
 
 		this.registerEditorExtension(markdownEditorViewPlugin);
-
-		pluginEventBus.emit(PluginEvents.SettingsUpdated, this.settings);
 	}
 
 	private async buildMarkdownEditorViewPlugin() {
@@ -118,7 +114,6 @@ export default class SolveObsidianPlugin extends Plugin {
 		}
 	}
 
-	// Events
 	private async onStatusBarUpdateEvent(status: PluginStatus) {
 		switch (status) {
 			case PluginStatus.Solving:

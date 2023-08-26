@@ -1,4 +1,5 @@
 import { BaseSolveProvider } from "@/providers/BaseSolveProvider";
+import UserSettings from "@/settings/UserSettings";
 import grammar, {
 	BasicArithmeticSemantics,
 } from "./BasicArithmetic.ohm-bundle";
@@ -77,6 +78,8 @@ export class BasicArithmeticProvider extends BaseSolveProvider {
 
 	provide(sentence: string, raw: boolean = true): string | undefined {
 		try {
+			const userSettings = UserSettings.getInstance();
+
 			this.outputHex = false;
 
 			const matchResult = grammar.match(sentence);
@@ -87,32 +90,27 @@ export class BasicArithmeticProvider extends BaseSolveProvider {
 
 			const result = this.semantics(matchResult).eval();
 
+			const renderEqualsBeforeResult = userSettings.renderResultEndOfLine;
+
 			if (this.outputHex) {
 				const rounded = Math.floor(result).toString(16).toUpperCase();
 
-				return this.settings?.arithmeticSettings
-					.renderEqualsBeforeResult && !raw
+				return renderEqualsBeforeResult && !raw
 					? `= 0x${rounded}`
 					: `0x${rounded}`;
 			}
 
-			const output = result.toPrecision(
-				this.settings?.arithmeticSettings.decimalPoints || 4
-			);
+			const decimalPoints = userSettings.decimalPoints;
+
+			const output = result.toPrecision(decimalPoints);
 
 			if (raw) {
 				return output;
 			}
 
-			if (
-				this.settings?.arithmeticSettings.renderEqualsBeforeResult &&
-				!raw
-			) {
-				return `= ${output}`;
-			}
-
-			return output;
+			return renderEqualsBeforeResult ? `= ${output}` : output;
 		} catch (e) {
+			console.error(e);
 			return undefined;
 		}
 	}

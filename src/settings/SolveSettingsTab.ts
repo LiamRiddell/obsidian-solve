@@ -73,18 +73,15 @@ export class SolveSettingTab extends PluginSettingTab {
 		new Setting(this.containerEl)
 			.setName("Show = before the result")
 			.setDesc(
-				`Adds the equals sign before arithmetic results to improve the natural reading of expressions. Default is ${DEFAULT_SETTINGS.arithmeticSettings.renderEqualsBeforeResult}`
+				`Adds the equals sign before arithmetic results to improve the natural reading of expressions. Default is ${DEFAULT_SETTINGS.arithmetic.renderEqualsBeforeResult}`
 			)
 			.addToggle((toggle) => {
-				const value =
-					this.plugin.settings.arithmeticSettings
-						.renderEqualsBeforeResult;
+				const value = this.plugin.settings.renderEqualsBeforeResult;
 
 				toggle.setValue(value);
 
 				toggle.onChange(async (value) => {
-					this.plugin.settings.arithmeticSettings.renderEqualsBeforeResult =
-						value;
+					this.plugin.settings.renderEqualsBeforeResult = value;
 
 					await this.plugin.saveSettings();
 				});
@@ -93,11 +90,10 @@ export class SolveSettingTab extends PluginSettingTab {
 		new Setting(this.containerEl)
 			.setName("Number precision")
 			.setDesc(
-				`Adjust the 'Number Precision' setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.arithmeticSettings.decimalPoints}`
+				`Adjust the 'Number Precision' setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.arithmetic.decimalPoints}`
 			)
 			.addSlider((slider) => {
-				const value =
-					this.plugin.settings.arithmeticSettings.decimalPoints;
+				const value = this.plugin.settings.decimalPoints;
 
 				slider.setLimits(0, 17, 1);
 				slider.setValue(value);
@@ -107,8 +103,7 @@ export class SolveSettingTab extends PluginSettingTab {
 				});
 
 				slider.onChange(async (value) => {
-					this.plugin.settings.arithmeticSettings.decimalPoints =
-						value;
+					this.plugin.settings.decimalPoints = value;
 
 					slider.showTooltip();
 

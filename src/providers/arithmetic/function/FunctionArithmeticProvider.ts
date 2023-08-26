@@ -1,4 +1,5 @@
 import { BaseSolveProvider } from "@/providers/BaseSolveProvider";
+import UserSettings from "@/settings/UserSettings";
 import grammar, {
 	FunctionArithmeticSemantics,
 } from "./FunctionArithmetic.ohm-bundle";
@@ -100,6 +101,8 @@ export class FunctionArithmeticProvider extends BaseSolveProvider {
 
 	provide(sentence: string, raw: boolean = true): string | undefined {
 		try {
+			const userSettings = UserSettings.getInstance();
+
 			this.outputHex = false;
 
 			const matchResult = grammar.FunctionArithmetic.match(sentence);
@@ -114,15 +117,13 @@ export class FunctionArithmeticProvider extends BaseSolveProvider {
 				return `0x${result.toString(16).toUpperCase()}`;
 			}
 
-			const output = result.toPrecision(
-				this.settings?.arithmeticSettings.decimalPoints || 4
-			);
+			const output = result.toPrecision(userSettings.decimalPoints);
 
 			if (raw) {
 				return output;
 			}
 
-			if (this.settings?.arithmeticSettings.renderEqualsBeforeResult) {
+			if (userSettings.renderResultEndOfLine) {
 				return `= ${output}`;
 			}
 
