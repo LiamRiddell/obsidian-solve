@@ -147,6 +147,14 @@ describe("Subtraction", () => {
 
 		expect(result).toBe("0x14");
 	});
+
+	test("0x100 - 0x328 to equal -0x228", () => {
+		const result = basicArithmeticProvider.provide("0x100 - 0x328");
+
+		expect(result).toBeDefined();
+
+		expect(result).toBe("-0x228");
+	});
 });
 
 describe("Multiplication", () => {

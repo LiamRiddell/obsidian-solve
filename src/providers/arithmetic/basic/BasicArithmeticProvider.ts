@@ -90,14 +90,20 @@ export class BasicArithmeticProvider extends BaseSolveProvider {
 
 			const result = this.semantics(matchResult).eval();
 
-			const renderEqualsBeforeResult = userSettings.renderResultEndOfLine;
+			const renderEqualsBeforeResult =
+				userSettings.renderEqualsBeforeResult;
 
 			if (this.outputHex) {
-				const rounded = Math.floor(result).toString(16).toUpperCase();
+				const rounded = Math.floor(result);
+				const isNegative = rounded < 0;
+				const roundedHex = Math.abs(rounded).toString(16).toUpperCase();
+				const hexString = isNegative
+					? `-0x${roundedHex}`
+					: `0x${roundedHex}`;
 
 				return renderEqualsBeforeResult && !raw
-					? `= 0x${rounded}`
-					: `0x${rounded}`;
+					? `= ${hexString}`
+					: hexString;
 			}
 
 			const decimalPoints = userSettings.decimalPoints;
