@@ -8,7 +8,8 @@ export class BaseSolveProvider<T> implements ISolveProvider {
 	semantics: T;
 	formatVisitor: FormatVisitor;
 
-	constructor() {
+	constructor(name: string) {
+		this.name = name;
 		this.formatVisitor = new FormatVisitor();
 	}
 

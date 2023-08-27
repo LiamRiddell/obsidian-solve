@@ -12,10 +12,8 @@ import {
 import moment from "moment";
 
 export class DatetimeProvider extends BaseSolveProvider<DatetimeSemantics> {
-	name: string = "DatetimeProvider";
-
 	constructor() {
-		super();
+		super("DatetimeProvider");
 
 		this.semantics = grammar.createSemantics();
 

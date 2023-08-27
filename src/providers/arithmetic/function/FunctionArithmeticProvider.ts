@@ -8,10 +8,8 @@ import grammar, {
 } from "./FunctionArithmetic.ohm-bundle";
 
 export class FunctionArithmeticProvider extends BaseSolveProvider<FunctionArithmeticSemantics> {
-	name: string = "FunctionArithmeticProvider";
-
 	constructor() {
-		super();
+		super("FunctionArithmeticProvider");
 
 		this.semantics = grammar.FunctionArithmetic.createSemantics();
 

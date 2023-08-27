@@ -15,10 +15,8 @@ import { IntegerResult } from "@/visitors/results/IntegerResult";
 import { PercentageResult } from "@/visitors/results/PercentageResult";
 
 export class PercentageArithmeticProvider extends BaseSolveProvider<PercentageArithmeticSemantics> {
-	name: string = "PercentageArithmeticProvider";
-
 	constructor() {
-		super();
+		super("PercentageArithmeticProvider");
 
 		this.semantics = grammar.PercentageArithmetic.createSemantics();
 
