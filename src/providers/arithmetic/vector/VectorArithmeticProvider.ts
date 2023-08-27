@@ -12,15 +12,13 @@ import vector4Grammar, {
 	Vector4ArithmeticSemantics,
 } from "@/providers/arithmetic/vector/Vector4Arithmetic.ohm-bundle";
 import UserSettings from "@/settings/UserSettings";
-export class VectorArithmeticProvider extends BaseSolveProvider {
-	name: string = "VectorArithmeticProvider";
-
+export class VectorArithmeticProvider extends BaseSolveProvider<null> {
 	private vector2Semantics: Vector2ArithmeticSemantics;
 	private vector3Semantics: Vector3ArithmeticSemantics;
 	private vector4Semantics: Vector4ArithmeticSemantics;
 
 	constructor() {
-		super();
+		super("VectorArithmeticProvider");
 
 		this.setupVector2Arithmetic();
 		this.setupVector3Arithmetic();
