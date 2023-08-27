@@ -1,13 +1,13 @@
 import { DatetimeParsingFormat } from "@/constants/DatetimeFormat";
-import SolveObsidianPlugin from "@/main";
+import SolvePlugin from "@/main";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";
 import { App, PluginSettingTab, Setting } from "obsidian";
 
-export class SolveSettingTab extends PluginSettingTab {
-	plugin: SolveObsidianPlugin;
+export class SettingTab extends PluginSettingTab {
+	plugin: SolvePlugin;
 
-	constructor(app: App, plugin: SolveObsidianPlugin) {
+	constructor(app: App, plugin: SolvePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}

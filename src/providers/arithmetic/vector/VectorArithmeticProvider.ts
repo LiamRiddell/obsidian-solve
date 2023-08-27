@@ -650,10 +650,6 @@ export class VectorArithmeticProvider extends BaseSolveProvider {
 					return output;
 				}
 
-				if (userSettings.renderResultEndOfLine) {
-					return `= ${output}`;
-				}
-
 				return output;
 			}
 

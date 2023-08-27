@@ -11,9 +11,8 @@ import {
 } from "@/utilities/Datetime";
 import moment from "moment";
 
-export class DatetimeProvider extends BaseSolveProvider {
+export class DatetimeProvider extends BaseSolveProvider<DatetimeSemantics> {
 	name: string = "DatetimeProvider";
-	private semantics: DatetimeSemantics;
 
 	constructor() {
 		super();

@@ -1,0 +1,27 @@
+include '../basic/BasicArithmetic.ohm'
+
+PercentageArithmetic <: BasicArithmetic {
+	Expression
+    	:=  PercentageOf
+        | IncreaseBy
+        | DecreaseBy
+        | PercentageIncreaseOrDecrease
+		| LogicalShift
+        
+    Primitive 
+        += percentage
+        
+    PercentageOf
+    	= number "%" "of" number 
+        
+   	IncreaseBy
+    	= "increase" number "by" number "%"
+        
+   	DecreaseBy
+    	= "decrease" number "by" number "%"
+    
+    PercentageIncreaseOrDecrease
+        = "from"? number "to" number
+
+    percentage = number "%"
+}

@@ -4,14 +4,14 @@ import { solveProviderManager } from "@/SolveProviderManager";
 import { PluginEvents } from "@/constants/PluginEvents";
 import { PluginStatus } from "@/constants/PluginStatus";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
-import { SolveSettingTab } from "@/settings/SolveSettingsTab";
+import { SettingTab } from "@/settings/SolveSettingsTab";
 import UserSettings from "@/settings/UserSettings";
 import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";
 import { SolveObsidianEvents } from "@/utilities/SolveObsidianEvents";
 import { ViewPlugin } from "@codemirror/view";
 import { Plugin } from "obsidian";
 
-export default class SolveObsidianPlugin extends Plugin {
+export default class SolvePlugin extends Plugin {
 	settings: UserSettings;
 	statusBarItemEl: HTMLElement;
 
@@ -88,7 +88,7 @@ export default class SolveObsidianPlugin extends Plugin {
 	}
 
 	private async registerSettings() {
-		this.addSettingTab(new SolveSettingTab(this.app, this));
+		this.addSettingTab(new SettingTab(this.app, this));
 	}
 
 	private async registerEditorExtensions() {
