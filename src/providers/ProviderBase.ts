@@ -1,6 +1,6 @@
 import { PluginEventBus } from "@/eventbus/PluginEventBus";
 import { IProvider } from "@/providers/IProvider";
-import { FormatVisitor } from "@/visitors/FormatVisitor";
+import { FormatVisitor } from "@/visitors/format/FormatVisitor";
 
 export class ProviderBase implements IProvider {
 	name: string;
