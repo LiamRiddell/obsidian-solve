@@ -20,45 +20,45 @@ const arithmeticVisitor = new ArithmeticExpressionVisitor();
 export const basicArithmeticSemanticActions: BasicArithmeticActionDict<
 	FloatResult | IntegerResult | HexResult | PercentageResult
 > = {
-	LogicalShift_left(x, _, y) {
-		const xVisit = x.visit();
-		const yVisit = y.visit();
-		return x.accept(new LogicalShiftLeftVisitor(xVisit, yVisit));
+	LogicalShift_left(xNode, _, yNode) {
+		const x = xNode.visit();
+		const y = yNode.visit();
+		return x.accept(new LogicalShiftLeftVisitor(x, y));
 	},
-	LogicalShift_right(x, _, y) {
-		const xVisit = x.visit();
-		const yVisit = y.visit();
-		return x.accept(new LogicalShiftRightVisitor(xVisit, yVisit));
+	LogicalShift_right(xNode, _, yNode) {
+		const x = xNode.visit();
+		const y = yNode.visit();
+		return x.accept(new LogicalShiftRightVisitor(x, y));
 	},
-	AS_addition(x, _, y) {
-		const xVisit = x.visit();
-		const yVisit = y.visit();
-		return xVisit.accept(new AdditionVisitor(xVisit, yVisit));
+	AS_addition(xNode, _, yNode) {
+		const x = xNode.visit();
+		const y = yNode.visit();
+		return x.accept(new AdditionVisitor(x, y));
 	},
-	AS_subtraction(x, _, y) {
-		const xVisit = x.visit();
-		const yVisit = y.visit();
-		return xVisit.accept(new SubtractionVisitor(xVisit, yVisit));
+	AS_subtraction(xNode, _, yNode) {
+		const x = xNode.visit();
+		const y = yNode.visit();
+		return x.accept(new SubtractionVisitor(x, y));
 	},
-	MD_multiplication(x, _, y) {
-		const xVisit = x.visit();
-		const yVisit = y.visit();
-		return xVisit.accept(new MultiplicationVisitor(xVisit, yVisit));
+	MD_multiplication(xNode, _, yNode) {
+		const x = xNode.visit();
+		const y = yNode.visit();
+		return x.accept(new MultiplicationVisitor(x, y));
 	},
-	MD_division(x, _, y) {
-		const xVisit = x.visit();
-		const yVisit = y.visit();
-		return xVisit.accept(new DivisionVisitor(xVisit, yVisit));
+	MD_division(xNode, _, yNode) {
+		const x = xNode.visit();
+		const y = yNode.visit();
+		return x.accept(new DivisionVisitor(x, y));
 	},
-	MD_modulo(x, _, y) {
-		const xVisit = x.visit();
-		const yVisit = y.visit();
-		return xVisit.accept(new ModuloVisitor(xVisit, yVisit));
+	MD_modulo(xNode, _, yNode) {
+		const x = xNode.visit();
+		const y = yNode.visit();
+		return x.accept(new ModuloVisitor(x, y));
 	},
-	E_exponent(x, _, y) {
-		const xVisit = x.visit();
-		const yVisit = y.visit();
-		return xVisit.accept(new ExponentVisitor(xVisit, yVisit));
+	E_exponent(xNode, _, yNode) {
+		const x = xNode.visit();
+		const y = yNode.visit();
+		return x.accept(new ExponentVisitor(x, y));
 	},
 	P_parenthesis(_l, e, _r) {
 		return e.visit();
