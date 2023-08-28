@@ -6,6 +6,7 @@ import { PercentageArithmeticProvider } from "@/providers/percentage/PercentageA
 import { VectorArithmeticProvider } from "@/providers/vector/VectorArithmeticProvider";
 import UserSettings from "@/settings/UserSettings";
 import { fastHash } from "@/utilities/FastHash";
+import { logger } from "@/utilities/Logger";
 
 class ProviderManager {
 	private providersMap: Map<number, IProvider>;
@@ -44,7 +45,7 @@ class ProviderManager {
 						: `${result}`;
 				}
 			} catch (error) {
-				// console.error(error);
+				logger.error(error);
 				continue;
 			}
 		}

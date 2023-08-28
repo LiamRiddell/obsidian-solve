@@ -12,6 +12,7 @@ import { Vector2 } from "@/providers/vector/Vector2";
 import { Vector3 } from "@/providers/vector/Vector3";
 import { Vector4 } from "@/providers/vector/Vector4";
 import UserSettings from "@/settings/UserSettings";
+import { logger } from "@/utilities/Logger";
 export class VectorArithmeticProvider extends ProviderBase {
 	private vector2Semantics: Vector2ArithmeticSemantics;
 	private vector3Semantics: Vector3ArithmeticSemantics;
@@ -655,7 +656,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 
 			return result.toPrecision(userSettings.decimalPoints);
 		} catch (e) {
-			// console.error(e);
+			logger.error(e);
 			return undefined;
 		}
 	}

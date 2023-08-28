@@ -6,6 +6,7 @@ import { basicArithmeticSemanticActions } from "@/providers/arithmetic/Arithmeti
 import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
+import { logger } from "@/utilities/Logger";
 
 export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionArithmeticSemantics> {
 	constructor() {
@@ -65,7 +66,7 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 
 			return result.accept(this.formatVisitor);
 		} catch (e) {
-			// console.error(e);
+			logger.error(e);
 			return undefined;
 		}
 	}

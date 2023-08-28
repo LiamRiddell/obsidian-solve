@@ -124,7 +124,7 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 			const result = this.semantics(matchResult).eval();
 
 			// if (moment.isMoment(result)) {
-			// 	console.log("IT'S A MOMENT OBJECT");
+			// 	logger.log("IT'S A MOMENT OBJECT");
 			// }
 
 			return result;

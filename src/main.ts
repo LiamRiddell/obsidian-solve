@@ -8,6 +8,7 @@ import { solveProviderManager } from "@/providers/ProviderManager";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { SettingTab } from "@/settings/SettingsTab";
 import UserSettings from "@/settings/UserSettings";
+import { logger } from "@/utilities/Logger";
 import { ViewPlugin } from "@codemirror/view";
 import { Plugin } from "obsidian";
 
@@ -16,18 +17,18 @@ export default class SolvePlugin extends Plugin {
 	statusBarItemEl: HTMLElement;
 
 	public async onload() {
-		console.debug("[Solve] onload()");
+		logger.debug("[Solve] onload()");
 
 		await this.registerEvents();
 
 		await this.restoreUserSettings();
-		console.debug("[Solve] User Settings Restored");
+		logger.debug("[Solve] User Settings Restored");
 
 		await this.registerSettings();
-		console.debug("[Solve] Registered: Settings");
+		logger.debug("[Solve] Registered: Settings");
 
 		this.app.workspace.trigger("parse-style-settings");
-		console.debug("[Solve] Triggered Event: parse-style-setting");
+		logger.debug("[Solve] Triggered Event: parse-style-setting");
 
 		this.registerEvent(
 			this.app.workspace.on(
@@ -35,7 +36,7 @@ export default class SolvePlugin extends Plugin {
 				ESolveEvents.SolveObsidianEvents,
 				// @ts-expect-error
 				([provider]: [ISolveProvider]) => {
-					console.debug(
+					logger.debug(
 						"[Solve] Registered Custom Provider",
 						provider
 					);
@@ -46,24 +47,24 @@ export default class SolvePlugin extends Plugin {
 				}
 			)
 		);
-		console.debug(`[Solve] Registered: Register Provider Event Listener`);
+		logger.debug(`[Solve] Registered: Register Provider Event Listener`);
 
 		await this.registerEditorExtensions();
-		console.debug(`[Solve] Registered: Editor Extensions`);
+		logger.debug(`[Solve] Registered: Editor Extensions`);
 
 		this.statusBarItemEl = this.addStatusBarItem();
 		pluginEventBus.emit(EPluginEvent.StatusBarUpdate, EPluginStatus.Idle);
 	}
 
 	public onunload() {
-		console.debug("[Solve] onunload()");
+		logger.debug("[Solve] onunload()");
 		pluginEventBus.removeAllListeners();
 	}
 
 	public async saveSettings() {
 		const rawSettings = this.settings.getRaw();
 
-		console.debug("[Solve] Settings Saved", rawSettings);
+		logger.debug("[Solve] Settings Saved", rawSettings);
 
 		await this.saveData(rawSettings);
 

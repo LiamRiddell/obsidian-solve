@@ -7,6 +7,7 @@ import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
+import { logger } from "@/utilities/Logger";
 import { DecreaseByVisitor } from "@/visitors/percentage/DecreaseByVisitor";
 import { IncreaseByVisitor } from "@/visitors/percentage/IncreaseByVisitor";
 import { PercentageIncreaseOrDecreaseVisitor } from "@/visitors/percentage/PercentageIncreaseOrDecreaseVisitor";
@@ -74,7 +75,7 @@ export class PercentageArithmeticProvider extends SemanticProviderBase<Percentag
 
 			return result.accept(this.formatVisitor);
 		} catch (e) {
-			// console.error(e);
+			logger.error(e);
 			return undefined;
 		}
 	}

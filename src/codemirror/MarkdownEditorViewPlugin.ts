@@ -1,6 +1,7 @@
 import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
 // @ts-expect-error
+import { logger } from "@/utilities/Logger";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -28,7 +29,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private variableMap = new Map<string, string>();
 
 	constructor(view: EditorView) {
-		console.debug(`[SolveViewPlugin] Constructer`);
+		logger.debug(`[SolveViewPlugin] Constructer`);
 		this.decorations = this.buildDecorations(view);
 	}
 
@@ -55,7 +56,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	}
 
 	destroy() {
-		console.debug(`[SolveViewPlugin] Destroyed`);
+		logger.debug(`[SolveViewPlugin] Destroyed`);
 	}
 
 	buildDecorations(view: EditorView): DecorationSet {
@@ -83,7 +84,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 						return;
 					}
 
-					// console.debug(node.type.id, node.type.name);
+					// logger.debug(node.type.id, node.type.name);
 
 					if (firstNode) {
 						firstNode = false;
