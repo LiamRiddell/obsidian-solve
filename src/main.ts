@@ -1,13 +1,13 @@
-import { MarkdownEditorViewPlugin } from "@/MarkdownEditorViewPlugin";
-import { pluginEventBus } from "@/PluginEventBus";
-import { solveProviderManager } from "@/SolveProviderManager";
-import { PluginEvents } from "@/constants/PluginEvents";
-import { PluginStatus } from "@/constants/PluginStatus";
+import { MarkdownEditorViewPlugin } from "@/codemirror/MarkdownEditorViewPlugin";
+import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
+import { EPluginEvent } from "@/constants/EPluginEvent";
+import { EPluginStatus } from "@/constants/EPluginStatus";
+import { ESolveEvents } from "@/constants/ESolveEvents";
+import { pluginEventBus } from "@/eventbus/PluginEventBus";
+import { solveProviderManager } from "@/providers/ProviderManager";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
-import { SettingTab } from "@/settings/SolveSettingsTab";
+import { SettingTab } from "@/settings/SettingsTab";
 import UserSettings from "@/settings/UserSettings";
-import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";
-import { SolveObsidianEvents } from "@/utilities/SolveObsidianEvents";
 import { ViewPlugin } from "@codemirror/view";
 import { Plugin } from "obsidian";
 
@@ -32,7 +32,7 @@ export default class SolvePlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on(
 				// @ts-expect-error
-				SolveObsidianEvents.SolveObsidianEvents,
+				ESolveEvents.SolveObsidianEvents,
 				// @ts-expect-error
 				([provider]: [ISolveProvider]) => {
 					console.debug(
@@ -52,7 +52,7 @@ export default class SolvePlugin extends Plugin {
 		console.debug(`[Solve] Registered: Editor Extensions`);
 
 		this.statusBarItemEl = this.addStatusBarItem();
-		pluginEventBus.emit(PluginEvents.StatusBarUpdate, PluginStatus.Idle);
+		pluginEventBus.emit(EPluginEvent.StatusBarUpdate, EPluginStatus.Idle);
 	}
 
 	public onunload() {
@@ -72,7 +72,7 @@ export default class SolvePlugin extends Plugin {
 
 	private async registerEvents() {
 		pluginEventBus.on(
-			PluginEvents.StatusBarUpdate,
+			EPluginEvent.StatusBarUpdate,
 			this.onStatusBarUpdateEvent.bind(this)
 		);
 	}
@@ -114,13 +114,13 @@ export default class SolvePlugin extends Plugin {
 		}
 	}
 
-	private async onStatusBarUpdateEvent(status: PluginStatus) {
+	private async onStatusBarUpdateEvent(status: EPluginStatus) {
 		switch (status) {
-			case PluginStatus.Solving:
+			case EPluginStatus.Solving:
 				this.statusBarItemEl.setText("Solve 🤔");
 				break;
 
-			case PluginStatus.Idle:
+			case EPluginStatus.Idle:
 				setTimeout(() => this.statusBarItemEl.setText("Solve 😴"), 700);
 				break;
 		}

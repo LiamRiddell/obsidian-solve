@@ -1,8 +1,8 @@
-import { DatetimeParsingFormat } from "@/constants/DatetimeFormat";
-import { BaseSolveProvider } from "@/providers/BaseSolveProvider";
+import { EDatetimeParsingFormat } from "@/constants/EDatetimeFormat";
 import grammar, {
 	DatetimeSemantics,
-} from "@/providers/datetime/Datetime.ohm-bundle";
+} from "@/grammars/datetime/Datetime.ohm-bundle";
+import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import UserSettings from "@/settings/UserSettings";
 import {
 	dayOfWeekToIndex,
@@ -11,7 +11,7 @@ import {
 } from "@/utilities/Datetime";
 import moment from "moment";
 
-export class DatetimeProvider extends BaseSolveProvider<DatetimeSemantics> {
+export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 	constructor() {
 		super("DatetimeProvider");
 
@@ -97,10 +97,10 @@ export class DatetimeProvider extends BaseSolveProvider<DatetimeSemantics> {
 			datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
 				const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
 				switch (UserSettings.getInstance().datetimeParsingFormat) {
-					case DatetimeParsingFormat.EU:
+					case EDatetimeParsingFormat.EU:
 						return moment(dateString, ["DD/MM/YYYY HH:mm:ss"]);
 
-					case DatetimeParsingFormat.US:
+					case EDatetimeParsingFormat.US:
 						return moment(dateString, ["MM/DD/YYYY HH:mm:ss"]);
 				}
 			},

@@ -1,4 +1,4 @@
-import { DatetimeParsingFormat } from "@/constants/DatetimeFormat";
+import { EDatetimeParsingFormat } from "@/constants/EDatetimeFormat";
 
 export interface InterfaceSettings {
 	renderResultEndOfLine: boolean;
@@ -10,7 +10,7 @@ export interface ArithmeticSettings {
 }
 
 export interface DatetimeSettings {
-	parsingFormat: DatetimeParsingFormat;
+	parsingFormat: EDatetimeParsingFormat;
 }
 
 export interface PluginSettings {
@@ -28,6 +28,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 		decimalPoints: 4,
 	},
 	datetime: {
-		parsingFormat: DatetimeParsingFormat.EU,
+		parsingFormat: EDatetimeParsingFormat.EU,
 	},
 };

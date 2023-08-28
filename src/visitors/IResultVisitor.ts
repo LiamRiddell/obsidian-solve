@@ -1,4 +1,4 @@
-import { IResult } from "@/visitors/results/IResult";
+import { IResult } from "@/results/IResult";
 
 export interface IResultVisitor<T> {
 	visitFloatResult(result: IResult<number>): T;

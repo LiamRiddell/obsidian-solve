@@ -1,4 +1,4 @@
-import { BasicArithmeticProvider } from "@/providers/arithmetic/basic/BasicArithmeticProvider";
+import { BasicArithmeticProvider } from "@/providers/arithmetic/BasicArithmeticProvider";
 import { beforeAll, describe, expect, test } from "@jest/globals";
 
 let basicArithmeticProvider: BasicArithmeticProvider;

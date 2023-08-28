@@ -1,8 +1,8 @@
+import { FloatResult } from "@/results/FloatResult";
+import { HexResult } from "@/results/HexResult";
+import { IntegerResult } from "@/results/IntegerResult";
+import { PercentageResult } from "@/results/PercentageResult";
 import { IResultVisitor } from "@/visitors/IResultVisitor";
-import { FloatResult } from "@/visitors/results/FloatResult";
-import { HexResult } from "@/visitors/results/HexResult";
-import { IntegerResult } from "@/visitors/results/IntegerResult";
-import { PercentageResult } from "@/visitors/results/PercentageResult";
 
 export class FormatVisitor implements IResultVisitor<string> {
 	visitFloatResult(result: FloatResult): string {
