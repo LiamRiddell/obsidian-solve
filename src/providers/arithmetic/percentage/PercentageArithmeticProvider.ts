@@ -3,12 +3,10 @@ import { basicArithmeticSemanticActions } from "@/providers/arithmetic/basic/Ari
 import grammar, {
 	PercentageArithmeticSemantics,
 } from "@/providers/arithmetic/percentage/PercentageArithmetic.ohm-bundle";
-import {
-	decreaseByPercentage,
-	increaseByPercentage,
-	percentageIncrease,
-	percentageOf,
-} from "@/utilities/Percentage";
+import { DecreaseByVisitor } from "@/visitors/DecreaseByVisitor";
+import { IncreaseByVisitor } from "@/visitors/IncreaseByVisitor";
+import { PercentageIncreaseOrDecreaseVisitor } from "@/visitors/PercentageIncreaseOrDecreaseVisitor";
+import { PercentageOfVisitor } from "@/visitors/PercentageOfVisitor";
 import { FloatResult } from "@/visitors/results/FloatResult";
 import { HexResult } from "@/visitors/results/HexResult";
 import { IntegerResult } from "@/visitors/results/IntegerResult";
@@ -28,37 +26,28 @@ export class PercentageArithmeticProvider extends BaseSolveProvider<PercentageAr
 				const percent = percentNode.visit();
 				const population = populationNode.visit();
 
-				return new FloatResult(
-					percentageOf(percent.value, population.value)
+				return percent.accept(
+					new PercentageOfVisitor(percent, population)
 				);
 			},
 			IncreaseBy(_, valueNode, _1, percentageNode, _2) {
 				const value = valueNode.visit();
 				const percentage = percentageNode.visit();
 
-				return new FloatResult(
-					increaseByPercentage(value.value, percentage.value)
-				);
+				return value.accept(new IncreaseByVisitor(value, percentage));
 			},
 			DecreaseBy(_, valueNode, _1, percentageNode, _2) {
 				const value = valueNode.visit();
 				const percentage = percentageNode.visit();
 
-				return new FloatResult(
-					decreaseByPercentage(value.value, percentage.value)
-				);
+				return value.accept(new DecreaseByVisitor(value, percentage));
 			},
-			PercentageIncreaseOrDecrease(
-				_,
-				originalValueNode,
-				_1,
-				newValueNode
-			) {
-				const originalValue = originalValueNode.visit();
-				const newValue = newValueNode.visit();
+			PercentageIncreaseOrDecrease(_, thenNode, _1, nowNode) {
+				const then = thenNode.visit();
+				const now = nowNode.visit();
 
-				return new PercentageResult(
-					percentageIncrease(originalValue.value, newValue.value)
+				return then.accept(
+					new PercentageIncreaseOrDecreaseVisitor(then, now)
 				);
 			},
 			percentage(numberNode, _) {

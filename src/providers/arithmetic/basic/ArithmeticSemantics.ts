@@ -6,7 +6,7 @@ import { ExponentVisitor } from "@/visitors/ExponentVisitor";
 import {
 	LogicalShiftLeftVisitor,
 	LogicalShiftRightVisitor,
-} from "@/visitors/LogicalVisitor";
+} from "@/visitors/LogicalShiftVisitor";
 import { ModuloVisitor } from "@/visitors/ModuloVisitor";
 import { MultiplicationVisitor } from "@/visitors/MultiplicationVisitor";
 import { SubtractionVisitor } from "@/visitors/SubtractionVisitor";
