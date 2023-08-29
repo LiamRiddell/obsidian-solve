@@ -14,10 +14,21 @@ export class SettingTab extends PluginSettingTab {
 
 	display(): void {
 		this.containerEl.empty();
+
 		this.displayIntroduction();
 		this.displayInterfaceSettings();
+
+		// Providers
 		this.displayArithmeticProviderSettings();
 		this.displayDatetimeProviderSettings();
+
+		// Reuslts
+		//this.displayIntegerSettings();
+		this.displayFloatSettings();
+		this.displayPercentageSettings();
+		this.displayDatetimeSettings();
+		//this.displayHexSettings();
+
 		this.displayStyleSettings();
 	}
 
@@ -174,8 +185,52 @@ export class SettingTab extends PluginSettingTab {
 			});
 	}
 
+	displayPercentageSettings() {
+		new Setting(this.containerEl).setName("Percentage Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Decimal Places")
+			.setDesc(
+				`Adjust the number of decimal places, setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.percentageResult.decimalPlaces}`
+			)
+			.addSlider((slider) => {
+				const value =
+					this.plugin.settings.percentageResult.decimalPlaces;
+
+				slider.setLimits(0, 17, 1);
+				slider.setValue(value);
+
+				slider.sliderEl.addEventListener("mouseover", () => {
+					slider.showTooltip();
+				});
+
+				slider.onChange(async (value) => {
+					this.plugin.settings.percentageResult.decimalPlaces = value;
+
+					slider.showTooltip();
+
+					await this.plugin.saveSettings();
+				});
+			});
+	}
+
 	displayDatetimeSettings() {
 		new Setting(this.containerEl).setName("Datetime Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Format")
+			.setDesc(
+				`The format to use when displaying a date in the result. Default is ${DEFAULT_SETTINGS.datetimeResult.format}`
+			)
+			.addMomentFormat((control) =>
+				control
+					.setValue(this.plugin.settings.datetimeResult.format)
+					.onChange(async (value) => {
+						this.plugin.settings.datetimeResult.format = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayHexSettings() {
