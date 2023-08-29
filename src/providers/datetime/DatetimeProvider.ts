@@ -91,8 +91,8 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 				return `${Math.max(timeUntil, 0)} ${unitNode.sourceString}`;
 			},
 			datetimeFormatIso(year, _, month, _1, day, time) {
-				const dateString = `${year.sourceString}/${month.sourceString}/${day.sourceString} ${time.sourceString}`;
-				return moment(dateString, ["DD/MM/YYYY HH:mm:ss"]);
+				const dateString = `${year.sourceString}-${month.sourceString}-${day.sourceString} ${time.sourceString}`;
+				return moment(dateString, ["DD-MM-YYYY HH:mm:ss"]);
 			},
 			datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
 				const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
