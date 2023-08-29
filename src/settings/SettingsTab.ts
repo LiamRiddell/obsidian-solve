@@ -15,9 +15,9 @@ export class SettingTab extends PluginSettingTab {
 	display(): void {
 		this.containerEl.empty();
 		this.displayIntroduction();
-		this.displayVisualSettings();
-		this.displayArithmeticSettings();
-		this.displayDatetimeSettings();
+		this.displayInterfaceSettings();
+		this.displayArithmeticProviderSettings();
+		this.displayDatetimeProviderSettings();
 		this.displayStyleSettings();
 	}
 
@@ -29,16 +29,17 @@ export class SettingTab extends PluginSettingTab {
 		);
 	}
 
-	displayVisualSettings() {
-		new Setting(this.containerEl).setName("Visual").setHeading();
+	displayInterfaceSettings() {
+		new Setting(this.containerEl).setName("Interface").setHeading();
 
 		new Setting(this.containerEl)
 			.setName("Show result at end of line")
 			.setDesc(
-				`Position results at the conclusion of lines, not text's termination. Be cautious when using this setting, as it may cause overlap between the displayed result and the text on the same line. Default is ${DEFAULT_SETTINGS.renderResultEndOfLine}`
+				`Position results at the conclusion of lines, not text's termination. Be cautious when using this setting, as it may cause overlap between the displayed result and the text on the same line. Default is ${DEFAULT_SETTINGS.interface.renderResultEndOfLine}`
 			)
 			.addToggle((toggle) => {
-				const value = this.plugin.settings.renderResultEndOfLine;
+				const value =
+					this.plugin.settings.interface.renderResultEndOfLine;
 
 				toggle.setValue(value);
 
@@ -53,7 +54,8 @@ export class SettingTab extends PluginSettingTab {
 				}
 
 				toggle.onChange(async (value) => {
-					this.plugin.settings.renderResultEndOfLine = value;
+					this.plugin.settings.interface.renderResultEndOfLine =
+						value;
 
 					if (value) {
 						document.body.classList.add(
@@ -70,52 +72,33 @@ export class SettingTab extends PluginSettingTab {
 			});
 	}
 
-	displayArithmeticSettings() {
-		new Setting(this.containerEl).setName("Arithmetic").setHeading();
+	displayArithmeticProviderSettings() {
+		new Setting(this.containerEl)
+			.setName("Arithmetic Provider")
+			.setHeading();
 		new Setting(this.containerEl)
 			.setName("Show = before the result")
 			.setDesc(
-				`Adds the equals sign before arithmetic results to improve the natural reading of expressions. Default is ${DEFAULT_SETTINGS.arithmetic.renderEqualsBeforeResult}`
+				`Adds the equals sign before arithmetic results to improve the natural reading of expressions. Default is ${DEFAULT_SETTINGS.arithmeticProvider.renderEqualsBeforeResult}`
 			)
 			.addToggle((toggle) => {
-				const value = this.plugin.settings.renderEqualsBeforeResult;
+				const value =
+					this.plugin.settings.arithmeticProvider
+						.renderEqualsBeforeResult;
 
 				toggle.setValue(value);
 
 				toggle.onChange(async (value) => {
-					this.plugin.settings.renderEqualsBeforeResult = value;
-
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(this.containerEl)
-			.setName("Number precision")
-			.setDesc(
-				`Adjust the 'Number Precision' setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.arithmetic.decimalPoints}`
-			)
-			.addSlider((slider) => {
-				const value = this.plugin.settings.decimalPoints;
-
-				slider.setLimits(0, 17, 1);
-				slider.setValue(value);
-
-				slider.sliderEl.addEventListener("mouseover", () => {
-					slider.showTooltip();
-				});
-
-				slider.onChange(async (value) => {
-					this.plugin.settings.decimalPoints = value;
-
-					slider.showTooltip();
+					this.plugin.settings.arithmeticProvider.renderEqualsBeforeResult =
+						value;
 
 					await this.plugin.saveSettings();
 				});
 			});
 	}
 
-	displayDatetimeSettings() {
-		new Setting(this.containerEl).setName("Datetime").setHeading();
+	displayDatetimeProviderSettings() {
+		new Setting(this.containerEl).setName("Datetime Provider").setHeading();
 
 		new Setting(this.containerEl)
 			.setName("Parsing Format")
@@ -123,7 +106,8 @@ export class SettingTab extends PluginSettingTab {
 				"Specify the format to be used for parsing datetime values."
 			)
 			.addDropdown((dropdown) => {
-				const value = this.plugin.settings.datetimeParsingFormat;
+				const value =
+					this.plugin.settings.datetimeProvider.parsingFormat;
 
 				switch (value) {
 					case EDatetimeParsingFormat.EU:
@@ -143,12 +127,12 @@ export class SettingTab extends PluginSettingTab {
 				dropdown.onChange(async (value) => {
 					switch (value) {
 						case "EU":
-							this.plugin.settings.datetimeParsingFormat =
+							this.plugin.settings.datetimeProvider.parsingFormat =
 								EDatetimeParsingFormat.EU;
 							break;
 
 						case "US":
-							this.plugin.settings.datetimeParsingFormat =
+							this.plugin.settings.datetimeProvider.parsingFormat =
 								EDatetimeParsingFormat.US;
 							break;
 					}
@@ -156,6 +140,46 @@ export class SettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
+	}
+
+	displayIntegerSettings() {
+		new Setting(this.containerEl).setName("Integer Result").setHeading();
+	}
+
+	displayFloatSettings() {
+		new Setting(this.containerEl).setName("Float Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Decimal Places")
+			.setDesc(
+				`Adjust the number of decimal places, setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.floatResult.decimalPlaces}`
+			)
+			.addSlider((slider) => {
+				const value = this.plugin.settings.floatResult.decimalPlaces;
+
+				slider.setLimits(0, 17, 1);
+				slider.setValue(value);
+
+				slider.sliderEl.addEventListener("mouseover", () => {
+					slider.showTooltip();
+				});
+
+				slider.onChange(async (value) => {
+					this.plugin.settings.floatResult.decimalPlaces = value;
+
+					slider.showTooltip();
+
+					await this.plugin.saveSettings();
+				});
+			});
+	}
+
+	displayDatetimeSettings() {
+		new Setting(this.containerEl).setName("Datetime Result").setHeading();
+	}
+
+	displayHexSettings() {
+		new Setting(this.containerEl).setName("Hex Result").setHeading();
 	}
 
 	displayStyleSettings() {

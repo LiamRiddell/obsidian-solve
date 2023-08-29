@@ -643,7 +643,9 @@ export class VectorArithmeticProvider extends ProviderBase {
 				result instanceof Vector3 ||
 				result instanceof Vector4
 			) {
-				const output = result.toString(userSettings.decimalPoints);
+				const output = result.toString(
+					userSettings.floatResult.decimalPlaces
+				);
 
 				if (raw) {
 					return output;
@@ -654,7 +656,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 
 			if (Number.isNaN(result)) return undefined;
 
-			return result.toPrecision(userSettings.decimalPoints);
+			return result.toPrecision(userSettings.floatResult.decimalPlaces);
 		} catch (e) {
 			logger.error(e);
 			return undefined;

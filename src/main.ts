@@ -62,7 +62,7 @@ export default class SolvePlugin extends Plugin {
 	}
 
 	public async saveSettings() {
-		const rawSettings = this.settings.getRaw();
+		const rawSettings = this.settings.settings;
 
 		logger.debug("[Solve] Settings Saved", rawSettings);
 
@@ -106,7 +106,7 @@ export default class SolvePlugin extends Plugin {
 	}
 
 	private async restoreFeatureFlags() {
-		if (this.settings.renderResultEndOfLine) {
+		if (this.settings.interface.renderResultEndOfLine) {
 			document.body.classList.add(FeatureFlagClass.RenderEndOfLineResult);
 		} else {
 			document.body.classList.remove(

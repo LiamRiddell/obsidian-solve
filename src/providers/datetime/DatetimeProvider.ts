@@ -96,7 +96,9 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 			},
 			datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
 				const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
-				switch (UserSettings.getInstance().datetimeParsingFormat) {
+				switch (
+					UserSettings.getInstance().datetimeProvider.parsingFormat
+				) {
 					case EDatetimeParsingFormat.EU:
 						return moment(dateString, ["DD/MM/YYYY HH:mm:ss"]);
 

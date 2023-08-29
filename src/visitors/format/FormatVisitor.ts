@@ -10,13 +10,10 @@ export class FormatVisitor implements IResultVisitor<string> {
 
 	constructor() {
 		this.settings = UserSettings.getInstance();
-		// TODO:
-		// - Float Result, Percentage Result
 	}
 
 	visitFloatResult(result: FloatResult): string {
-		// TODO: Implement User Settings
-		return result.value.toFixed(this.settings.decimalPoints);
+		return result.value.toFixed(this.settings.floatResult.decimalPlaces);
 	}
 
 	visitHexResult(result: HexResult): string {
@@ -30,7 +27,8 @@ export class FormatVisitor implements IResultVisitor<string> {
 	}
 
 	visitPercentageResult(result: PercentageResult): string {
-		// TODO: Implement User Settings
-		return `${result.value.toFixed(4)}%`;
+		return `${result.value.toFixed(
+			this.settings.percentageResult.decimalPlaces
+		)}%`;
 	}
 }

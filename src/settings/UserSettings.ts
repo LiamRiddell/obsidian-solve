@@ -1,12 +1,41 @@
-import { EDatetimeParsingFormat } from "@/constants/EDatetimeFormat";
-import { DEFAULT_SETTINGS, PluginSettings } from "@/settings/PluginSettings";
+import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
+import { IPluginSettings } from "@/settings/definition/IPluginSettings";
+import { ArithmeticProviderSettings } from "@/settings/properties/ArithmeticProviderSettings";
+import { DatetimeProviderSettings } from "@/settings/properties/DatetimeProviderSettings";
+import { DatetimeResultSettings } from "@/settings/properties/DatetimeResultSettings";
+import { FloatResultSettings } from "@/settings/properties/FloatResultSettings";
+import { HexResultSettings } from "@/settings/properties/HexResultSettings";
+import { IntegerResultSettings } from "@/settings/properties/IntegerResultSettings";
+import { InterfaceSettings } from "@/settings/properties/InterfaceSettings";
+import { PercentageResultSettings } from "@/settings/properties/PercentageResultSettings";
 
 export default class UserSettings {
 	private static instance: UserSettings | null = null;
-	private settings: PluginSettings;
+	public settings: IPluginSettings;
+
+	public readonly interface: InterfaceSettings;
+
+	// Provider Settings
+	public readonly arithmeticProvider: ArithmeticProviderSettings;
+	public readonly datetimeProvider: DatetimeProviderSettings;
+
+	// Result Settings
+	public readonly integerResult: IntegerResultSettings;
+	public readonly floatResult: FloatResultSettings;
+	public readonly percentageResult: PercentageResultSettings;
+	public readonly datetimeResult: DatetimeResultSettings;
+	public readonly hexResult: HexResultSettings;
 
 	private constructor() {
 		this.settings = DEFAULT_SETTINGS;
+		this.interface = new InterfaceSettings(this);
+		this.arithmeticProvider = new ArithmeticProviderSettings(this);
+		this.datetimeProvider = new DatetimeProviderSettings(this);
+		this.integerResult = new IntegerResultSettings(this);
+		this.floatResult = new FloatResultSettings(this);
+		this.percentageResult = new PercentageResultSettings(this);
+		this.datetimeResult = new DatetimeResultSettings(this);
+		this.hexResult = new HexResultSettings(this);
 	}
 
 	static getInstance(): UserSettings {
@@ -16,62 +45,22 @@ export default class UserSettings {
 		return UserSettings.instance;
 	}
 
-	public getRaw() {
-		return this.settings;
-	}
-
-	public updateSettings(settings: PluginSettings) {
+	public updateSettings(settings: IPluginSettings) {
 		this.settings = settings;
 	}
 
-	//#region Visual
-	get renderResultEndOfLine(): boolean {
-		return (
-			this.settings.visual.renderResultEndOfLine ||
-			DEFAULT_SETTINGS.visual.renderResultEndOfLine
-		);
-	}
+	// //#endregion
 
-	set renderResultEndOfLine(value: boolean) {
-		this.settings.visual.renderResultEndOfLine = value;
-	}
-	//#endregion
+	// //#region Datetime
+	// get datetimeParsingFormat(): EDatetimeParsingFormat {
+	// 	return (
+	// 		this.settings.datetimeProvider.parsingFormat ||
+	// 		DEFAULT_SETTINGS.datetimeProvider.parsingFormat
+	// 	);
+	// }
 
-	//#region Arithmetic
-	get renderEqualsBeforeResult() {
-		return (
-			this.settings.arithmetic.renderEqualsBeforeResult ||
-			DEFAULT_SETTINGS.arithmetic.renderEqualsBeforeResult
-		);
-	}
-
-	set renderEqualsBeforeResult(value: boolean) {
-		this.settings.arithmetic.renderEqualsBeforeResult = value;
-	}
-
-	get decimalPoints(): number {
-		return (
-			this.settings.arithmetic.decimalPoints ||
-			DEFAULT_SETTINGS.arithmetic.decimalPoints
-		);
-	}
-
-	set decimalPoints(value: number) {
-		this.settings.arithmetic.decimalPoints = value;
-	}
-	//#endregion
-
-	//#region Datetime
-	get datetimeParsingFormat(): EDatetimeParsingFormat {
-		return (
-			this.settings.datetime.parsingFormat ||
-			DEFAULT_SETTINGS.datetime.parsingFormat
-		);
-	}
-
-	set datetimeParsingFormat(value: EDatetimeParsingFormat) {
-		this.settings.datetime.parsingFormat = value;
-	}
-
-	//#endregion
+	// set datetimeParsingFormat(value: EDatetimeParsingFormat) {
+	// 	this.settings.datetimeProvider.parsingFormat = value;
+	// }
+	// //#endregion
 }
