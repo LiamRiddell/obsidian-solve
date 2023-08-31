@@ -1,9 +1,9 @@
 import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IDatetimeResult } from "@/results/IMomentResult";
-import { IStringResult } from "@/results/IStringResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
+import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
+import { IStringResult } from "@/results/definition/IStringResult";
 import UserSettings from "@/settings/UserSettings";
 import { IResultVisitor } from "@/visitors/IResultVisitor";
 

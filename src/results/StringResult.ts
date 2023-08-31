@@ -1,5 +1,5 @@
 import { EResultType } from "@/constants/EResultType";
-import { IStringResult } from "@/results/IStringResult";
+import { IStringResult } from "@/results/definition/IStringResult";
 import { IResultVisitor } from "@/visitors/IResultVisitor";
 
 export class StringResult implements IStringResult {

@@ -1,4 +1,4 @@
-import { IResult } from "@/results/IResult";
+import { IResult } from "@/results/definition/IResult";
 import { IResultVisitor } from "@/visitors/IResultVisitor";
 import { Moment } from "moment";
 

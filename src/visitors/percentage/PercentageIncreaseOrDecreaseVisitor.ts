@@ -1,9 +1,9 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
-import { IDatetimeResult } from "@/results/IMomentResult";
-import { INumericResult } from "@/results/INumericResult";
-import { IResult } from "@/results/IResult";
-import { IStringResult } from "@/results/IStringResult";
 import { PercentageResult } from "@/results/PercentageResult";
+import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
+import { INumericResult } from "@/results/definition/INumericResult";
+import { IResult } from "@/results/definition/IResult";
+import { IStringResult } from "@/results/definition/IStringResult";
 import { percentageIncrease } from "@/utilities/Percentage";
 import { IResultVisitor } from "@/visitors/IResultVisitor";
 

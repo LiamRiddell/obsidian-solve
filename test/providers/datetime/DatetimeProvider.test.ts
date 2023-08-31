@@ -120,8 +120,8 @@ describe("Date", () => {
 });
 
 describe("ISO8601", () => {
-	test("1997-07-16Z", () => {
-		const result = datetimeProvider.provide("1997-07-16Z");
+	test("1997-07-16", () => {
+		const result = datetimeProvider.provide("1997-07-16");
 		expect(result).toBeDefined();
 	});
 

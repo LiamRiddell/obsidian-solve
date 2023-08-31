@@ -1,5 +1,5 @@
 import { EResultType } from "@/constants/EResultType";
-import { IDatetimeResult } from "@/results/IMomentResult";
+import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
 import { IResultVisitor } from "@/visitors/IResultVisitor";
 import { Moment } from "moment";
 

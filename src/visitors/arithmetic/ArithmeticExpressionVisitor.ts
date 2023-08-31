@@ -1,7 +1,7 @@
 import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { INumericResult } from "@/results/INumericResult";
 import { IntegerResult } from "@/results/IntegerResult";
+import { INumericResult } from "@/results/definition/INumericResult";
 
 export class ArithmeticExpressionVisitor {
 	visitPositive(e: INumericResult): INumericResult {

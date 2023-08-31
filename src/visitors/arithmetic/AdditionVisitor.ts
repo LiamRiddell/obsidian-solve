@@ -1,11 +1,11 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
 import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IDatetimeResult } from "@/results/IMomentResult";
-import { INumericResult } from "@/results/INumericResult";
-import { IStringResult } from "@/results/IStringResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
+import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
+import { INumericResult } from "@/results/definition/INumericResult";
+import { IStringResult } from "@/results/definition/IStringResult";
 import { percentageOf } from "@/utilities/Percentage";
 import { IResultVisitor } from "@/visitors/IResultVisitor";
 

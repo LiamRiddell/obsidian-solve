@@ -1,6 +1,6 @@
-import { IDatetimeResult } from "@/results/IMomentResult";
-import { INumericResult } from "@/results/INumericResult";
-import { IStringResult } from "@/results/IStringResult";
+import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
+import { INumericResult } from "@/results/definition/INumericResult";
+import { IStringResult } from "@/results/definition/IStringResult";
 
 export interface IResultVisitor<T> {
 	visitFloatResult(result: INumericResult): T;

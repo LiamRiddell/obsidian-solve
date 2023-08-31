@@ -1,5 +1,5 @@
 import { EResultType } from "@/constants/EResultType";
-import { INumericResult } from "@/results/INumericResult";
+import { INumericResult } from "@/results/definition/INumericResult";
 import { IResultVisitor } from "@/visitors/IResultVisitor";
 
 export class FloatResult implements INumericResult {
