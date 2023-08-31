@@ -3,6 +3,8 @@ import grammar, {
 	DatetimeSemantics,
 } from "@/grammars/datetime/Datetime.ohm-bundle";
 import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
+import { DatetimeResult } from "@/results/DatetimeResult";
+import { StringResult } from "@/results/StringResult";
 import UserSettings from "@/settings/UserSettings";
 import {
 	dayOfWeekToIndex,
@@ -17,102 +19,128 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 
 		this.semantics = grammar.createSemantics();
 
-		this.semantics.addOperation<moment.Moment | string | number>("eval()", {
-			Addition(datetimeNode, _, timespanNode) {
-				const datetime = datetimeNode.eval();
+		this.semantics.addOperation<DatetimeResult | StringResult | number>(
+			"visit()",
+			{
+				Addition(datetimeNode, _, timespanNode) {
+					const datetime = datetimeNode.visit();
 
-				const timespanNumber = parseInt(
-					timespanNode.child(0).sourceString
-				);
+					const timespanNumber = parseInt(
+						timespanNode.child(0).sourceString
+					);
 
-				const timespanUnit = timespanNode.child(1).sourceString;
+					const timespanUnit = timespanNode.child(1).sourceString;
 
-				return datetime.add(timespanNumber, timespanUnit);
-			},
-			Subtraction(datetimeNode, _, timespanNode) {
-				const datetime = datetimeNode.eval();
+					return new DatetimeResult(
+						datetime.value.add(timespanNumber, timespanUnit)
+					);
+				},
+				Subtraction(datetimeNode, _, timespanNode) {
+					const datetime = datetimeNode.visit();
 
-				const timespanNumber = parseInt(
-					timespanNode.child(0).sourceString
-				);
+					const timespanNumber = parseInt(
+						timespanNode.child(0).sourceString
+					);
 
-				const timespanUnit = timespanNode.child(1).sourceString;
+					const timespanUnit = timespanNode.child(1).sourceString;
 
-				return datetime.subtract(timespanNumber, timespanUnit);
-			},
-			Primitive(node) {
-				return node.eval();
-			},
-			Now(_) {
-				return moment();
-			},
-			Today(_) {
-				return moment().startOf("day");
-			},
-			Tomorrow(_) {
-				return moment().add(1, "day").startOf("day");
-			},
-			Yesterday(_) {
-				return moment().subtract(1, "day").startOf("day");
-			},
-			NextDayOfWeek(_, dayOfWeekNode) {
-				const dayOfWeek = dayOfWeekNode.sourceString.toLowerCase();
+					return new DatetimeResult(
+						datetime.value.subtract(timespanNumber, timespanUnit)
+					);
+				},
+				Primitive(node) {
+					return node.visit();
+				},
+				Now(_) {
+					return new DatetimeResult(moment());
+				},
+				Today(_) {
+					return new DatetimeResult(moment().startOf("day"));
+				},
+				Tomorrow(_) {
+					return new DatetimeResult(
+						moment().add(1, "day").startOf("day")
+					);
+				},
+				Yesterday(_) {
+					return new DatetimeResult(
+						moment().subtract(1, "day").startOf("day")
+					);
+				},
+				NextDayOfWeek(_, dayOfWeekNode) {
+					const dayOfWeek = dayOfWeekNode.sourceString.toLowerCase();
 
-				const nextDayOfWeekIndex = dayOfWeekToIndex(dayOfWeek);
+					const nextDayOfWeekIndex = dayOfWeekToIndex(dayOfWeek);
 
-				return getNextDayOfWeek(nextDayOfWeekIndex);
-			},
-			LastDayOfWeek(_, dayOfWeekNode) {
-				const dayOfWeek = dayOfWeekNode.sourceString.toLowerCase();
+					return new DatetimeResult(
+						getNextDayOfWeek(nextDayOfWeekIndex)
+					);
+				},
+				LastDayOfWeek(_, dayOfWeekNode) {
+					const dayOfWeek = dayOfWeekNode.sourceString.toLowerCase();
 
-				const previousDayOfWeekIndex = dayOfWeekToIndex(dayOfWeek);
+					const previousDayOfWeekIndex = dayOfWeekToIndex(dayOfWeek);
 
-				return getPreviousDayOfWeek(previousDayOfWeekIndex);
-			},
-			TimeUnitSinceDate(unitNode, _, dateNode) {
-				const date = dateNode.eval();
+					return new DatetimeResult(
+						getPreviousDayOfWeek(previousDayOfWeekIndex)
+					);
+				},
+				TimeUnitSinceDate(unitNode, _, dateNode) {
+					const date = dateNode.visit();
 
-				const timeUntil = moment().startOf("day").diff(
-					date,
-					// @ts-expect-error
-					unitNode.sourceString
-				);
+					const timeUntil = moment().startOf("day").diff(
+						date.value,
+						// @ts-expect-error
+						unitNode.sourceString
+					);
 
-				return `${Math.max(timeUntil, 0)} ${unitNode.sourceString}`;
-			},
-			TimeUnitUntilDate(unitNode, _, dateNode) {
-				const date = dateNode.eval();
+					return new StringResult(
+						`${Math.max(timeUntil, 0)} ${unitNode.sourceString}`
+					);
+				},
+				TimeUnitUntilDate(unitNode, _, dateNode) {
+					const date = dateNode.visit();
 
-				const timeUntil = date.diff(
-					moment().startOf("day"),
-					unitNode.sourceString
-				);
+					const timeUntil = date.value.diff(
+						moment().startOf("day"),
+						unitNode.sourceString
+					);
 
-				return `${Math.max(timeUntil, 0)} ${unitNode.sourceString}`;
-			},
-			datetimeFormatIso(year, _, month, _1, day, time) {
-				const dateString = `${year.sourceString}-${month.sourceString}-${day.sourceString} ${time.sourceString}`;
-				return moment(dateString, ["DD-MM-YYYY HH:mm:ss"]);
-			},
-			datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
-				const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
-				switch (
-					UserSettings.getInstance().datetimeProvider.parsingFormat
-				) {
-					case EDatetimeParsingFormat.EU:
-						return moment(dateString, ["DD/MM/YYYY HH:mm:ss"]);
+					return new StringResult(
+						`${Math.max(timeUntil, 0)} ${unitNode.sourceString}`
+					);
+				},
+				datetimeFormatIso(year, _, month, _1, day, time) {
+					const dateString = `${year.sourceString}-${month.sourceString}-${day.sourceString} ${time.sourceString}`;
+					return new DatetimeResult(
+						moment(dateString, ["DD-MM-YYYY HH:mm:ss"])
+					);
+				},
+				datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
+					const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
+					switch (
+						UserSettings.getInstance().datetimeProvider
+							.parsingFormat
+					) {
+						case EDatetimeParsingFormat.EU:
+							return new DatetimeResult(
+								moment(dateString, ["DD/MM/YYYY HH:mm:ss"])
+							);
 
-					case EDatetimeParsingFormat.US:
-						return moment(dateString, ["MM/DD/YYYY HH:mm:ss"]);
-				}
-			},
-			integer(_) {
-				return parseInt(this.sourceString);
-			},
-			number(_) {
-				return parseFloat(this.sourceString);
-			},
-		});
+						case EDatetimeParsingFormat.US:
+							return new DatetimeResult(
+								moment(dateString, ["MM/DD/YYYY HH:mm:ss"])
+							);
+					}
+				},
+				integer(_) {
+					return parseInt(this.sourceString);
+				},
+				number(_) {
+					return parseFloat(this.sourceString);
+				},
+			}
+		);
 	}
 
 	provide(sentence: string, raw: boolean = true): string | undefined {
@@ -123,11 +151,11 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 				return undefined;
 			}
 
-			const result = this.semantics(matchResult).eval();
+			const result = this.semantics(matchResult).visit();
 
-			// if (moment.isMoment(result)) {
-			// 	logger.log("IT'S A MOMENT OBJECT");
-			// }
+			if (raw) {
+				return result.value;
+			}
 
 			return result;
 		} catch (e) {

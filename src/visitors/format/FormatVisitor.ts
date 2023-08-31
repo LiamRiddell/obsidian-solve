@@ -1,5 +1,7 @@
 import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
+import { IDatetimeResult } from "@/results/IMomentResult";
+import { IStringResult } from "@/results/IStringResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import UserSettings from "@/settings/UserSettings";
@@ -30,5 +32,13 @@ export class FormatVisitor implements IResultVisitor<string> {
 		return `${result.value.toFixed(
 			this.settings.percentageResult.decimalPlaces
 		)}%`;
+	}
+
+	visitDatetimeResult(result: IDatetimeResult): string {
+		return result.value.format(this.settings.datetimeResult.format);
+	}
+
+	visitStringResult(result: IStringResult): string {
+		return result.value;
 	}
 }

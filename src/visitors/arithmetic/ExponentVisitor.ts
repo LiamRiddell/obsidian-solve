@@ -1,7 +1,10 @@
+import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
 import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
+import { IDatetimeResult } from "@/results/IMomentResult";
 import { INumericResult } from "@/results/INumericResult";
 import { IResult } from "@/results/IResult";
+import { IStringResult } from "@/results/IStringResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { percentageOf } from "@/utilities/Percentage";
@@ -43,7 +46,7 @@ export class ExponentVisitor implements IResultVisitor<INumericResult> {
 
 	visitHexResult(result: IResult<number>): INumericResult {
 		if (this.right instanceof PercentageResult) {
-			throw new Error("Unable to use percentage with left hex operand");
+			throw new UnsupportedVisitorOperationError();
 		}
 
 		return new HexResult(
@@ -55,5 +58,13 @@ export class ExponentVisitor implements IResultVisitor<INumericResult> {
 		return new FloatResult(
 			Math.pow(this.left.value / 100, this.right.value)
 		);
+	}
+
+	visitDatetimeResult(result: IDatetimeResult): INumericResult {
+		throw new UnsupportedVisitorOperationError();
+	}
+
+	visitStringResult(result: IStringResult): INumericResult {
+		throw new UnsupportedVisitorOperationError();
 	}
 }

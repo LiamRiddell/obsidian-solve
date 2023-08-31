@@ -1,9 +1,12 @@
-import { IResult } from "@/results/IResult";
+import { IDatetimeResult } from "@/results/IMomentResult";
+import { INumericResult } from "@/results/INumericResult";
+import { IStringResult } from "@/results/IStringResult";
 
 export interface IResultVisitor<T> {
-	visitFloatResult(result: IResult<number>): T;
-	visitIntegerResult(result: IResult<number>): T;
-	visitPercentageResult(result: IResult<number>): T;
-	visitHexResult(result: IResult<number>): T;
-	visitPercentageResult(result: IResult<number>): T;
+	visitFloatResult(result: INumericResult): T;
+	visitIntegerResult(result: INumericResult): T;
+	visitPercentageResult(result: INumericResult): T;
+	visitHexResult(result: INumericResult): T;
+	visitDatetimeResult(result: IDatetimeResult): T;
+	visitStringResult(result: IStringResult): T;
 }
