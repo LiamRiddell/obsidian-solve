@@ -70,7 +70,7 @@ export class PercentageArithmeticProvider extends SemanticProviderBase<Percentag
 			const result = this.semantics(matchResult).visit();
 
 			if (raw) {
-				return result;
+				return result.value;
 			}
 
 			return result.accept(this.formatVisitor);
