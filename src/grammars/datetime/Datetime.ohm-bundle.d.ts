@@ -30,8 +30,9 @@ export interface DatetimeActionDict<T> extends BaseActionDict<T> {
   twoDigit?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode) => T;
   fourDigit?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode, arg3: NonterminalNode) => T;
   time?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode) => T;
-  datetimeFormatIso?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode) => T;
+  datetimeIso8601?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode, arg6: IterationNode, arg7: IterationNode, arg8: IterationNode, arg9: IterationNode, arg10: IterationNode, arg11: IterationNode, arg12: IterationNode, arg13: IterationNode) => T;
   datetimeFormatEuropeanOrUs?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode) => T;
+  timeZone?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: TerminalNode, arg3: IterationNode) => T;
   add?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode) => T;
   subtract?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode) => T;
   now?: (this: NonterminalNode, arg0: NonterminalNode) => T;

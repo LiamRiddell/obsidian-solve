@@ -38,7 +38,7 @@ Datetime {
   
   // e.g. 1/10/23 or 01.10.2023
   Datetime 
-  	= datetimeFormatIso
+  	= datetimeIso8601
     | datetimeFormatEuropeanOrUs
   
   // e.g. Next Monday
@@ -68,15 +68,17 @@ Datetime {
   time
     =  (twoDigit | oneDigit) ":" (twoDigit | oneDigit) ":" (twoDigit | oneDigit)
 
-  datetimeFormatIso
-    = fourDigit "/" (twoDigit | oneDigit) "/" (twoDigit | oneDigit)  time?
-    | fourDigit "-" (twoDigit | oneDigit) "-" (twoDigit | oneDigit)  time?
-    | fourDigit "." (twoDigit | oneDigit) "." (twoDigit | oneDigit)  time?
+  datetimeIso8601
+    = fourDigit "-" twoDigit "-" twoDigit "T"? (twoDigit ":" twoDigit ":" twoDigit)? ("." digit+)? ("Z" | timeZone)?
 
   datetimeFormatEuropeanOrUs
     = (twoDigit | oneDigit) "/" (twoDigit | oneDigit) "/" (fourDigit | twoDigit) time?
     | (twoDigit | oneDigit) "-" (twoDigit | oneDigit) "-" (fourDigit | twoDigit) time?
     | (twoDigit | oneDigit) "." (twoDigit | oneDigit) "." (fourDigit | twoDigit) time?
+    
+  timeZone
+ 	 = "+" digit+ ":" digit+
+ 	 | "-" digit+ ":" digit+
 
   add 
   	= "+"

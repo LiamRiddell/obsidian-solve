@@ -110,11 +110,24 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 						`${Math.max(timeUntil, 0)} ${unitNode.sourceString}`
 					);
 				},
-				datetimeFormatIso(year, _, month, _1, day, time) {
-					const dateString = `${year.sourceString}-${month.sourceString}-${day.sourceString} ${time.sourceString}`;
-					return new DatetimeResult(
-						moment(dateString, ["DD-MM-YYYY HH:mm:ss"])
-					);
+
+				datetimeIso8601(
+					_,
+					_1,
+					_2,
+					_3,
+					_4,
+					_5,
+					_6,
+					_7,
+					_8,
+					_9,
+					_10,
+					_11,
+					_12,
+					_13
+				) {
+					return new DatetimeResult(moment(this.sourceString));
 				},
 				datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
 					const dateString = `${dOrM.sourceString}/${mOrD.sourceString}/${year.sourceString} ${time.sourceString}`;
@@ -157,7 +170,7 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 				return result.value;
 			}
 
-			return result;
+			return result.accept(this.formatVisitor);
 		} catch (e) {
 			return undefined;
 		}
