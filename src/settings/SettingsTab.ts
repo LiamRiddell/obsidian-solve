@@ -237,7 +237,7 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Hex Result").setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Enable Value Padding")
+			.setName("Value Padding")
 			.setDesc(
 				`Enable or disable padding the start of hex values with zeros for consistency. Default is ${DEFAULT_SETTINGS.hexResult.enablePadding}`
 			)
