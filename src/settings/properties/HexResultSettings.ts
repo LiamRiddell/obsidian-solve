@@ -4,14 +4,25 @@ import UserSettings from "@/settings/UserSettings";
 export class HexResultSettings {
 	constructor(private parent: UserSettings) {}
 
-	get padding(): boolean {
+	get enablePadding(): boolean {
 		return (
-			this.parent.settings.hexResult.padding ||
-			DEFAULT_SETTINGS.hexResult.padding
+			this.parent.settings.hexResult.enablePadding ||
+			DEFAULT_SETTINGS.hexResult.enablePadding
 		);
 	}
 
-	set padding(value: boolean) {
-		this.parent.settings.hexResult.padding = value;
+	set enablePadding(value: boolean) {
+		this.parent.settings.hexResult.enablePadding = value;
+	}
+
+	get paddingZeros(): number {
+		return (
+			this.parent.settings.hexResult.paddingZeros ||
+			DEFAULT_SETTINGS.hexResult.paddingZeros
+		);
+	}
+
+	set paddingZeros(value: number) {
+		this.parent.settings.hexResult.paddingZeros = value;
 	}
 }

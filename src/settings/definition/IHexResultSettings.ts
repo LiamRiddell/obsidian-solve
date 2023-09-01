@@ -1,3 +1,4 @@
 export interface IHexResultSettings {
-	padding: boolean;
+	enablePadding: boolean;
+	paddingZeros: number;
 }

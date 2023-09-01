@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		format: moment.defaultFormat,
 	},
 	hexResult: {
-		padding: false,
+		enablePadding: false,
+		paddingZeros: 8,
 	},
 };

@@ -27,7 +27,7 @@ export class SettingTab extends PluginSettingTab {
 		this.displayFloatSettings();
 		this.displayPercentageSettings();
 		this.displayDatetimeSettings();
-		//this.displayHexSettings();
+		this.displayHexSettings();
 
 		this.displayStyleSettings();
 	}
@@ -235,6 +235,44 @@ export class SettingTab extends PluginSettingTab {
 
 	displayHexSettings() {
 		new Setting(this.containerEl).setName("Hex Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Enable Value Padding")
+			.setDesc(
+				`Enable or disable padding the start of hex values with zeros for consistency. Default is ${DEFAULT_SETTINGS.hexResult.enablePadding}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.hexResult.enablePadding)
+					.onChange(async (value) => {
+						this.plugin.settings.hexResult.enablePadding = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Padding Zeros")
+			.setDesc(
+				`Specify the number of leading zeros to pad hex values with for a uniform appearance. Default is ${DEFAULT_SETTINGS.hexResult.paddingZeros}`
+			)
+			.addSlider((slider) => {
+				const value = this.plugin.settings.hexResult.paddingZeros;
+
+				slider.setLimits(0, 32, 1);
+				slider.setValue(value);
+
+				slider.sliderEl.addEventListener("mouseover", () => {
+					slider.showTooltip();
+				});
+
+				slider.onChange(async (value) => {
+					this.plugin.settings.hexResult.paddingZeros = value;
+
+					slider.showTooltip();
+
+					await this.plugin.saveSettings();
+				});
+			});
 	}
 
 	displayStyleSettings() {

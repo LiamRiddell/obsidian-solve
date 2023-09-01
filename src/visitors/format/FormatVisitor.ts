@@ -20,7 +20,15 @@ export class FormatVisitor implements IResultVisitor<string> {
 
 	visitHexResult(result: HexResult): string {
 		const isNegative = result.value < 0;
-		const hexString = Math.abs(result.value).toString(16).toUpperCase();
+		const hexString = Math.abs(result.value)
+			.toString(16)
+			.toUpperCase()
+			.padStart(
+				this.settings.hexResult.enablePadding
+					? this.settings.hexResult.paddingZeros
+					: 0,
+				"0"
+			);
 		return isNegative ? `-0x${hexString}` : `0x${hexString}`;
 	}
 
