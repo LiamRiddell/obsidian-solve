@@ -16,12 +16,12 @@ export class DecreaseByVisitor
 			visited instanceof FloatResult ||
 			visited instanceof IntegerResult
 		) {
-			this.right.value = decreaseByPercentage(
+			(visited as INumericResult).value = decreaseByPercentage(
 				visited.value,
 				this.right.value
 			);
 
-			return this.right;
+			return visited;
 		}
 
 		throw new UnsupportedVisitorOperationError();
