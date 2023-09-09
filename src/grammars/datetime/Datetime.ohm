@@ -89,6 +89,7 @@ Datetime {
     = "-"
     | caseInsensitive<"take">
     | caseInsensitive<"minus">
+    | caseInsensitive<"subtract">
 
   now
     = caseInsensitive<"now">
