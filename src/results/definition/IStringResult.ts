@@ -1,6 +1,6 @@
 import { IResult } from "@/results/definition/IResult";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export interface IStringResult extends IResult<string> {
-	accept<T>(visitor: IResultVisitor<T>): T;
+	accept<T>(visitor: IGenericResultVisitor<T>): T;
 }

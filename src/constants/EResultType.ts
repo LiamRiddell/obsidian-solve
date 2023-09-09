@@ -4,4 +4,7 @@ export enum EResultType {
 	String,
 	Datetime,
 	Percentage,
+	Vector2,
+	Vector3,
+	Vector4,
 }

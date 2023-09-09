@@ -1,17 +1,67 @@
+import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
+import { DatetimeResult } from "@/results/DatetimeResult";
 import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
+import { StringResult } from "@/results/StringResult";
+import { Vector2Result } from "@/results/Vector2Result";
+import { Vector3Result } from "@/results/Vector3Result";
+import { Vector4Result } from "@/results/Vector4Result";
 import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
+import { IResult } from "@/results/definition/IResult";
 import { IStringResult } from "@/results/definition/IStringResult";
+import { IVector2Result } from "@/results/definition/IVector2Result";
+import { IVector3Result } from "@/results/definition/IVector3Result";
+import { IVector4Result } from "@/results/definition/IVector4Result";
 import UserSettings from "@/settings/UserSettings";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
-export class FormatVisitor implements IResultVisitor<string> {
+export class FormatVisitor implements IGenericResultVisitor<string> {
 	private settings: UserSettings;
 
 	constructor() {
 		this.settings = UserSettings.getInstance();
+	}
+
+	visit<TValue>(visited: IResult<TValue>): string {
+		if (visited instanceof FloatResult) {
+			return this.visitFloatResult(visited);
+		}
+
+		if (visited instanceof IntegerResult) {
+			return this.visitIntegerResult(visited);
+		}
+
+		if (visited instanceof HexResult) {
+			return this.visitHexResult(visited);
+		}
+
+		if (visited instanceof PercentageResult) {
+			return this.visitPercentageResult(visited);
+		}
+
+		if (visited instanceof DatetimeResult) {
+			return this.visitDatetimeResult(visited);
+		}
+
+		if (visited instanceof StringResult) {
+			return this.visitStringResult(visited);
+		}
+
+		if (visited instanceof Vector2Result) {
+			return this.visitVector2Result(visited);
+		}
+
+		if (visited instanceof Vector3Result) {
+			return this.visitVector3Result(visited);
+		}
+
+		if (visited instanceof Vector4Result) {
+			return this.visitVector4Result(visited);
+		}
+
+		throw new UnsupportedVisitorOperationError();
 	}
 
 	visitFloatResult(result: FloatResult): string {
@@ -48,5 +98,53 @@ export class FormatVisitor implements IResultVisitor<string> {
 
 	visitStringResult(result: IStringResult): string {
 		return result.value;
+	}
+
+	visitVector2Result(result: IVector2Result): string {
+		const x = result.value.x.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		const y = result.value.y.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		return `(${x}, ${y})`;
+	}
+
+	visitVector3Result(result: IVector3Result): string {
+		const x = result.value.x.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		const y = result.value.y.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		const z = result.value.z.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		return `(${x}, ${y}, ${z})`;
+	}
+
+	visitVector4Result(result: IVector4Result): string {
+		const x = result.value.x.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		const y = result.value.y.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		const z = result.value.z.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		const w = result.value.w.toFixed(
+			this.settings.floatResult.decimalPlaces
+		);
+
+		return `(${x}, ${y}, ${z}, ${w})`;
 	}
 }

@@ -1,6 +1,6 @@
 import { EResultType } from "@/constants/EResultType";
 import { INumericResult } from "@/results/definition/INumericResult";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class FloatResult implements INumericResult {
 	type = EResultType.Number;
@@ -10,7 +10,7 @@ export class FloatResult implements INumericResult {
 		this.value = value;
 	}
 
-	accept<T>(visitor: IResultVisitor<T>): T {
-		return visitor.visitFloatResult(this);
+	accept<T>(visitor: IGenericResultVisitor<T>): T {
+		return visitor.visit(this);
 	}
 }

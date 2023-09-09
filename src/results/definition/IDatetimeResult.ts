@@ -1,7 +1,7 @@
 import { IResult } from "@/results/definition/IResult";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 import { Moment } from "moment";
 
 export interface IDatetimeResult extends IResult<Moment> {
-	accept<T>(visitor: IResultVisitor<T>): T;
+	accept<T>(visitor: IGenericResultVisitor<T>): T;
 }

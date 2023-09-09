@@ -1,6 +1,6 @@
 import { EResultType } from "@/constants/EResultType";
 import { IStringResult } from "@/results/definition/IStringResult";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class StringResult implements IStringResult {
 	type = EResultType.String;
@@ -10,7 +10,7 @@ export class StringResult implements IStringResult {
 		this.value = value;
 	}
 
-	accept<T>(visitor: IResultVisitor<T>): T {
-		return visitor.visitStringResult(this);
+	accept<T>(visitor: IGenericResultVisitor<T>): T {
+		return visitor.visit(this);
 	}
 }

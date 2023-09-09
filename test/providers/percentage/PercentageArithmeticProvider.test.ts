@@ -18,8 +18,16 @@ describe("Primitive", () => {
 });
 
 describe("Addition", () => {
-	test("10 + 15% to equal 11.5", () => {
+	test("10 + 15% to equal 11", () => {
 		const result = percentageArithmeticProvider.provide("10 + 15%");
+
+		expect(result).toBeDefined();
+
+		expect(result).toBe(11);
+	});
+
+	test("10.0 + 15% to equal 11.5", () => {
+		const result = percentageArithmeticProvider.provide("10.0 + 15%");
 
 		expect(result).toBeDefined();
 
@@ -36,8 +44,16 @@ describe("Addition", () => {
 });
 
 describe("Subtraction", () => {
-	test("10 - 15% to equal 8.50", () => {
+	test("10 - 15% to equal 8", () => {
 		const result = percentageArithmeticProvider.provide("10 - 15%");
+
+		expect(result).toBeDefined();
+
+		expect(result).toBe(8);
+	});
+
+	test("10.0 - 15% to equal 8.5", () => {
+		const result = percentageArithmeticProvider.provide("10.0 - 15%");
 
 		expect(result).toBeDefined();
 

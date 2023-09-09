@@ -1,6 +1,6 @@
 import { EResultType } from "@/constants/EResultType";
 import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 import { Moment } from "moment";
 
 export class DatetimeResult implements IDatetimeResult {
@@ -11,7 +11,7 @@ export class DatetimeResult implements IDatetimeResult {
 		this.value = value;
 	}
 
-	accept<T>(visitor: IResultVisitor<T>): T {
-		return visitor.visitDatetimeResult(this);
+	accept<T>(visitor: IGenericResultVisitor<T>): T {
+		return visitor.visit(this);
 	}
 }

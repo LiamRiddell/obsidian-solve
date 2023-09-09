@@ -1,48 +1,37 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
+import { FloatResult } from "@/results/FloatResult";
+import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
-import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
-import { IStringResult } from "@/results/definition/IStringResult";
 import { percentageIncrease } from "@/utilities/Percentage";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { FloatCoercion } from "@/visitors/coercion/FloatCoercionVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class PercentageIncreaseOrDecreaseVisitor
-	implements IResultVisitor<INumericResult>
+	implements IGenericResultVisitor<INumericResult>
 {
-	constructor(
-		private left: INumericResult,
-		private right: INumericResult
-	) {}
+	constructor(private right: INumericResult) {}
 
-	visitFloatResult(result: IResult<number>): INumericResult {
-		return new PercentageResult(
-			percentageIncrease(this.left.value, this.right.value)
-		);
-	}
+	visit<TValue>(visited: IResult<TValue>): INumericResult {
+		if (this.right instanceof PercentageResult) {
+			throw new UnsupportedVisitorOperationError();
+		}
 
-	visitIntegerResult(result: IResult<number>): INumericResult {
-		return new PercentageResult(
-			percentageIncrease(this.left.value, this.right.value)
-		);
-	}
+		if (
+			visited instanceof FloatResult ||
+			visited instanceof IntegerResult
+		) {
+			const coercedRight = FloatCoercion.visit(this.right);
 
-	visitHexResult(result: IResult<number>): INumericResult {
-		return new PercentageResult(
-			percentageIncrease(this.left.value, this.right.value)
-		);
-	}
+			this.right.value = percentageIncrease(
+				visited.value,
+				coercedRight.value
+			);
 
-	visitPercentageResult(result: IResult<number>): INumericResult {
-		return new PercentageResult(
-			percentageIncrease(this.left.value, this.right.value)
-		);
-	}
+			return this.right;
+		}
 
-	visitDatetimeResult(result: IDatetimeResult): INumericResult {
-		throw new UnsupportedVisitorOperationError();
-	}
-	visitStringResult(result: IStringResult): INumericResult {
 		throw new UnsupportedVisitorOperationError();
 	}
 }

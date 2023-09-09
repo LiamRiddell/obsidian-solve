@@ -5,11 +5,13 @@ import { INumericResult } from "@/results/definition/INumericResult";
 
 export class ArithmeticExpressionVisitor {
 	visitPositive(e: INumericResult): INumericResult {
-		return new IntegerResult(Math.abs(e.value));
+		e.value = Math.abs(e.value);
+		return e;
 	}
 
 	visitNegative(e: INumericResult): INumericResult {
-		return new IntegerResult(-Math.abs(e.value));
+		e.value = -Math.abs(e.value);
+		return e;
 	}
 
 	visitConstant(constantName: string): INumericResult {
@@ -39,3 +41,5 @@ export class ArithmeticExpressionVisitor {
 		return new IntegerResult(parseInt(numString));
 	}
 }
+
+export const ArithmeticExpression = new ArithmeticExpressionVisitor();

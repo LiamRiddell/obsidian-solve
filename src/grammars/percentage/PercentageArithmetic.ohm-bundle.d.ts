@@ -59,9 +59,9 @@ export interface BasicArithmeticGrammar extends Grammar {
 export interface PercentageArithmeticActionDict<T> extends BasicArithmeticActionDict<T> {
   Expression?: (this: NonterminalNode, arg0: NonterminalNode) => T;
   Primitive?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  PercentageOf?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: TerminalNode, arg3: NonterminalNode) => T;
-  IncreaseBy?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: NonterminalNode, arg4: TerminalNode) => T;
-  DecreaseBy?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: NonterminalNode, arg4: TerminalNode) => T;
+  PercentageOf?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode) => T;
+  IncreaseBy?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: NonterminalNode) => T;
+  DecreaseBy?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: NonterminalNode) => T;
   PercentageIncreaseOrDecrease?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: NonterminalNode) => T;
   percentage?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode) => T;
 }

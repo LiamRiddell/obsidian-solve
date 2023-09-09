@@ -12,13 +12,13 @@ PercentageArithmetic <: BasicArithmetic {
         += percentage
         
     PercentageOf
-    	= number "%" "of" number 
+    	= percentage "of" number 
         
    	IncreaseBy
-    	= "increase" number "by" number "%"
+    	= "increase" number "by" percentage
         
    	DecreaseBy
-    	= "decrease" number "by" number "%"
+    	= "decrease" number "by" percentage
     
     PercentageIncreaseOrDecrease
         = "from"? number "to" number

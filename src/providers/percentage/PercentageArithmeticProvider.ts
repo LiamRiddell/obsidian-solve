@@ -23,32 +23,30 @@ export class PercentageArithmeticProvider extends SemanticProviderBase<Percentag
 			FloatResult | IntegerResult | HexResult | PercentageResult
 		>("visit()", {
 			...basicArithmeticSemanticActions,
-			PercentageOf(percentNode, _, of, populationNode) {
+			PercentageOf(percentNode, of, populationNode) {
 				const percent = percentNode.visit();
 				const population = populationNode.visit();
 
-				return percent.accept(
-					new PercentageOfVisitor(percent, population)
-				);
+				return percent.accept(new PercentageOfVisitor(population));
 			},
-			IncreaseBy(_, valueNode, _1, percentageNode, _2) {
+			IncreaseBy(_1, valueNode, _2, percentageNode) {
 				const value = valueNode.visit();
 				const percentage = percentageNode.visit();
 
-				return value.accept(new IncreaseByVisitor(value, percentage));
+				return value.accept(new IncreaseByVisitor(percentage));
 			},
-			DecreaseBy(_, valueNode, _1, percentageNode, _2) {
+			DecreaseBy(_1, valueNode, _2, percentageNode) {
 				const value = valueNode.visit();
 				const percentage = percentageNode.visit();
 
-				return value.accept(new DecreaseByVisitor(value, percentage));
+				return value.accept(new DecreaseByVisitor(percentage));
 			},
 			PercentageIncreaseOrDecrease(_, thenNode, _1, nowNode) {
 				const then = thenNode.visit();
 				const now = nowNode.visit();
 
 				return then.accept(
-					new PercentageIncreaseOrDecreaseVisitor(then, now)
+					new PercentageIncreaseOrDecreaseVisitor(now)
 				);
 			},
 			percentage(numberNode, _) {

@@ -1,6 +1,6 @@
 import { EResultType } from "@/constants/EResultType";
 import { INumericResult } from "@/results/definition/INumericResult";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class PercentageResult implements INumericResult {
 	type = EResultType.Percentage;
@@ -10,7 +10,7 @@ export class PercentageResult implements INumericResult {
 		this.value = value;
 	}
 
-	accept<T>(visitor: IResultVisitor<T>): T {
-		return visitor.visitPercentageResult(this);
+	accept<T>(visitor: IGenericResultVisitor<T>): T {
+		return visitor.visit(this);
 	}
 }

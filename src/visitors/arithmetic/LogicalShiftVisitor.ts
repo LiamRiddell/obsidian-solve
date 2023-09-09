@@ -3,108 +3,117 @@ import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
-import { IDatetimeResult } from "@/results/definition/IDatetimeResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
-import { IStringResult } from "@/results/definition/IStringResult";
-import { IResultVisitor } from "@/visitors/IResultVisitor";
+import { FloatCoercion } from "@/visitors/coercion/FloatCoercionVisitor";
+import { HexCoercion } from "@/visitors/coercion/HexCoercionVisitor";
+import { IntegerCoercion } from "@/visitors/coercion/IntegerCoercionVisitor";
+import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
-export class LogicalShiftLeftVisitor implements IResultVisitor<INumericResult> {
-	constructor(
-		private left: INumericResult,
-		private right: INumericResult
-	) {}
+export class LogicalShiftLeftVisitor
+	implements IGenericResultVisitor<INumericResult>
+{
+	constructor(private right: INumericResult) {}
 
-	visitFloatResult(result: IResult<number>): INumericResult {
+	visit<TValue>(visited: IResult<TValue>): INumericResult {
 		if (this.right instanceof PercentageResult) {
 			throw new UnsupportedVisitorOperationError();
 		}
 
-		return new FloatResult(this.left.value << this.right.value);
-	}
-
-	visitIntegerResult(result: IResult<number>): INumericResult {
-		if (this.right instanceof PercentageResult) {
-			throw new UnsupportedVisitorOperationError();
+		if (visited instanceof FloatResult) {
+			return this.float(visited, this.right);
 		}
 
-		return new IntegerResult(
-			Math.trunc(this.left.value << this.right.value)
-		);
-	}
-
-	visitHexResult(result: IResult<number>): INumericResult {
-		if (this.right instanceof PercentageResult) {
-			throw new UnsupportedVisitorOperationError();
+		if (visited instanceof IntegerResult) {
+			return this.integer(visited, this.right);
 		}
 
-		return new HexResult(Math.trunc(this.left.value << this.right.value));
-	}
-
-	visitPercentageResult(result: IResult<number>): INumericResult {
-		if (this.right instanceof PercentageResult) {
-			throw new UnsupportedVisitorOperationError();
+		if (visited instanceof HexResult) {
+			return this.hex(visited, this.right);
 		}
 
-		return new PercentageResult(this.left.value << this.right.value);
-	}
+		if (visited instanceof PercentageResult) {
+			return this.percentage(visited, this.right);
+		}
 
-	visitDatetimeResult(result: IDatetimeResult): INumericResult {
 		throw new UnsupportedVisitorOperationError();
 	}
 
-	visitStringResult(result: IStringResult): INumericResult {
-		throw new UnsupportedVisitorOperationError();
+	private float(left: FloatResult, right: INumericResult) {
+		const coercedRight = FloatCoercion.visit(right);
+
+		return new FloatResult(left.value << coercedRight.value);
+	}
+
+	private integer(left: IntegerResult, right: INumericResult) {
+		const coercedRight = IntegerCoercion.visit(right);
+
+		return new IntegerResult(left.value << coercedRight.value);
+	}
+
+	private hex(left: HexResult, right: INumericResult) {
+		const coercedRight = HexCoercion.visit(right);
+
+		return new HexResult(left.value << coercedRight.value);
+	}
+
+	private percentage(left: PercentageResult, right: INumericResult) {
+		const coercedRight = FloatCoercion.visit(right);
+
+		return new FloatResult((left.value / 100) << coercedRight.value);
 	}
 }
 
 export class LogicalShiftRightVisitor
-	implements IResultVisitor<INumericResult>
+	implements IGenericResultVisitor<INumericResult>
 {
-	constructor(
-		private left: INumericResult,
-		private right: INumericResult
-	) {}
+	constructor(private right: INumericResult) {}
 
-	visitFloatResult(result: IResult<number>): INumericResult {
+	visit<TValue>(visited: IResult<TValue>): INumericResult {
 		if (this.right instanceof PercentageResult) {
 			throw new UnsupportedVisitorOperationError();
 		}
 
-		return new FloatResult(this.left.value >> this.right.value);
-	}
-
-	visitIntegerResult(result: IResult<number>): INumericResult {
-		if (this.right instanceof PercentageResult) {
-			throw new UnsupportedVisitorOperationError();
+		if (visited instanceof FloatResult) {
+			return this.float(visited, this.right);
 		}
 
-		return new IntegerResult(
-			Math.trunc(this.left.value >> this.right.value)
-		);
-	}
-
-	visitHexResult(result: IResult<number>): INumericResult {
-		if (this.right instanceof PercentageResult) {
-			throw new UnsupportedVisitorOperationError();
+		if (visited instanceof IntegerResult) {
+			return this.integer(visited, this.right);
 		}
 
-		return new HexResult(Math.trunc(this.left.value >> this.right.value));
-	}
-
-	visitPercentageResult(result: IResult<number>): INumericResult {
-		if (this.right instanceof PercentageResult) {
-			throw new UnsupportedVisitorOperationError();
+		if (visited instanceof HexResult) {
+			return this.hex(visited, this.right);
 		}
 
-		return new PercentageResult(this.left.value >> this.right.value);
-	}
+		if (visited instanceof PercentageResult) {
+			return this.percentage(visited, this.right);
+		}
 
-	visitDatetimeResult(result: IDatetimeResult): INumericResult {
 		throw new UnsupportedVisitorOperationError();
 	}
 
-	visitStringResult(result: IStringResult): INumericResult {
-		throw new UnsupportedVisitorOperationError();
+	private float(left: FloatResult, right: INumericResult) {
+		const coercedRight = FloatCoercion.visit(right);
+
+		return new FloatResult(left.value >> coercedRight.value);
+	}
+
+	private integer(left: IntegerResult, right: INumericResult) {
+		const coercedRight = IntegerCoercion.visit(right);
+
+		return new IntegerResult(left.value >> coercedRight.value);
+	}
+
+	private hex(left: HexResult, right: INumericResult) {
+		const coercedRight = HexCoercion.visit(right);
+
+		return new HexResult(left.value >> coercedRight.value);
+	}
+
+	private percentage(left: PercentageResult, right: INumericResult) {
+		const coercedRight = FloatCoercion.visit(right);
+
+		return new FloatResult((left.value / 100) >> coercedRight.value);
 	}
 }
