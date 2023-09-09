@@ -7,7 +7,7 @@ export class DatetimeProviderSettings {
 
 	get parsingFormat(): EDatetimeParsingFormat {
 		return (
-			this.parent.settings.datetimeProvider.parsingFormat ||
+			this.parent.settings.datetimeProvider.parsingFormat ??
 			DEFAULT_SETTINGS.datetimeProvider.parsingFormat
 		);
 	}

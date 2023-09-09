@@ -6,7 +6,7 @@ export class PercentageResultSettings {
 
 	get decimalPlaces(): number {
 		return (
-			this.parent.settings.percentageResult.decimalPlaces ||
+			this.parent.settings.percentageResult.decimalPlaces ??
 			DEFAULT_SETTINGS.percentageResult.decimalPlaces
 		);
 	}

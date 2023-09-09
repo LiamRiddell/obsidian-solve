@@ -5,6 +5,7 @@ import moment from "moment";
 export const DEFAULT_SETTINGS: IPluginSettings = {
 	interface: {
 		renderResultEndOfLine: false,
+		showStatusBarCompanion: true,
 	},
 
 	// Providers

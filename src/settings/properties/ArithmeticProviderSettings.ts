@@ -6,7 +6,7 @@ export class ArithmeticProviderSettings {
 
 	get renderEqualsBeforeResult() {
 		return (
-			this.parent.settings.arithmeticProvider.renderEqualsBeforeResult ||
+			this.parent.settings.arithmeticProvider.renderEqualsBeforeResult ??
 			DEFAULT_SETTINGS.arithmeticProvider.renderEqualsBeforeResult
 		);
 	}

@@ -265,19 +265,6 @@ export class VectorArithmeticProvider extends ProviderBase {
 				return e.visit();
 			},
 			Vector4_parse(_1, _2, xNode, _3, yNode, _4, zNode, _5, wNode, _6) {
-				logger.debug(
-					_1,
-					_2,
-					xNode,
-					_3,
-					yNode,
-					_4,
-					zNode,
-					_5,
-					wNode,
-					_6
-				);
-
 				const x = xNode.visit();
 				const y = yNode.visit();
 				const z = zNode.visit();

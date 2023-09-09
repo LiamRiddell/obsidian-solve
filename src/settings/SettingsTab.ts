@@ -81,6 +81,30 @@ export class SettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
+
+		new Setting(this.containerEl)
+			.setName("Show status bar companion")
+			.setDesc(
+				`Show the Solve companion in the status bar. Default is ${DEFAULT_SETTINGS.interface.showStatusBarCompanion}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.interface.showStatusBarCompanion
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.interface.showStatusBarCompanion =
+							value;
+
+						if (value) {
+							this.plugin.setStatusBarCompanionVisibility(true);
+						} else {
+							this.plugin.setStatusBarCompanionVisibility(false);
+						}
+
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayArithmeticProviderSettings() {

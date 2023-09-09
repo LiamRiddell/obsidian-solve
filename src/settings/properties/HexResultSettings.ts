@@ -6,7 +6,7 @@ export class HexResultSettings {
 
 	get enablePadding(): boolean {
 		return (
-			this.parent.settings.hexResult.enablePadding ||
+			this.parent.settings.hexResult.enablePadding ??
 			DEFAULT_SETTINGS.hexResult.enablePadding
 		);
 	}
@@ -17,7 +17,7 @@ export class HexResultSettings {
 
 	get paddingZeros(): number {
 		return (
-			this.parent.settings.hexResult.paddingZeros ||
+			this.parent.settings.hexResult.paddingZeros ??
 			DEFAULT_SETTINGS.hexResult.paddingZeros
 		);
 	}

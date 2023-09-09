@@ -52,8 +52,8 @@ export default class SolvePlugin extends Plugin {
 		await this.registerEditorExtensions();
 		logger.debug(`[Solve] Registered: Editor Extensions`);
 
-		this.statusBarItemEl = this.addStatusBarItem();
-		pluginEventBus.emit(EPluginEvent.StatusBarUpdate, EPluginStatus.Idle);
+		await this.addStatusBarCompanion();
+		logger.debug(`[Solve] Added: Status Bar Companion`);
 	}
 
 	public onunload() {
@@ -81,8 +81,10 @@ export default class SolvePlugin extends Plugin {
 	private async restoreUserSettings() {
 		this.settings = UserSettings.getInstance();
 
+		const savedSettings = await this.loadData();
+
 		this.settings.updateSettings(
-			Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
+			Object.assign({}, DEFAULT_SETTINGS, savedSettings)
 		);
 
 		await this.restoreFeatureFlags();
@@ -112,6 +114,24 @@ export default class SolvePlugin extends Plugin {
 			document.body.classList.remove(
 				FeatureFlagClass.RenderEndOfLineResult
 			);
+		}
+	}
+
+	private async addStatusBarCompanion() {
+		this.statusBarItemEl = this.addStatusBarItem();
+
+		if (!this.settings.interface.showStatusBarCompanion) {
+			this.setStatusBarCompanionVisibility(false);
+		}
+
+		pluginEventBus.emit(EPluginEvent.StatusBarUpdate, EPluginStatus.Idle);
+	}
+
+	public async setStatusBarCompanionVisibility(visible: boolean) {
+		if (visible) {
+			this.statusBarItemEl.style.display = "inline-block";
+		} else {
+			this.statusBarItemEl.style.display = "none";
 		}
 	}
 

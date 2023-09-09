@@ -6,7 +6,7 @@ export class DatetimeResultSettings {
 
 	get format(): string {
 		return (
-			this.parent.settings.datetimeResult.format ||
+			this.parent.settings.datetimeResult.format ??
 			DEFAULT_SETTINGS.datetimeResult.format
 		);
 	}

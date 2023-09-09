@@ -48,19 +48,4 @@ export default class UserSettings {
 	public updateSettings(settings: IPluginSettings) {
 		this.settings = settings;
 	}
-
-	// //#endregion
-
-	// //#region Datetime
-	// get datetimeParsingFormat(): EDatetimeParsingFormat {
-	// 	return (
-	// 		this.settings.datetimeProvider.parsingFormat ||
-	// 		DEFAULT_SETTINGS.datetimeProvider.parsingFormat
-	// 	);
-	// }
-
-	// set datetimeParsingFormat(value: EDatetimeParsingFormat) {
-	// 	this.settings.datetimeProvider.parsingFormat = value;
-	// }
-	// //#endregion
 }

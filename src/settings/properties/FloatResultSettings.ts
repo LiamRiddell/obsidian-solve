@@ -6,7 +6,7 @@ export class FloatResultSettings {
 
 	get decimalPlaces(): number {
 		return (
-			this.parent.settings.floatResult.decimalPlaces ||
+			this.parent.settings.floatResult.decimalPlaces ??
 			DEFAULT_SETTINGS.floatResult.decimalPlaces
 		);
 	}
