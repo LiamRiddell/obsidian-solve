@@ -9,15 +9,15 @@ import vector4Grammar, {
 } from "@/grammars/vector/Vector4Arithmetic.ohm-bundle";
 import { ProviderBase } from "@/providers/ProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { Vector2 } from "@/providers/vector/Vector2";
-import { Vector3 } from "@/providers/vector/Vector3";
-import { Vector4 } from "@/providers/vector/Vector4";
 import { FloatResult } from "@/results/FloatResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { Vector2Result } from "@/results/Vector2Result";
 import { Vector3Result } from "@/results/Vector3Result";
 import { Vector4Result } from "@/results/Vector4Result";
 import { logger } from "@/utilities/Logger";
+import { Vector2 } from "@/utilities/Vector2";
+import { Vector3 } from "@/utilities/Vector3";
+import { Vector4 } from "@/utilities/Vector4";
 import { VectorAdditionVisitor } from "@/visitors/vector/VectorAdditionVisitor";
 import { VectorDivisionVisitor } from "@/visitors/vector/VectorDivisionVisitor";
 import { VectorExponentVisitor } from "@/visitors/vector/VectorExponentVisitor";
