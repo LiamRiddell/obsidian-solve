@@ -36,7 +36,10 @@ class ProviderManager {
 						return result;
 					}
 
-					if (this.settings.renderEqualsBeforeResult) {
+					if (
+						this.settings.arithmeticProvider
+							.renderEqualsBeforeResult
+					) {
 						result = `= ${result}`;
 					}
 

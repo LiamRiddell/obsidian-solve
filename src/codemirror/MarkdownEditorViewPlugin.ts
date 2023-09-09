@@ -1,7 +1,7 @@
 import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
-// @ts-expect-error
 import { logger } from "@/utilities/Logger";
+// @ts-expect-error
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
