@@ -1,4 +1,4 @@
-import { BasicArithmeticProvider } from "@/providers/arithmetic/basic/BasicArithmeticProvider";
+import { BasicArithmeticProvider } from "@/providers/arithmetic/BasicArithmeticProvider";
 import { beforeAll, describe, expect, test } from "@jest/globals";
 
 let basicArithmeticProvider: BasicArithmeticProvider;
@@ -13,7 +13,7 @@ describe("Primitive", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("102.0");
+		expect(result).toBe(102);
 	});
 
 	test("positive whole number", () => {
@@ -21,7 +21,7 @@ describe("Primitive", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("10.00");
+		expect(result).toBe(10);
 	});
 
 	test("negative whole number", () => {
@@ -29,7 +29,7 @@ describe("Primitive", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("-10.00");
+		expect(result).toBe(-10);
 	});
 
 	test("fractional number", () => {
@@ -37,7 +37,7 @@ describe("Primitive", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("10.20");
+		expect(result).toBe(10.2);
 	});
 
 	test("positive fractional number", () => {
@@ -45,7 +45,7 @@ describe("Primitive", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("7.100");
+		expect(result).toBe(7.1);
 	});
 
 	test("negative fractional number", () => {
@@ -53,7 +53,7 @@ describe("Primitive", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("-5.100");
+		expect(result).toBe(-5.1);
 	});
 
 	test("hex", () => {
@@ -61,7 +61,7 @@ describe("Primitive", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x10");
+		expect(result).toBe(0x10);
 	});
 });
 
@@ -71,7 +71,7 @@ describe("Addition", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("102.0");
+		expect(result).toBe(102);
 	});
 
 	test("100 add 2 to equal 102", () => {
@@ -79,7 +79,7 @@ describe("Addition", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("102.0");
+		expect(result).toBe(102);
 	});
 
 	test("100 plus 2 to equal 102", () => {
@@ -87,7 +87,7 @@ describe("Addition", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("102.0");
+		expect(result).toBe(102);
 	});
 
 	test("0x20 + 10 to equal 0x30", () => {
@@ -95,7 +95,7 @@ describe("Addition", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x30");
+		expect(result).toBe(0x30);
 	});
 
 	test("0x20 + 0xC to equal 0x2C", () => {
@@ -103,7 +103,7 @@ describe("Addition", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x2C");
+		expect(result).toBe(0x2c);
 	});
 });
 
@@ -113,7 +113,7 @@ describe("Subtraction", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("98.00");
+		expect(result).toBe(98);
 	});
 
 	test("100 take 2 to equal 98", () => {
@@ -121,7 +121,7 @@ describe("Subtraction", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("98.00");
+		expect(result).toBe(98);
 	});
 
 	test("100 minus 2 to equal 98", () => {
@@ -129,7 +129,7 @@ describe("Subtraction", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("98.00");
+		expect(result).toBe(98);
 	});
 
 	test("0x20 - 10 to equal 0x16", () => {
@@ -137,7 +137,7 @@ describe("Subtraction", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x16");
+		expect(result).toBe(0x16);
 	});
 
 	test("0x20 - 0xC to equal 0x14", () => {
@@ -145,7 +145,15 @@ describe("Subtraction", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x14");
+		expect(result).toBe(0x14);
+	});
+
+	test("0x100 - 0x328 to equal -0x228", () => {
+		const result = basicArithmeticProvider.provide("0x100 - 0x328");
+
+		expect(result).toBeDefined();
+
+		expect(result).toBe(-0x228);
 	});
 });
 
@@ -155,7 +163,7 @@ describe("Multiplication", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("200.0");
+		expect(result).toBe(200);
 	});
 
 	test("100 times 2 to equal 200", () => {
@@ -163,7 +171,7 @@ describe("Multiplication", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("200.0");
+		expect(result).toBe(200);
 	});
 
 	test("100 multiply by 2 to equal 200", () => {
@@ -171,7 +179,7 @@ describe("Multiplication", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("200.0");
+		expect(result).toBe(200);
 	});
 
 	test("100 multiply 2 to equal 200", () => {
@@ -179,7 +187,7 @@ describe("Multiplication", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("200.0");
+		expect(result).toBe(200);
 	});
 
 	test("0x20 * 10 to equal 0x140", () => {
@@ -187,7 +195,7 @@ describe("Multiplication", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x140");
+		expect(result).toBe(0x140);
 	});
 
 	test("0x20 * 0xC to equal 0x180", () => {
@@ -195,7 +203,7 @@ describe("Multiplication", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x180");
+		expect(result).toBe(0x180);
 	});
 });
 
@@ -205,7 +213,7 @@ describe("Division", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("50.00");
+		expect(result).toBe(50);
 	});
 
 	test("100 divide by 2 to equal 50", () => {
@@ -213,7 +221,7 @@ describe("Division", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("50.00");
+		expect(result).toBe(50);
 	});
 
 	test("100 divide 2 to equal 50", () => {
@@ -221,7 +229,7 @@ describe("Division", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("50.00");
+		expect(result).toBe(50);
 	});
 
 	test("0x20 / 10 to equal 0x3", () => {
@@ -229,7 +237,7 @@ describe("Division", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x3");
+		expect(result).toBe(0x3);
 	});
 
 	test("0x20 / 0xC to equal 0x2", () => {
@@ -237,7 +245,7 @@ describe("Division", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("0x2");
+		expect(result).toBe(0x2);
 	});
 });
 
@@ -247,7 +255,7 @@ describe("Exponent", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("100.0");
+		expect(result).toBe(100);
 	});
 
 	test("10 to the power of 2 to equal 100", () => {
@@ -255,7 +263,7 @@ describe("Exponent", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("100.0");
+		expect(result).toBe(100);
 	});
 
 	test("10 power of 2 to equal 100", () => {
@@ -263,7 +271,7 @@ describe("Exponent", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("100.0");
+		expect(result).toBe(100);
 	});
 
 	test("10 exponent 2 to equal 100", () => {
@@ -271,7 +279,7 @@ describe("Exponent", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("100.0");
+		expect(result).toBe(100);
 	});
 
 	test("10 prime 2 to equal 100", () => {
@@ -279,7 +287,7 @@ describe("Exponent", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("100.0");
+		expect(result).toBe(100);
 	});
 });
 
@@ -291,7 +299,7 @@ describe("PEMDAS", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("23.00");
+		expect(result).toBe(23);
 	});
 
 	test("(4 plus 3) times by 2 to the power of 2 minus 10 divide by 2 to equal 23", () => {
@@ -301,6 +309,6 @@ describe("PEMDAS", () => {
 
 		expect(result).toBeDefined();
 
-		expect(result).toBe("23.00");
+		expect(result).toBe(23);
 	});
 });

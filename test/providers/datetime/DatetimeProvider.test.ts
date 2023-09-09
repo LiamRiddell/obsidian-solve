@@ -119,6 +119,38 @@ describe("Date", () => {
 	});
 });
 
+describe("ISO8601", () => {
+	test("1997-07-16", () => {
+		const result = datetimeProvider.provide("1997-07-16");
+		expect(result).toBeDefined();
+	});
+
+	test("1997-07-16T19:20:30", () => {
+		const result = datetimeProvider.provide("1997-07-16T19:20:30");
+		expect(result).toBeDefined();
+	});
+
+	test("1997-07-16T19:20:30.45Z", () => {
+		const result = datetimeProvider.provide("1997-07-16T19:20:30.45Z");
+		expect(result).toBeDefined();
+	});
+
+	test("1997-07-16T19:20:30.45", () => {
+		const result = datetimeProvider.provide("1997-07-16T19:20:30.45");
+		expect(result).toBeDefined();
+	});
+
+	test("1997-07-16T19:20:30.45+01:00", () => {
+		const result = datetimeProvider.provide("1997-07-16T19:20:30.45+01:00");
+		expect(result).toBeDefined();
+	});
+
+	test("1997-07-16T19:20:30.45-01:00", () => {
+		const result = datetimeProvider.provide("1997-07-16T19:20:30.45-01:00");
+		expect(result).toBeDefined();
+	});
+});
+
 describe("Addition & Subtraction", () => {
 	test("Now + 2 days", () => {
 		const nowTwoDaysAhead = moment().add(2, "days");

@@ -1,13 +1,13 @@
 {
 	"name": "solve",
-	"version": "0.3.3",
+	"version": "0.4.0",
 	"description": "Level Up Your Notes: Introducing Solve – Your Math Maestro! Real-time calculations without AI fuss. From date magic ('Now + 20 days') to arithmetic flair ('10 + 5'), your trusted sidekick in every note. More brilliance on the way!",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "jest",
-		"ohm": "npx ohm generateBundles --withTypes src/providers/**/*.ohm",
+		"ohm": "npx ohm generateBundles --withTypes src/grammars/**/*.ohm",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [],

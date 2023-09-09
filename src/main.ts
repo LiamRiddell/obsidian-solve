@@ -1,43 +1,42 @@
-import { MarkdownEditorViewPlugin } from "@/MarkdownEditorViewPlugin";
-import { pluginEventBus } from "@/PluginEventBus";
-import { solveProviderManager } from "@/SolveProviderManager";
-import { PluginEvents } from "@/constants/PluginEvents";
-import { PluginStatus } from "@/constants/PluginStatus";
-import {
-	DEFAULT_SETTINGS,
-	SolvePluginSettings,
-} from "@/settings/SolvePluginSettings";
-import { SolveSettingTab } from "@/settings/SolveSettingsTab";
-import { FeatureFlagClass } from "@/utilities/FeatureFlagClass";
-import { SolveObsidianEvents } from "@/utilities/SolveObsidianEvents";
+import { MarkdownEditorViewPlugin } from "@/codemirror/MarkdownEditorViewPlugin";
+import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
+import { EPluginEvent } from "@/constants/EPluginEvent";
+import { EPluginStatus } from "@/constants/EPluginStatus";
+import { ESolveEvents } from "@/constants/ESolveEvents";
+import { pluginEventBus } from "@/eventbus/PluginEventBus";
+import { solveProviderManager } from "@/providers/ProviderManager";
+import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
+import { SettingTab } from "@/settings/SettingsTab";
+import UserSettings from "@/settings/UserSettings";
+import { logger } from "@/utilities/Logger";
 import { ViewPlugin } from "@codemirror/view";
 import { Plugin } from "obsidian";
 
-export default class SolveObsidianPlugin extends Plugin {
-	settings: SolvePluginSettings;
+export default class SolvePlugin extends Plugin {
+	settings: UserSettings;
 	statusBarItemEl: HTMLElement;
 
 	public async onload() {
-		console.debug("[Solve] onload()");
+		logger.debug("[Solve] onload()");
 
 		await this.registerEvents();
 
 		await this.restoreUserSettings();
-		console.debug("[Solve] User Settings Restored");
+		logger.debug("[Solve] User Settings Restored");
 
 		await this.registerSettings();
-		console.debug("[Solve] Registered: Settings");
+		logger.debug("[Solve] Registered: Settings");
 
 		this.app.workspace.trigger("parse-style-settings");
-		console.debug("[Solve] Triggered Event: parse-style-setting");
+		logger.debug("[Solve] Triggered Event: parse-style-setting");
 
 		this.registerEvent(
 			this.app.workspace.on(
 				// @ts-expect-error
-				SolveObsidianEvents.SolveObsidianEvents,
+				ESolveEvents.SolveObsidianEvents,
 				// @ts-expect-error
 				([provider]: [ISolveProvider]) => {
-					console.debug(
+					logger.debug(
 						"[Solve] Registered Custom Provider",
 						provider
 					);
@@ -48,49 +47,51 @@ export default class SolveObsidianPlugin extends Plugin {
 				}
 			)
 		);
-		console.debug(`[Solve] Registered: Register Provider Event Listener`);
+		logger.debug(`[Solve] Registered: Register Provider Event Listener`);
 
 		await this.registerEditorExtensions();
-		console.debug(`[Solve] Registered: Editor Extensions`);
+		logger.debug(`[Solve] Registered: Editor Extensions`);
 
-		this.statusBarItemEl = this.addStatusBarItem();
-		pluginEventBus.emit(PluginEvents.StatusBarUpdate, PluginStatus.Idle);
+		await this.addStatusBarCompanion();
+		logger.debug(`[Solve] Added: Status Bar Companion`);
 	}
 
 	public onunload() {
-		console.debug("[Solve] onunload()");
+		logger.debug("[Solve] onunload()");
 		pluginEventBus.removeAllListeners();
 	}
 
 	public async saveSettings() {
-		console.debug("[Solve] Settings Saved", this.settings);
+		const rawSettings = this.settings.settings;
 
-		await this.saveData(this.settings);
+		logger.debug("[Solve] Settings Saved", rawSettings);
 
-		pluginEventBus.emit(PluginEvents.SettingsUpdated, this.settings);
+		await this.saveData(rawSettings);
 
 		this.app.workspace.updateOptions();
 	}
 
 	private async registerEvents() {
 		pluginEventBus.on(
-			PluginEvents.StatusBarUpdate,
+			EPluginEvent.StatusBarUpdate,
 			this.onStatusBarUpdateEvent.bind(this)
 		);
 	}
 
 	private async restoreUserSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData()
+		this.settings = UserSettings.getInstance();
+
+		const savedSettings = await this.loadData();
+
+		this.settings.updateSettings(
+			Object.assign({}, DEFAULT_SETTINGS, savedSettings)
 		);
 
 		await this.restoreFeatureFlags();
 	}
 
 	private async registerSettings() {
-		this.addSettingTab(new SolveSettingTab(this.app, this));
+		this.addSettingTab(new SettingTab(this.app, this));
 	}
 
 	private async registerEditorExtensions() {
@@ -98,8 +99,6 @@ export default class SolveObsidianPlugin extends Plugin {
 			await this.buildMarkdownEditorViewPlugin();
 
 		this.registerEditorExtension(markdownEditorViewPlugin);
-
-		pluginEventBus.emit(PluginEvents.SettingsUpdated, this.settings);
 	}
 
 	private async buildMarkdownEditorViewPlugin() {
@@ -109,7 +108,7 @@ export default class SolveObsidianPlugin extends Plugin {
 	}
 
 	private async restoreFeatureFlags() {
-		if (this.settings.renderResultEndOfLine) {
+		if (this.settings.interface.renderResultEndOfLine) {
 			document.body.classList.add(FeatureFlagClass.RenderEndOfLineResult);
 		} else {
 			document.body.classList.remove(
@@ -118,14 +117,31 @@ export default class SolveObsidianPlugin extends Plugin {
 		}
 	}
 
-	// Events
-	private async onStatusBarUpdateEvent(status: PluginStatus) {
+	private async addStatusBarCompanion() {
+		this.statusBarItemEl = this.addStatusBarItem();
+
+		if (!this.settings.interface.showStatusBarCompanion) {
+			this.setStatusBarCompanionVisibility(false);
+		}
+
+		pluginEventBus.emit(EPluginEvent.StatusBarUpdate, EPluginStatus.Idle);
+	}
+
+	public async setStatusBarCompanionVisibility(visible: boolean) {
+		if (visible) {
+			this.statusBarItemEl.style.display = "inline-block";
+		} else {
+			this.statusBarItemEl.style.display = "none";
+		}
+	}
+
+	private async onStatusBarUpdateEvent(status: EPluginStatus) {
 		switch (status) {
-			case PluginStatus.Solving:
+			case EPluginStatus.Solving:
 				this.statusBarItemEl.setText("Solve 🤔");
 				break;
 
-			case PluginStatus.Idle:
+			case EPluginStatus.Idle:
 				setTimeout(() => this.statusBarItemEl.setText("Solve 😴"), 700);
 				break;
 		}

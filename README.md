@@ -1,7 +1,7 @@
 <img src="internal/banner_beta.png" width="100%" />
 
 <p align="center">
-  <img width="900px" src="internal/screenshot.png"/>
+  <img width="100%" max-width="900px" src="internal/screenshot.png"/>
 </p>
 
 ## Obsidian Solve
