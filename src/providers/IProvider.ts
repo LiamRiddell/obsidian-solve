@@ -1,5 +1,5 @@
 export interface IProvider {
 	name: string;
 
-	provide(sentence: string, raw: boolean): string | undefined;
+	provide<T = string>(sentence: string, raw: boolean): T | undefined;
 }

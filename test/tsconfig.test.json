@@ -3,5 +3,13 @@
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+    "paths": {
+      "@/*": [
+        "src/*"
+      ],
+      "test/*": [
+        "test/*"
+      ]
+    },
   }
 }
