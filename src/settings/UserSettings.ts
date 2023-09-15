@@ -7,12 +7,14 @@ import { FloatResultSettings } from "@/settings/properties/FloatResultSettings";
 import { HexResultSettings } from "@/settings/properties/HexResultSettings";
 import { IntegerResultSettings } from "@/settings/properties/IntegerResultSettings";
 import { InterfaceSettings } from "@/settings/properties/InterfaceSettings";
+import { ParserSettings } from "@/settings/properties/ParserSettings";
 import { PercentageResultSettings } from "@/settings/properties/PercentageResultSettings";
 
 export default class UserSettings {
 	private static instance: UserSettings | null = null;
 	public settings: IPluginSettings;
 
+	public readonly parser: ParserSettings;
 	public readonly interface: InterfaceSettings;
 
 	// Provider Settings
@@ -28,6 +30,7 @@ export default class UserSettings {
 
 	private constructor() {
 		this.settings = DEFAULT_SETTINGS;
+		this.parser = new ParserSettings(this);
 		this.interface = new InterfaceSettings(this);
 		this.arithmeticProvider = new ArithmeticProviderSettings(this);
 		this.datetimeProvider = new DatetimeProviderSettings(this);

@@ -1,5 +1,6 @@
 import { EDatetimeParsingFormat } from "@/constants/EDatetimeFormat";
 import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
+import { EParserMode } from "@/constants/EParserMode";
 import SolvePlugin from "@/main";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { App, PluginSettingTab, Setting } from "obsidian";
@@ -16,6 +17,9 @@ export class SettingTab extends PluginSettingTab {
 		this.containerEl.empty();
 
 		this.displayIntroduction();
+
+		this.displayParserSettings();
+
 		this.displayInterfaceSettings();
 
 		// Providers
@@ -38,6 +42,50 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setDesc(
 			`Solve is an unobtrusive Obsidian plugin that quietly processes equations and patterns in real time, inspired by NoteMaster's Smart Mode. With solid engineering at its core, Solve enhances note-taking without relying on ChatGPT. For instance, effortlessly calculates date and time expressions (e.g., 'Now + 20 days'), performs arithmetic (e.g., '10 + 5'), and more features are coming soon.`
 		);
+	}
+
+	displayParserSettings() {
+		new Setting(this.containerEl).setName("Parser").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Trigger Mode")
+			.setDesc(
+				`Specify which is mode used for triggering Solve. When in Manual mode solve will wait for the user to run the Solve Refresh command. This can be bound to a hotkey in the Obsidian settings. Default is ${DEFAULT_SETTINGS.parser.triggerMode}`
+			)
+			.addDropdown((dropdown) => {
+				const value = this.plugin.settings.parser.triggerMode;
+
+				dropdown.addOptions({
+					Automatic: "Automatic",
+					Manual: "Manual",
+				});
+
+				switch (value) {
+					case EParserMode.Automatic:
+						dropdown.setValue("Automatic");
+						break;
+
+					case EParserMode.Manual:
+						dropdown.setValue("Manual");
+						break;
+				}
+
+				dropdown.onChange(async (value) => {
+					switch (value) {
+						case "Automatic":
+							this.plugin.settings.parser.triggerMode =
+								EParserMode.Automatic;
+							break;
+
+						case "Manual":
+							this.plugin.settings.parser.triggerMode =
+								EParserMode.Manual;
+							break;
+					}
+
+					await this.plugin.saveSettings();
+				});
+			});
 	}
 
 	displayInterfaceSettings() {
@@ -138,26 +186,26 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl)
 			.setName("Parsing Format")
 			.setDesc(
-				"Specify the format to be used for parsing datetime values."
+				`Specify the format to be used for parsing datetime values. Default is ${DEFAULT_SETTINGS.parser.triggerMode}`
 			)
 			.addDropdown((dropdown) => {
 				const value =
 					this.plugin.settings.datetimeProvider.parsingFormat;
 
-				switch (value) {
-					case EDatetimeParsingFormat.EU:
-						dropdown.setValue("European DD/MM/YYYY");
-						break;
-
-					case EDatetimeParsingFormat.US:
-						dropdown.setValue("American - MM/DD/YYYY");
-						break;
-				}
-
 				dropdown.addOptions({
 					EU: "European DD/MM/YYYY",
 					US: "American - MM/DD/YYYY",
 				});
+
+				switch (value) {
+					case EDatetimeParsingFormat.EU:
+						dropdown.setValue("EU");
+						break;
+
+					case EDatetimeParsingFormat.US:
+						dropdown.setValue("US");
+						break;
+				}
 
 				dropdown.onChange(async (value) => {
 					switch (value) {

@@ -5,9 +5,11 @@ import { IFloatResultSettings } from "@/settings/definition/IFloatResultSettings
 import { IHexResultSettings } from "@/settings/definition/IHexResultSettings";
 import { IIntegerResultSettings } from "@/settings/definition/IIntegerResultSettings";
 import { IInterfaceSettings } from "@/settings/definition/IInterfaceSettings";
+import { IParserSettings } from "@/settings/definition/IParserSettings";
 import { IPercentageResultSettings } from "@/settings/definition/IPercentageResultSettings";
 
 export interface IPluginSettings {
+	parser: IParserSettings;
 	interface: IInterfaceSettings;
 
 	// Providers

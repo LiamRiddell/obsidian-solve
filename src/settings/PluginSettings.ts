@@ -1,8 +1,13 @@
 import { EDatetimeParsingFormat } from "@/constants/EDatetimeFormat";
+import { EParserMode } from "@/constants/EParserMode";
 import { IPluginSettings } from "@/settings/definition/IPluginSettings";
 import moment from "moment";
 
 export const DEFAULT_SETTINGS: IPluginSettings = {
+	parser: {
+		triggerMode: EParserMode.Automatic,
+	},
+
 	interface: {
 		renderResultEndOfLine: false,
 		showStatusBarCompanion: true,

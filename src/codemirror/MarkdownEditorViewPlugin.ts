@@ -2,6 +2,8 @@ import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
+import { EParserMode } from "@/constants/EParserMode";
+import UserSettings from "@/settings/UserSettings";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -17,6 +19,7 @@ import { EPluginStatus } from "../constants/EPluginStatus";
 import { solveProviderManager } from "../providers/ProviderManager";
 
 export class MarkdownEditorViewPlugin implements PluginValue {
+	private settings: UserSettings;
 	public decorations: DecorationSet;
 	private ignoreNodeForMaskString = [
 		"Document",
@@ -27,14 +30,35 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
 	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
 	private variableMap = new Map<string, string>();
+	private manualUpdate: boolean = false;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
+		this.settings = UserSettings.getInstance();
 		this.decorations = this.buildDecorations(view);
 	}
 
 	update(update: ViewUpdate) {
 		if (update.docChanged || update.viewportChanged) {
+			const triggerMode = this.settings.parser.triggerMode;
+
+			// When Manual, we only want to update if it was forced by user
+			if (
+				triggerMode === EParserMode.Manual &&
+				this.manualUpdate === false
+			) {
+				logger.debug("Manual update not forced by user, returning.");
+				return;
+			}
+
+			/* 
+				TODO: 
+				We would need to continue running this.buildDecorations to update the carrot positions but  
+				in a readonly-esque style. The purpose of this would be to remove lines that have changed due
+				to document changes and update carrot positions in the widgets for anything that is the same.
+			*/
+
+			// When Automatic, pass-through to this logic.
 			pluginEventBus.emit(
 				EPluginEvent.StatusBarUpdate,
 				EPluginStatus.Solving
@@ -47,6 +71,12 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			// console.timeEnd(
 			// 	"[Solve] MarkdownEditorViewPlugin.buildDecorations"
 			// );
+
+			// When Manual, after update we wait for next forced update
+			if (triggerMode === EParserMode.Manual) {
+				this.manualUpdate = false;
+				logger.debug("Reset manualUpdate flag");
+			}
 
 			pluginEventBus.emit(
 				EPluginEvent.StatusBarUpdate,
@@ -162,6 +192,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		return builder.finish();
+	}
+
+	public setManualUpdate() {
+		this.manualUpdate = true;
 	}
 
 	private isNodeIgnoredFromMask(name: string) {

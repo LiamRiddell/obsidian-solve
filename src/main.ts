@@ -1,4 +1,5 @@
 import { MarkdownEditorViewPlugin } from "@/codemirror/MarkdownEditorViewPlugin";
+import { forceRefreshEditor } from "@/codemirror/utils/Editor";
 import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@/constants/EPluginEvent";
 import { EPluginStatus } from "@/constants/EPluginStatus";
@@ -9,12 +10,13 @@ import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { SettingTab } from "@/settings/SettingsTab";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
-import { ViewPlugin } from "@codemirror/view";
+import { EditorView, ViewPlugin } from "@codemirror/view";
 import { Plugin } from "obsidian";
 
 export default class SolvePlugin extends Plugin {
 	settings: UserSettings;
 	statusBarItemEl: HTMLElement;
+	markdownEditorViewPlugin: ViewPlugin<MarkdownEditorViewPlugin>;
 
 	public async onload() {
 		logger.debug("[Solve] onload()");
@@ -51,6 +53,9 @@ export default class SolvePlugin extends Plugin {
 
 		await this.registerEditorExtensions();
 		logger.debug(`[Solve] Registered: Editor Extensions`);
+
+		await this.registerCommands();
+		logger.debug(`[Solve] Registered: Commands`);
 
 		await this.addStatusBarCompanion();
 		logger.debug(`[Solve] Added: Status Bar Companion`);
@@ -95,10 +100,10 @@ export default class SolvePlugin extends Plugin {
 	}
 
 	private async registerEditorExtensions() {
-		const markdownEditorViewPlugin =
+		this.markdownEditorViewPlugin =
 			await this.buildMarkdownEditorViewPlugin();
 
-		this.registerEditorExtension(markdownEditorViewPlugin);
+		this.registerEditorExtension(this.markdownEditorViewPlugin);
 	}
 
 	private async buildMarkdownEditorViewPlugin() {
@@ -115,6 +120,26 @@ export default class SolvePlugin extends Plugin {
 				FeatureFlagClass.RenderEndOfLineResult
 			);
 		}
+	}
+
+	private async registerCommands() {
+		this.addCommand({
+			id: "solve-trigger-manual",
+			name: "Refresh",
+			editorCallback: (_, view) => {
+				// @ts-expect-error
+				const editorView = view.editor.cm as EditorView;
+
+				const viewPlugin = editorView.plugin(
+					this.markdownEditorViewPlugin
+				);
+
+				if (viewPlugin) {
+					viewPlugin.setManualUpdate();
+					forceRefreshEditor(editorView);
+				}
+			},
+		});
 	}
 
 	private async addStatusBarCompanion() {
