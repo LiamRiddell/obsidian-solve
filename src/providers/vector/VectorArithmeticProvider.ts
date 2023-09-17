@@ -367,7 +367,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 		return undefined;
 	}
 
-	provide(sentence: string, raw: boolean = true): string | undefined {
+	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
 		try {
 			const result = this.tryParseVectorArithmetic(sentence);
 
@@ -379,6 +379,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 				return result.value as any;
 			}
 
+			// @ts-expect-error
 			return result.accept(this.formatVisitor);
 		} catch (e) {
 			logger.error(e);
