@@ -22,7 +22,7 @@ describe("Primitive", () => {
 });
 
 describe("Addition", () => {
-	test("10 + 15% to equal 11", () => {
+	test("10 + 15% ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"10 + 15%",
@@ -30,7 +30,7 @@ describe("Addition", () => {
 		);
 	});
 
-	test("10.0 + 15% to equal 11.5", () => {
+	test("10.0 + 15% ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"10.0 + 15%",
@@ -38,7 +38,7 @@ describe("Addition", () => {
 		);
 	});
 
-	test("15% + 10 to equal 10.15", () => {
+	test("15% + 10 ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"15% + 10",
@@ -48,7 +48,7 @@ describe("Addition", () => {
 });
 
 describe("Subtraction", () => {
-	test("10 - 15% to equal 8", () => {
+	test("10 - 15% ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"10 - 15%",
@@ -56,7 +56,7 @@ describe("Subtraction", () => {
 		);
 	});
 
-	test("10.0 - 15% to equal 8.5", () => {
+	test("10.0 - 15% ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"10.0 - 15%",
@@ -64,7 +64,7 @@ describe("Subtraction", () => {
 		);
 	});
 
-	test("15% - 10 to equal -9.85", () => {
+	test("15% - 10 ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"15% - 10",
@@ -74,7 +74,7 @@ describe("Subtraction", () => {
 });
 
 describe("Multiplication", () => {
-	test("10 * 15% to equal 15", () => {
+	test("10 * 15% ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"10 * 15%",
@@ -82,7 +82,7 @@ describe("Multiplication", () => {
 		);
 	});
 
-	test("15% * 10 to equal 1.50", () => {
+	test("15% * 10 ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"15% * 10",
@@ -92,7 +92,7 @@ describe("Multiplication", () => {
 });
 
 describe("Division", () => {
-	test("10 / 10% to equal 10", () => {
+	test("10 / 10% ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"10 / 10%",
@@ -100,7 +100,7 @@ describe("Division", () => {
 		);
 	});
 
-	test("100% / 10 to equal 0.1", () => {
+	test("100% / 10 ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"100% / 10",
@@ -110,7 +110,7 @@ describe("Division", () => {
 });
 
 describe("Exponent", () => {
-	test("10 ^ 20% to equal 100", () => {
+	test("10 ^ 20% ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"10 ^ 20%",
@@ -118,7 +118,7 @@ describe("Exponent", () => {
 		);
 	});
 
-	test("150% ^ 10 to equal 57.6650390625", () => {
+	test("150% ^ 10 ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"150% ^ 10",
@@ -128,7 +128,7 @@ describe("Exponent", () => {
 });
 
 describe("PEMDAS", () => {
-	test("(10 + 50%) * 2 to equal 30", () => {
+	test("(10 + 50%) * 2 ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"(10 + 50%) * 2",
@@ -138,7 +138,7 @@ describe("PEMDAS", () => {
 });
 
 describe("Percentage Of", () => {
-	test("10% of 20 to equal 2", () => {
+	test("10% of 20 ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"10% of 20",
@@ -148,7 +148,7 @@ describe("Percentage Of", () => {
 });
 
 describe("Percentage Increase/Decrease", () => {
-	test("800 to 1000 to equal 25%", () => {
+	test("800 to 1000 ", () => {
 		expectProviderResultAndType<PercentageResult>(
 			provider,
 			"800 to 1000",
@@ -156,7 +156,7 @@ describe("Percentage Increase/Decrease", () => {
 		);
 	});
 
-	test("800 to 400 to equal -50%", () => {
+	test("800 to 400 ", () => {
 		expectProviderResultAndType<PercentageResult>(
 			provider,
 			"800 to 400",
@@ -166,7 +166,7 @@ describe("Percentage Increase/Decrease", () => {
 });
 
 describe("Increase/Decrease By Percentage", () => {
-	test("increase 100 by 25% to equal 125", () => {
+	test("increase 100 by 25% ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"increase 100 by 25%",
@@ -174,7 +174,7 @@ describe("Increase/Decrease By Percentage", () => {
 		);
 	});
 
-	test("decrease 100 by 25% to equal 75", () => {
+	test("decrease 100 by 25% ", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"decrease 100 by 25%",

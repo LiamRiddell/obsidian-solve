@@ -10,7 +10,7 @@ beforeAll(() => {
 });
 
 describe("Functions", () => {
-	test("sinh(1.0) to equal 1.175", () => {
+	test("sinh(1.0) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"sinh(1.0)",
@@ -18,7 +18,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("sin(1.0) to equal 0.8415", () => {
+	test("sin(1.0) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"sin(1.0)",
@@ -26,7 +26,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("abs(-1200) to equal 1200", () => {
+	test("abs(-1200) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"abs(-1200)",
@@ -34,7 +34,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("acosh(2.0) to equal 1.317", () => {
+	test("acosh(2.0) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"acosh(2.0)",
@@ -42,7 +42,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("asinh(1.5) to equal 1.194", () => {
+	test("asinh(1.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"asinh(1.5)",
@@ -50,7 +50,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("asin(0.5) to equal 0.5236", () => {
+	test("asin(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"asin(0.5)",
@@ -58,7 +58,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("atan2(1.0, 2.0) to equal 0.4636", () => {
+	test("atan2(1.0, 2.0) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"atan2(1.0, 2.0)",
@@ -66,7 +66,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("atanh(0.5) to equal 0.5493", () => {
+	test("atanh(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"atanh(0.5)",
@@ -74,7 +74,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("atan(0.5) to equal 0.4636", () => {
+	test("atan(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"atan(0.5)",
@@ -82,7 +82,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("cbrt(8) to equal 2", () => {
+	test("cbrt(8) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"cbrt(8)",
@@ -90,7 +90,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("ceil(3.3) to equal 4", () => {
+	test("ceil(3.3) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"ceil(3.3)",
@@ -98,7 +98,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("clz32(42) to equal 26", () => {
+	test("clz32(42) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"clz32(42)",
@@ -106,7 +106,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("cosh(0.5) to equal 1.128", () => {
+	test("cosh(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"cosh(0.5)",
@@ -114,7 +114,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("cos(0.5) to equal 0.8776", () => {
+	test("cos(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"cos(0.5)",
@@ -122,7 +122,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("expm1(0.5) to equal 0.6487", () => {
+	test("expm1(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"expm1(0.5)",
@@ -130,7 +130,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("exp(0.5) to equal 1.649", () => {
+	test("exp(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"exp(0.5)",
@@ -138,7 +138,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("floor(3.7) to equal 3.000", () => {
+	test("floor(3.7) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"floor(3.7)",
@@ -146,7 +146,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("fround(3.5) to equal 3.500", () => {
+	test("fround(3.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"fround(3.5)",
@@ -154,7 +154,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("hypot(3, 4) to equal 5.000", () => {
+	test("hypot(3, 4) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"hypot(3, 4)",
@@ -162,7 +162,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("imul(2, 7) to equal 14.00", () => {
+	test("imul(2, 7) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"imul(2, 7)",
@@ -170,7 +170,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("log10(100) to equal 2.000", () => {
+	test("log10(100) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"log10(100)",
@@ -178,7 +178,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("log1p(1.5) to equal 0.9163", () => {
+	test("log1p(1.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"log1p(1.5)",
@@ -186,7 +186,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("log2(8) to equal 3.000", () => {
+	test("log2(8) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"log2(8)",
@@ -194,7 +194,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("log(10) to equal 2.303", () => {
+	test("log(10) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"log(10)",
@@ -202,7 +202,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("max(4, 7) to equal 7.000", () => {
+	test("max(4, 7) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"max(4, 7)",
@@ -210,7 +210,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("min(4, 7) to equal 4.000", () => {
+	test("min(4, 7) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"min(4, 7)",
@@ -218,7 +218,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("pow(2, 3) to equal 8.000", () => {
+	test("pow(2, 3) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"pow(2, 3)",
@@ -240,7 +240,7 @@ describe("Functions", () => {
 		expect(result?.value).toBeGreaterThanOrEqual(0);
 	});
 
-	test("round(3.7) to equal 4.000", () => {
+	test("round(3.7) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"round(3.7)",
@@ -248,7 +248,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("sign(-5) to equal -1.000", () => {
+	test("sign(-5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"sign(-5)",
@@ -256,7 +256,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("sqrt(16) to equal 4.000", () => {
+	test("sqrt(16) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"sqrt(16)",
@@ -264,7 +264,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("tanh(0.5) to equal 0.4621", () => {
+	test("tanh(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"tanh(0.5)",
@@ -272,7 +272,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("tan(0.5) to equal 0.5463", () => {
+	test("tan(0.5) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"tan(0.5)",
@@ -280,7 +280,7 @@ describe("Functions", () => {
 		);
 	});
 
-	test("trunc(3.7) to equal 3.000", () => {
+	test("trunc(3.7) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"trunc(3.7)",
@@ -290,7 +290,7 @@ describe("Functions", () => {
 });
 
 describe("Mixed", () => {
-	test("sin(0.42) + acos(0.52) to equal 1.432", () => {
+	test("sin(0.42) + acos(0.52) ", () => {
 		expectProviderResultAndType<FloatResult>(
 			provider,
 			"sin(0.42) + acos(0.52)",
