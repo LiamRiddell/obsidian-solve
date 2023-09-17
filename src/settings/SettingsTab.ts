@@ -144,20 +144,20 @@ export class SettingTab extends PluginSettingTab {
 				const value =
 					this.plugin.settings.datetimeProvider.parsingFormat;
 
-				switch (value) {
-					case EDatetimeParsingFormat.EU:
-						dropdown.setValue("European DD/MM/YYYY");
-						break;
-
-					case EDatetimeParsingFormat.US:
-						dropdown.setValue("American - MM/DD/YYYY");
-						break;
-				}
-
 				dropdown.addOptions({
 					EU: "European DD/MM/YYYY",
 					US: "American - MM/DD/YYYY",
 				});
+
+				switch (value) {
+					case EDatetimeParsingFormat.EU:
+						dropdown.setValue("EU");
+						break;
+
+					case EDatetimeParsingFormat.US:
+						dropdown.setValue("US");
+						break;
+				}
 
 				dropdown.onChange(async (value) => {
 					switch (value) {
