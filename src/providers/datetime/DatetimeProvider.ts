@@ -156,7 +156,7 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 		);
 	}
 
-	provide(sentence: string, raw: boolean = true): string | undefined {
+	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
 		try {
 			const matchResult = grammar.match(sentence);
 
@@ -167,7 +167,7 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 			const result = this.semantics(matchResult).visit();
 
 			if (raw) {
-				return result.value;
+				return result;
 			}
 
 			return result.accept(this.formatVisitor);
