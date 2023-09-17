@@ -3,7 +3,7 @@ import { FloatResult } from "@/results/FloatResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { beforeAll, describe, test } from "@jest/globals";
-import { expectProviderResultAndType } from "./../../helpers/Provider";
+import { expectProviderResultAndType } from "../../helpers/Provider";
 
 let provider: PercentageArithmeticProvider;
 
