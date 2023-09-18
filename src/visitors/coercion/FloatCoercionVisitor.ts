@@ -3,6 +3,7 @@ import { IResult } from "@/results/definition/IResult";
 import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
+import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
 
 export class FloatCoercionVisitor
@@ -16,7 +17,8 @@ export class FloatCoercionVisitor
 		if (
 			visited instanceof FloatResult ||
 			visited instanceof IntegerResult ||
-			visited instanceof HexResult
+			visited instanceof HexResult ||
+			visited instanceof UnitOfMeasurementResult
 		) {
 			return new FloatResult(visited.value);
 		}

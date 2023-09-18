@@ -5,6 +5,7 @@ import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { StringResult } from "@/results/StringResult";
+import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { Vector2Result } from "@/results/Vector2Result";
 import { Vector3Result } from "@/results/Vector3Result";
 import { Vector4Result } from "@/results/Vector4Result";
@@ -59,6 +60,10 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 
 		if (visited instanceof Vector4Result) {
 			return this.visitVector4Result(visited);
+		}
+
+		if (visited instanceof UnitOfMeasurementResult) {
+			return this.visitUnitOfMeasurementResult(visited);
 		}
 
 		throw new UnsupportedVisitorOperationError();
@@ -146,5 +151,9 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 		);
 
 		return `(${x}, ${y}, ${z}, ${w})`;
+	}
+
+	visitUnitOfMeasurementResult(result: UnitOfMeasurementResult): string {
+		return `${result.value} ${result.unit}`;
 	}
 }
