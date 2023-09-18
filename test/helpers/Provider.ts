@@ -14,4 +14,6 @@ export function expectProviderResultAndType<T extends IResult<any>>(
 	expect(result).toBeInstanceOf(expected.constructor);
 
 	expect(result?.value).toBe(expected.value);
+
+	return result;
 }

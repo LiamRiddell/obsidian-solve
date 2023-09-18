@@ -36,7 +36,7 @@ export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeas
 					.from(uom.unit as Unit)
 					.toBest();
 
-				return new StringResult(`${best.val} ${best.unit}`);
+				return new UnitOfMeasurementResult(best.val, best.unit);
 			},
 			Conversion_convert(_, uomNode, _1, unitNode) {
 				const uom = uomNode.visit() as UnitOfMeasurementResult;
