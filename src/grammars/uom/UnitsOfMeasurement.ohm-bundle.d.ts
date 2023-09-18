@@ -65,6 +65,7 @@ export interface UnitsOfMeasurementArithmeticActionDict<T> extends BasicArithmet
   ConversionPossiblities?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: IterationNode) => T;
   UoM?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode) => T;
   Unit?: (this: NonterminalNode, arg0: TerminalNode) => T;
+  percentage?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode) => T;
 }
 
 export interface UnitsOfMeasurementArithmeticSemantics extends Semantics {

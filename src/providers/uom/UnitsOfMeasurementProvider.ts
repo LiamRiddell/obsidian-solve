@@ -68,6 +68,11 @@ export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeas
 			Unit(_) {
 				return new UnitOfMeasurementResult(0, this.sourceString);
 			},
+			percentage(numberNode, _) {
+				return new PercentageResult(
+					parseFloat(numberNode.sourceString)
+				);
+			},
 		});
 	}
 

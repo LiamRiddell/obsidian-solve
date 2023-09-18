@@ -8,6 +8,7 @@ UnitsOfMeasurementArithmetic <: BasicArithmetic {
         
     Primitive 
         += UoM
+        | percentage
         
    	Conversion
     	= "convert"? UoM "to" caseInsensitive<"best"> -- best
@@ -191,5 +192,6 @@ UnitsOfMeasurementArithmetic <: BasicArithmetic {
         | "Mb"
         | "b"
 
-
+    percentage 
+        = number "%"
 }
