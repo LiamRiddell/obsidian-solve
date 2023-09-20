@@ -262,7 +262,7 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Hex Result").setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Value Padding")
+			.setName("Value padding")
 			.setDesc(
 				`Enable or disable padding the start of hex values with zeros for consistency. Default is ${DEFAULT_SETTINGS.hexResult.enablePadding}`
 			)
@@ -276,7 +276,7 @@ export class SettingTab extends PluginSettingTab {
 			);
 
 		new Setting(this.containerEl)
-			.setName("Padding Zeros")
+			.setName("Padding zeros")
 			.setDesc(
 				`Specify the number of leading zeros to pad hex values with for a uniform appearance. Default is ${DEFAULT_SETTINGS.hexResult.paddingZeros}`
 			)
