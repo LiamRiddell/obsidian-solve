@@ -306,7 +306,7 @@ export class SettingTab extends PluginSettingTab {
 			.setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Decimal Places")
+			.setName("Decimal places")
 			.setDesc(
 				`Adjust the number of decimal places, setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.unitOfMeasurementResult.decimalPlaces}`
 			)
