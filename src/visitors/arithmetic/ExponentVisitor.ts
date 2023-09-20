@@ -3,9 +3,11 @@ import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
+import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
 import { percentageOf } from "@/utilities/Percentage";
+import { convertUnitOfMeasurementResultTo } from "@/utilities/UnitOfMeasurement";
 import { FloatCoercion } from "@/visitors/coercion/FloatCoercionVisitor";
 import { HexCoercion } from "@/visitors/coercion/HexCoercionVisitor";
 import { IntegerCoercion } from "@/visitors/coercion/IntegerCoercionVisitor";
@@ -29,6 +31,10 @@ export class ExponentVisitor implements IGenericResultVisitor<INumericResult> {
 
 		if (visited instanceof PercentageResult) {
 			return this.percentage(visited, this.right);
+		}
+
+		if (visited instanceof UnitOfMeasurementResult) {
+			return this.unitOfMeasurement(visited, this.right);
 		}
 
 		throw new UnsupportedVisitorOperationError();
@@ -80,5 +86,36 @@ export class ExponentVisitor implements IGenericResultVisitor<INumericResult> {
 		const coercedRight = FloatCoercion.visit(right);
 
 		return new FloatResult(Math.pow(left.value / 100, coercedRight.value));
+	}
+
+	private unitOfMeasurement(
+		left: UnitOfMeasurementResult,
+		right: INumericResult
+	) {
+		if (right instanceof PercentageResult) {
+			return new UnitOfMeasurementResult(
+				Math.pow(left.value, percentageOf(right.value, left.value)),
+				left.unit
+			);
+		}
+
+		if (right instanceof UnitOfMeasurementResult) {
+			const convertedRight = convertUnitOfMeasurementResultTo(
+				right,
+				left
+			);
+
+			return new UnitOfMeasurementResult(
+				Math.pow(left.value, convertedRight.value),
+				left.unit
+			);
+		}
+
+		const coercedRight = FloatCoercion.visit(right);
+
+		return new UnitOfMeasurementResult(
+			Math.pow(left.value, coercedRight.value),
+			left.unit
+		);
 	}
 }

@@ -28,6 +28,7 @@ export class SettingTab extends PluginSettingTab {
 		this.displayPercentageSettings();
 		this.displayDatetimeSettings();
 		this.displayHexSettings();
+		this.displayUnitOfMeasurementSettings();
 
 		this.displayStyleSettings();
 	}
@@ -136,7 +137,7 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Datetime Provider").setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Parsing Format")
+			.setName("Parsing format")
 			.setDesc(
 				"Specify the format to be used for parsing datetime values."
 			)
@@ -185,7 +186,7 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Float Result").setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Decimal Places")
+			.setName("Decimal places")
 			.setDesc(
 				`Adjust the number of decimal places, setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.floatResult.decimalPlaces}`
 			)
@@ -213,7 +214,7 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Percentage Result").setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Decimal Places")
+			.setName("Decimal places")
 			.setDesc(
 				`Adjust the number of decimal places, setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.percentageResult.decimalPlaces}`
 			)
@@ -261,7 +262,7 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Hex Result").setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Value Padding")
+			.setName("Value padding")
 			.setDesc(
 				`Enable or disable padding the start of hex values with zeros for consistency. Default is ${DEFAULT_SETTINGS.hexResult.enablePadding}`
 			)
@@ -275,7 +276,7 @@ export class SettingTab extends PluginSettingTab {
 			);
 
 		new Setting(this.containerEl)
-			.setName("Padding Zeros")
+			.setName("Padding zeros")
 			.setDesc(
 				`Specify the number of leading zeros to pad hex values with for a uniform appearance. Default is ${DEFAULT_SETTINGS.hexResult.paddingZeros}`
 			)
@@ -297,6 +298,56 @@ export class SettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
+	}
+
+	displayUnitOfMeasurementSettings() {
+		new Setting(this.containerEl)
+			.setName("Unit of Measurement Result")
+			.setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Decimal places")
+			.setDesc(
+				`Adjust the number of decimal places, setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.unitOfMeasurementResult.decimalPlaces}`
+			)
+			.addSlider((slider) => {
+				const value =
+					this.plugin.settings.unitOfMeasurementResult.decimalPlaces;
+
+				slider.setLimits(0, 17, 1);
+				slider.setValue(value);
+
+				slider.sliderEl.addEventListener("mouseover", () => {
+					slider.showTooltip();
+				});
+
+				slider.onChange(async (value) => {
+					this.plugin.settings.unitOfMeasurementResult.decimalPlaces =
+						value;
+
+					slider.showTooltip();
+
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(this.containerEl)
+			.setName("Show unit name")
+			.setDesc(
+				`Show the unit name in the result instead of the unit abbreviation. Default is ${DEFAULT_SETTINGS.unitOfMeasurementResult.unitNames}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.unitOfMeasurementResult.unitNames
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.unitOfMeasurementResult.unitNames =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayStyleSettings() {

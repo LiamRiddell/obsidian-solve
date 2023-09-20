@@ -31,6 +31,8 @@
 		"typescript": "5.1.6"
 	},
 	"dependencies": {
+		"@types/convert-units": "^2.3.7",
+		"convert-units": "^2.3.4",
 		"moment": "^2.29.4",
 		"ohm-js": "^17.1.0"
 	}
