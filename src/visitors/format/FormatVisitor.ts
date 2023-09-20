@@ -5,6 +5,7 @@ import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { StringResult } from "@/results/StringResult";
+import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { Vector2Result } from "@/results/Vector2Result";
 import { Vector3Result } from "@/results/Vector3Result";
 import { Vector4Result } from "@/results/Vector4Result";
@@ -16,6 +17,7 @@ import { IVector3Result } from "@/results/definition/IVector3Result";
 import { IVector4Result } from "@/results/definition/IVector4Result";
 import UserSettings from "@/settings/UserSettings";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
+import convert, { Unit } from "convert-units";
 
 export class FormatVisitor implements IGenericResultVisitor<string> {
 	private settings: UserSettings;
@@ -59,6 +61,10 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 
 		if (visited instanceof Vector4Result) {
 			return this.visitVector4Result(visited);
+		}
+
+		if (visited instanceof UnitOfMeasurementResult) {
+			return this.visitUnitOfMeasurementResult(visited);
 		}
 
 		throw new UnsupportedVisitorOperationError();
@@ -146,5 +152,27 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 		);
 
 		return `(${x}, ${y}, ${z}, ${w})`;
+	}
+
+	visitUnitOfMeasurementResult(result: UnitOfMeasurementResult): string {
+		const decimalPlaces =
+			this.settings.unitOfMeasurementResult.decimalPlaces;
+
+		const value = Number.isInteger(result.value)
+			? result.value
+			: result.value.toFixed(decimalPlaces);
+
+		let unit = result.unit;
+
+		if (this.settings.unitOfMeasurementResult.unitNames) {
+			const unitData = convert().describe(result.unit as Unit);
+
+			unit =
+				Math.abs(result.value) > 1
+					? unitData.plural
+					: unitData.singular;
+		}
+
+		return `${value} ${unit}`;
 	}
 }

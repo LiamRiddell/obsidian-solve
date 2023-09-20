@@ -24,12 +24,9 @@ export class PercentageIncreaseOrDecreaseVisitor
 		) {
 			const coercedRight = FloatCoercion.visit(this.right);
 
-			this.right.value = percentageIncrease(
-				visited.value,
-				coercedRight.value
+			return new PercentageResult(
+				percentageIncrease(visited.value, coercedRight.value)
 			);
-
-			return this.right;
 		}
 
 		throw new UnsupportedVisitorOperationError();

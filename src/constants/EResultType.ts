@@ -7,4 +7,5 @@ export enum EResultType {
 	Vector2,
 	Vector3,
 	Vector4,
+	UnitOfMeasurement,
 }
