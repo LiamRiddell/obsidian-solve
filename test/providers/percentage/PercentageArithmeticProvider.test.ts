@@ -172,7 +172,27 @@ describe("Increase/Decrease By Percentage", () => {
 		expect(result).toBe(125);
 	});
 
+	test("INcREaSE 100 bY 25% To equal 125", () => {
+		const result = percentageArithmeticProvider.provide(
+			"increase 100 by 25%"
+		);
+
+		expect(result).toBeDefined();
+
+		expect(result).toBe(125);
+	});
+
 	test("decrease 100 by 25% to equal 75", () => {
+		const result = percentageArithmeticProvider.provide(
+			"decrease 100 by 25%"
+		);
+
+		expect(result).toBeDefined();
+
+		expect(result).toBe(75);
+	});
+
+	test("Decrease 100 bY 25% to eQual 75", () => {
 		const result = percentageArithmeticProvider.provide(
 			"decrease 100 by 25%"
 		);

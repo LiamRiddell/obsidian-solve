@@ -12,16 +12,16 @@ PercentageArithmetic <: BasicArithmetic {
         += percentage
         
     PercentageOf
-    	= percentage "of" number 
+    	= percentage caseInsensitive<"of"> number 
         
    	IncreaseBy
-    	= "increase" number "by" percentage
+    	= caseInsensitive<"increase"> number caseInsensitive<"by"> percentage
         
    	DecreaseBy
-    	= "decrease" number "by" percentage
+    	= caseInsensitive<"decrease"> number caseInsensitive<"by"> percentage
     
     PercentageIncreaseOrDecrease
-        = "from"? number "to" number
+        = caseInsensitive<"from">? number caseInsensitive<"to"> number
 
     percentage = number "%"
 }
