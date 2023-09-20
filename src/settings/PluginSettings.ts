@@ -31,4 +31,8 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		enablePadding: false,
 		paddingZeros: 8,
 	},
+	unitOfMeasurementResult: {
+		decimalPlaces: 2,
+		unitNames: false,
+	},
 };

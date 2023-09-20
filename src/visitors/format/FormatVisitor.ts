@@ -17,6 +17,7 @@ import { IVector3Result } from "@/results/definition/IVector3Result";
 import { IVector4Result } from "@/results/definition/IVector4Result";
 import UserSettings from "@/settings/UserSettings";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
+import convert, { Unit } from "convert-units";
 
 export class FormatVisitor implements IGenericResultVisitor<string> {
 	private settings: UserSettings;
@@ -154,6 +155,24 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 	}
 
 	visitUnitOfMeasurementResult(result: UnitOfMeasurementResult): string {
-		return `${result.value} ${result.unit}`;
+		const decimalPlaces =
+			this.settings.unitOfMeasurementResult.decimalPlaces;
+
+		const value = Number.isInteger(result.value)
+			? result.value
+			: result.value.toFixed(decimalPlaces);
+
+		let unit = result.unit;
+
+		if (this.settings.unitOfMeasurementResult.unitNames) {
+			const unitData = convert().describe(result.unit as Unit);
+
+			unit =
+				Math.abs(result.value) > 1
+					? unitData.plural
+					: unitData.singular;
+		}
+
+		return `${value} ${unit}`;
 	}
 }
