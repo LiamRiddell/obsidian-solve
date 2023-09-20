@@ -174,10 +174,26 @@ describe("Increase/Decrease By Percentage", () => {
 		);
 	});
 
+	test("INcREaSE 100 bY 25%", () => {
+		expectProviderResultAndType<IntegerResult>(
+			provider,
+			"INcREaSE 100 bY 25%",
+			new IntegerResult(125)
+		);
+	});
+
 	test("decrease 100 by 25%", () => {
 		expectProviderResultAndType<IntegerResult>(
 			provider,
 			"decrease 100 by 25%",
+			new IntegerResult(75)
+		);
+	});
+
+	test("Decrease 100 bY 25%", () => {
+		expectProviderResultAndType<IntegerResult>(
+			provider,
+			"Decrease 100 bY 25%",
 			new IntegerResult(75)
 		);
 	});
