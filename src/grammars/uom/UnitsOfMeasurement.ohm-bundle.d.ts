@@ -59,10 +59,10 @@ export interface BasicArithmeticGrammar extends Grammar {
 export interface UnitsOfMeasurementArithmeticActionDict<T> extends BasicArithmeticActionDict<T> {
   Expression?: (this: NonterminalNode, arg0: NonterminalNode) => T;
   Primitive?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  Conversion_best?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: NonterminalNode) => T;
-  Conversion_convert?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: NonterminalNode) => T;
+  Conversion_best?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode, arg2: NonterminalNode, arg3: NonterminalNode) => T;
+  Conversion_convert?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode, arg2: NonterminalNode, arg3: NonterminalNode) => T;
   Conversion?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  ConversionPossiblities?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode, arg2: TerminalNode, arg3: IterationNode) => T;
+  ConversionPossiblities?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode, arg2: NonterminalNode, arg3: IterationNode) => T;
   UoM?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode) => T;
   Unit?: (this: NonterminalNode, arg0: TerminalNode) => T;
   percentage?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode) => T;

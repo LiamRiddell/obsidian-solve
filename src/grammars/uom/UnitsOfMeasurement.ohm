@@ -11,11 +11,11 @@ UnitsOfMeasurementArithmetic <: BasicArithmetic {
         | percentage
         
    	Conversion
-    	= "convert"? UoM "to" caseInsensitive<"best"> -- best
-        | "convert"? UoM "to" Unit -- convert
+    	= caseInsensitive<"convert">? UoM caseInsensitive<"to"> caseInsensitive<"best"> -- best
+        | caseInsensitive<"convert">? UoM caseInsensitive<"to"> Unit -- convert
         	
     ConversionPossiblities
-        = "convert"? UoM "to" "?"?
+        = caseInsensitive<"convert">? UoM caseInsensitive<"to"> "?"?
     
     UoM 
         = number Unit
