@@ -1,9 +1,8 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
+import { AutoNumberResult } from "@/results/AutoNumberResult";
 import { IResult } from "@/results/definition/IResult";
 import { IVector4Result } from "@/results/definition/IVector4Result";
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
 import { Vector4Result } from "@/results/Vector4Result";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
 
@@ -16,8 +15,7 @@ export class Vector4CoercionVisitor
 		}
 
 		if (
-			visited instanceof FloatResult ||
-			visited instanceof IntegerResult ||
+			visited instanceof AutoNumberResult ||
 			visited instanceof HexResult
 		) {
 			return new Vector4Result({

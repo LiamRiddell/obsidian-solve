@@ -1,7 +1,6 @@
 import { BasicArithmeticActionDict } from "@/grammars/arithmetic/BasicArithmetic.ohm-bundle";
-import { FloatResult } from "@/results/FloatResult";
+import { AutoNumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { AdditionVisitor } from "@/visitors/arithmetic/AdditionVisitor";
 import { ArithmeticExpression } from "@/visitors/arithmetic/ArithmeticExpressionVisitor";
@@ -16,7 +15,7 @@ import { MultiplicationVisitor } from "@/visitors/arithmetic/MultiplicationVisit
 import { SubtractionVisitor } from "@/visitors/arithmetic/SubtractionVisitor";
 
 export const basicArithmeticSemanticActions: BasicArithmeticActionDict<
-	FloatResult | IntegerResult | HexResult | PercentageResult
+	AutoNumberResult | HexResult | PercentageResult
 > = {
 	LogicalShift_left(xNode, _, yNode) {
 		const x = xNode.visit();
@@ -74,9 +73,9 @@ export const basicArithmeticSemanticActions: BasicArithmeticActionDict<
 		return ArithmeticExpression.visitHex(this.sourceString);
 	},
 	number_fract(_, _1, _2) {
-		return ArithmeticExpression.visitFloat(this.sourceString);
+		return ArithmeticExpression.visitNumber(this.sourceString);
 	},
 	number_whole(_) {
-		return ArithmeticExpression.visitInteger(this.sourceString);
+		return ArithmeticExpression.visitNumber(this.sourceString);
 	},
 };

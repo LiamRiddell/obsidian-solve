@@ -1,12 +1,14 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
 import { AutoNumberResult } from "@/results/AutoNumberResult";
-import { IResult } from "@/results/definition/IResult";
 import { HexResult } from "@/results/HexResult";
+import { IResult } from "@/results/definition/IResult";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
 
-export class HexCoercionVisitor implements ICoercionResultVisitor<HexResult> {
-	visit(visited: IResult<unknown>): HexResult {
-		if (visited instanceof HexResult) {
+export class NumberCoercionVisitor
+	implements ICoercionResultVisitor<AutoNumberResult>
+{
+	visit(visited: IResult<unknown>): AutoNumberResult {
+		if (visited instanceof AutoNumberResult) {
 			return visited;
 		}
 
@@ -14,11 +16,11 @@ export class HexCoercionVisitor implements ICoercionResultVisitor<HexResult> {
 			visited instanceof AutoNumberResult ||
 			visited instanceof HexResult
 		) {
-			return new HexResult(visited.value);
+			return new AutoNumberResult(visited.value);
 		}
 
 		throw new UnsupportedCoercionOperationError();
 	}
 }
 
-export const HexCoercion = new HexCoercionVisitor();
+export const FloatCoercion = new NumberCoercionVisitor();

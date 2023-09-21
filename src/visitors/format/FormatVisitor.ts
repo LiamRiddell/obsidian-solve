@@ -1,8 +1,7 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
+import { AutoNumberResult } from "@/results/AutoNumberResult";
 import { DatetimeResult } from "@/results/DatetimeResult";
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { StringResult } from "@/results/StringResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
@@ -27,12 +26,8 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 	}
 
 	visit<TValue>(visited: IResult<TValue>): string {
-		if (visited instanceof FloatResult) {
-			return this.visitFloatResult(visited);
-		}
-
-		if (visited instanceof IntegerResult) {
-			return this.visitIntegerResult(visited);
+		if (visited instanceof AutoNumberResult) {
+			return this.visitNumberResult(visited);
 		}
 
 		if (visited instanceof HexResult) {
@@ -70,7 +65,8 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 		throw new UnsupportedVisitorOperationError();
 	}
 
-	visitFloatResult(result: FloatResult): string {
+	visitNumberResult(result: AutoNumberResult): string {
+		// TODO: FIX THIS RESULT
 		return result.value.toFixed(this.settings.floatResult.decimalPlaces);
 	}
 
@@ -86,10 +82,6 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 				"0"
 			);
 		return isNegative ? `-0x${hexString}` : `0x${hexString}`;
-	}
-
-	visitIntegerResult(result: IntegerResult): string {
-		return Math.trunc(result.value).toString();
 	}
 
 	visitPercentageResult(result: PercentageResult): string {

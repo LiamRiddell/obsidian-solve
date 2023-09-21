@@ -3,9 +3,8 @@ import grammar, {
 } from "@/grammars/function/FunctionArithmetic.ohm-bundle";
 import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { FloatResult } from "@/results/FloatResult";
+import { AutoNumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
 import { logger } from "@/utilities/Logger";
 
 export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionArithmeticSemantics> {
@@ -17,37 +16,38 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 		const degToRad = (degrees: number) => degrees * (Math.PI / 180);
 		const radToDeg = (radians: number) => radians / (Math.PI / 180);
 
-		this.semantics.addOperation<FloatResult | IntegerResult | HexResult>(
-			"visit()",
-			{
-				...basicArithmeticSemanticActions,
-				Function_function(functionName, _l, e, _r) {
-					const functionNameLower =
-						functionName.sourceString.toLowerCase();
+		this.semantics.addOperation<AutoNumberResult | HexResult>("visit()", {
+			...basicArithmeticSemanticActions,
+			Function_function(functionName, _l, e, _r) {
+				const functionNameLower =
+					functionName.sourceString.toLowerCase();
 
-					const argumentsArray = e
-						.asIteration()
-						.children.map((c) => c.visit().value);
+				const argumentsArray = e
+					.asIteration()
+					.children.map((c) => c.visit().value);
 
-					const mathFunc = (Math as any)[functionNameLower];
+				const mathFunc = (Math as any)[functionNameLower];
 
-					switch (functionNameLower) {
-						case "degtorad":
+				switch (functionNameLower) {
+					case "degtorad":
+						return new AutoNumberResult(
 							// @ts-expect-error
-							return new FloatResult(degToRad(...argumentsArray));
+							degToRad(...argumentsArray)
+						);
 
-						case "radtodeg":
+					case "radtodeg":
+						return new AutoNumberResult(
 							// @ts-expect-error
-							return new FloatResult(radToDeg(...argumentsArray));
+							radToDeg(...argumentsArray)
+						);
 
-						default:
-							return new FloatResult(
-								mathFunc ? mathFunc(...argumentsArray) : 0
-							);
-					}
-				},
-			}
-		);
+					default:
+						return new AutoNumberResult(
+							mathFunc ? mathFunc(...argumentsArray) : 0
+						);
+				}
+			},
+		});
 	}
 
 	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {

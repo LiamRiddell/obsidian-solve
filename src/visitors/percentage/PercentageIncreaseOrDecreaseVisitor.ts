@@ -1,11 +1,10 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
-import { FloatResult } from "@/results/FloatResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { AutoNumberResult } from "@/results/AutoNumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
 import { percentageIncrease } from "@/utilities/Percentage";
-import { FloatCoercion } from "@/visitors/coercion/FloatCoercionVisitor";
+import { FloatCoercion } from "@/visitors/coercion/NumberCoercionVisitor";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class PercentageIncreaseOrDecreaseVisitor
@@ -18,10 +17,7 @@ export class PercentageIncreaseOrDecreaseVisitor
 			throw new UnsupportedVisitorOperationError();
 		}
 
-		if (
-			visited instanceof FloatResult ||
-			visited instanceof IntegerResult
-		) {
+		if (visited instanceof AutoNumberResult) {
 			const coercedRight = FloatCoercion.visit(this.right);
 
 			return new PercentageResult(

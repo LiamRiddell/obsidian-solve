@@ -9,8 +9,7 @@ import vector4Grammar, {
 } from "@/grammars/vector/Vector4Arithmetic.ohm-bundle";
 import { ProviderBase } from "@/providers/ProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { FloatResult } from "@/results/FloatResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { AutoNumberResult } from "@/results/AutoNumberResult";
 import { Vector2Result } from "@/results/Vector2Result";
 import { Vector3Result } from "@/results/Vector3Result";
 import { Vector4Result } from "@/results/Vector4Result";
@@ -41,7 +40,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 			vector2Grammar.Vector2Arithmetic.createSemantics();
 
 		this.vector2Semantics.addOperation<
-			Vector2Result | IntegerResult | FloatResult
+			Vector2Result | AutoNumberResult | AutoNumberResult
 		>("visit()", {
 			...basicArithmeticSemanticActions,
 			AS_addition(xNode, _, yNode) {
@@ -88,37 +87,37 @@ export class VectorArithmeticProvider extends ProviderBase {
 				return new Vector2Result({ x: x.value, y: y.value });
 			},
 			LengthSq_function(_f, _l, v, _r) {
-				return new FloatResult(Vector2.magnitudeSqrt(v.visit()?.value));
+				return new AutoNumberResult(Vector2.magnitudeSqrt(v.visit()));
 			},
 			DistanceSq_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector2.distanceSq(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector2.distanceSq(v1.visit(), v2.visit())
 				);
 			},
 			Length_function(_f, _l, v, _r) {
-				return new FloatResult(Vector2.magnitude(v.visit()?.value));
+				return new AutoNumberResult(Vector2.magnitude(v.visit()));
 			},
 			Distance_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector2.distance(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector2.distance(v1.visit(), v2.visit())
 				);
 			},
 			Normalise_function(_f, _l, v, _r) {
 				return new Vector2Result(Vector2.normalise(v.visit()?.value));
 			},
 			Dot_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector2.dot(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector2.dot(v1.visit(), v2.visit())
 				);
 			},
 			AngleBetween_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector2.angleBetween(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector2.angleBetween(v1.visit(), v2.visit())
 				);
 			},
 			Cross_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector2.cross(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector2.cross(v1.visit(), v2.visit())
 				);
 			},
 			Lerp_function(_f, _l, v1, _1, v2, _2, t, _r) {
@@ -138,7 +137,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 			vector3Grammar.Vector3Arithmetic.createSemantics();
 
 		this.vector3Semantics.addOperation<
-			Vector3Result | IntegerResult | FloatResult
+			Vector3Result | AutoNumberResult | AutoNumberResult
 		>("visit()", {
 			...basicArithmeticSemanticActions,
 			AS_addition(xNode, _, yNode) {
@@ -194,32 +193,32 @@ export class VectorArithmeticProvider extends ProviderBase {
 				});
 			},
 			LengthSq_function(_f, _l, v, _r) {
-				return new FloatResult(Vector3.magnitudeSqrt(v.visit()?.value));
+				return new AutoNumberResult(Vector3.magnitudeSqrt(v.visit()));
 			},
 			DistanceSq_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector3.distanceSq(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector3.distanceSq(v1.visit(), v2.visit())
 				);
 			},
 			Length_function(_f, _l, v, _r) {
-				return new FloatResult(Vector3.magnitude(v.visit()?.value));
+				return new AutoNumberResult(Vector3.magnitude(v.visit()));
 			},
 			Distance_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector3.distance(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector3.distance(v1.visit(), v2.visit())
 				);
 			},
 			Normalise_function(_f, _l, v, _r) {
 				return new Vector3Result(Vector3.normalise(v.visit()?.value));
 			},
 			Dot_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector3.dot(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector3.dot(v1.visit(), v2.visit())
 				);
 			},
 			AngleBetween_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector3.angleBetween(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector3.angleBetween(v1.visit(), v2.visit())
 				);
 			},
 			Cross_function(_f, _l, v1, _1, v2, _r) {
@@ -244,7 +243,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 			vector4Grammar.Vector4Arithmetic.createSemantics();
 
 		this.vector4Semantics.addOperation<
-			Vector4Result | IntegerResult | FloatResult
+			Vector4Result | AutoNumberResult | AutoNumberResult
 		>("visit()", {
 			...basicArithmeticSemanticActions,
 			AS_addition(xNode, _, yNode) {
@@ -303,32 +302,32 @@ export class VectorArithmeticProvider extends ProviderBase {
 				});
 			},
 			LengthSq_function(_f, _l, v, _r) {
-				return new FloatResult(Vector4.magnitudeSqrt(v.visit()?.value));
+				return new AutoNumberResult(Vector4.magnitudeSqrt(v.visit()));
 			},
 			DistanceSq_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector4.distanceSq(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector4.distanceSq(v1.visit(), v2.visit())
 				);
 			},
 			Length_function(_f, _l, v, _r) {
-				return new FloatResult(Vector4.magnitude(v.visit()?.value));
+				return new AutoNumberResult(Vector4.magnitude(v.visit()));
 			},
 			Distance_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector4.distance(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector4.distance(v1.visit(), v2.visit())
 				);
 			},
 			Normalise_function(_f, _l, v, _r) {
 				return new Vector4Result(Vector4.normalise(v.visit()?.value));
 			},
 			Dot_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector4.dot(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector4.dot(v1.visit(), v2.visit())
 				);
 			},
 			AngleBetween_function(_f, _l, v1, _1, v2, _r) {
-				return new FloatResult(
-					Vector4.angleBetween(v1.visit()?.value, v2.visit()?.value)
+				return new AutoNumberResult(
+					Vector4.angleBetween(v1.visit(), v2.visit())
 				);
 			},
 			Lerp_function(_f, _l, v1, _1, v2, _2, t, _r) {

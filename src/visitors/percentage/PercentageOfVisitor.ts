@@ -3,7 +3,7 @@ import { PercentageResult } from "@/results/PercentageResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
 import { percentageOf } from "@/utilities/Percentage";
-import { FloatCoercion } from "@/visitors/coercion/FloatCoercionVisitor";
+import { FloatCoercion } from "@/visitors/coercion/NumberCoercionVisitor";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class PercentageOfVisitor
