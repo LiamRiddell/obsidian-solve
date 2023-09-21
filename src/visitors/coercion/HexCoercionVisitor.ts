@@ -1,5 +1,5 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
-import { AutoNumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { IResult } from "@/results/definition/IResult";
 import { HexResult } from "@/results/HexResult";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
@@ -10,10 +10,7 @@ export class HexCoercionVisitor implements ICoercionResultVisitor<HexResult> {
 			return visited;
 		}
 
-		if (
-			visited instanceof AutoNumberResult ||
-			visited instanceof HexResult
-		) {
+		if (visited instanceof NumberResult || visited instanceof HexResult) {
 			return new HexResult(visited.value);
 		}
 

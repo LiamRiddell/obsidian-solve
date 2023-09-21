@@ -1,4 +1,4 @@
-import { AutoNumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 
@@ -16,11 +16,11 @@ export class ArithmeticExpressionVisitor {
 	visitConstant(constantName: string): INumericResult {
 		switch (constantName.toLowerCase()) {
 			case "pi":
-				return new AutoNumberResult(Math.PI);
+				return new NumberResult(Math.PI);
 			case "e":
-				return new AutoNumberResult(Math.E);
+				return new NumberResult(Math.E);
 			default:
-				return new AutoNumberResult(0);
+				return new NumberResult(0);
 		}
 	}
 
@@ -33,7 +33,7 @@ export class ArithmeticExpressionVisitor {
 	}
 
 	visitNumber(numString: string): INumericResult {
-		return new AutoNumberResult(parseFloat(numString));
+		return new NumberResult(parseFloat(numString));
 	}
 }
 

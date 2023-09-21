@@ -1,5 +1,5 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
-import { AutoNumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { IResult } from "@/results/definition/IResult";
 import { IVector4Result } from "@/results/definition/IVector4Result";
 import { HexResult } from "@/results/HexResult";
@@ -14,10 +14,7 @@ export class Vector4CoercionVisitor
 			return visited;
 		}
 
-		if (
-			visited instanceof AutoNumberResult ||
-			visited instanceof HexResult
-		) {
+		if (visited instanceof NumberResult || visited instanceof HexResult) {
 			return new Vector4Result({
 				x: visited.value,
 				y: visited.value,

@@ -2,7 +2,7 @@ import { EResultType } from "@/constants/EResultType";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
-export class AutoNumberResult implements INumericResult {
+export class NumberResult implements INumericResult {
 	type = EResultType.Number;
 	value: number;
 

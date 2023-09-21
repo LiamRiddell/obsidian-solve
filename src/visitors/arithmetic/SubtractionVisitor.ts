@@ -1,13 +1,14 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
-import { AutoNumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
 import { percentageOf } from "@/utilities/Percentage";
+import { convertUnitOfMeasurementResultTo } from "@/utilities/UnitOfMeasurement";
 import { HexCoercion } from "@/visitors/coercion/HexCoercionVisitor";
-import { FloatCoercion } from "@/visitors/coercion/NumberCoercionVisitor";
+import { NumberCoercion } from "@/visitors/coercion/NumberCoercionVisitor";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class SubtractionVisitor
@@ -16,7 +17,7 @@ export class SubtractionVisitor
 	constructor(private right: INumericResult) {}
 
 	visit<TValue>(visited: IResult<TValue>): INumericResult {
-		if (visited instanceof AutoNumberResult) {
+		if (visited instanceof NumberResult) {
 			return this.number(visited, this.right);
 		}
 
@@ -35,16 +36,16 @@ export class SubtractionVisitor
 		throw new UnsupportedVisitorOperationError();
 	}
 
-	private number(left: AutoNumberResult, right: INumericResult) {
+	private number(left: NumberResult, right: INumericResult) {
 		if (right instanceof PercentageResult) {
-			return new AutoNumberResult(
+			return new NumberResult(
 				left.value - percentageOf(right.value, left.value)
 			);
 		}
 
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
-		return new AutoNumberResult(left.value - coercedRight.value);
+		return new NumberResult(left.value - coercedRight.value);
 	}
 
 	private hex(left: HexResult, right: INumericResult) {
@@ -61,12 +62,12 @@ export class SubtractionVisitor
 
 	private percentage(left: PercentageResult, right: INumericResult) {
 		if (right instanceof PercentageResult) {
-			return new AutoNumberResult(left.value / 100 - right.value / 100);
+			return new NumberResult(left.value / 100 - right.value / 100);
 		}
 
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
-		return new AutoNumberResult(left.value / 100 - coercedRight.value);
+		return new NumberResult(left.value / 100 - coercedRight.value);
 	}
 
 	private unitOfMeasurement(
@@ -92,7 +93,7 @@ export class SubtractionVisitor
 			);
 		}
 
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
 		return new UnitOfMeasurementResult(
 			left.value - coercedRight.value,

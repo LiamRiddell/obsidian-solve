@@ -1,5 +1,5 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
-import { AutoNumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
 import { increaseByPercentage } from "@/utilities/Percentage";
@@ -11,7 +11,7 @@ export class IncreaseByVisitor
 	constructor(private right: INumericResult) {}
 
 	visit<TValue>(visited: IResult<TValue>): INumericResult {
-		if (visited instanceof AutoNumberResult) {
+		if (visited instanceof NumberResult) {
 			(visited as INumericResult).value = increaseByPercentage(
 				visited.value,
 				this.right.value

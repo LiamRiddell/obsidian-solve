@@ -1,5 +1,5 @@
 import { FunctionArithmeticProvider } from "@/providers/function/FunctionArithmeticProvider";
-import { FloatResult } from "@/results/FloatResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { beforeAll, describe, expect, test } from "@jest/globals";
 import { expectProviderResultAndType } from "../../../test/helpers/Provider";
 
@@ -11,227 +11,227 @@ beforeAll(() => {
 
 describe("Functions", () => {
 	test("sinh(1.0)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"sinh(1.0)",
-			new FloatResult(Math.sinh(1.0))
+			new NumberResult(Math.sinh(1.0))
 		);
 	});
 
 	test("sin(1.0)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"sin(1.0)",
-			new FloatResult(Math.sin(1.0))
+			new NumberResult(Math.sin(1.0))
 		);
 	});
 
 	test("abs(-1200)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"abs(-1200)",
-			new FloatResult(Math.abs(-1200))
+			new NumberResult(Math.abs(-1200))
 		);
 	});
 
 	test("acosh(2.0)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"acosh(2.0)",
-			new FloatResult(Math.acosh(2.0))
+			new NumberResult(Math.acosh(2.0))
 		);
 	});
 
 	test("asinh(1.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"asinh(1.5)",
-			new FloatResult(Math.asinh(1.5))
+			new NumberResult(Math.asinh(1.5))
 		);
 	});
 
 	test("asin(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"asin(0.5)",
-			new FloatResult(Math.asin(0.5))
+			new NumberResult(Math.asin(0.5))
 		);
 	});
 
 	test("atan2(1.0, 2.0)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"atan2(1.0, 2.0)",
-			new FloatResult(Math.atan2(1.0, 2.0))
+			new NumberResult(Math.atan2(1.0, 2.0))
 		);
 	});
 
 	test("atanh(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"atanh(0.5)",
-			new FloatResult(Math.atanh(0.5))
+			new NumberResult(Math.atanh(0.5))
 		);
 	});
 
 	test("atan(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"atan(0.5)",
-			new FloatResult(Math.atan(0.5))
+			new NumberResult(Math.atan(0.5))
 		);
 	});
 
 	test("cbrt(8)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"cbrt(8)",
-			new FloatResult(Math.cbrt(8))
+			new NumberResult(Math.cbrt(8))
 		);
 	});
 
 	test("ceil(3.3)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"ceil(3.3)",
-			new FloatResult(Math.ceil(3.3))
+			new NumberResult(Math.ceil(3.3))
 		);
 	});
 
 	test("clz32(42)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"clz32(42)",
-			new FloatResult(Math.clz32(42))
+			new NumberResult(Math.clz32(42))
 		);
 	});
 
 	test("cosh(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"cosh(0.5)",
-			new FloatResult(Math.cosh(0.5))
+			new NumberResult(Math.cosh(0.5))
 		);
 	});
 
 	test("cos(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"cos(0.5)",
-			new FloatResult(Math.cos(0.5))
+			new NumberResult(Math.cos(0.5))
 		);
 	});
 
 	test("expm1(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"expm1(0.5)",
-			new FloatResult(Math.expm1(0.5))
+			new NumberResult(Math.expm1(0.5))
 		);
 	});
 
 	test("exp(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"exp(0.5)",
-			new FloatResult(Math.exp(0.5))
+			new NumberResult(Math.exp(0.5))
 		);
 	});
 
 	test("floor(3.7)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"floor(3.7)",
-			new FloatResult(Math.floor(3.7))
+			new NumberResult(Math.floor(3.7))
 		);
 	});
 
 	test("fround(3.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"fround(3.5)",
-			new FloatResult(Math.fround(3.5))
+			new NumberResult(Math.fround(3.5))
 		);
 	});
 
 	test("hypot(3, 4)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"hypot(3, 4)",
-			new FloatResult(Math.hypot(3, 4))
+			new NumberResult(Math.hypot(3, 4))
 		);
 	});
 
 	test("imul(2, 7)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"imul(2, 7)",
-			new FloatResult(Math.imul(2, 7))
+			new NumberResult(Math.imul(2, 7))
 		);
 	});
 
 	test("log10(100)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"log10(100)",
-			new FloatResult(Math.log10(100))
+			new NumberResult(Math.log10(100))
 		);
 	});
 
 	test("log1p(1.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"log1p(1.5)",
-			new FloatResult(Math.log1p(1.5))
+			new NumberResult(Math.log1p(1.5))
 		);
 	});
 
 	test("log2(8)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"log2(8)",
-			new FloatResult(Math.log2(8))
+			new NumberResult(Math.log2(8))
 		);
 	});
 
 	test("log(10)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"log(10)",
-			new FloatResult(Math.log(10))
+			new NumberResult(Math.log(10))
 		);
 	});
 
 	test("max(4, 7)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"max(4, 7)",
-			new FloatResult(Math.max(4, 7))
+			new NumberResult(Math.max(4, 7))
 		);
 	});
 
 	test("min(4, 7)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"min(4, 7)",
-			new FloatResult(Math.min(4, 7))
+			new NumberResult(Math.min(4, 7))
 		);
 	});
 
 	test("pow(2, 3)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"pow(2, 3)",
-			new FloatResult(Math.pow(2, 3))
+			new NumberResult(Math.pow(2, 3))
 		);
 	});
 
 	test("random() to be a number", () => {
-		const result = provider.provide("random()") as FloatResult;
+		const result = provider.provide("random()") as NumberResult;
 
 		expect(result).toBeDefined();
 
-		expect(result).toBeInstanceOf(FloatResult);
+		expect(result).toBeInstanceOf(NumberResult);
 
 		// @ts-ignore
 		expect(result?.value).toBeLessThan(1);
@@ -241,60 +241,60 @@ describe("Functions", () => {
 	});
 
 	test("round(3.7)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"round(3.7)",
-			new FloatResult(Math.round(3.7))
+			new NumberResult(Math.round(3.7))
 		);
 	});
 
 	test("sign(-5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"sign(-5)",
-			new FloatResult(Math.sign(-5))
+			new NumberResult(Math.sign(-5))
 		);
 	});
 
 	test("sqrt(16)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"sqrt(16)",
-			new FloatResult(Math.sqrt(16))
+			new NumberResult(Math.sqrt(16))
 		);
 	});
 
 	test("tanh(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"tanh(0.5)",
-			new FloatResult(Math.tanh(0.5))
+			new NumberResult(Math.tanh(0.5))
 		);
 	});
 
 	test("tan(0.5)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"tan(0.5)",
-			new FloatResult(Math.tan(0.5))
+			new NumberResult(Math.tan(0.5))
 		);
 	});
 
 	test("trunc(3.7)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"trunc(3.7)",
-			new FloatResult(Math.trunc(3.7))
+			new NumberResult(Math.trunc(3.7))
 		);
 	});
 });
 
 describe("Mixed", () => {
 	test("sin(0.42) + acos(0.52)", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"sin(0.42) + acos(0.52)",
-			new FloatResult(Math.sin(0.42) + Math.acos(0.52))
+			new NumberResult(Math.sin(0.42) + Math.acos(0.52))
 		);
 	});
 });

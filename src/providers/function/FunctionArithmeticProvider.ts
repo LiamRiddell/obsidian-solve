@@ -3,7 +3,7 @@ import grammar, {
 } from "@/grammars/function/FunctionArithmetic.ohm-bundle";
 import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { AutoNumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
 import { logger } from "@/utilities/Logger";
 
@@ -16,7 +16,7 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 		const degToRad = (degrees: number) => degrees * (Math.PI / 180);
 		const radToDeg = (radians: number) => radians / (Math.PI / 180);
 
-		this.semantics.addOperation<AutoNumberResult | HexResult>("visit()", {
+		this.semantics.addOperation<NumberResult | HexResult>("visit()", {
 			...basicArithmeticSemanticActions,
 			Function_function(functionName, _l, e, _r) {
 				const functionNameLower =
@@ -30,19 +30,19 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 
 				switch (functionNameLower) {
 					case "degtorad":
-						return new AutoNumberResult(
+						return new NumberResult(
 							// @ts-expect-error
 							degToRad(...argumentsArray)
 						);
 
 					case "radtodeg":
-						return new AutoNumberResult(
+						return new NumberResult(
 							// @ts-expect-error
 							radToDeg(...argumentsArray)
 						);
 
 					default:
-						return new AutoNumberResult(
+						return new NumberResult(
 							mathFunc ? mathFunc(...argumentsArray) : 0
 						);
 				}

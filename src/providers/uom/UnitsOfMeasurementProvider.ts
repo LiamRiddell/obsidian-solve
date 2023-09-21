@@ -3,9 +3,8 @@ import grammar, {
 } from "@/grammars/uom/UnitsOfMeasurement.ohm-bundle";
 import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { FloatResult } from "@/results/FloatResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { StringResult } from "@/results/StringResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
@@ -13,7 +12,6 @@ import { INumericResult } from "@/results/definition/INumericResult";
 import { logger } from "@/utilities/Logger";
 import convert, { Unit } from "convert-units";
 
-// TODO: REPLACE SEMANTICS
 export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeasurementArithmeticSemantics> {
 	constructor() {
 		super("UnitsOfMeasurementProvider");
@@ -22,8 +20,7 @@ export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeas
 
 		this.semantics.addOperation<
 			| UnitOfMeasurementResult
-			| FloatResult
-			| IntegerResult
+			| NumberResult
 			| HexResult
 			| PercentageResult
 			| StringResult

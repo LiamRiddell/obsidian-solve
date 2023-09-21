@@ -1,6 +1,5 @@
 import { PercentageArithmeticProvider } from "@/providers/percentage/PercentageArithmeticProvider";
-import { FloatResult } from "@/results/FloatResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { beforeAll, describe, test } from "@jest/globals";
 import { expectProviderResultAndType } from "../../helpers/Provider";
@@ -22,127 +21,111 @@ describe("Primitive", () => {
 });
 
 describe("Addition", () => {
-	test("10 + 15%", () => {
-		expectProviderResultAndType<IntegerResult>(
-			provider,
-			"10 + 15%",
-			new IntegerResult(11)
-		);
-	});
-
 	test("10.0 + 15%", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10.0 + 15%",
-			new FloatResult(11.5)
+			new NumberResult(11.5)
 		);
 	});
 
 	test("15% + 10", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"15% + 10",
-			new FloatResult(10.15)
+			new NumberResult(10.15)
 		);
 	});
 });
 
 describe("Subtraction", () => {
-	test("10 - 15%", () => {
-		expectProviderResultAndType<IntegerResult>(
-			provider,
-			"10 - 15%",
-			new IntegerResult(8)
-		);
-	});
-
 	test("10.0 - 15%", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10.0 - 15%",
-			new FloatResult(8.5)
+			new NumberResult(8.5)
 		);
 	});
 
 	test("15% - 10", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"15% - 10",
-			new FloatResult(-9.85)
+			new NumberResult(-9.85)
 		);
 	});
 });
 
 describe("Multiplication", () => {
 	test("10 * 15%", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 * 15%",
-			new IntegerResult(15)
+			new NumberResult(15)
 		);
 	});
 
 	test("15% * 10", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"15% * 10",
-			new FloatResult(1.5)
+			new NumberResult(1.5)
 		);
 	});
 });
 
 describe("Division", () => {
 	test("10 / 10%", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 / 10%",
-			new IntegerResult(10)
+			new NumberResult(10)
 		);
 	});
 
 	test("100% / 10", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100% / 10",
-			new FloatResult(0.1)
+			new NumberResult(0.1)
 		);
 	});
 });
 
 describe("Exponent", () => {
 	test("10 ^ 20%", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 ^ 20%",
-			new IntegerResult(100)
+			new NumberResult(100)
 		);
 	});
 
 	test("150% ^ 10", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"150% ^ 10",
-			new FloatResult(57.6650390625)
+			new NumberResult(57.6650390625)
 		);
 	});
 });
 
 describe("PEMDAS", () => {
 	test("(10 + 50%) * 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"(10 + 50%) * 2",
-			new IntegerResult(30)
+			new NumberResult(30)
 		);
 	});
 });
 
 describe("Percentage Of", () => {
 	test("10% of 20", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10% of 20",
-			new IntegerResult(2)
+			new NumberResult(2)
 		);
 	});
 });
@@ -167,34 +150,34 @@ describe("Percentage Increase/Decrease", () => {
 
 describe("Increase/Decrease By Percentage", () => {
 	test("increase 100 by 25%", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"increase 100 by 25%",
-			new IntegerResult(125)
+			new NumberResult(125)
 		);
 	});
 
 	test("INcREaSE 100 bY 25%", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"INcREaSE 100 bY 25%",
-			new IntegerResult(125)
+			new NumberResult(125)
 		);
 	});
 
 	test("decrease 100 by 25%", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"decrease 100 by 25%",
-			new IntegerResult(75)
+			new NumberResult(75)
 		);
 	});
 
 	test("Decrease 100 bY 25%", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"Decrease 100 bY 25%",
-			new IntegerResult(75)
+			new NumberResult(75)
 		);
 	});
 });

@@ -1,4 +1,4 @@
-import { AutoNumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/AutoNumberResult";
 import { DatetimeResult } from "@/results/DatetimeResult";
 import { HexResult } from "@/results/HexResult";
 import { PercentageResult } from "@/results/PercentageResult";
@@ -15,10 +15,16 @@ beforeAll(() => {
 
 describe("Types", () => {
 	test("Float", () =>
-		expect(new AutoNumberResult(2.54).accept(formatVisitor)).toBe("2.54"));
+		expect(new NumberResult(2.54).accept(formatVisitor)).toBe("2.54"));
+
+	test("Float (Many Decimals Places)", () =>
+		expect(new NumberResult(2.00004).accept(formatVisitor)).toBe("2.00"));
 
 	test("Integer", () =>
-		expect(new AutoNumberResult(2.0).accept(formatVisitor)).toBe("2"));
+		expect(new NumberResult(2).accept(formatVisitor)).toBe("2"));
+
+	test("Integer (Many Decimal Places)", () =>
+		expect(new NumberResult(2.0).accept(formatVisitor)).toBe("2"));
 
 	test("Percentage", () =>
 		expect(new PercentageResult(83).accept(formatVisitor)).toBe("83.00%"));
