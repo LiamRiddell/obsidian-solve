@@ -3,8 +3,10 @@ import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
 import { IntegerResult } from "@/results/IntegerResult";
 import { PercentageResult } from "@/results/PercentageResult";
+import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
+import { convertUnitOfMeasurementResultTo } from "@/utilities/UnitOfMeasurement";
 import { FloatCoercion } from "@/visitors/coercion/FloatCoercionVisitor";
 import { HexCoercion } from "@/visitors/coercion/HexCoercionVisitor";
 import { IntegerCoercion } from "@/visitors/coercion/IntegerCoercionVisitor";
@@ -36,6 +38,10 @@ export class LogicalShiftLeftVisitor
 			return this.percentage(visited, this.right);
 		}
 
+		if (visited instanceof UnitOfMeasurementResult) {
+			return this.unitOfMeasurement(visited, this.right);
+		}
+
 		throw new UnsupportedVisitorOperationError();
 	}
 
@@ -61,6 +67,30 @@ export class LogicalShiftLeftVisitor
 		const coercedRight = FloatCoercion.visit(right);
 
 		return new FloatResult((left.value / 100) << coercedRight.value);
+	}
+
+	private unitOfMeasurement(
+		left: UnitOfMeasurementResult,
+		right: INumericResult
+	) {
+		if (right instanceof UnitOfMeasurementResult) {
+			const convertedRight = convertUnitOfMeasurementResultTo(
+				right,
+				left
+			);
+
+			return new UnitOfMeasurementResult(
+				left.value << convertedRight.value,
+				left.unit
+			);
+		}
+
+		const coercedRight = FloatCoercion.visit(right);
+
+		return new UnitOfMeasurementResult(
+			left.value << coercedRight.value,
+			left.unit
+		);
 	}
 }
 
@@ -90,6 +120,10 @@ export class LogicalShiftRightVisitor
 			return this.percentage(visited, this.right);
 		}
 
+		if (visited instanceof UnitOfMeasurementResult) {
+			return this.unitOfMeasurement(visited, this.right);
+		}
+
 		throw new UnsupportedVisitorOperationError();
 	}
 
@@ -115,5 +149,29 @@ export class LogicalShiftRightVisitor
 		const coercedRight = FloatCoercion.visit(right);
 
 		return new FloatResult((left.value / 100) >> coercedRight.value);
+	}
+
+	private unitOfMeasurement(
+		left: UnitOfMeasurementResult,
+		right: INumericResult
+	) {
+		if (right instanceof UnitOfMeasurementResult) {
+			const convertedRight = convertUnitOfMeasurementResultTo(
+				right,
+				left
+			);
+
+			return new UnitOfMeasurementResult(
+				left.value >> convertedRight.value,
+				left.unit
+			);
+		}
+
+		const coercedRight = FloatCoercion.visit(right);
+
+		return new UnitOfMeasurementResult(
+			left.value >> coercedRight.value,
+			left.unit
+		);
 	}
 }

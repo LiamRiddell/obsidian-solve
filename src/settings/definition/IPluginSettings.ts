@@ -6,6 +6,7 @@ import { IHexResultSettings } from "@/settings/definition/IHexResultSettings";
 import { IIntegerResultSettings } from "@/settings/definition/IIntegerResultSettings";
 import { IInterfaceSettings } from "@/settings/definition/IInterfaceSettings";
 import { IPercentageResultSettings } from "@/settings/definition/IPercentageResultSettings";
+import { IUnitOfMeasurementResultSettings } from "@/settings/definition/IUnitOfMeasurementResultSettings";
 
 export interface IPluginSettings {
 	interface: IInterfaceSettings;
@@ -20,4 +21,5 @@ export interface IPluginSettings {
 	percentageResult: IPercentageResultSettings;
 	datetimeResult: IDatetimeResultSettings;
 	hexResult: IHexResultSettings;
+	unitOfMeasurementResult: IUnitOfMeasurementResultSettings;
 }

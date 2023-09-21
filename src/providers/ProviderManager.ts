@@ -3,6 +3,7 @@ import { BasicArithmeticProvider } from "@/providers/arithmetic/BasicArithmeticP
 import { DatetimeProvider } from "@/providers/datetime/DatetimeProvider";
 import { FunctionArithmeticProvider } from "@/providers/function/FunctionArithmeticProvider";
 import { PercentageArithmeticProvider } from "@/providers/percentage/PercentageArithmeticProvider";
+import { UnitsOfMeasurementProvider } from "@/providers/uom/UnitsOfMeasurementProvider";
 import { VectorArithmeticProvider } from "@/providers/vector/VectorArithmeticProvider";
 import UserSettings from "@/settings/UserSettings";
 import { fastHash } from "@/utilities/FastHash";
@@ -58,6 +59,7 @@ class ProviderManager {
 
 	private registerCoreProviders() {
 		// Order of precedence
+		this.registerProvider(new UnitsOfMeasurementProvider());
 		this.registerProvider(new DatetimeProvider());
 		this.registerProvider(new PercentageArithmeticProvider());
 		this.registerProvider(new BasicArithmeticProvider());

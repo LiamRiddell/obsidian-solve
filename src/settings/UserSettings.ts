@@ -8,6 +8,7 @@ import { HexResultSettings } from "@/settings/properties/HexResultSettings";
 import { IntegerResultSettings } from "@/settings/properties/IntegerResultSettings";
 import { InterfaceSettings } from "@/settings/properties/InterfaceSettings";
 import { PercentageResultSettings } from "@/settings/properties/PercentageResultSettings";
+import { UnitOfMeasurementResultSettings } from "@/settings/properties/UnitOfMeasurementResultSettings";
 
 export default class UserSettings {
 	private static instance: UserSettings | null = null;
@@ -25,6 +26,7 @@ export default class UserSettings {
 	public readonly percentageResult: PercentageResultSettings;
 	public readonly datetimeResult: DatetimeResultSettings;
 	public readonly hexResult: HexResultSettings;
+	public readonly unitOfMeasurementResult: UnitOfMeasurementResultSettings;
 
 	private constructor() {
 		this.settings = DEFAULT_SETTINGS;
@@ -36,6 +38,9 @@ export default class UserSettings {
 		this.percentageResult = new PercentageResultSettings(this);
 		this.datetimeResult = new DatetimeResultSettings(this);
 		this.hexResult = new HexResultSettings(this);
+		this.unitOfMeasurementResult = new UnitOfMeasurementResultSettings(
+			this
+		);
 	}
 
 	static getInstance(): UserSettings {
