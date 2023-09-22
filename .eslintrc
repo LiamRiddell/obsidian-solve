@@ -15,6 +15,11 @@
   "parserOptions": {
     "sourceType": "module"
   },
+  "ignorePatterns": [
+    "*.ohm",
+    "*.ohm-bundle.js",
+    "*.ohm-bundle.d.ts"
+  ],
   "rules": {
     "no-unused-vars": "off",
     "@typescript-eslint/no-unused-vars": [

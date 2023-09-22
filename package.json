@@ -5,6 +5,7 @@
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
+		"lint": "npx eslint --fix src",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "jest",
 		"ohm": "npx ohm generateBundles --withTypes src/grammars/**/*.ohm",
