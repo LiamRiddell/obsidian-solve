@@ -17,6 +17,11 @@ import { logger } from "@/utilities/Logger";
 import { Vector2 } from "@/utilities/Vector2";
 import { Vector3 } from "@/utilities/Vector3";
 import { Vector4 } from "@/utilities/Vector4";
+import { AdditionVisitor } from "@/visitors/arithmetic/AdditionVisitor";
+import { DivisionVisitor } from "@/visitors/arithmetic/DivisionVisitor";
+import { ExponentVisitor } from "@/visitors/arithmetic/ExponentVisitor";
+import { MultiplicationVisitor } from "@/visitors/arithmetic/MultiplicationVisitor";
+import { SubtractionVisitor } from "@/visitors/arithmetic/SubtractionVisitor";
 import { VectorAdditionVisitor } from "@/visitors/vector/VectorAdditionVisitor";
 import { VectorDivisionVisitor } from "@/visitors/vector/VectorDivisionVisitor";
 import { VectorExponentVisitor } from "@/visitors/vector/VectorExponentVisitor";
@@ -47,11 +52,25 @@ export class VectorArithmeticProvider extends ProviderBase {
 					const x = xNode.visit();
 					const y = yNode.visit();
 
+					if (
+						x instanceof Vector2Result === false &&
+						y instanceof Vector2Result === false
+					) {
+						return x.accept(new AdditionVisitor(y));
+					}
+
 					return x.accept(new VectorAdditionVisitor(y));
 				},
 				AS_subtraction(xNode, _, yNode) {
 					const x = xNode.visit();
 					const y = yNode.visit();
+
+					if (
+						x instanceof Vector2Result === false &&
+						y instanceof Vector2Result === false
+					) {
+						return x.accept(new SubtractionVisitor(y));
+					}
 
 					return x.accept(new VectorSubtractionVisitor(y));
 				},
@@ -59,17 +78,38 @@ export class VectorArithmeticProvider extends ProviderBase {
 					const x = xNode.visit();
 					const y = yNode.visit();
 
+					if (
+						x instanceof Vector2Result === false &&
+						y instanceof Vector2Result === false
+					) {
+						return x.accept(new MultiplicationVisitor(y));
+					}
+
 					return x.accept(new VectorMultiplicationVisitor(y));
 				},
 				MD_division(xNode, _, yNode) {
 					const x = xNode.visit();
 					const y = yNode.visit();
 
+					if (
+						x instanceof Vector2Result === false &&
+						y instanceof Vector2Result === false
+					) {
+						return x.accept(new DivisionVisitor(y));
+					}
+
 					return x.accept(new VectorDivisionVisitor(y));
 				},
 				E_exponent(xNode, _, yNode) {
 					const x = xNode.visit();
 					const y = yNode.visit();
+
+					if (
+						x instanceof Vector2Result === false &&
+						y instanceof Vector2Result === false
+					) {
+						return x.accept(new ExponentVisitor(y));
+					}
 
 					return x.accept(new VectorExponentVisitor(y));
 				},
@@ -157,11 +197,25 @@ export class VectorArithmeticProvider extends ProviderBase {
 				const x = xNode.visit();
 				const y = yNode.visit();
 
+				if (
+					x instanceof Vector3Result === false &&
+					y instanceof Vector3Result === false
+				) {
+					return x.accept(new AdditionVisitor(y));
+				}
+
 				return x.accept(new VectorAdditionVisitor(y));
 			},
 			AS_subtraction(xNode, _, yNode) {
 				const x = xNode.visit();
 				const y = yNode.visit();
+
+				if (
+					x instanceof Vector3Result === false &&
+					y instanceof Vector3Result === false
+				) {
+					return x.accept(new SubtractionVisitor(y));
+				}
 
 				return x.accept(new VectorSubtractionVisitor(y));
 			},
@@ -169,17 +223,38 @@ export class VectorArithmeticProvider extends ProviderBase {
 				const x = xNode.visit();
 				const y = yNode.visit();
 
+				if (
+					x instanceof Vector3Result === false &&
+					y instanceof Vector3Result === false
+				) {
+					return x.accept(new MultiplicationVisitor(y));
+				}
+
 				return x.accept(new VectorMultiplicationVisitor(y));
 			},
 			MD_division(xNode, _, yNode) {
 				const x = xNode.visit();
 				const y = yNode.visit();
 
+				if (
+					x instanceof Vector3Result === false &&
+					y instanceof Vector3Result === false
+				) {
+					return x.accept(new DivisionVisitor(y));
+				}
+
 				return x.accept(new VectorDivisionVisitor(y));
 			},
 			E_exponent(xNode, _, yNode) {
 				const x = xNode.visit();
 				const y = yNode.visit();
+
+				if (
+					x instanceof Vector3Result === false &&
+					y instanceof Vector3Result === false
+				) {
+					return x.accept(new ExponentVisitor(y));
+				}
 
 				return x.accept(new VectorExponentVisitor(y));
 			},
@@ -265,11 +340,25 @@ export class VectorArithmeticProvider extends ProviderBase {
 				const x = xNode.visit();
 				const y = yNode.visit();
 
+				if (
+					x instanceof Vector4Result === false &&
+					y instanceof Vector4Result === false
+				) {
+					return x.accept(new AdditionVisitor(y));
+				}
+
 				return x.accept(new VectorAdditionVisitor(y));
 			},
 			AS_subtraction(xNode, _, yNode) {
 				const x = xNode.visit();
 				const y = yNode.visit();
+
+				if (
+					x instanceof Vector4Result === false &&
+					y instanceof Vector4Result === false
+				) {
+					return x.accept(new SubtractionVisitor(y));
+				}
 
 				return x.accept(new VectorSubtractionVisitor(y));
 			},
@@ -277,17 +366,38 @@ export class VectorArithmeticProvider extends ProviderBase {
 				const x = xNode.visit();
 				const y = yNode.visit();
 
+				if (
+					x instanceof Vector4Result === false &&
+					y instanceof Vector4Result === false
+				) {
+					return x.accept(new MultiplicationVisitor(y));
+				}
+
 				return x.accept(new VectorMultiplicationVisitor(y));
 			},
 			MD_division(xNode, _, yNode) {
 				const x = xNode.visit();
 				const y = yNode.visit();
 
+				if (
+					x instanceof Vector4Result === false &&
+					y instanceof Vector4Result === false
+				) {
+					return x.accept(new DivisionVisitor(y));
+				}
+
 				return x.accept(new VectorDivisionVisitor(y));
 			},
 			E_exponent(xNode, _, yNode) {
 				const x = xNode.visit();
 				const y = yNode.visit();
+
+				if (
+					x instanceof Vector4Result === false &&
+					y instanceof Vector4Result === false
+				) {
+					return x.accept(new ExponentVisitor(y));
+				}
 
 				return x.accept(new VectorExponentVisitor(y));
 			},
@@ -392,7 +502,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 			}
 
 			if (raw) {
-				return result.value as any;
+				return result as T;
 			}
 
 			// @ts-expect-error
