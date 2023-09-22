@@ -189,284 +189,311 @@ export class VectorArithmeticProvider extends ProviderBase {
 		this.vector3Semantics =
 			vector3Grammar.Vector3Arithmetic.createSemantics();
 
-		this.vector3Semantics.addOperation<
-			Vector3Result | NumberResult | NumberResult
-		>("visit()", {
-			...basicArithmeticSemanticActions,
-			AS_addition(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
+		this.vector3Semantics.addOperation<Vector3Result | NumberResult>(
+			"visit()",
+			{
+				...basicArithmeticSemanticActions,
+				AS_addition(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
 
-				if (
-					x instanceof Vector3Result === false &&
-					y instanceof Vector3Result === false
-				) {
-					return x.accept(new AdditionVisitor(y));
-				}
+					if (
+						x instanceof Vector3Result === false &&
+						y instanceof Vector3Result === false
+					) {
+						return x.accept(new AdditionVisitor(y));
+					}
 
-				return x.accept(new VectorAdditionVisitor(y));
-			},
-			AS_subtraction(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
+					return x.accept(new VectorAdditionVisitor(y));
+				},
+				AS_subtraction(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
 
-				if (
-					x instanceof Vector3Result === false &&
-					y instanceof Vector3Result === false
-				) {
-					return x.accept(new SubtractionVisitor(y));
-				}
+					if (
+						x instanceof Vector3Result === false &&
+						y instanceof Vector3Result === false
+					) {
+						return x.accept(new SubtractionVisitor(y));
+					}
 
-				return x.accept(new VectorSubtractionVisitor(y));
-			},
-			MD_multiplication(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
+					return x.accept(new VectorSubtractionVisitor(y));
+				},
+				MD_multiplication(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
 
-				if (
-					x instanceof Vector3Result === false &&
-					y instanceof Vector3Result === false
-				) {
-					return x.accept(new MultiplicationVisitor(y));
-				}
+					if (
+						x instanceof Vector3Result === false &&
+						y instanceof Vector3Result === false
+					) {
+						return x.accept(new MultiplicationVisitor(y));
+					}
 
-				return x.accept(new VectorMultiplicationVisitor(y));
-			},
-			MD_division(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
+					return x.accept(new VectorMultiplicationVisitor(y));
+				},
+				MD_division(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
 
-				if (
-					x instanceof Vector3Result === false &&
-					y instanceof Vector3Result === false
-				) {
-					return x.accept(new DivisionVisitor(y));
-				}
+					if (
+						x instanceof Vector3Result === false &&
+						y instanceof Vector3Result === false
+					) {
+						return x.accept(new DivisionVisitor(y));
+					}
 
-				return x.accept(new VectorDivisionVisitor(y));
-			},
-			E_exponent(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
+					return x.accept(new VectorDivisionVisitor(y));
+				},
+				E_exponent(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
 
-				if (
-					x instanceof Vector3Result === false &&
-					y instanceof Vector3Result === false
-				) {
-					return x.accept(new ExponentVisitor(y));
-				}
+					if (
+						x instanceof Vector3Result === false &&
+						y instanceof Vector3Result === false
+					) {
+						return x.accept(new ExponentVisitor(y));
+					}
 
-				return x.accept(new VectorExponentVisitor(y));
-			},
-			P_parenthesis(_l, e, _r) {
-				return e.visit();
-			},
-			Vector3_parse(_1, _2, xNode, _3, yNode, _4, zNode, _5) {
-				const x = xNode.visit();
-				const y = yNode.visit();
-				const z = zNode.visit();
+					return x.accept(new VectorExponentVisitor(y));
+				},
+				P_parenthesis(_l, e, _r) {
+					return e.visit();
+				},
+				Vector3_parse(_1, _2, xNode, _3, yNode, _4, zNode, _5) {
+					const x = xNode.visit();
+					const y = yNode.visit();
+					const z = zNode.visit();
 
-				if (
-					x instanceof Vector3Result ||
-					y instanceof Vector3Result ||
-					z instanceof Vector3Result
-				) {
-					throw new TypeError("Expected: Number");
-				}
+					if (
+						x instanceof Vector3Result ||
+						y instanceof Vector3Result ||
+						z instanceof Vector3Result
+					) {
+						throw new TypeError("Expected: Number");
+					}
 
-				return new Vector3Result({
-					x: x.value,
-					y: y.value,
-					z: z.value,
-				});
-			},
-			LengthSq_function(_f, _l, v, _r) {
-				return new NumberResult(
-					Vector3.magnitudeSqrt(v.visit()?.value)
-				);
-			},
-			DistanceSq_function(_f, _l, v1, _1, v2, _r) {
-				return new NumberResult(
-					Vector3.distanceSq(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			Length_function(_f, _l, v, _r) {
-				return new NumberResult(Vector3.magnitude(v.visit()?.value));
-			},
-			Distance_function(_f, _l, v1, _1, v2, _r) {
-				return new NumberResult(
-					Vector3.distance(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			Normalise_function(_f, _l, v, _r) {
-				return new Vector3Result(Vector3.normalise(v.visit()?.value));
-			},
-			Dot_function(_f, _l, v1, _1, v2, _r) {
-				return new NumberResult(
-					Vector3.dot(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			AngleBetween_function(_f, _l, v1, _1, v2, _r) {
-				return new NumberResult(
-					Vector3.angleBetween(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			Cross_function(_f, _l, v1, _1, v2, _r) {
-				return new Vector3Result(
-					Vector3.cross(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			Lerp_function(_f, _l, v1, _1, v2, _2, t, _r) {
-				return new Vector3Result(
-					Vector3.lerp(
-						v1.visit()?.value,
-						v2.visit()?.value,
-						t.visit()?.value
-					)
-				);
-			},
-		});
+					return new Vector3Result({
+						x: x.value,
+						y: y.value,
+						z: z.value,
+					});
+				},
+				LengthSq_function(_f, _l, v, _r) {
+					return new NumberResult(
+						Vector3.magnitudeSqrt(v.visit()?.value)
+					);
+				},
+				DistanceSq_function(_f, _l, v1, _1, v2, _r) {
+					return new NumberResult(
+						Vector3.distanceSq(v1.visit()?.value, v2.visit()?.value)
+					);
+				},
+				Length_function(_f, _l, v, _r) {
+					return new NumberResult(
+						Vector3.magnitude(v.visit()?.value)
+					);
+				},
+				Distance_function(_f, _l, v1, _1, v2, _r) {
+					return new NumberResult(
+						Vector3.distance(v1.visit()?.value, v2.visit()?.value)
+					);
+				},
+				Normalise_function(_f, _l, v, _r) {
+					return new Vector3Result(
+						Vector3.normalise(v.visit()?.value)
+					);
+				},
+				Dot_function(_f, _l, v1, _1, v2, _r) {
+					return new NumberResult(
+						Vector3.dot(v1.visit()?.value, v2.visit()?.value)
+					);
+				},
+				AngleBetween_function(_f, _l, v1, _1, v2, _r) {
+					return new NumberResult(
+						Vector3.angleBetween(
+							v1.visit()?.value,
+							v2.visit()?.value
+						)
+					);
+				},
+				Cross_function(_f, _l, v1, _1, v2, _r) {
+					return new Vector3Result(
+						Vector3.cross(v1.visit()?.value, v2.visit()?.value)
+					);
+				},
+				Lerp_function(_f, _l, v1, _1, v2, _2, t, _r) {
+					return new Vector3Result(
+						Vector3.lerp(
+							v1.visit()?.value,
+							v2.visit()?.value,
+							t.visit()?.value
+						)
+					);
+				},
+			}
+		);
 	}
 
 	private setupVector4Arithmetic() {
 		this.vector4Semantics =
 			vector4Grammar.Vector4Arithmetic.createSemantics();
 
-		this.vector4Semantics.addOperation<
-			Vector4Result | NumberResult | NumberResult
-		>("visit()", {
-			...basicArithmeticSemanticActions,
-			AS_addition(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
+		this.vector4Semantics.addOperation<Vector4Result | NumberResult>(
+			"visit()",
+			{
+				...basicArithmeticSemanticActions,
+				AS_addition(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
 
-				if (
-					x instanceof Vector4Result === false &&
-					y instanceof Vector4Result === false
+					if (
+						x instanceof Vector4Result === false &&
+						y instanceof Vector4Result === false
+					) {
+						return x.accept(new AdditionVisitor(y));
+					}
+
+					return x.accept(new VectorAdditionVisitor(y));
+				},
+				AS_subtraction(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
+
+					if (
+						x instanceof Vector4Result === false &&
+						y instanceof Vector4Result === false
+					) {
+						return x.accept(new SubtractionVisitor(y));
+					}
+
+					return x.accept(new VectorSubtractionVisitor(y));
+				},
+				MD_multiplication(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
+
+					if (
+						x instanceof Vector4Result === false &&
+						y instanceof Vector4Result === false
+					) {
+						return x.accept(new MultiplicationVisitor(y));
+					}
+
+					return x.accept(new VectorMultiplicationVisitor(y));
+				},
+				MD_division(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
+
+					if (
+						x instanceof Vector4Result === false &&
+						y instanceof Vector4Result === false
+					) {
+						return x.accept(new DivisionVisitor(y));
+					}
+
+					return x.accept(new VectorDivisionVisitor(y));
+				},
+				E_exponent(xNode, _, yNode) {
+					const x = xNode.visit();
+					const y = yNode.visit();
+
+					if (
+						x instanceof Vector4Result === false &&
+						y instanceof Vector4Result === false
+					) {
+						return x.accept(new ExponentVisitor(y));
+					}
+
+					return x.accept(new VectorExponentVisitor(y));
+				},
+				P_parenthesis(_l, e, _r) {
+					return e.visit();
+				},
+				Vector4_parse(
+					_1,
+					_2,
+					xNode,
+					_3,
+					yNode,
+					_4,
+					zNode,
+					_5,
+					wNode,
+					_6
 				) {
-					return x.accept(new AdditionVisitor(y));
-				}
+					const x = xNode.visit();
+					const y = yNode.visit();
+					const z = zNode.visit();
+					const w = wNode.visit();
 
-				return x.accept(new VectorAdditionVisitor(y));
-			},
-			AS_subtraction(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
+					if (
+						x instanceof Vector4Result ||
+						y instanceof Vector4Result ||
+						z instanceof Vector4Result ||
+						w instanceof Vector4Result
+					) {
+						throw new TypeError("Expected: Number");
+					}
 
-				if (
-					x instanceof Vector4Result === false &&
-					y instanceof Vector4Result === false
-				) {
-					return x.accept(new SubtractionVisitor(y));
-				}
-
-				return x.accept(new VectorSubtractionVisitor(y));
-			},
-			MD_multiplication(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
-
-				if (
-					x instanceof Vector4Result === false &&
-					y instanceof Vector4Result === false
-				) {
-					return x.accept(new MultiplicationVisitor(y));
-				}
-
-				return x.accept(new VectorMultiplicationVisitor(y));
-			},
-			MD_division(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
-
-				if (
-					x instanceof Vector4Result === false &&
-					y instanceof Vector4Result === false
-				) {
-					return x.accept(new DivisionVisitor(y));
-				}
-
-				return x.accept(new VectorDivisionVisitor(y));
-			},
-			E_exponent(xNode, _, yNode) {
-				const x = xNode.visit();
-				const y = yNode.visit();
-
-				if (
-					x instanceof Vector4Result === false &&
-					y instanceof Vector4Result === false
-				) {
-					return x.accept(new ExponentVisitor(y));
-				}
-
-				return x.accept(new VectorExponentVisitor(y));
-			},
-			P_parenthesis(_l, e, _r) {
-				return e.visit();
-			},
-			Vector4_parse(_1, _2, xNode, _3, yNode, _4, zNode, _5, wNode, _6) {
-				const x = xNode.visit();
-				const y = yNode.visit();
-				const z = zNode.visit();
-				const w = wNode.visit();
-
-				if (
-					x instanceof Vector4Result ||
-					y instanceof Vector4Result ||
-					z instanceof Vector4Result ||
-					w instanceof Vector4Result
-				) {
-					throw new TypeError("Expected: Number");
-				}
-
-				return new Vector4Result({
-					x: x.value,
-					y: y.value,
-					z: z.value,
-					w: w.value,
-				});
-			},
-			LengthSq_function(_f, _l, v, _r) {
-				return new NumberResult(
-					Vector4.magnitudeSqrt(v.visit()?.value)
-				);
-			},
-			DistanceSq_function(_f, _l, v1, _1, v2, _r) {
-				return new NumberResult(
-					Vector4.distanceSq(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			Length_function(_f, _l, v, _r) {
-				return new NumberResult(Vector4.magnitude(v.visit()?.value));
-			},
-			Distance_function(_f, _l, v1, _1, v2, _r) {
-				return new NumberResult(
-					Vector4.distance(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			Normalise_function(_f, _l, v, _r) {
-				return new Vector4Result(Vector4.normalise(v.visit()?.value));
-			},
-			Dot_function(_f, _l, v1, _1, v2, _r) {
-				return new NumberResult(
-					Vector4.dot(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			AngleBetween_function(_f, _l, v1, _1, v2, _r) {
-				return new NumberResult(
-					Vector4.angleBetween(v1.visit()?.value, v2.visit()?.value)
-				);
-			},
-			Lerp_function(_f, _l, v1, _1, v2, _2, t, _r) {
-				return new Vector4Result(
-					Vector4.lerp(
-						v1.visit()?.value,
-						v2.visit()?.value,
-						t.visit()?.value
-					)
-				);
-			},
-		});
+					return new Vector4Result({
+						x: x.value,
+						y: y.value,
+						z: z.value,
+						w: w.value,
+					});
+				},
+				LengthSq_function(_f, _l, v, _r) {
+					return new NumberResult(
+						Vector4.magnitudeSqrt(v.visit()?.value)
+					);
+				},
+				DistanceSq_function(_f, _l, v1, _1, v2, _r) {
+					return new NumberResult(
+						Vector4.distanceSq(v1.visit()?.value, v2.visit()?.value)
+					);
+				},
+				Length_function(_f, _l, v, _r) {
+					return new NumberResult(
+						Vector4.magnitude(v.visit()?.value)
+					);
+				},
+				Distance_function(_f, _l, v1, _1, v2, _r) {
+					return new NumberResult(
+						Vector4.distance(v1.visit()?.value, v2.visit()?.value)
+					);
+				},
+				Normalise_function(_f, _l, v, _r) {
+					return new Vector4Result(
+						Vector4.normalise(v.visit()?.value)
+					);
+				},
+				Dot_function(_f, _l, v1, _1, v2, _r) {
+					return new NumberResult(
+						Vector4.dot(v1.visit()?.value, v2.visit()?.value)
+					);
+				},
+				AngleBetween_function(_f, _l, v1, _1, v2, _r) {
+					return new NumberResult(
+						Vector4.angleBetween(
+							v1.visit()?.value,
+							v2.visit()?.value
+						)
+					);
+				},
+				Lerp_function(_f, _l, v1, _1, v2, _2, t, _r) {
+					return new Vector4Result(
+						Vector4.lerp(
+							v1.visit()?.value,
+							v2.visit()?.value,
+							t.visit()?.value
+						)
+					);
+				},
+			}
+		);
 	}
 
 	private tryParseVectorArithmetic(
