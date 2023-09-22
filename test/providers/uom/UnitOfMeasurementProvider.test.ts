@@ -1,5 +1,5 @@
 import { UnitsOfMeasurementProvider } from "@/providers/uom/UnitsOfMeasurementProvider";
-import { NumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/NumberResult";
 import { StringResult } from "@/results/StringResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { beforeAll, describe, test } from "@jest/globals";

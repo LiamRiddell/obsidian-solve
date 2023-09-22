@@ -1,5 +1,5 @@
-import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 
 export class ArithmeticExpressionVisitor {

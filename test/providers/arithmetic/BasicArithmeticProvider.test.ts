@@ -1,6 +1,6 @@
 import { BasicArithmeticProvider } from "@/providers/arithmetic/BasicArithmeticProvider";
-import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
 import { beforeAll, describe, test } from "@jest/globals";
 import { expectProviderResultAndType } from "../../helpers/Provider";
 

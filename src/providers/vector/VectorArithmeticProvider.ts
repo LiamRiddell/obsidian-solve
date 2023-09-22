@@ -9,7 +9,7 @@ import vector4Grammar, {
 } from "@/grammars/vector/Vector4Arithmetic.ohm-bundle";
 import { ProviderBase } from "@/providers/ProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { NumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/NumberResult";
 import { Vector2Result } from "@/results/Vector2Result";
 import { Vector3Result } from "@/results/Vector3Result";
 import { Vector4Result } from "@/results/Vector4Result";

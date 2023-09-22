@@ -1,5 +1,5 @@
 import { PercentageArithmeticProvider } from "@/providers/percentage/PercentageArithmeticProvider";
-import { NumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/NumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { beforeAll, describe, test } from "@jest/globals";
 import { expectProviderResultAndType } from "../../helpers/Provider";

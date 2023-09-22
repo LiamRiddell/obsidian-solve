@@ -1,9 +1,9 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
-import { NumberResult } from "@/results/AutoNumberResult";
+import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
+import { Vector3Result } from "@/results/Vector3Result";
 import { IResult } from "@/results/definition/IResult";
 import { IVector3Result } from "@/results/definition/IVector3Result";
-import { HexResult } from "@/results/HexResult";
-import { Vector3Result } from "@/results/Vector3Result";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
 
 export class Vector3CoercionVisitor

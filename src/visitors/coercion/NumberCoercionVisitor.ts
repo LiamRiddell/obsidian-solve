@@ -1,6 +1,6 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
-import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { IResult } from "@/results/definition/IResult";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";

@@ -1,7 +1,7 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
-import { NumberResult } from "@/results/AutoNumberResult";
-import { IResult } from "@/results/definition/IResult";
 import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
+import { IResult } from "@/results/definition/IResult";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
 
 export class HexCoercionVisitor implements ICoercionResultVisitor<HexResult> {

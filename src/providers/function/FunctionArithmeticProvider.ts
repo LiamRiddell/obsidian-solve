@@ -3,8 +3,8 @@ import grammar, {
 } from "@/grammars/function/FunctionArithmetic.ohm-bundle";
 import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
 import { logger } from "@/utilities/Logger";
 
 export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionArithmeticSemantics> {

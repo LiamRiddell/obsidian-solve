@@ -1,6 +1,6 @@
 import { BasicArithmeticActionDict } from "@/grammars/arithmetic/BasicArithmetic.ohm-bundle";
-import { NumberResult } from "@/results/AutoNumberResult";
 import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { AdditionVisitor } from "@/visitors/arithmetic/AdditionVisitor";
 import { ArithmeticExpression } from "@/visitors/arithmetic/ArithmeticExpressionVisitor";

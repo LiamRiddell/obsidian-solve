@@ -1,5 +1,5 @@
 import { FunctionArithmeticProvider } from "@/providers/function/FunctionArithmeticProvider";
-import { NumberResult } from "@/results/AutoNumberResult";
+import { NumberResult } from "@/results/NumberResult";
 import { beforeAll, describe, expect, test } from "@jest/globals";
 import { expectProviderResultAndType } from "../../../test/helpers/Provider";
 
