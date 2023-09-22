@@ -1,15 +1,13 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { NumberResult } from "@/results/NumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
 import { convertUnitOfMeasurementResultTo } from "@/utilities/UnitOfMeasurement";
-import { FloatCoercion } from "@/visitors/coercion/FloatCoercionVisitor";
 import { HexCoercion } from "@/visitors/coercion/HexCoercionVisitor";
-import { IntegerCoercion } from "@/visitors/coercion/IntegerCoercionVisitor";
+import { NumberCoercion } from "@/visitors/coercion/NumberCoercionVisitor";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class LogicalShiftLeftVisitor
@@ -22,12 +20,8 @@ export class LogicalShiftLeftVisitor
 			throw new UnsupportedVisitorOperationError();
 		}
 
-		if (visited instanceof FloatResult) {
-			return this.float(visited, this.right);
-		}
-
-		if (visited instanceof IntegerResult) {
-			return this.integer(visited, this.right);
+		if (visited instanceof NumberResult) {
+			return this.number(visited, this.right);
 		}
 
 		if (visited instanceof HexResult) {
@@ -45,16 +39,10 @@ export class LogicalShiftLeftVisitor
 		throw new UnsupportedVisitorOperationError();
 	}
 
-	private float(left: FloatResult, right: INumericResult) {
-		const coercedRight = FloatCoercion.visit(right);
+	private number(left: NumberResult, right: INumericResult) {
+		const coercedRight = NumberCoercion.visit(right);
 
-		return new FloatResult(left.value << coercedRight.value);
-	}
-
-	private integer(left: IntegerResult, right: INumericResult) {
-		const coercedRight = IntegerCoercion.visit(right);
-
-		return new IntegerResult(left.value << coercedRight.value);
+		return new NumberResult(left.value << coercedRight.value);
 	}
 
 	private hex(left: HexResult, right: INumericResult) {
@@ -64,9 +52,9 @@ export class LogicalShiftLeftVisitor
 	}
 
 	private percentage(left: PercentageResult, right: INumericResult) {
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
-		return new FloatResult((left.value / 100) << coercedRight.value);
+		return new NumberResult((left.value / 100) << coercedRight.value);
 	}
 
 	private unitOfMeasurement(
@@ -85,7 +73,7 @@ export class LogicalShiftLeftVisitor
 			);
 		}
 
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
 		return new UnitOfMeasurementResult(
 			left.value << coercedRight.value,
@@ -104,12 +92,8 @@ export class LogicalShiftRightVisitor
 			throw new UnsupportedVisitorOperationError();
 		}
 
-		if (visited instanceof FloatResult) {
-			return this.float(visited, this.right);
-		}
-
-		if (visited instanceof IntegerResult) {
-			return this.integer(visited, this.right);
+		if (visited instanceof NumberResult) {
+			return this.number(visited, this.right);
 		}
 
 		if (visited instanceof HexResult) {
@@ -127,16 +111,10 @@ export class LogicalShiftRightVisitor
 		throw new UnsupportedVisitorOperationError();
 	}
 
-	private float(left: FloatResult, right: INumericResult) {
-		const coercedRight = FloatCoercion.visit(right);
+	private number(left: NumberResult, right: INumericResult) {
+		const coercedRight = NumberCoercion.visit(right);
 
-		return new FloatResult(left.value >> coercedRight.value);
-	}
-
-	private integer(left: IntegerResult, right: INumericResult) {
-		const coercedRight = IntegerCoercion.visit(right);
-
-		return new IntegerResult(left.value >> coercedRight.value);
+		return new NumberResult(left.value >> coercedRight.value);
 	}
 
 	private hex(left: HexResult, right: INumericResult) {
@@ -146,9 +124,9 @@ export class LogicalShiftRightVisitor
 	}
 
 	private percentage(left: PercentageResult, right: INumericResult) {
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
-		return new FloatResult((left.value / 100) >> coercedRight.value);
+		return new NumberResult((left.value / 100) >> coercedRight.value);
 	}
 
 	private unitOfMeasurement(
@@ -167,7 +145,7 @@ export class LogicalShiftRightVisitor
 			);
 		}
 
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
 		return new UnitOfMeasurementResult(
 			left.value >> coercedRight.value,

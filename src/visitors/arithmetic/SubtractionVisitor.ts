@@ -1,16 +1,14 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { NumberResult } from "@/results/NumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IResult } from "@/results/definition/IResult";
 import { percentageOf } from "@/utilities/Percentage";
 import { convertUnitOfMeasurementResultTo } from "@/utilities/UnitOfMeasurement";
-import { FloatCoercion } from "@/visitors/coercion/FloatCoercionVisitor";
 import { HexCoercion } from "@/visitors/coercion/HexCoercionVisitor";
-import { IntegerCoercion } from "@/visitors/coercion/IntegerCoercionVisitor";
+import { NumberCoercion } from "@/visitors/coercion/NumberCoercionVisitor";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class SubtractionVisitor
@@ -19,12 +17,8 @@ export class SubtractionVisitor
 	constructor(private right: INumericResult) {}
 
 	visit<TValue>(visited: IResult<TValue>): INumericResult {
-		if (visited instanceof FloatResult) {
-			return this.float(visited, this.right);
-		}
-
-		if (visited instanceof IntegerResult) {
-			return this.integer(visited, this.right);
+		if (visited instanceof NumberResult) {
+			return this.number(visited, this.right);
 		}
 
 		if (visited instanceof HexResult) {
@@ -42,28 +36,16 @@ export class SubtractionVisitor
 		throw new UnsupportedVisitorOperationError();
 	}
 
-	private float(left: FloatResult, right: INumericResult) {
+	private number(left: NumberResult, right: INumericResult) {
 		if (right instanceof PercentageResult) {
-			return new FloatResult(
+			return new NumberResult(
 				left.value - percentageOf(right.value, left.value)
 			);
 		}
 
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
-		return new FloatResult(left.value - coercedRight.value);
-	}
-
-	private integer(left: IntegerResult, right: INumericResult) {
-		if (right instanceof PercentageResult) {
-			return new IntegerResult(
-				left.value - percentageOf(right.value, left.value)
-			);
-		}
-
-		const coercedRight = IntegerCoercion.visit(right);
-
-		return new IntegerResult(left.value - coercedRight.value);
+		return new NumberResult(left.value - coercedRight.value);
 	}
 
 	private hex(left: HexResult, right: INumericResult) {
@@ -80,12 +62,12 @@ export class SubtractionVisitor
 
 	private percentage(left: PercentageResult, right: INumericResult) {
 		if (right instanceof PercentageResult) {
-			return new FloatResult(left.value / 100 - right.value / 100);
+			return new NumberResult(left.value / 100 - right.value / 100);
 		}
 
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
-		return new FloatResult(left.value / 100 - coercedRight.value);
+		return new NumberResult(left.value / 100 - coercedRight.value);
 	}
 
 	private unitOfMeasurement(
@@ -111,7 +93,7 @@ export class SubtractionVisitor
 			);
 		}
 
-		const coercedRight = FloatCoercion.visit(right);
+		const coercedRight = NumberCoercion.visit(right);
 
 		return new UnitOfMeasurementResult(
 			left.value - coercedRight.value,

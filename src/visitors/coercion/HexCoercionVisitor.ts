@@ -1,9 +1,7 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
-import { IResult } from "@/results/definition/IResult";
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
-import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
+import { NumberResult } from "@/results/NumberResult";
+import { IResult } from "@/results/definition/IResult";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
 
 export class HexCoercionVisitor implements ICoercionResultVisitor<HexResult> {
@@ -12,12 +10,7 @@ export class HexCoercionVisitor implements ICoercionResultVisitor<HexResult> {
 			return visited;
 		}
 
-		if (
-			visited instanceof FloatResult ||
-			visited instanceof IntegerResult ||
-			visited instanceof HexResult ||
-			visited instanceof UnitOfMeasurementResult
-		) {
+		if (visited instanceof NumberResult || visited instanceof HexResult) {
 			return new HexResult(visited.value);
 		}
 

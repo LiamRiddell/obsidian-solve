@@ -1,7 +1,6 @@
 import { BasicArithmeticProvider } from "@/providers/arithmetic/BasicArithmeticProvider";
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { NumberResult } from "@/results/NumberResult";
 import { beforeAll, describe, test } from "@jest/globals";
 import { expectProviderResultAndType } from "../../helpers/Provider";
 
@@ -13,50 +12,50 @@ beforeAll(() => {
 
 describe("Primitive", () => {
 	test("whole number", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"102",
-			new IntegerResult(102)
+			new NumberResult(102)
 		);
 	});
 
 	test("positive whole number", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"+10",
-			new IntegerResult(10)
+			new NumberResult(10)
 		);
 	});
 
 	test("negative whole number", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"-15",
-			new IntegerResult(-15)
+			new NumberResult(-15)
 		);
 	});
 
 	test("fractional number", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"15.2",
-			new FloatResult(15.2)
+			new NumberResult(15.2)
 		);
 	});
 
 	test("positive fractional number", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"7.1",
-			new FloatResult(7.1)
+			new NumberResult(7.1)
 		);
 	});
 
 	test("negative fractional number", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"-5.1",
-			new FloatResult(-5.1)
+			new NumberResult(-5.1)
 		);
 	});
 
@@ -71,34 +70,34 @@ describe("Primitive", () => {
 
 describe("Addition", () => {
 	test("100 + 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 + 2",
-			new IntegerResult(100 + 2)
+			new NumberResult(100 + 2)
 		);
 	});
 
 	test("100 add 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 add 2",
-			new IntegerResult(100 + 2)
+			new NumberResult(100 + 2)
 		);
 	});
 
 	test("100 plus 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 plus 2",
-			new IntegerResult(100 + 2)
+			new NumberResult(100 + 2)
 		);
 	});
 
 	test("100.20 + 24.3", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100.20 + 24.3",
-			new FloatResult(100.2 + 24.3)
+			new NumberResult(100.2 + 24.3)
 		);
 	});
 
@@ -121,34 +120,34 @@ describe("Addition", () => {
 
 describe("Subtraction", () => {
 	test("100 - 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 - 2",
-			new IntegerResult(100 - 2)
+			new NumberResult(100 - 2)
 		);
 	});
 
 	test("100 take 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 take 2",
-			new IntegerResult(100 - 2)
+			new NumberResult(100 - 2)
 		);
 	});
 
 	test("100 minus 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 minus 2",
-			new IntegerResult(100 - 2)
+			new NumberResult(100 - 2)
 		);
 	});
 
 	test("100.23 - 24.3", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100.23 - 24.3",
-			new FloatResult(100.23 - 24.3)
+			new NumberResult(100.23 - 24.3)
 		);
 	});
 
@@ -179,42 +178,42 @@ describe("Subtraction", () => {
 
 describe("Multiplication", () => {
 	test("100 * 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 * 2",
-			new IntegerResult(100 * 2)
+			new NumberResult(100 * 2)
 		);
 	});
 
 	test("100 times 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 times 2",
-			new IntegerResult(100 * 2)
+			new NumberResult(100 * 2)
 		);
 	});
 
 	test("100 multiply by 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 multiply by 2",
-			new IntegerResult(100 * 2)
+			new NumberResult(100 * 2)
 		);
 	});
 
 	test("100 multiply 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 multiply 2",
-			new IntegerResult(100 * 2)
+			new NumberResult(100 * 2)
 		);
 	});
 
 	test("27.3 * 8.2", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"27.3 * 8.2",
-			new FloatResult(27.3 * 8.2)
+			new NumberResult(27.3 * 8.2)
 		);
 	});
 
@@ -237,34 +236,34 @@ describe("Multiplication", () => {
 
 describe("Division", () => {
 	test("100 / 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 / 2",
-			new IntegerResult(100 / 2)
+			new NumberResult(100 / 2)
 		);
 	});
 
 	test("100 divide by 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 divide by 2",
-			new IntegerResult(100 / 2)
+			new NumberResult(100 / 2)
 		);
 	});
 
 	test("100 divide 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"100 divide 2",
-			new IntegerResult(100 / 2)
+			new NumberResult(100 / 2)
 		);
 	});
 
 	test("146.38 / 4.76", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"146.38 / 4.76",
-			new FloatResult(146.38 / 4.76)
+			new NumberResult(146.38 / 4.76)
 		);
 	});
 
@@ -287,68 +286,68 @@ describe("Division", () => {
 
 describe("Exponent", () => {
 	test("10 ^ 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 ^ 2",
-			new IntegerResult(Math.pow(10, 2))
+			new NumberResult(Math.pow(10, 2))
 		);
 	});
 
 	test("10 to the power of 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 to the power of 2",
-			new IntegerResult(Math.pow(10, 2))
+			new NumberResult(Math.pow(10, 2))
 		);
 	});
 
 	test("10 power of 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 power of 2",
-			new IntegerResult(Math.pow(10, 2))
+			new NumberResult(Math.pow(10, 2))
 		);
 	});
 
 	test("10 exponent 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 exponent 2",
-			new IntegerResult(Math.pow(10, 2))
+			new NumberResult(Math.pow(10, 2))
 		);
 	});
 
 	test("10 prime 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 prime 2",
-			new IntegerResult(Math.pow(10, 2))
+			new NumberResult(Math.pow(10, 2))
 		);
 	});
 
 	test("10.36 ^ 2", () => {
-		expectProviderResultAndType<FloatResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10.36 ^ 2",
-			new FloatResult(Math.pow(10.36, 2))
+			new NumberResult(Math.pow(10.36, 2))
 		);
 	});
 });
 
 describe("PEMDAS", () => {
 	test("(4 + 3) * 2^2 - 10 / 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"(4 + 3) * 2^2 - 10 / 2",
-			new IntegerResult(23)
+			new NumberResult(23)
 		);
 	});
 
 	test("(4 plus 3) times by 2 to the power of 2 minus 10 divide by 2", () => {
-		expectProviderResultAndType<IntegerResult>(
+		expectProviderResultAndType<NumberResult>(
 			provider,
 			"(4 plus 3) times by 2 to the power of 2 minus 10 divide by 2",
-			new IntegerResult(23)
+			new NumberResult(23)
 		);
 	});
 });

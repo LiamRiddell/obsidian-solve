@@ -3,9 +3,6 @@ import grammar, {
 } from "@/grammars/arithmetic/BasicArithmetic.ohm-bundle";
 import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { FloatResult } from "@/results/FloatResult";
-import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
 import { logger } from "@/utilities/Logger";
 
 export class BasicArithmeticProvider extends SemanticProviderBase<BasicArithmeticSemantics> {
@@ -14,10 +11,7 @@ export class BasicArithmeticProvider extends SemanticProviderBase<BasicArithmeti
 
 		this.semantics = grammar.createSemantics();
 
-		this.semantics.addOperation<FloatResult | IntegerResult | HexResult>(
-			"visit()",
-			basicArithmeticSemanticActions
-		);
+		this.semantics.addOperation("visit()", basicArithmeticSemanticActions);
 	}
 
 	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {

@@ -1,4 +1,5 @@
 import { UnitsOfMeasurementProvider } from "@/providers/uom/UnitsOfMeasurementProvider";
+import { NumberResult } from "@/results/NumberResult";
 import { StringResult } from "@/results/StringResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { beforeAll, describe, test } from "@jest/globals";
@@ -229,6 +230,14 @@ describe("Addition", () => {
 			new UnitOfMeasurementResult(10 + 20, "mm")
 		);
 	});
+
+	test("100 + 20 cm", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100 + 20 cm",
+			new NumberResult(100 + 20)
+		);
+	});
 });
 
 describe("Subtraction", () => {
@@ -237,6 +246,14 @@ describe("Subtraction", () => {
 			provider,
 			"10 mm - 20",
 			new UnitOfMeasurementResult(10 - 20, "mm")
+		);
+	});
+
+	test("100 - 20 cm", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100 - 20 cm",
+			new NumberResult(100 - 20)
 		);
 	});
 });
@@ -249,6 +266,14 @@ describe("Multiplication", () => {
 			new UnitOfMeasurementResult(10 * 20, "mm")
 		);
 	});
+
+	test("100 * 20 cm", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100 * 20 cm",
+			new NumberResult(100 * 20)
+		);
+	});
 });
 
 describe("Division", () => {
@@ -259,6 +284,14 @@ describe("Division", () => {
 			new UnitOfMeasurementResult(10 / 20, "mm")
 		);
 	});
+
+	test("100 / 20 cm", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100 / 20 cm",
+			new NumberResult(100 / 20)
+		);
+	});
 });
 
 describe("Exponent", () => {
@@ -267,6 +300,14 @@ describe("Exponent", () => {
 			provider,
 			"10 mm ^ 20",
 			new UnitOfMeasurementResult(Math.pow(10, 20), "mm")
+		);
+	});
+
+	test("100 ^ 20 cm", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100 ^ 20 cm",
+			new NumberResult(Math.pow(100, 20))
 		);
 	});
 });

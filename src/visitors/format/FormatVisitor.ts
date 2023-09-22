@@ -1,8 +1,7 @@
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
 import { DatetimeResult } from "@/results/DatetimeResult";
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { NumberResult } from "@/results/NumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { StringResult } from "@/results/StringResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
@@ -16,6 +15,7 @@ import { IVector2Result } from "@/results/definition/IVector2Result";
 import { IVector3Result } from "@/results/definition/IVector3Result";
 import { IVector4Result } from "@/results/definition/IVector4Result";
 import UserSettings from "@/settings/UserSettings";
+import { autoFormatIntegerOrFloat } from "@/utilities/Number";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 import convert, { Unit } from "convert-units";
 
@@ -27,12 +27,8 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 	}
 
 	visit<TValue>(visited: IResult<TValue>): string {
-		if (visited instanceof FloatResult) {
-			return this.visitFloatResult(visited);
-		}
-
-		if (visited instanceof IntegerResult) {
-			return this.visitIntegerResult(visited);
+		if (visited instanceof NumberResult) {
+			return this.visitNumberResult(visited);
 		}
 
 		if (visited instanceof HexResult) {
@@ -70,8 +66,11 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 		throw new UnsupportedVisitorOperationError();
 	}
 
-	visitFloatResult(result: FloatResult): string {
-		return result.value.toFixed(this.settings.floatResult.decimalPlaces);
+	visitNumberResult(result: NumberResult): string {
+		return autoFormatIntegerOrFloat(
+			result.value,
+			this.settings.floatResult.decimalPlaces
+		).toString();
 	}
 
 	visitHexResult(result: HexResult): string {
@@ -86,10 +85,6 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 				"0"
 			);
 		return isNegative ? `-0x${hexString}` : `0x${hexString}`;
-	}
-
-	visitIntegerResult(result: IntegerResult): string {
-		return Math.trunc(result.value).toString();
 	}
 
 	visitPercentageResult(result: PercentageResult): string {

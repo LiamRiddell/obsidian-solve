@@ -3,9 +3,8 @@ import grammar, {
 } from "@/grammars/percentage/PercentageArithmetic.ohm-bundle";
 import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { NumberResult } from "@/results/NumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import { logger } from "@/utilities/Logger";
 import { DecreaseByVisitor } from "@/visitors/percentage/DecreaseByVisitor";
@@ -20,7 +19,7 @@ export class PercentageArithmeticProvider extends SemanticProviderBase<Percentag
 		this.semantics = grammar.PercentageArithmetic.createSemantics();
 
 		this.semantics.addOperation<
-			FloatResult | IntegerResult | HexResult | PercentageResult
+			NumberResult | HexResult | PercentageResult
 		>("visit()", {
 			...basicArithmeticSemanticActions,
 			PercentageOf(percentNode, of, populationNode) {
