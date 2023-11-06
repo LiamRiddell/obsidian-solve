@@ -1,6 +1,5 @@
-import { FloatResult } from "@/results/FloatResult";
 import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
+import { NumberResult } from "@/results/NumberResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 
 export class ArithmeticExpressionVisitor {
@@ -17,11 +16,11 @@ export class ArithmeticExpressionVisitor {
 	visitConstant(constantName: string): INumericResult {
 		switch (constantName.toLowerCase()) {
 			case "pi":
-				return new FloatResult(Math.PI);
+				return new NumberResult(Math.PI);
 			case "e":
-				return new FloatResult(Math.E);
+				return new NumberResult(Math.E);
 			default:
-				return new FloatResult(0);
+				return new NumberResult(0);
 		}
 	}
 
@@ -33,12 +32,8 @@ export class ArithmeticExpressionVisitor {
 		return new HexResult(hexValue);
 	}
 
-	visitFloat(numString: string): INumericResult {
-		return new FloatResult(parseFloat(numString));
-	}
-
-	visitInteger(numString: string): INumericResult {
-		return new IntegerResult(parseInt(numString));
+	visitNumber(numString: string): INumericResult {
+		return new NumberResult(parseFloat(numString));
 	}
 }
 

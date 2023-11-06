@@ -1,10 +1,9 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
+import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
+import { Vector4Result } from "@/results/Vector4Result";
 import { IResult } from "@/results/definition/IResult";
 import { IVector4Result } from "@/results/definition/IVector4Result";
-import { FloatResult } from "@/results/FloatResult";
-import { HexResult } from "@/results/HexResult";
-import { IntegerResult } from "@/results/IntegerResult";
-import { Vector4Result } from "@/results/Vector4Result";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
 
 export class Vector4CoercionVisitor
@@ -15,11 +14,7 @@ export class Vector4CoercionVisitor
 			return visited;
 		}
 
-		if (
-			visited instanceof FloatResult ||
-			visited instanceof IntegerResult ||
-			visited instanceof HexResult
-		) {
+		if (visited instanceof NumberResult || visited instanceof HexResult) {
 			return new Vector4Result({
 				x: visited.value,
 				y: visited.value,

@@ -1,184 +1,183 @@
 import { PercentageArithmeticProvider } from "@/providers/percentage/PercentageArithmeticProvider";
-import { beforeAll, describe, expect, test } from "@jest/globals";
+import { NumberResult } from "@/results/NumberResult";
+import { PercentageResult } from "@/results/PercentageResult";
+import { beforeAll, describe, test } from "@jest/globals";
+import { expectProviderResultAndType } from "../../helpers/Provider";
 
-let percentageArithmeticProvider: PercentageArithmeticProvider;
+let provider: PercentageArithmeticProvider;
 
 beforeAll(() => {
-	percentageArithmeticProvider = new PercentageArithmeticProvider();
+	provider = new PercentageArithmeticProvider();
 });
 
 describe("Primitive", () => {
 	test("percentage", () => {
-		const result = percentageArithmeticProvider.provide("10%");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(10.0);
+		expectProviderResultAndType<PercentageResult>(
+			provider,
+			"10%",
+			new PercentageResult(10.0)
+		);
 	});
 });
 
 describe("Addition", () => {
-	test("10 + 15% to equal 11", () => {
-		const result = percentageArithmeticProvider.provide("10 + 15%");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(11);
+	test("10.0 + 15%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"10.0 + 15%",
+			new NumberResult(11.5)
+		);
 	});
 
-	test("10.0 + 15% to equal 11.5", () => {
-		const result = percentageArithmeticProvider.provide("10.0 + 15%");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(11.5);
-	});
-
-	test("15% + 10 to equal 10.15", () => {
-		const result = percentageArithmeticProvider.provide("15% + 10");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(10.15);
+	test("15% + 10", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"15% + 10",
+			new NumberResult(10.15)
+		);
 	});
 });
 
 describe("Subtraction", () => {
-	test("10 - 15% to equal 8", () => {
-		const result = percentageArithmeticProvider.provide("10 - 15%");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(8);
+	test("10.0 - 15%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"10.0 - 15%",
+			new NumberResult(8.5)
+		);
 	});
 
-	test("10.0 - 15% to equal 8.5", () => {
-		const result = percentageArithmeticProvider.provide("10.0 - 15%");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(8.5);
-	});
-
-	test("15% - 10 to equal 9.85", () => {
-		const result = percentageArithmeticProvider.provide("15% - 10");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(-9.85);
+	test("15% - 10", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"15% - 10",
+			new NumberResult(-9.85)
+		);
 	});
 });
 
 describe("Multiplication", () => {
-	test("10 * 15% to equal 15.00", () => {
-		const result = percentageArithmeticProvider.provide("10 * 15%");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(15.0);
+	test("10 * 15%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"10 * 15%",
+			new NumberResult(15)
+		);
 	});
 
-	test("15% * 10 to equal 1.50", () => {
-		const result = percentageArithmeticProvider.provide("15% * 10");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(1.5);
+	test("15% * 10", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"15% * 10",
+			new NumberResult(1.5)
+		);
 	});
 });
 
 describe("Division", () => {
-	test("10 / 10% to equal 10", () => {
-		const result = percentageArithmeticProvider.provide("10 / 10%");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(10);
+	test("10 / 10%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"10 / 10%",
+			new NumberResult(10)
+		);
 	});
 
-	test("100% / 10 to equal 0.10", () => {
-		const result = percentageArithmeticProvider.provide("100% / 10");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(0.1);
+	test("100% / 10", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100% / 10",
+			new NumberResult(0.1)
+		);
 	});
 });
 
 describe("Exponent", () => {
-	test("10 ^ 20% to equal 100", () => {
-		const result = percentageArithmeticProvider.provide("10 ^ 20%");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(100);
+	test("10 ^ 20%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"10 ^ 20%",
+			new NumberResult(100)
+		);
 	});
 
-	test("150% ^  10 to equal 100", () => {
-		const result = percentageArithmeticProvider.provide("150% ^ 10");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(57.6650390625);
+	test("150% ^ 10", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"150% ^ 10",
+			new NumberResult(57.6650390625)
+		);
 	});
 });
 
 describe("PEMDAS", () => {
-	test("(10 + 50%) * 2 to equal 30.00", () => {
-		const result = percentageArithmeticProvider.provide("(10 + 50%) * 2");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(30);
+	test("(10 + 50%) * 2", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"(10 + 50%) * 2",
+			new NumberResult(30)
+		);
 	});
 });
 
 describe("Percentage Of", () => {
-	test("10% of 20 to equal 2", () => {
-		const result = percentageArithmeticProvider.provide("10% of 20");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(2);
+	test("10% of 20", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"10% of 20",
+			new NumberResult(2)
+		);
 	});
 });
 
 describe("Percentage Increase/Decrease", () => {
-	test("800 to 1000 to equal 25%", () => {
-		const result = percentageArithmeticProvider.provide("800 to 1000");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(25);
+	test("800 to 1000", () => {
+		expectProviderResultAndType<PercentageResult>(
+			provider,
+			"800 to 1000",
+			new PercentageResult(25)
+		);
 	});
 
-	test("800 to 400 to equal 25%", () => {
-		const result = percentageArithmeticProvider.provide("800 to 400");
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(-50);
+	test("800 to 400", () => {
+		expectProviderResultAndType<PercentageResult>(
+			provider,
+			"800 to 400",
+			new PercentageResult(-50)
+		);
 	});
 });
 
 describe("Increase/Decrease By Percentage", () => {
-	test("increase 100 by 25% to equal 125", () => {
-		const result = percentageArithmeticProvider.provide(
-			"increase 100 by 25%"
+	test("increase 100 by 25%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"increase 100 by 25%",
+			new NumberResult(125)
 		);
-
-		expect(result).toBeDefined();
-
-		expect(result).toBe(125);
 	});
 
-	test("decrease 100 by 25% to equal 75", () => {
-		const result = percentageArithmeticProvider.provide(
-			"decrease 100 by 25%"
+	test("INcREaSE 100 bY 25%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"INcREaSE 100 bY 25%",
+			new NumberResult(125)
 		);
+	});
 
-		expect(result).toBeDefined();
+	test("decrease 100 by 25%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"decrease 100 by 25%",
+			new NumberResult(75)
+		);
+	});
 
-		expect(result).toBe(75);
+	test("Decrease 100 bY 25%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"Decrease 100 bY 25%",
+			new NumberResult(75)
+		);
 	});
 });

@@ -36,13 +36,13 @@ But wait, there's more! Visit [our documentation](https://github.com/LiamRiddell
 
 Our feature list is a testament to the dynamic capabilities we offer to enhance your note-taking experience. Let's take a glimpse into what awaits:
 
--   **Arithmetic Enrichment:** Navigate through the realms of basic arithmetic, explore intricate mathematical functions, and traverse the vectors' landscape. An upcoming addition to this family is the captivating realm of Hex arithmetic.
+-   [**Arithmetic Enrichment:**](https://github.com/LiamRiddell/obsidian-solve/wiki/Basic) Navigate through the realms of basic arithmetic, explore intricate mathematical functions, and traverse the vectors' landscape. An upcoming addition to this family is the captivating realm of Hex arithmetic.
 
--   **Datetime Delve (Alpha):** Dive into the world of time manipulation with our Datetime feature, currently in its alpha stage. Explore this exciting capability and stay tuned for its evolution.
+-   [**Datetime Delve:**](https://github.com/LiamRiddell/obsidian-solve/wiki/Datetime) Dive into the world of time manipulation with our Datetime feature, currently in its alpha stage. Explore this exciting capability and stay tuned for its evolution.
 
--   **Percentages on the Horizon:** The horizon shines with the promise of percentage calculations, coming soon to further elevate your analytical prowess.
+-   [**Percentage Proficiency:**](https://github.com/LiamRiddell/obsidian-solve/wiki/Percentage) Embark on a journey through the numeric nuances of percentages with the adept integration of Obsidian Solve's Percentage Provider. Delve into a symphony of quantitative relationships, from discerning parts of a whole to understanding increases and decreases. This feature elevates your note-taking to an analytical art form, rendering complex percentage calculations as simple as jotting down a thought.
 
--   **Units of Measurement (Coming Soon):** Prepare to unravel the mysteries of units of measurement as we bring this functionality to Solve in the near future.
+-   [**Units of Measurement:**](https://github.com/LiamRiddell/obsidian-solve/wiki/Units-Of-Measurement) Diversify your numerical toolkit with the newly introduced ability to interpret and convert a multitude of measurement units. Obsidian Solve now speaks the language of distance, volume, weight, and more, bringing a newfound depth to your data interaction.
 
 -   **Community Collaboration:** Engage in collaborative innovation with our Community Provider Support. Join forces with fellow creators to extend Solve's potential.
 
@@ -77,6 +77,7 @@ A colossal shoutout to the forces that fuel our innovation! We extend our heartf
 
 -   [Ohm-js](https://ohmjs.org/): The backbone of our precision, powering the magic of parsing and calculations. Your genius propels us forward.
 -   [Obsidian MD](https://obsidian.md/): The nurturing ground that breathes life into our vision, elevating it to new heights.
+-   [convert-units](https://github.com/convert-units/convert-units): The virtuoso of versatility, infusing Obsidian Solve with the mastery to effortlessly translate and transform units.
 
 Join us in raising a virtual toast to these pillars of progress! 🥂🌟
 

@@ -1,5 +1,6 @@
 import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
+import { IResult } from "@/results/definition/IResult";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
 import { syntaxTree } from "@codemirror/language";
@@ -26,7 +27,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	];
 	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
 	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
-	private variableMap = new Map<string, string>();
+	private variableMap = new Map<string, IResult<any>>();
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
@@ -236,7 +237,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			);
 
 			if (result !== undefined) {
-				this.variableMap.set(name, result);
+				this.variableMap.set(name, result as any as IResult<any>);
 			}
 		}
 
@@ -247,11 +248,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		expression: string,
 		variablesMatches: RegExpMatchArray[]
 	) {
-		const cachedVariableMatchLength = variablesMatches.length;
-
 		let expressionSubstituted = expression;
 
-		for (let i = 0; i < cachedVariableMatchLength; i++) {
+		for (let i = 0; i < variablesMatches.length; i++) {
 			const variableMatch = variablesMatches[i];
 
 			if (!variableMatch) continue;
@@ -264,7 +263,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				if (variableValue) {
 					expressionSubstituted = expressionSubstituted.replace(
 						variableName,
-						variableValue
+						variableValue.value
 					);
 				}
 			}

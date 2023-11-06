@@ -12,7 +12,7 @@ export class ProviderBase implements IProvider {
 		this.formatVisitor = new FormatVisitor();
 	}
 
-	public provide(sentence: string, raw: boolean): string | undefined {
+	public provide<T = string>(sentence: string, raw: boolean): T | undefined {
 		throw new Error("Method not implemented.");
 	}
 }
