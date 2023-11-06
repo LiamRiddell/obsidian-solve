@@ -18,6 +18,7 @@
 		"@jest/globals": "^29.6.2",
 		"@lezer/common": "^1.0.3",
 		"@ohm-js/cli": "https://gitpkg.now.sh/LiamRiddell/ohm/packages/cli?main",
+		"@types/convert-units": "^2.3.8",
 		"@types/node": "16.18.39",
 		"@typescript-eslint/eslint-plugin": "6.2.0",
 		"@typescript-eslint/parser": "6.2.0",
@@ -32,7 +33,6 @@
 		"typescript": "5.1.6"
 	},
 	"dependencies": {
-		"@types/convert-units": "^2.3.7",
 		"convert-units": "^2.3.4",
 		"moment": "^2.29.4",
 		"ohm-js": "^17.1.0"
