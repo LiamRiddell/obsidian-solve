@@ -1,8 +1,8 @@
 import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
+import { IResult } from "@/results/definition/IResult";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
-import { IResult } from "@/results/definition/IResult";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -237,7 +237,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			);
 
 			if (result !== undefined) {
-				this.variableMap.set(name, result);
+				this.variableMap.set(name, result as any as IResult<any>);
 			}
 		}
 
