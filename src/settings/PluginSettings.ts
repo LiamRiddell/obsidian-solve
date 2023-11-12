@@ -3,6 +3,10 @@ import { IPluginSettings } from "@/settings/definition/IPluginSettings";
 import moment from "moment";
 
 export const DEFAULT_SETTINGS: IPluginSettings = {
+	engine: {
+		explicitMode: false,
+	},
+
 	interface: {
 		renderResultEndOfLine: false,
 		showStatusBarCompanion: true,

@@ -1,6 +1,7 @@
 import { IArithmeticProviderSettings } from "@/settings/definition/IArithmeticProviderSettings";
 import { IDatetimeProviderSettings } from "@/settings/definition/IDatetimeProviderSettings";
 import { IDatetimeResultSettings } from "@/settings/definition/IDatetimeResultSettings";
+import { IEngineSettings } from "@/settings/definition/IEngineSettings";
 import { IFloatResultSettings } from "@/settings/definition/IFloatResultSettings";
 import { IHexResultSettings } from "@/settings/definition/IHexResultSettings";
 import { IIntegerResultSettings } from "@/settings/definition/IIntegerResultSettings";
@@ -9,6 +10,7 @@ import { IPercentageResultSettings } from "@/settings/definition/IPercentageResu
 import { IUnitOfMeasurementResultSettings } from "@/settings/definition/IUnitOfMeasurementResultSettings";
 
 export interface IPluginSettings {
+	engine: IEngineSettings;
 	interface: IInterfaceSettings;
 
 	// Providers

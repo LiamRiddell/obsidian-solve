@@ -3,6 +3,7 @@ import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { IResult } from "@/results/definition/IResult";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
+import UserSettings from "@/settings/UserSettings";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -19,6 +20,8 @@ import { solveProviderManager } from "../providers/ProviderManager";
 
 export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
+	private userSettings: UserSettings;
+
 	private ignoreNodeForMaskString = [
 		"Document",
 		"quote",
@@ -31,6 +34,12 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
+
+		logger.debug(
+			`[SolveViewPlugin] Getting reference to user settings singleton`
+		);
+		this.userSettings = UserSettings.getInstance();
+
 		this.decorations = this.buildDecorations(view);
 	}
 
@@ -140,8 +149,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					continue;
 				}
 
-				// Ignored nodes e.g. block qoutes (>), lists (-), checked list ([ ] Test) will leave the
-				// markdown formatting at the front we need these to be removed.
+				// Ignored nodes e.g. block qoutes (>), lists (-), checked list ([ ]) will remove the
+				// markdown formatting at the start of the string.
 				lineText = lineText.replace(
 					/^(?:(?:[-+*>]|(?:\[\s\])|(?:\d+\.))\s)+/m,
 					""
@@ -192,15 +201,37 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	}
 
 	private provideDecoration(sentence: string) {
+		let isExplicitlyDefinedSentence = false;
+
+		// When explicit mode is enabled the sentence will end with = sign.
+		// This needs to be removed in order for grammars to match.
+		if (
+			this.userSettings.engine.explicitMode &&
+			sentence.trimEnd().endsWith("=")
+		) {
+			sentence = sentence.substring(0, sentence.length - 1).trimEnd();
+			isExplicitlyDefinedSentence = true;
+		}
+
 		// Initial implementation will show the first valid result from available providers.
 		const result = solveProviderManager.provideFirst(sentence);
 
-		if (result !== undefined) {
-			return Decoration.widget({
-				widget: new ResultWidget(result),
-				side: 1,
-			});
+		if (result === undefined) {
+			return undefined;
 		}
+
+		// If we're in explicit mode, we should only show the result if it was defined explicitly `=`
+		if (
+			this.userSettings.engine.explicitMode &&
+			!isExplicitlyDefinedSentence
+		) {
+			return undefined;
+		}
+
+		return Decoration.widget({
+			widget: new ResultWidget(result),
+			side: 1,
+		});
 	}
 
 	//#region Variables

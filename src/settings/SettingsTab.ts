@@ -16,6 +16,7 @@ export class SettingTab extends PluginSettingTab {
 		this.containerEl.empty();
 
 		this.displayIntroduction();
+		this.displayEngineSettings();
 		this.displayInterfaceSettings();
 
 		// Providers
@@ -39,6 +40,25 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setDesc(
 			`Solve is an unobtrusive Obsidian plugin that quietly processes equations and patterns in real time, inspired by NoteMaster's Smart Mode. With solid engineering at its core, Solve enhances note-taking without relying on ChatGPT. For instance, effortlessly calculates date and time expressions (e.g., 'Now + 20 days'), performs arithmetic (e.g., '10 + 5'), and more features are coming soon.`
 		);
+	}
+
+	displayEngineSettings() {
+		new Setting(this.containerEl).setName("Engine").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Explicit mode")
+			.setDesc(
+				`Solve will only display results for sentences ending with '=' sign. Default is ${DEFAULT_SETTINGS.engine.explicitMode}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.engine.explicitMode)
+					.onChange(async (value) => {
+						this.plugin.settings.engine.explicitMode = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayInterfaceSettings() {
