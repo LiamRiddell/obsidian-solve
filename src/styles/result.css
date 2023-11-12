@@ -1,0 +1,40 @@
+.os--beta-tag ::after {
+	content: "BETA";
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	vertical-align: top;
+	background-color: var(--interactive-accent);
+	margin-left: 8px;
+	height: 20px;
+	width: 34px;
+	display: inline-flex;
+	justify-content: center;
+	align-items: center;
+	border-radius: var(--radius-s);
+}
+
+.osf--result-eol .os-result {
+	position: absolute;
+	right: 0;
+}
+
+.os-result {
+	display: inline-flex;
+	margin: var(--solve-result-margin, 0 0 0 4px);
+	padding: var(--solve-result-padding, 0 0 0 4px);
+	line-height: var(--line-height-normal);
+
+	/* Color Style Settings */
+	color: var(--solve-result-text, #29ce99e8);
+	background-color: var(--solve-result-background, #22ce9900);
+
+	/* Font Style Settings */
+	font-family: var(--font-text);
+	font-size: var(--font-text-size, 16px);
+
+	/* Border Style Settings */
+	border-color: var(--solve-result-border-color, transparent);
+	border-style: var(--solve-result-border-style, solid);
+	border-width: var(--solve-result-border-width, 0);
+	border-radius: var(--solve-result-border-radius, 4px);
+}
