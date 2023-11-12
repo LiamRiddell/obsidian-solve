@@ -220,6 +220,12 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			return undefined;
 		}
 
+		// If the input sentence and the output is the same value ignore it.
+		// For example, 10 = 10
+		if (result.toLowerCase().trim() === sentence.toLowerCase().trim()) {
+			return undefined;
+		}
+
 		// If we're in explicit mode, we should only show the result if it was defined explicitly `=`
 		if (
 			this.userSettings.engine.explicitMode &&
