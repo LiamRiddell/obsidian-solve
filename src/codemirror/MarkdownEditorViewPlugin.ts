@@ -221,11 +221,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		// If the input sentence and the output is the same value ignore it.
 		// For example, 10 = 10
 		const sentenceLowercasedTrimmed = sentence.toLowerCase().trim();
-		const resultLowercaseTrimmer = result.startsWith("= ")
+		const resultLowercaseTrimmed = result.startsWith("= ")
 			? result.substring(2).toLocaleLowerCase().trim()
 			: result.toLowerCase().trim();
 
-		if (sentenceLowercasedTrimmed === resultLowercaseTrimmer) {
+		if (sentenceLowercasedTrimmed === resultLowercaseTrimmed) {
 			return undefined;
 		}
 
