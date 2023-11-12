@@ -38,8 +38,8 @@ class ProviderManager {
 					}
 
 					if (
+						!this.settings.engine.explicitMode &&
 						this.settings.arithmeticProvider
-							.renderEqualsBeforeResult
 					) {
 						result = `= ${result}`;
 					}
