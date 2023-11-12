@@ -52,7 +52,7 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 	}
 
 	enabled() {
-		return UserSettings.getInstance().arithmeticProvider.enabled;
+		return UserSettings.getInstance().functionArithmeticProvider.enabled;
 	}
 
 	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
