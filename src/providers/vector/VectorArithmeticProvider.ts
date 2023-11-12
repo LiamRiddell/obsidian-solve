@@ -13,6 +13,7 @@ import { NumberResult } from "@/results/NumberResult";
 import { Vector2Result } from "@/results/Vector2Result";
 import { Vector3Result } from "@/results/Vector3Result";
 import { Vector4Result } from "@/results/Vector4Result";
+import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 import { Vector2 } from "@/utilities/Vector2";
 import { Vector3 } from "@/utilities/Vector3";
@@ -518,6 +519,10 @@ export class VectorArithmeticProvider extends ProviderBase {
 		}
 
 		return undefined;
+	}
+
+	enabled() {
+		return UserSettings.getInstance().vectorArithmeticProvider.enabled;
 	}
 
 	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {

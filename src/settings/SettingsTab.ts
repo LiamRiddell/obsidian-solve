@@ -19,7 +19,8 @@ export class SettingTab extends PluginSettingTab {
 		this.displayEngineSettings();
 		this.displayInterfaceSettings();
 
-		// Providers
+		// Providers Settings
+		this.displayProviderManagementSettings();
 		this.displayArithmeticProviderSettings();
 		this.displayDatetimeProviderSettings();
 
@@ -55,6 +56,115 @@ export class SettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.engine.explicitMode)
 					.onChange(async (value) => {
 						this.plugin.settings.engine.explicitMode = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+	}
+
+	displayProviderManagementSettings() {
+		new Setting(this.containerEl)
+			.setName("Provider management")
+			.setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Arithmetic")
+			.setDesc(
+				`Enable the arithmetic provider e.g. 10 + 2. Default is ${DEFAULT_SETTINGS.arithmeticProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.arithmeticProvider.enabled)
+					.onChange(async (value) => {
+						this.plugin.settings.arithmeticProvider.enabled = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Function Arithmetic")
+			.setDesc(
+				`Enable the function arithmetic provider e.g. sin(), cos(). Default is ${DEFAULT_SETTINGS.functionArithmeticProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.functionArithmeticProvider.enabled
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.functionArithmeticProvider.enabled =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Vector Arithmetic")
+			.setDesc(
+				`Enable the vector arithmetic provider e.g. (10, 22.3), vec3(1.0, 23, 18.3). Default is ${DEFAULT_SETTINGS.vectorArithmeticProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.vectorArithmeticProvider.enabled
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.vectorArithmeticProvider.enabled =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Percentage")
+			.setDesc(
+				`Enable the percentage provider e.g. 10% of 200, increase 20 by 10%. Default is ${DEFAULT_SETTINGS.percentageArithmeticProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.percentageArithmeticProvider
+							.enabled
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.percentageArithmeticProvider.enabled =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Datetime")
+			.setDesc(
+				`Enable the datetime provider e.g. today + 20 days, last monday. Default is ${DEFAULT_SETTINGS.datetimeProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.datetimeProvider.enabled)
+					.onChange(async (value) => {
+						this.plugin.settings.datetimeProvider.enabled = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Unit of Measurement")
+			.setDesc(
+				`Enable the unit of measurement provider e.g. 10cm + 20, 200cm to m. Default is ${DEFAULT_SETTINGS.unitOfMeasurementProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.unitOfMeasurementProvider.enabled
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.unitOfMeasurementProvider.enabled =
+							value;
 
 						await this.plugin.saveSettings();
 					})

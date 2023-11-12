@@ -6,6 +6,7 @@ import { basicArithmeticSemanticActions } from "@/providers/arithmetic/Arithmeti
 import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
+import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 import { DecreaseByVisitor } from "@/visitors/percentage/DecreaseByVisitor";
 import { IncreaseByVisitor } from "@/visitors/percentage/IncreaseByVisitor";
@@ -54,6 +55,10 @@ export class PercentageArithmeticProvider extends SemanticProviderBase<Percentag
 				);
 			},
 		});
+	}
+
+	enabled() {
+		return UserSettings.getInstance().percentageArithmeticProvider.enabled;
 	}
 
 	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {

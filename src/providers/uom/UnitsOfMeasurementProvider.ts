@@ -9,6 +9,7 @@ import { PercentageResult } from "@/results/PercentageResult";
 import { StringResult } from "@/results/StringResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { INumericResult } from "@/results/definition/INumericResult";
+import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 import convert, { Unit } from "convert-units";
 
@@ -71,6 +72,10 @@ export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeas
 				);
 			},
 		});
+	}
+
+	enabled() {
+		return UserSettings.getInstance().unitOfMeasurementProvider.enabled;
 	}
 
 	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {

@@ -5,6 +5,7 @@ import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
 import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
+import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 
 export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionArithmeticSemantics> {
@@ -48,6 +49,10 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 				}
 			},
 		});
+	}
+
+	enabled() {
+		return UserSettings.getInstance().arithmeticProvider.enabled;
 	}
 
 	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
