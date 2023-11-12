@@ -35,9 +35,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
 
-		logger.debug(
-			`[SolveViewPlugin] Getting reference to user settings singleton`
-		);
 		this.userSettings = UserSettings.getInstance();
 
 		this.decorations = this.buildDecorations(view);
