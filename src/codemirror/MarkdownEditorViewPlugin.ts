@@ -202,12 +202,13 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		// When explicit mode is enabled the sentence will end with = sign.
 		// This needs to be removed in order for grammars to match.
-		if (
-			this.userSettings.engine.explicitMode &&
-			sentence.trimEnd().endsWith("=")
-		) {
-			sentence = sentence.substring(0, sentence.length - 1).trimEnd();
-			isExplicitlyDefinedSentence = true;
+		if (this.userSettings.engine.explicitMode) {
+			if (sentence.trimEnd().endsWith("=")) {
+				sentence = sentence.substring(0, sentence.length - 1).trimEnd();
+				isExplicitlyDefinedSentence = true;
+			} else {
+				return undefined;
+			}
 		}
 
 		// Initial implementation will show the first valid result from available providers.
@@ -219,7 +220,13 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		// If the input sentence and the output is the same value ignore it.
 		// For example, 10 = 10
-		if (result.toLowerCase().trim() === sentence.toLowerCase().trim()) {
+		const sentenceLowercasedTrimmed = sentence.toLowerCase().trim();
+
+		const resultLowercaseTrimmer = result.startsWith("= ")
+			? result.substring(2).toLocaleLowerCase().trim()
+			: result.toLowerCase().trim();
+
+		if (sentenceLowercasedTrimmed === resultLowercaseTrimmer) {
 			return undefined;
 		}
 
