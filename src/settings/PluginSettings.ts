@@ -10,6 +10,9 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	interface: {
 		renderResultEndOfLine: false,
 		showStatusBarCompanion: true,
+		animateResults: true,
+		animationClass: "animate__fadeInDown",
+		animationDuration: "200ms",
 	},
 
 	// Providers

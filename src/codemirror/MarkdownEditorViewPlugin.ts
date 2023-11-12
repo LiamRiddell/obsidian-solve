@@ -31,6 +31,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
 	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
 	private variableMap = new Map<string, IResult<any>>();
+	private activeLineNumber = -1;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
@@ -48,6 +49,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			);
 
 			this.variableMap.clear();
+
+			// Update the current active line number for animations
+			this.activeLineNumber = update.state.doc.lineAt(
+				update.state.selection.main.head
+			).number;
 
 			// console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
 			this.decorations = this.buildDecorations(update.view);
@@ -157,7 +163,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				lineText = this.handleVariables(lineText);
 
 				// The line is valid and decoration can be provided.
-				const decoration = this.provideDecoration(lineText);
+				const decoration = this.provideDecoration(
+					lineText,
+					line.number
+				);
 
 				if (decoration) {
 					builder.add(line.to, line.to, decoration);
@@ -197,7 +206,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		return false;
 	}
 
-	private provideDecoration(sentence: string) {
+	private provideDecoration(sentence: string, lineNumber: number) {
 		let isExplicitlyDefinedSentence = false;
 
 		// When explicit mode is enabled the sentence will end with = sign.
@@ -238,7 +247,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		return Decoration.widget({
-			widget: new ResultWidget(result),
+			widget: new ResultWidget(result, lineNumber),
 			side: 1,
 		});
 	}
