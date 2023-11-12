@@ -10,8 +10,8 @@ import { fastHash } from "@/utilities/FastHash";
 import { logger } from "@/utilities/Logger";
 
 class ProviderManager {
-	private providersMap: Map<number, IProvider>;
 	private _debugMode = false;
+	private providersMap: Map<number, IProvider>;
 	private settings: UserSettings;
 
 	constructor() {
@@ -30,6 +30,11 @@ class ProviderManager {
 	): string | undefined {
 		for (const [, provider] of this.providersMap) {
 			try {
+				// Skip providers that are not enabled
+				if (!provider.enabled()) {
+					continue;
+				}
+
 				let result = provider.provide(sentence, raw);
 
 				if (result !== undefined) {
@@ -38,8 +43,8 @@ class ProviderManager {
 					}
 
 					if (
+						!this.settings.engine.explicitMode &&
 						this.settings.arithmeticProvider
-							.renderEqualsBeforeResult
 					) {
 						result = `= ${result}`;
 					}

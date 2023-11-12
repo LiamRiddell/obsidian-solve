@@ -156,6 +156,10 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 		);
 	}
 
+	enabled() {
+		return UserSettings.getInstance().datetimeProvider.enabled;
+	}
+
 	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
 		try {
 			const matchResult = grammar.match(sentence);
