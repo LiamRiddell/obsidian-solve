@@ -33,6 +33,7 @@
 		"typescript": "5.1.6"
 	},
 	"dependencies": {
+		"animate.css": "^4.1.1",
 		"convert-units": "^2.3.4",
 		"moment": "^2.29.4",
 		"ohm-js": "^17.1.0"
