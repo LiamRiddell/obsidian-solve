@@ -31,7 +31,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
 	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
 	private variableMap = new Map<string, IResult<any>>();
-	private activeLineNumber = -1;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
@@ -49,11 +48,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			);
 
 			this.variableMap.clear();
-
-			// Update the current active line number for animations
-			this.activeLineNumber = update.state.doc.lineAt(
-				update.state.selection.main.head
-			).number;
 
 			// console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
 			this.decorations = this.buildDecorations(update.view);
