@@ -17,7 +17,7 @@
 	"devDependencies": {
 		"@jest/globals": "^29.6.2",
 		"@lezer/common": "^1.0.3",
-		"@ohm-js/cli": "https://gitpkg.now.sh/LiamRiddell/ohm/packages/cli?main",
+		"@ohm-js/cli": "https://gitpkg.now.sh/LiamRiddell/ohm/packages/cli?cli-includes",
 		"@types/convert-units": "^2.3.8",
 		"@types/node": "16.18.39",
 		"@typescript-eslint/eslint-plugin": "6.2.0",

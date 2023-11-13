@@ -170,6 +170,21 @@ export class SettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		new Setting(this.containerEl)
+			.setName("Dice")
+			.setDesc(
+				`Enable the dice provider e.g. roll(1, 100), roll between 1 and 12. Default is ${DEFAULT_SETTINGS.diceProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.diceProvider.enabled)
+					.onChange(async (value) => {
+						this.plugin.settings.diceProvider.enabled = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayInterfaceSettings() {

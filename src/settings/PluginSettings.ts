@@ -36,6 +36,9 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	unitOfMeasurementProvider: {
 		enabled: true,
 	},
+	diceProvider: {
+		enabled: true,
+	},
 
 	// Results
 	integerResult: {},
