@@ -53,4 +53,12 @@ settings:
         type: variable-number
         default: 4
         format: px
+    - 
+        id: solve-result-hover-underline-color
+        title: Text Underline Hover Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#00000000'
+        default-dark: '#00000000'
 */

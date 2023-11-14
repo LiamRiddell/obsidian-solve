@@ -37,4 +37,19 @@
 	border-style: var(--solve-result-border-style, solid);
 	border-width: var(--solve-result-border-width, 0);
 	border-radius: var(--solve-result-border-radius, 4px);
+
+	/* Hover */
+	text-decoration: dotted;
+	text-decoration-line: underline;
+	text-underline-offset: 2px;
+	text-decoration-color: transparent;
+	transition: all 150ms;
+}
+
+.os-result:hover {
+	cursor: pointer;
+	text-decoration-color: var(
+		--solve-result-hover-underline-color,
+		currentColor
+	);
 }

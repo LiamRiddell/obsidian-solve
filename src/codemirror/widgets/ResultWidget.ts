@@ -1,3 +1,5 @@
+import { EPluginEvent } from "@/constants/EPluginEvent";
+import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import UserSettings from "@/settings/UserSettings";
 import { EditorView, WidgetType } from "@codemirror/view";
 
@@ -19,6 +21,15 @@ export class ResultWidget extends WidgetType {
 		).number;
 
 		const div = document.createElement("div");
+		div.title = "Click to commit this result";
+
+		div.addEventListener("click", () => {
+			pluginEventBus.emit(
+				EPluginEvent.WriteResult,
+				this.lineNumber,
+				this.value
+			);
+		});
 
 		if (this.userSettings.interface.animateResults) {
 			div.style.setProperty(
@@ -27,13 +38,18 @@ export class ResultWidget extends WidgetType {
 			);
 		}
 
-		div.classList.add(...["os-result", "animate__animated"]);
+		div.classList.add("os-result");
 
 		if (
 			this.userSettings.interface.animateResults &&
 			this.lineNumber === activeLineNumber
 		) {
-			div.classList.add(this.userSettings.interface.animationClass);
+			div.classList.add(
+				...[
+					"animate__animated",
+					this.userSettings.interface.animationClass,
+				]
+			);
 		}
 
 		div.textContent = `${this.value}`;
