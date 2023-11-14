@@ -1,3 +1,3 @@
-export const logb = (base: number, value: number): number => {
+export const logBase = (base: number, value: number): number => {
 	return Math.log(value) / Math.log(base);
 };

@@ -8,7 +8,7 @@ import { NumberResult } from "@/results/NumberResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 import { degreesToRadians, radiansToDegrees } from "@/utilities/math/Angle";
-import { logb } from "@/utilities/math/Log";
+import { logBase } from "@/utilities/math/Log";
 
 export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionArithmeticSemantics> {
 	constructor() {
@@ -29,7 +29,7 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 			LogBase(_, _l, baseNode, _s, valueNode, _r) {
 				const base = baseNode.visit();
 				const value = valueNode.visit();
-				return new NumberResult(logb(base.value, value.value));
+				return new NumberResult(logBase(base.value, value.value));
 			},
 			JavascriptMathObjectFunction(functionName, _l, e, _r) {
 				const functionNameLower =
