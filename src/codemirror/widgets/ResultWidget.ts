@@ -19,13 +19,20 @@ export class ResultWidget extends WidgetType {
 		).number;
 
 		const div = document.createElement("div");
-		div.style.setProperty(
-			"--animate-duration",
-			this.userSettings.interface.animationDuration
-		);
+
+		if (this.userSettings.interface.animateResults) {
+			div.style.setProperty(
+				"--animate-duration",
+				this.userSettings.interface.animationDuration
+			);
+		}
+
 		div.classList.add(...["os-result", "animate__animated"]);
 
-		if (this.lineNumber === activeLineNumber) {
+		if (
+			this.userSettings.interface.animateResults &&
+			this.lineNumber === activeLineNumber
+		) {
 			div.classList.add(this.userSettings.interface.animationClass);
 		}
 
