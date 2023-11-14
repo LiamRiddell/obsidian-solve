@@ -59,9 +59,12 @@ export interface BasicArithmeticGrammar extends Grammar {
 export interface FunctionArithmeticActionDict<T> extends BasicArithmeticActionDict<T> {
   P_parenthesis?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: TerminalNode) => T;
   P?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  Function_function?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode) => T;
   Function?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  function?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  LogBaseFunction?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: TerminalNode) => T;
+  DegreesToRadians?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode) => T;
+  RadiansToDegrees?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode) => T;
+  JavascriptMathObjectFunction?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode) => T;
+  mathJsName?: (this: NonterminalNode, arg0: NonterminalNode) => T;
 }
 
 export interface FunctionArithmeticSemantics extends Semantics {
