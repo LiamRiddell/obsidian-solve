@@ -26,7 +26,7 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 				const radians = radiansNode.visit();
 				return new NumberResult(radiansToDegrees(radians.value));
 			},
-			LogBaseFunction(_, _l, baseNode, _s, valueNode, _r) {
+			LogBase(_, _l, baseNode, _s, valueNode, _r) {
 				const base = baseNode.visit();
 				const value = valueNode.visit();
 				return new NumberResult(logb(base.value, value.value));

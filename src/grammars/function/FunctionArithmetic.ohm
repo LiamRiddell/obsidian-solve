@@ -9,10 +9,10 @@ FunctionArithmetic <: BasicArithmetic {
   Function
     = DegreesToRadians
     | RadiansToDegrees
-    | LogBaseFunction
+    | LogBase
     | JavascriptMathObjectFunction
 
-  LogBaseFunction 
+  LogBase 
     = caseInsensitive<"logb"> "(" number "," number ")"
     | caseInsensitive<"logBase"> "(" number "," number ")"
 
