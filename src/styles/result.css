@@ -44,6 +44,11 @@
 	text-underline-offset: 2px;
 	text-decoration-color: transparent;
 	transition: all 150ms;
+
+	/* Anti-blur for animation */
+	-webkit-font-smoothing: antialiased;
+	backface-visibility: hidden;
+	transform: translate3d(0, 0, 0);
 }
 
 .os-result:hover {
