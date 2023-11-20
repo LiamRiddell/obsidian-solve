@@ -76,6 +76,11 @@ export default class SolvePlugin extends Plugin {
 			EPluginEvent.StatusBarUpdate,
 			this.onStatusBarUpdateEvent.bind(this)
 		);
+
+		pluginEventBus.on(
+			EPluginEvent.WriteResultToActiveDocumentLine,
+			this.onWriteResultEvent.bind(this)
+		);
 	}
 
 	private async restoreUserSettings() {
@@ -145,5 +150,18 @@ export default class SolvePlugin extends Plugin {
 				setTimeout(() => this.statusBarItemEl.setText("Solve 😴"), 700);
 				break;
 		}
+	}
+
+	private async onWriteResultEvent(lineNumber: number, resultValue: string) {
+		const lineNumberZeroIndexed = Math.max(0, lineNumber - 1);
+
+		const lineText = this.app.workspace.activeEditor?.editor?.getLine(
+			lineNumberZeroIndexed
+		);
+
+		this.app.workspace.activeEditor?.editor?.setLine(
+			lineNumberZeroIndexed,
+			`${lineText?.trimEnd()} ${resultValue}`
+		);
 	}
 }

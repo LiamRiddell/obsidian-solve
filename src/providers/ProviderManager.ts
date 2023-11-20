@@ -1,6 +1,7 @@
 import { IProvider } from "@/providers/IProvider";
 import { BasicArithmeticProvider } from "@/providers/arithmetic/BasicArithmeticProvider";
 import { DatetimeProvider } from "@/providers/datetime/DatetimeProvider";
+import { DiceProvider } from "@/providers/dice/DiceProvider";
 import { FunctionArithmeticProvider } from "@/providers/function/FunctionArithmeticProvider";
 import { PercentageArithmeticProvider } from "@/providers/percentage/PercentageArithmeticProvider";
 import { UnitsOfMeasurementProvider } from "@/providers/uom/UnitsOfMeasurementProvider";
@@ -70,6 +71,7 @@ class ProviderManager {
 		this.registerProvider(new BasicArithmeticProvider());
 		this.registerProvider(new FunctionArithmeticProvider());
 		this.registerProvider(new VectorArithmeticProvider());
+		this.registerProvider(new DiceProvider());
 	}
 }
 

@@ -7,13 +7,32 @@ FunctionArithmetic <: BasicArithmetic {
     | Primitive
 
   Function
-    = function "(" ListOf<Expression, ","> ")" -- function
+    = DegreesToRadians
+    | RadiansToDegrees
+    | LogBase
+    | JavascriptMathObjectFunction
 
-  // IMPORTANT: https://ohmjs.org/docs/patterns-and-pitfalls#reserved-words--keywords 
-  function 
- 	  = caseInsensitive<"degToRad">
-    | caseInsensitive<"radToDeg">
-    | caseInsensitive<"sinh">
+  LogBase 
+    = caseInsensitive<"logb"> "(" number "," number ")"
+    | caseInsensitive<"logBase"> "(" number "," number ")"
+
+  DegreesToRadians 
+    = caseInsensitive<"degToRad"> "(" number ")"
+    | caseInsensitive<"degreesToRadians"> "(" number ")"
+    | caseInsensitive<"radians"> "(" number ")"
+    | caseInsensitive<"toRadians"> "(" number ")"
+
+  RadiansToDegrees 
+    = caseInsensitive<"radToDeg"> "(" number ")"
+    | caseInsensitive<"radiansToDegrees"> "(" number ")"
+    | caseInsensitive<"degrees"> "(" number ")"
+    | caseInsensitive<"toDegrees"> "(" number ")"
+
+  // Pass-through for Math.* functions from JS
+  JavascriptMathObjectFunction = mathJsName "(" ListOf<Expression, ","> ")"
+
+  mathJsName 
+ 	  = caseInsensitive<"sinh">
     | caseInsensitive<"sin">
     | caseInsensitive<"abs">
     | caseInsensitive<"acosh">

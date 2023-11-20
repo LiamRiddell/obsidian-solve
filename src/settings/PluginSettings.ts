@@ -10,6 +10,9 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	interface: {
 		renderResultEndOfLine: false,
 		showStatusBarCompanion: true,
+		animateResults: true,
+		animationClass: "animate__pulse",
+		animationDuration: "200ms",
 	},
 
 	// Providers
@@ -31,6 +34,9 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		parsingFormat: EDatetimeParsingFormat.EU,
 	},
 	unitOfMeasurementProvider: {
+		enabled: true,
+	},
+	diceProvider: {
 		enabled: true,
 	},
 

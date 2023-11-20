@@ -1,6 +1,7 @@
 import { IArithmeticProviderSettings } from "@/settings/definition/IArithmeticProviderSettings";
 import { IDatetimeProviderSettings } from "@/settings/definition/IDatetimeProviderSettings";
 import { IDatetimeResultSettings } from "@/settings/definition/IDatetimeResultSettings";
+import { IDiceProviderSettings } from "@/settings/definition/IDiceProviderSettings";
 import { IEngineSettings } from "@/settings/definition/IEngineSettings";
 import { IFloatResultSettings } from "@/settings/definition/IFloatResultSettings";
 import { IFunctionArithmeticProviderSettings } from "@/settings/definition/IFuntionArithmeticProviderSettings";
@@ -24,6 +25,7 @@ export interface IPluginSettings {
 	percentageArithmeticProvider: IPercentageProviderSettings;
 	datetimeProvider: IDatetimeProviderSettings;
 	unitOfMeasurementProvider: IUnitOfMeasurementProviderSettings;
+	diceProvider: IDiceProviderSettings;
 
 	// Results
 	integerResult: IIntegerResultSettings;

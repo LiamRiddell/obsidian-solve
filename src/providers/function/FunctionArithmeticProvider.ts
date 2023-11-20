@@ -7,6 +7,8 @@ import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
+import { degreesToRadians, radiansToDegrees } from "@/utilities/math/Angle";
+import { logBase } from "@/utilities/math/Log";
 
 export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionArithmeticSemantics> {
 	constructor() {
@@ -14,12 +16,22 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 
 		this.semantics = grammar.FunctionArithmetic.createSemantics();
 
-		const degToRad = (degrees: number) => degrees * (Math.PI / 180);
-		const radToDeg = (radians: number) => radians / (Math.PI / 180);
-
 		this.semantics.addOperation<NumberResult | HexResult>("visit()", {
 			...basicArithmeticSemanticActions,
-			Function_function(functionName, _l, e, _r) {
+			DegreesToRadians(_, _l, degreesNode, _r) {
+				const degrees = degreesNode.visit();
+				return new NumberResult(degreesToRadians(degrees.value));
+			},
+			RadiansToDegrees(_, _l, radiansNode, _r) {
+				const radians = radiansNode.visit();
+				return new NumberResult(radiansToDegrees(radians.value));
+			},
+			LogBase(_, _l, baseNode, _s, valueNode, _r) {
+				const base = baseNode.visit();
+				const value = valueNode.visit();
+				return new NumberResult(logBase(base.value, value.value));
+			},
+			JavascriptMathObjectFunction(functionName, _l, e, _r) {
 				const functionNameLower =
 					functionName.sourceString.toLowerCase();
 
@@ -29,24 +41,9 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 
 				const mathFunc = (Math as any)[functionNameLower];
 
-				switch (functionNameLower) {
-					case "degtorad":
-						return new NumberResult(
-							// @ts-expect-error
-							degToRad(...argumentsArray)
-						);
-
-					case "radtodeg":
-						return new NumberResult(
-							// @ts-expect-error
-							radToDeg(...argumentsArray)
-						);
-
-					default:
-						return new NumberResult(
-							mathFunc ? mathFunc(...argumentsArray) : 0
-						);
-				}
+				return new NumberResult(
+					mathFunc ? mathFunc(...argumentsArray) : 0
+				);
 			},
 		});
 	}

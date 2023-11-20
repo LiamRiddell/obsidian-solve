@@ -1,7 +1,7 @@
 {
 	"name": "solve",
-	"version": "0.6.0",
-	"description": "Level Up Your Notes: Introducing Solve – Your Math Maestro! Real-time calculations without AI fuss. From date magic ('Now + 20 days') to arithmetic flair ('10 + 5'), your trusted sidekick in every note. More brilliance on the way!",
+	"version": "0.7.0",
+	"description": "Supercharge your notes in with real-time calculations without AI fuss. From date magic ('Now + 20 days') to arithmetic flair ('10 + 5').",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -17,7 +17,7 @@
 	"devDependencies": {
 		"@jest/globals": "^29.6.2",
 		"@lezer/common": "^1.0.3",
-		"@ohm-js/cli": "https://gitpkg.now.sh/LiamRiddell/ohm/packages/cli?main",
+		"@ohm-js/cli": "https://gitpkg.now.sh/LiamRiddell/ohm/packages/cli?cli-includes",
 		"@types/convert-units": "^2.3.8",
 		"@types/node": "16.18.39",
 		"@typescript-eslint/eslint-plugin": "6.2.0",
@@ -33,6 +33,7 @@
 		"typescript": "5.1.6"
 	},
 	"dependencies": {
+		"animate.css": "^4.1.1",
 		"convert-units": "^2.3.4",
 		"moment": "^2.29.4",
 		"ohm-js": "^17.1.0"

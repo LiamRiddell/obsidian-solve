@@ -157,7 +157,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				lineText = this.handleVariables(lineText);
 
 				// The line is valid and decoration can be provided.
-				const decoration = this.provideDecoration(lineText);
+				const decoration = this.provideDecoration(
+					lineText,
+					line.number
+				);
 
 				if (decoration) {
 					builder.add(line.to, line.to, decoration);
@@ -197,7 +200,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		return false;
 	}
 
-	private provideDecoration(sentence: string) {
+	private provideDecoration(sentence: string, lineNumber: number) {
 		let isExplicitlyDefinedSentence = false;
 
 		// When explicit mode is enabled the sentence will end with = sign.
@@ -238,7 +241,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		return Decoration.widget({
-			widget: new ResultWidget(result),
+			widget: new ResultWidget(result, lineNumber),
 			side: 1,
 		});
 	}

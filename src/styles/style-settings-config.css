@@ -1,0 +1,64 @@
+/* @settings
+name: Solve
+id: obsidian-solve
+settings:
+	- 
+        id: solve-result-margin
+        title: Margin
+        type: variable-text
+        default: 0 0 0 4px
+    - 
+        id: solve-result-padding
+        title: Padding
+        type: variable-text
+        default: 0 0 0 4px			
+    - 
+        id: solve-result-text
+        title: Text Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#29ce99e8'
+        default-dark: '#29ce99e8'
+    -
+        id: solve-result-background
+        title: Background Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#22CE9900'
+        default-dark: '#22CE9900'
+	- 
+        id: solve-result-border-color
+        title: Border Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#00000000'
+        default-dark: '#00000000'
+	- 
+        id: solve-result-border-style
+        title: Border Style
+        type: variable-text
+        default: solid		
+	- 
+        id: solve-result-border-width
+        title: Border Width
+        type: variable-number
+        default: 0
+        format: px
+    - 
+        id: solve-result-border-radius
+        title: Border Radius
+        type: variable-number
+        default: 4
+        format: px
+    - 
+        id: solve-result-hover-underline-color
+        title: Text Underline Hover Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#00000000'
+        default-dark: '#00000000'
+*/

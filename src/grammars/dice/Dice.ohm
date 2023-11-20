@@ -1,0 +1,36 @@
+Dice {
+  Expression = Roll
+
+  /*
+    Patterns Examples:
+    roll(0, 7)
+    roll between 1 and 4
+    roll from 2 to 6
+    roll 4-8
+  */
+  Roll
+    = caseInsensitive<"roll"> rollOpen? Primitive rollSeperator? Primitive rollEnd?
+
+  Primitive
+    = "+" Primitive -- positive
+    | "-" Primitive -- negative
+    | number
+
+  rollOpen 
+    = "("
+    | caseInsensitive<"between">
+    | caseInsensitive<"from">
+
+  rollSeperator
+    = ","
+    | "-"
+    | caseInsensitive<"and">
+    | caseInsensitive<"to">
+
+  rollEnd
+    = ")"
+
+  number
+    = digit* "." digit+  -- fract
+    | digit+             -- whole
+} 

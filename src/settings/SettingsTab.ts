@@ -1,3 +1,4 @@
+import { ANIMATE_CSS_TRANSITIONS_OPTIONS } from "@/constants/AnimateCssOptions";
 import { EDatetimeParsingFormat } from "@/constants/EDatetimeFormat";
 import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
 import SolvePlugin from "@/main";
@@ -169,6 +170,21 @@ export class SettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		new Setting(this.containerEl)
+			.setName("Dice")
+			.setDesc(
+				`Enable the dice provider e.g. roll(1, 100), roll between 1 and 12. Default is ${DEFAULT_SETTINGS.diceProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.diceProvider.enabled)
+					.onChange(async (value) => {
+						this.plugin.settings.diceProvider.enabled = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayInterfaceSettings() {
@@ -236,6 +252,59 @@ export class SettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		// Animation
+		new Setting(this.containerEl)
+			.setName("Animate results")
+			.setDesc(
+				`Enable animate results on the current active line that is being solved. Default is ${DEFAULT_SETTINGS.interface.animateResults}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.interface.animateResults)
+					.onChange(async (value) => {
+						this.plugin.settings.interface.animateResults = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Animation transition")
+			.setDesc(
+				`Specify the transition class name from Animate.css to use on animated results. Default is ${DEFAULT_SETTINGS.interface.animationClass.replace(
+					"animate__",
+					""
+				)}`
+			)
+			.addDropdown((dropdown) => {
+				const value = this.plugin.settings.interface.animationClass;
+
+				dropdown.addOptions(ANIMATE_CSS_TRANSITIONS_OPTIONS);
+
+				dropdown.setValue(value);
+
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.interface.animationClass = value;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(this.containerEl)
+			.setName("Animation duration")
+			.setDesc(
+				`Specify the animation duration (CSS format) to use for animated results. Default is ${DEFAULT_SETTINGS.interface.animationDuration}`
+			)
+			.addText((text) => {
+				const value = this.plugin.settings.interface.animationDuration;
+
+				text.setValue(value);
+
+				text.onChange(async (value) => {
+					this.plugin.settings.interface.animationDuration = value;
+					await this.plugin.saveSettings();
+				});
+			});
 	}
 
 	displayArithmeticProviderSettings() {

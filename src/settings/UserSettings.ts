@@ -3,6 +3,7 @@ import { IPluginSettings } from "@/settings/definition/IPluginSettings";
 import { ArithmeticProviderSettings } from "@/settings/properties/ArithmeticProviderSettings";
 import { DatetimeProviderSettings } from "@/settings/properties/DatetimeProviderSettings";
 import { DatetimeResultSettings } from "@/settings/properties/DatetimeResultSettings";
+import { DiceProviderSettings } from "@/settings/properties/DiceProviderSettings";
 import { EngineSettings } from "@/settings/properties/EngineSettings";
 import { FloatResultSettings } from "@/settings/properties/FloatResultSettings";
 import { FunctionArithmeticProviderSettings } from "@/settings/properties/FunctionArithmeticProviderSettings";
@@ -29,6 +30,7 @@ export default class UserSettings {
 	public readonly percentageArithmeticProvider: PercentageArithmeticProviderSettings;
 	public readonly datetimeProvider: DatetimeProviderSettings;
 	public readonly unitOfMeasurementProvider: UnitOfMeasurementProviderSettings;
+	public readonly diceProvider: DiceProviderSettings;
 
 	// Result Settings
 	public readonly integerResult: IntegerResultSettings;
@@ -58,6 +60,7 @@ export default class UserSettings {
 		this.unitOfMeasurementProvider = new UnitOfMeasurementProviderSettings(
 			this
 		);
+		this.diceProvider = new DiceProviderSettings(this);
 
 		// Results
 		this.integerResult = new IntegerResultSettings(this);
