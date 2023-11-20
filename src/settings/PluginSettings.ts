@@ -11,7 +11,7 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		renderResultEndOfLine: false,
 		showStatusBarCompanion: true,
 		animateResults: true,
-		animationClass: "animate__fadeInDown",
+		animationClass: "animate__pulse",
 		animationDuration: "200ms",
 	},
 
