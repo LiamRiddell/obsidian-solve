@@ -1,4 +1,4 @@
 export enum EPluginEvent {
 	StatusBarUpdate,
-	WriteResult,
+	WriteResultToActiveDocumentLine,
 }

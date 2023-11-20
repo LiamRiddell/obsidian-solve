@@ -25,7 +25,7 @@ export class ResultWidget extends WidgetType {
 
 		div.addEventListener("click", () => {
 			pluginEventBus.emit(
-				EPluginEvent.WriteResult,
+				EPluginEvent.WriteResultToActiveDocumentLine,
 				this.lineNumber,
 				this.value
 			);

@@ -78,7 +78,7 @@ export default class SolvePlugin extends Plugin {
 		);
 
 		pluginEventBus.on(
-			EPluginEvent.WriteResult,
+			EPluginEvent.WriteResultToActiveDocumentLine,
 			this.onWriteResultEvent.bind(this)
 		);
 	}
