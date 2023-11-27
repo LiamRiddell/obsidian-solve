@@ -4,7 +4,6 @@ import { Pipeline } from "@/pipelines/definition/Pipeline";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/CommentsRemovalStage";
 import { SharedMarkdownRemovalStage } from "@/pipelines/stages/MarkdownRemovalStage";
 import { VariableProcessingStage } from "@/pipelines/stages/VariableProcessingStage";
-import { IResult } from "@/results/definition/IResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
@@ -33,8 +32,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		"HyperMD-list-line",
 	];
 
-	private variableMap = new Map<string, IResult<any>>();
-
 	private processingPipeline: Pipeline<string>;
 
 	constructor(view: EditorView) {
@@ -56,8 +53,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				EPluginEvent.StatusBarUpdate,
 				EPluginStatus.Solving
 			);
-
-			this.variableMap.clear();
 
 			// console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
 			this.decorations = this.buildDecorations(update.view);
