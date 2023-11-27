@@ -1,6 +1,6 @@
 {
 	"name": "solve",
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"description": "Supercharge your notes in with real-time calculations without AI fuss. From date magic ('Now + 20 days') to arithmetic flair ('10 + 5').",
 	"main": "main.js",
 	"scripts": {
