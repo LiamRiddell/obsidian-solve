@@ -240,6 +240,22 @@ describe("Multiplication", () => {
 			new HexResult(0x20 * 0xc)
 		);
 	});
+
+	test("0x20 × 0xC", () => {
+		expectProviderResultAndType<HexResult>(
+			provider,
+			"0x20 × 0xC",
+			new HexResult(0x20 * 0xc)
+		);
+	});
+
+	test("27.3 x 8.2", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"27.3 x 8.2",
+			new NumberResult(27.3 * 8.2)
+		);
+	});
 });
 
 describe("Division", () => {
@@ -287,6 +303,14 @@ describe("Division", () => {
 		expectProviderResultAndType<HexResult>(
 			provider,
 			"0x20 / 0xC",
+			new HexResult(0x20 / 0xc)
+		);
+	});
+
+	test("0x20 ÷ 0xC", () => {
+		expectProviderResultAndType<HexResult>(
+			provider,
+			"0x20 ÷ 0xC",
 			new HexResult(0x20 / 0xc)
 		);
 	});
