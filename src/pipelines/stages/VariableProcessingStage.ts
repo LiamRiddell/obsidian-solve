@@ -2,7 +2,7 @@ import { BasePipelineStage } from "@/pipelines/definition/stages/BasePipelineSta
 import { solveProviderManager } from "@/providers/ProviderManager";
 import { IResult } from "@/results/definition/IResult";
 
-// Important: Since this stage is stateful it can not be used in shared context.
+// Important: Since this stage is stateful it can not be used in a shared context.
 export class VariableProcessingStage extends BasePipelineStage<string> {
 	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
 	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
