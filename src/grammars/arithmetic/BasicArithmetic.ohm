@@ -53,6 +53,7 @@ BasicArithmetic {
       
   multiply 
     = "*"
+    | "\\*" // Escaped e.g. \* for markdown
     | caseInsensitive<"times by">
     | caseInsensitive<"times">
     | caseInsensitive<"multiply by">

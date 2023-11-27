@@ -232,6 +232,14 @@ describe("Multiplication", () => {
 			new HexResult(0x20 * 0xc)
 		);
 	});
+
+	test("0x20 \\* 0xC (Escaped)", () => {
+		expectProviderResultAndType<HexResult>(
+			provider,
+			"0x20 \\* 0xC",
+			new HexResult(0x20 * 0xc)
+		);
+	});
 });
 
 describe("Division", () => {
