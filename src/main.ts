@@ -8,9 +8,11 @@ import { solveProviderManager } from "@/providers/ProviderManager";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { SettingTab } from "@/settings/SettingsTab";
 import UserSettings from "@/settings/UserSettings";
+import { minValueExcludingBelow } from "@/utilities/Array";
 import { logger } from "@/utilities/Logger";
+import { insertAtIndex } from "@/utilities/String";
 import { ViewPlugin } from "@codemirror/view";
-import { Plugin } from "obsidian";
+import { Notice, Plugin } from "obsidian";
 
 export default class SolvePlugin extends Plugin {
 	settings: UserSettings;
@@ -54,6 +56,8 @@ export default class SolvePlugin extends Plugin {
 
 		await this.addStatusBarCompanion();
 		logger.debug(`[Solve] Added: Status Bar Companion`);
+
+		await this.registerCommands();
 	}
 
 	public onunload() {
@@ -132,6 +136,50 @@ export default class SolvePlugin extends Plugin {
 		pluginEventBus.emit(EPluginEvent.StatusBarUpdate, EPluginStatus.Idle);
 	}
 
+	private async registerCommands() {
+		this.addCommand({
+			id: "commit-result-current-line",
+			name: "Commit result on current line",
+			editorCallback(editor, ctx) {
+				const currentLineNumber = editor.getCursor("head").line + 1;
+
+				const { containerEl } = editor as any;
+
+				const resultElement = (
+					containerEl as HTMLElement
+				).querySelector<HTMLElement>(`#osr-${currentLineNumber}`);
+
+				if (resultElement) {
+					resultElement.click();
+				} else {
+					new Notice(
+						"Solve: Failed to commit, no result found on the current line."
+					);
+				}
+			},
+		});
+
+		this.addCommand({
+			id: "commit-result-all-visible",
+			name: "Commit all visible results",
+			editorCallback(editor, ctx) {
+				const { containerEl } = editor as any;
+
+				const resultElements = (
+					containerEl as HTMLElement
+				).querySelectorAll<HTMLElement>(`.os-result`);
+
+				for (let i = 0; i < resultElements.length; i++) {
+					const resultElement = resultElements[i];
+
+					if (resultElement) {
+						resultElement.click();
+					}
+				}
+			},
+		});
+	}
+
 	public async setStatusBarCompanionVisibility(visible: boolean) {
 		if (visible) {
 			this.statusBarItemEl.style.display = "inline-block";
@@ -155,13 +203,32 @@ export default class SolvePlugin extends Plugin {
 	private async onWriteResultEvent(lineNumber: number, resultValue: string) {
 		const lineNumberZeroIndexed = Math.max(0, lineNumber - 1);
 
-		const lineText = this.app.workspace.activeEditor?.editor?.getLine(
+		let lineText = this.app.workspace.activeEditor?.editor?.getLine(
 			lineNumberZeroIndexed
 		);
 
+		if (typeof lineText === "undefined") {
+			return;
+		}
+
+		const commentsBeginIndex = minValueExcludingBelow([
+			lineText.indexOf("#"),
+			lineText.indexOf("//"),
+		]);
+
+		if (commentsBeginIndex > -1) {
+			lineText = insertAtIndex(
+				lineText,
+				commentsBeginIndex,
+				` ${resultValue} ` // Whitespace normalised for format.. Expression Result Comment
+			);
+		} else {
+			lineText = `${lineText?.trimEnd()} ${resultValue}`;
+		}
+
 		this.app.workspace.activeEditor?.editor?.setLine(
 			lineNumberZeroIndexed,
-			`${lineText?.trimEnd()} ${resultValue}`
+			lineText
 		);
 	}
 }

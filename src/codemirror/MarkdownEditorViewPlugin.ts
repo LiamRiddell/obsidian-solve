@@ -1,6 +1,9 @@
 import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
-import { IResult } from "@/results/definition/IResult";
+import { Pipeline } from "@/pipelines/definition/Pipeline";
+import { SharedCommentsRemovalStage } from "@/pipelines/stages/CommentsRemovalStage";
+import { SharedMarkdownRemovalStage } from "@/pipelines/stages/MarkdownRemovalStage";
+import { VariableProcessingStage } from "@/pipelines/stages/VariableProcessingStage";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
@@ -28,14 +31,18 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		"list",
 		"HyperMD-list-line",
 	];
-	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
-	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
-	private variableMap = new Map<string, IResult<any>>();
+
+	private processingPipeline: Pipeline<string>;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
 
 		this.userSettings = UserSettings.getInstance();
+
+		this.processingPipeline = new Pipeline<string>()
+			.addStage(SharedMarkdownRemovalStage)
+			.addStage(SharedCommentsRemovalStage)
+			.addStage(new VariableProcessingStage());
 
 		this.decorations = this.buildDecorations(view);
 	}
@@ -46,8 +53,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				EPluginEvent.StatusBarUpdate,
 				EPluginStatus.Solving
 			);
-
-			this.variableMap.clear();
 
 			// console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
 			this.decorations = this.buildDecorations(update.view);
@@ -87,6 +92,13 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				from,
 				to,
 				enter: (node: SyntaxNodeRef) => {
+					// console.log(
+					// 	node.type.name,
+					// 	node.from,
+					// 	node.to,
+					// 	view.state.doc.sliceString(node.from, node.to)
+					// );
+
 					if (this.isNodeIgnoredFromMask(node.type.name)) {
 						return;
 					}
@@ -146,15 +158,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					continue;
 				}
 
-				// Ignored nodes e.g. block qoutes (>), lists (-), checked list ([ ]) will remove the
-				// markdown formatting at the start of the string.
-				lineText = lineText.replace(
-					/^(?:(?:[-+*>]|(?:\[\s\])|(?:\d+\.))\s)+/m,
-					""
-				);
-
-				// Variable Support (Scoped to view)
-				lineText = this.handleVariables(lineText);
+				// logger.debug("Before Pipeline:", lineText);
+				lineText = this.processingPipeline.process(lineText);
+				// logger.debug("After Pipeline:", lineText);
 
 				// The line is valid and decoration can be provided.
 				const decoration = this.provideDecoration(
@@ -245,74 +251,4 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			side: 1,
 		});
 	}
-
-	//#region Variables
-	private handleVariables(sentence: string) {
-		const variableAssignmentMatch = sentence.match(
-			this.variableAssignmentRegex
-		);
-
-		if (variableAssignmentMatch && variableAssignmentMatch.length > 0) {
-			this.parseVariable(variableAssignmentMatch[1], sentence);
-		} else {
-			const variableMatches = [
-				...sentence.matchAll(this.variableSubstitutionRegex),
-			];
-
-			if (variableMatches.length > 0) {
-				sentence = this.substituteVariables(sentence, variableMatches);
-			}
-		}
-
-		return sentence;
-	}
-
-	private parseVariable(name: string, expression: string) {
-		const assignmentPosition = expression.indexOf("=");
-		if (assignmentPosition > -1) {
-			const assignmentExpression = expression.substring(
-				assignmentPosition + 1
-			);
-
-			const result = solveProviderManager.provideFirst(
-				assignmentExpression,
-				true
-			);
-
-			if (result !== undefined) {
-				this.variableMap.set(name, result as any as IResult<any>);
-			}
-		}
-
-		return false;
-	}
-
-	private substituteVariables(
-		expression: string,
-		variablesMatches: RegExpMatchArray[]
-	) {
-		let expressionSubstituted = expression;
-
-		for (let i = 0; i < variablesMatches.length; i++) {
-			const variableMatch = variablesMatches[i];
-
-			if (!variableMatch) continue;
-
-			const variableName = variableMatch[0];
-
-			if (this.variableMap.has(variableName)) {
-				const variableValue = this.variableMap.get(variableName);
-
-				if (variableValue) {
-					expressionSubstituted = expressionSubstituted.replace(
-						variableName,
-						variableValue.value
-					);
-				}
-			}
-		}
-
-		return expressionSubstituted;
-	}
-	//#endregion
 }

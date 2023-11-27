@@ -53,6 +53,9 @@ BasicArithmetic {
       
   multiply 
     = "*"
+    | "\\*" // Escaped \* for markdown
+    | "\u{00D7}" // ×
+    | caseInsensitive<"x">
     | caseInsensitive<"times by">
     | caseInsensitive<"times">
     | caseInsensitive<"multiply by">
@@ -60,6 +63,7 @@ BasicArithmetic {
       
   divide
     = "/"
+    | "\u{00F7}" // ÷
     | caseInsensitive<"divide by">
     | caseInsensitive<"divide">
 
