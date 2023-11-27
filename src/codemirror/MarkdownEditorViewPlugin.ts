@@ -98,6 +98,13 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				from,
 				to,
 				enter: (node: SyntaxNodeRef) => {
+					// console.log(
+					// 	node.type.name,
+					// 	node.from,
+					// 	node.to,
+					// 	view.state.doc.sliceString(node.from, node.to)
+					// );
+
 					if (this.isNodeIgnoredFromMask(node.type.name)) {
 						return;
 					}
@@ -157,9 +164,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					continue;
 				}
 
-				logger.debug("Before Pipeline:", lineText);
+				// logger.debug("Before Pipeline:", lineText);
 				lineText = this.processingPipeline.process(lineText);
-				logger.debug("After Pipeline:", lineText);
+				// logger.debug("After Pipeline:", lineText);
 
 				// The line is valid and decoration can be provided.
 				const decoration = this.provideDecoration(
