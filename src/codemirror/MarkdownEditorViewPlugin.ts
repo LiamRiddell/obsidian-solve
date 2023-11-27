@@ -3,11 +3,11 @@ import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { Pipeline } from "@/pipelines/definition/Pipeline";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/CommentsRemovalStage";
 import { SharedMarkdownRemovalStage } from "@/pipelines/stages/MarkdownRemovalStage";
+import { VariableProcessingStage } from "@/pipelines/stages/VariableProcessingStage";
 import { IResult } from "@/results/definition/IResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
-import { VariableProcessingStage } from "@/pipelines/stages/VariableProcessingStage";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -32,8 +32,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		"list",
 		"HyperMD-list-line",
 	];
-	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
-	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
+
 	private variableMap = new Map<string, IResult<any>>();
 
 	private processingPipeline: Pipeline<string>;
