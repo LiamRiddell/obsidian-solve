@@ -21,6 +21,7 @@ export class ResultWidget extends WidgetType {
 		).number;
 
 		const div = document.createElement("div");
+		div.id = `osr-${this.lineNumber}`;
 		div.title = "Click to commit this result";
 
 		div.addEventListener("click", () => {
