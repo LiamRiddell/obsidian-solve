@@ -1,0 +1,96 @@
+ObsidianMarkdownParser {
+    Fragment 
+        = Elements?
+
+    Elements 
+        = Element+
+
+    Element 
+        = Header
+        | Blockquote
+        | HorizontalRule
+        | UnorderedList
+        | OrderedList
+        | Code
+        | Paragraph
+        | nonEmptyLine
+
+
+    /*
+        TODO:
+        1. Finish all basic blocks
+        2. Support nested blocks
+            a. Blockquoute
+            b. Ordered List
+            c. Unordered List
+            d. Task List
+    */
+  
+    // ========= Elements =========
+  
+    // Heading
+    Header 
+        = "#" spaces notNewline+
+    
+    // Blockquote
+    Blockquote
+        = ">" spaces notNewline+
+
+    // Horizontal Rule
+    HorizontalRule
+        = ("*" | "-" | "_") space? ("*" | "-" | "_") space? ("*" | "-" | "_")
+
+    // Unordered List
+    UnorderedList
+        = ("-" | "*" | "+") spaces notNewline+
+
+    // Ordered List
+    OrderedList
+        = digit+ "." spaces notNewline+
+
+    // Code
+    Code
+        = "```" (~"```" any)* "```"
+
+    // Links
+
+    // Images
+
+    // Tables
+
+    // Fenced Code Blocks
+
+    // Syntax Highlighting
+
+    // Task List
+    
+    // Paragraph
+    Paragraph 
+        = notNewline+
+
+
+    // ========= Ignored Elements (NOTE) =========
+    // 1. Bold
+    // 2. Italic
+    // 3. Emoji Shortcodes
+    // 4. Highlight
+    // 5.
+  
+    // block = header | bulletList | codeBlock | quoteBlock | paragraph | nonEmptyLine
+    /*
+        header = ("#" | "##" | "###") notNewline+
+        bulletList = bulletItem+
+        bulletItem = "*" (notNewline+ | bulletList)
+        codeBlock = "```" codeContent "```"
+        codeContent = (~"```" any)*
+        quoteBlock = ">" (notNewline+ | quoteBlock)*
+        paragraph = notNewline+
+        Link = "!"? "[["
+    */
+
+    nonEmptyLine = space* notNewline+
+
+    notNewline = ~newline any
+
+    newline = "\n" | "\r\n" | "\r"
+}
