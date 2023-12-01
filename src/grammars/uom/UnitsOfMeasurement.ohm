@@ -1,26 +1,31 @@
 include '../arithmetic/BasicArithmetic.ohm'
 
 UnitsOfMeasurementArithmetic <: BasicArithmetic {
-	Expression
-    	:=  Conversion
+		Expression
+    	:=  
+        | Conversion
         | ConversionPossiblities
 		| LogicalShift
         
     Primitive 
-        += UoM
+        += uom
         | percentage
         
    	Conversion
-    	= caseInsensitive<"convert">? UoM caseInsensitive<"to"> caseInsensitive<"best"> -- best
-        | caseInsensitive<"convert">? UoM caseInsensitive<"to"> Unit -- convert
+    	= caseInsensitive<"convert">? LogicalShift caseInsensitive<"to"> caseInsensitive<"best"> -- best
+        | caseInsensitive<"convert">? LogicalShift caseInsensitive<"to"> unit -- convert    
         	
     ConversionPossiblities
-        = caseInsensitive<"convert">? UoM caseInsensitive<"to"> "?"?
+        = caseInsensitive<"convert">? LogicalShift caseInsensitive<"to"> "?"?
     
-    UoM 
-        = number Unit
-
-    Unit
+    percentage 
+        = number "%"
+    
+    // Important: The reason we include `~("to" space+)` is to prevent matching "t" or "torr" units when used in expression "convert 100g + 20 to g"
+    uom 
+        = number spaces ~("to" ~"rr") spaces unit
+    
+    unit
         = "km3/s"
         | "yd3/h"
         | "yd3/min"
@@ -191,7 +196,4 @@ UnitsOfMeasurementArithmetic <: BasicArithmetic {
         | "Gb"
         | "Mb"
         | "b"
-
-    percentage 
-        = number "%"
 }

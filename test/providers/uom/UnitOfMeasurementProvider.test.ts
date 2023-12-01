@@ -358,3 +358,26 @@ describe("Conversion", () => {
 		);
 	});
 });
+
+describe("Negative Lookahead", () => {
+	test("100 kg + 2 to g", () => {
+		expectProviderResultAndType<UnitOfMeasurementResult>(
+			provider,
+			"100 kg + 2 to g",
+			new UnitOfMeasurementResult(
+				convert(100 + 2)
+					.from("kg")
+					.to("g"),
+				"g"
+			)
+		);
+	});
+
+	test("convert 1 torr to Pa", () => {
+		expectProviderResultAndType<UnitOfMeasurementResult>(
+			provider,
+			"convert 1 torr to Pa",
+			new UnitOfMeasurementResult(convert(1).from("torr").to("Pa"), "Pa")
+		);
+	});
+});
