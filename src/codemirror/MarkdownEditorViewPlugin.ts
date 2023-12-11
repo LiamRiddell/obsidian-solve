@@ -3,6 +3,7 @@ import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { Pipeline } from "@/pipelines/definition/Pipeline";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/CommentsRemovalStage";
 import { SharedMarkdownRemovalStage } from "@/pipelines/stages/MarkdownRemovalStage";
+import { PreviousResultSubstitutionStage } from "@/pipelines/stages/PreviousResultSubstitutionStage";
 import { VariableProcessingStage } from "@/pipelines/stages/VariableProcessingStage";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
@@ -33,15 +34,20 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	];
 
 	private processingPipeline: Pipeline<string>;
+	private previousResultSubstitutionStage: PreviousResultSubstitutionStage;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
 
 		this.userSettings = UserSettings.getInstance();
 
+		this.previousResultSubstitutionStage =
+			new PreviousResultSubstitutionStage();
+
 		this.processingPipeline = new Pipeline<string>()
 			.addStage(SharedMarkdownRemovalStage)
 			.addStage(SharedCommentsRemovalStage)
+			.addStage(this.previousResultSubstitutionStage)
 			.addStage(new VariableProcessingStage());
 
 		this.decorations = this.buildDecorations(view);
@@ -221,7 +227,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		// Initial implementation will show the first valid result from available providers.
-		const result = solveProviderManager.provideFirst(sentence);
+		const result = solveProviderManager.provideFirst<string>(sentence);
 
 		if (result === undefined) {
 			return undefined;
@@ -229,12 +235,12 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		// If the input sentence and the output is the same value ignore it.
 		// For example, 10 = 10
-		const sentenceLowercasedTrimmed = sentence.toLowerCase().trim();
-		const resultLowercaseTrimmed = result.startsWith("= ")
-			? result.substring(2).toLocaleLowerCase().trim()
-			: result.toLowerCase().trim();
+		const sentenceTrimmed = sentence.trim();
+		const resultTrimmed = result.startsWith("= ")
+			? result.substring(2).trim()
+			: result.trim();
 
-		if (sentenceLowercasedTrimmed === resultLowercaseTrimmed) {
+		if (sentenceTrimmed.toLowerCase() === resultTrimmed.toLowerCase()) {
 			return undefined;
 		}
 
@@ -245,6 +251,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		) {
 			return undefined;
 		}
+
+		// Updates the previous solve to be the new solve that's passed the checks
+		this.previousResultSubstitutionStage.setPreviousResultString(
+			resultTrimmed
+		);
 
 		return Decoration.widget({
 			widget: new ResultWidget(result, lineNumber),
