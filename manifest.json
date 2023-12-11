@@ -1,9 +1,9 @@
 {
 	"id": "solve",
 	"name": "Solve",
-	"version": "0.8.2",
+	"version": "0.9.0",
 	"minAppVersion": "0.15.0",
-	"description": "Level Up Your Notes: Introducing Solve – Your Math Maestro! Real-time calculations without AI fuss. From date magic ('Now + 20 days') to arithmetic flair ('10 + 5'), your trusted sidekick in every note. More brilliance on the way!",
+	"description": "Supercharge your notes in Obsdian with real-time calculations without AI fuss. From date magic ('Now + 20 days') to arithmetic flair ('10 + 5').",
 	"author": "Liam Riddell",
 	"authorUrl": "https://github.com/LiamRiddell",
 	"fundingUrl": {

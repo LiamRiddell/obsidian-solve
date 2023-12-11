@@ -178,6 +178,43 @@ export default class SolvePlugin extends Plugin {
 				}
 			},
 		});
+
+		this.addCommand({
+			id: "commit-result-selection-visible",
+			name: "Commit results in selection",
+			editorCallback(editor, ctx) {
+				const selectionStart = editor.getCursor("from");
+				const selectionEnd = editor.getCursor("to");
+
+				if (
+					selectionStart.line === selectionEnd.line &&
+					selectionStart.ch === selectionEnd.ch
+				) {
+					new Notice("Solve: Failed to commit, no text selected.");
+					return;
+				}
+
+				const { containerEl } = editor as any;
+
+				if (!containerEl) {
+					return;
+				}
+
+				for (
+					let i = selectionStart.line + 1;
+					i < selectionEnd.line + 1;
+					i++
+				) {
+					const resultElement = (
+						containerEl as HTMLElement
+					).querySelector<HTMLElement>(`#osr-${i + 1}`);
+
+					if (resultElement) {
+						resultElement.click();
+					}
+				}
+			},
+		});
 	}
 
 	public async setStatusBarCompanionVisibility(visible: boolean) {

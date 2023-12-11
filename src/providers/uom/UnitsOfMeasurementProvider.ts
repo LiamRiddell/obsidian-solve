@@ -57,13 +57,13 @@ export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeas
 
 				return new StringResult(possibilities);
 			},
-			UoM(numberNode, unitNode) {
+			uom(numberNode, _, _1, unitNode) {
 				const number = numberNode.visit() as INumericResult;
 				const unit = unitNode.visit() as UnitOfMeasurementResult;
 
 				return new UnitOfMeasurementResult(number.value, unit.unit);
 			},
-			Unit(_) {
+			unit(_) {
 				return new UnitOfMeasurementResult(0, this.sourceString);
 			},
 			percentage(numberNode, _) {

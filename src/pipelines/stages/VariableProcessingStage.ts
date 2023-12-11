@@ -1,11 +1,14 @@
 import { BasePipelineStage } from "@/pipelines/definition/stages/BasePipelineStage";
 import { solveProviderManager } from "@/providers/ProviderManager";
 import { IResult } from "@/results/definition/IResult";
+import { ResultSubstitutionFormatVisitor } from "@/visitors/format/VariableSubstitutionFormatVisitor";
 
 // Important: Since this stage is stateful it can not be used in a shared context.
 export class VariableProcessingStage extends BasePipelineStage<string> {
 	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
 	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
+	private resultSubstitutionVisitor = new ResultSubstitutionFormatVisitor();
+
 	private variableMap = new Map<string, IResult<any>>();
 
 	protected execute(request: string): string {
@@ -43,14 +46,20 @@ export class VariableProcessingStage extends BasePipelineStage<string> {
 		);
 
 		if (result !== undefined) {
+			// Save the mapping to the variable name to result map table
 			this.variableMap.set(variableName, result as any as IResult<any>);
 		}
 	}
 
 	private substituteVariables(expression: string): string {
 		return expression.replace(this.variableSubstitutionRegex, (match) => {
-			const variableValue = this.variableMap.get(match)?.value;
-			return variableValue !== undefined ? variableValue : match;
+			const variableResult = this.variableMap.get(match);
+
+			if (typeof variableResult === "undefined") {
+				return match;
+			}
+
+			return this.resultSubstitutionVisitor.visit(variableResult);
 		});
 	}
 }

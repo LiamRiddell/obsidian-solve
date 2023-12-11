@@ -25,10 +25,10 @@ class ProviderManager {
 		this.providersMap.set(fastHash(provider.name), provider);
 	}
 
-	public provideFirst(
+	public provideFirst<T>(
 		sentence: string,
 		raw: boolean = false
-	): string | undefined {
+	): T | undefined {
 		for (const [, provider] of this.providersMap) {
 			try {
 				// Skip providers that are not enabled
@@ -40,7 +40,7 @@ class ProviderManager {
 
 				if (result !== undefined) {
 					if (raw) {
-						return result;
+						return result as T;
 					}
 
 					if (
@@ -50,9 +50,11 @@ class ProviderManager {
 						result = `= ${result}`;
 					}
 
-					return this._debugMode
-						? `${result} [${provider.name}]`
-						: `${result}`;
+					return (
+						this._debugMode
+							? `${result} [${provider.name}]`
+							: `${result}`
+					) as T;
 				}
 			} catch (error) {
 				logger.error(error);
