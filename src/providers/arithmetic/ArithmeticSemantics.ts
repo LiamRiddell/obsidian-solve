@@ -1,7 +1,6 @@
 import { BasicArithmeticActionDict } from "@/grammars/arithmetic/BasicArithmetic.ohm-bundle";
 import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
-import { PercentageResult } from "@/results/PercentageResult";
 import { AdditionVisitor } from "@/visitors/arithmetic/AdditionVisitor";
 import { ArithmeticExpression } from "@/visitors/arithmetic/ArithmeticExpressionVisitor";
 import { DivisionVisitor } from "@/visitors/arithmetic/DivisionVisitor";
@@ -15,7 +14,7 @@ import { MultiplicationVisitor } from "@/visitors/arithmetic/MultiplicationVisit
 import { SubtractionVisitor } from "@/visitors/arithmetic/SubtractionVisitor";
 
 export const basicArithmeticSemanticActions: BasicArithmeticActionDict<
-	NumberResult | HexResult | PercentageResult
+	NumberResult | HexResult
 > = {
 	LogicalShift_left(xNode, _, yNode) {
 		const x = xNode.visit();

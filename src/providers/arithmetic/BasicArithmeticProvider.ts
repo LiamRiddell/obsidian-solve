@@ -3,12 +3,15 @@ import grammar, {
 } from "@/grammars/arithmetic/BasicArithmetic.ohm-bundle";
 import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { basicArithmeticSemanticActions } from "@/providers/arithmetic/ArithmeticSemantics";
+import { HexResult } from "@/results/HexResult";
+import { NumberResult } from "@/results/NumberResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
+import { BASIC_ARITHMETIC_PROVIDER } from "@/utilities/constants/providers/Names";
 
 export class BasicArithmeticProvider extends SemanticProviderBase<BasicArithmeticSemantics> {
 	constructor() {
-		super("BasicArithmeticProvider");
+		super(BASIC_ARITHMETIC_PROVIDER);
 
 		this.semantics = grammar.createSemantics();
 
@@ -19,21 +22,15 @@ export class BasicArithmeticProvider extends SemanticProviderBase<BasicArithmeti
 		return UserSettings.getInstance().arithmeticProvider.enabled;
 	}
 
-	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
+	provide<T = NumberResult | HexResult>(expression: string): T | undefined {
 		try {
-			const matchResult = grammar.match(sentence);
+			const matchResult = grammar.match(expression);
 
 			if (matchResult.failed()) {
 				return undefined;
 			}
 
-			const result = this.semantics(matchResult).visit();
-
-			if (raw) {
-				return result;
-			}
-
-			return result.accept(this.formatVisitor);
+			return this.semantics(matchResult).visit();
 		} catch (e) {
 			logger.error(e);
 			return undefined;

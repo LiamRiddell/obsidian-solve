@@ -25,10 +25,7 @@ class ProviderManager {
 		this.providersMap.set(fastHash(provider.name), provider);
 	}
 
-	public provideFirst<T>(
-		sentence: string,
-		raw: boolean = false
-	): T | undefined {
+	public provideFirst<T>(expression: string): [IProvider, T] | undefined {
 		for (const [, provider] of this.providersMap) {
 			try {
 				// Skip providers that are not enabled
@@ -36,26 +33,13 @@ class ProviderManager {
 					continue;
 				}
 
-				let result = provider.provide(sentence, raw);
+				const result = provider.provide<T>(expression);
 
-				if (result !== undefined) {
-					if (raw) {
-						return result as T;
-					}
-
-					if (
-						!this.settings.engine.explicitMode &&
-						this.settings.arithmeticProvider
-					) {
-						result = `= ${result}`;
-					}
-
-					return (
-						this._debugMode
-							? `${result} [${provider.name}]`
-							: `${result}`
-					) as T;
+				if (result === undefined) {
+					continue;
 				}
+
+				return [provider, result];
 			} catch (error) {
 				logger.error(error);
 				continue;
@@ -67,10 +51,10 @@ class ProviderManager {
 
 	private registerCoreProviders() {
 		// Order of precedence
+		this.registerProvider(new BasicArithmeticProvider());
+		this.registerProvider(new PercentageArithmeticProvider());
 		this.registerProvider(new UnitsOfMeasurementProvider());
 		this.registerProvider(new DatetimeProvider());
-		this.registerProvider(new PercentageArithmeticProvider());
-		this.registerProvider(new BasicArithmeticProvider());
 		this.registerProvider(new FunctionArithmeticProvider());
 		this.registerProvider(new VectorArithmeticProvider());
 		this.registerProvider(new DiceProvider());

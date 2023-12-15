@@ -3,11 +3,12 @@ import { SemanticProviderBase } from "@/providers/SemanticProviderBase";
 import { NumberResult } from "@/results/NumberResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
+import { DICE_PROVIDER } from "@/utilities/constants/providers/Names";
 import { ArithmeticExpression } from "@/visitors/arithmetic/ArithmeticExpressionVisitor";
 
 export class DiceProvider extends SemanticProviderBase<DiceSemantics> {
 	constructor() {
-		super("DiceProvider");
+		super(DICE_PROVIDER);
 
 		this.semantics = grammar.createSemantics();
 
@@ -54,21 +55,15 @@ export class DiceProvider extends SemanticProviderBase<DiceSemantics> {
 		return UserSettings.getInstance().diceProvider.enabled;
 	}
 
-	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
+	provide<T = NumberResult>(expression: string): T | undefined {
 		try {
-			const matchResult = grammar.match(sentence);
+			const matchResult = grammar.match(expression);
 
 			if (matchResult.failed()) {
 				return undefined;
 			}
 
-			const result = this.semantics(matchResult).visit();
-
-			if (raw) {
-				return result;
-			}
-
-			return result.accept(this.formatVisitor);
+			return this.semantics(matchResult).visit();
 		} catch (e) {
 			logger.error(e);
 			return undefined;

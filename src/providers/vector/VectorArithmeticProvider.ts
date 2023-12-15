@@ -18,6 +18,7 @@ import { logger } from "@/utilities/Logger";
 import { Vector2 } from "@/utilities/Vector2";
 import { Vector3 } from "@/utilities/Vector3";
 import { Vector4 } from "@/utilities/Vector4";
+import { VECTOR_ARITHMETIC_PROVIDER } from "@/utilities/constants/providers/Names";
 import { AdditionVisitor } from "@/visitors/arithmetic/AdditionVisitor";
 import { DivisionVisitor } from "@/visitors/arithmetic/DivisionVisitor";
 import { ExponentVisitor } from "@/visitors/arithmetic/ExponentVisitor";
@@ -34,8 +35,7 @@ export class VectorArithmeticProvider extends ProviderBase {
 	private vector4Semantics: Vector4ArithmeticSemantics;
 
 	constructor() {
-		super("VectorArithmeticProvider");
-
+		super(VECTOR_ARITHMETIC_PROVIDER);
 		this.setupVector2Arithmetic();
 		this.setupVector3Arithmetic();
 		this.setupVector4Arithmetic();
@@ -525,20 +525,11 @@ export class VectorArithmeticProvider extends ProviderBase {
 		return UserSettings.getInstance().vectorArithmeticProvider.enabled;
 	}
 
-	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
+	provide<T = Vector4Result | Vector3Result | Vector2Result>(
+		expression: string
+	): T | undefined {
 		try {
-			const result = this.tryParseVectorArithmetic(sentence);
-
-			if (result === undefined) {
-				return undefined;
-			}
-
-			if (raw) {
-				return result as T;
-			}
-
-			// @ts-expect-error
-			return result.accept(this.formatVisitor);
+			return this.tryParseVectorArithmetic(expression) as T;
 		} catch (e) {
 			logger.error(e);
 			return undefined;

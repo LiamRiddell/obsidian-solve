@@ -8,6 +8,7 @@ import { NumberResult } from "@/results/NumberResult";
 import { PercentageResult } from "@/results/PercentageResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
+import { PERCENTAGE_ARITHMETIC_PROVIDER } from "@/utilities/constants/providers/Names";
 import { DecreaseByVisitor } from "@/visitors/percentage/DecreaseByVisitor";
 import { IncreaseByVisitor } from "@/visitors/percentage/IncreaseByVisitor";
 import { PercentageIncreaseOrDecreaseVisitor } from "@/visitors/percentage/PercentageIncreaseOrDecreaseVisitor";
@@ -15,7 +16,7 @@ import { PercentageOfVisitor } from "@/visitors/percentage/PercentageOfVisitor";
 
 export class PercentageArithmeticProvider extends SemanticProviderBase<PercentageArithmeticSemantics> {
 	constructor() {
-		super("PercentageArithmeticProvider");
+		super(PERCENTAGE_ARITHMETIC_PROVIDER);
 
 		this.semantics = grammar.PercentageArithmetic.createSemantics();
 
@@ -61,21 +62,17 @@ export class PercentageArithmeticProvider extends SemanticProviderBase<Percentag
 		return UserSettings.getInstance().percentageArithmeticProvider.enabled;
 	}
 
-	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
+	provide<T = NumberResult | HexResult | PercentageResult>(
+		expression: string
+	): T | undefined {
 		try {
-			const matchResult = grammar.PercentageArithmetic.match(sentence);
+			const matchResult = grammar.PercentageArithmetic.match(expression);
 
 			if (matchResult.failed()) {
 				return undefined;
 			}
 
-			const result = this.semantics(matchResult).visit();
-
-			if (raw) {
-				return result;
-			}
-
-			return result.accept(this.formatVisitor);
+			return this.semantics(matchResult).visit();
 		} catch (e) {
 			logger.error(e);
 			return undefined;

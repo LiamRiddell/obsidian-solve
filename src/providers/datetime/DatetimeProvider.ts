@@ -11,11 +11,12 @@ import {
 	getNextDayOfWeek,
 	getPreviousDayOfWeek,
 } from "@/utilities/Datetime";
+import { DATETIME_PROVIDER } from "@/utilities/constants/providers/Names";
 import moment from "moment";
 
 export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 	constructor() {
-		super("DatetimeProvider");
+		super(DATETIME_PROVIDER);
 
 		this.semantics = grammar.createSemantics();
 
@@ -160,21 +161,17 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 		return UserSettings.getInstance().datetimeProvider.enabled;
 	}
 
-	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
+	provide<T = DatetimeResult | StringResult>(
+		expression: string
+	): T | undefined {
 		try {
-			const matchResult = grammar.match(sentence);
+			const matchResult = grammar.match(expression);
 
 			if (matchResult.failed()) {
 				return undefined;
 			}
 
-			const result = this.semantics(matchResult).visit();
-
-			if (raw) {
-				return result;
-			}
-
-			return result.accept(this.formatVisitor);
+			return this.semantics(matchResult).visit();
 		} catch (e) {
 			return undefined;
 		}

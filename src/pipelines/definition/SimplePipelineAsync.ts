@@ -1,5 +1,5 @@
 import { EmptyPipelineError } from "@/errors/EmptyPipelineError";
-import { IPipelineAsyncStage } from "@/pipelines/definition/stages/IPipelineAsyncStage";
+import { IPipelineAsyncStage } from "@/pipelines/definition/stages/ISimplePipelineAsyncStage";
 
 export class PipelineAsync<T> {
 	private firstStage: IPipelineAsyncStage<T> | null = null;

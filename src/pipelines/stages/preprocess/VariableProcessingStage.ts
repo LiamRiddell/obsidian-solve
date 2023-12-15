@@ -1,5 +1,6 @@
-import { BasePipelineStage } from "@/pipelines/definition/stages/BasePipelineStage";
+import { BasePipelineStage } from "@/pipelines/definition/stages/BaseSimplePipelineStage";
 import { solveProviderManager } from "@/providers/ProviderManager";
+import { AnyResult } from "@/results/AnyResult";
 import { IResult } from "@/results/definition/IResult";
 import { ResultSubstitutionFormatVisitor } from "@/visitors/format/VariableSubstitutionFormatVisitor";
 
@@ -40,15 +41,17 @@ export class VariableProcessingStage extends BasePipelineStage<string> {
 		);
 
 		// Solve the expression
-		const result = solveProviderManager.provideFirst(
-			assignmentExpression,
-			true
-		);
+		const solveResultTuple =
+			solveProviderManager.provideFirst<AnyResult>(assignmentExpression);
 
-		if (result !== undefined) {
-			// Save the mapping to the variable name to result map table
-			this.variableMap.set(variableName, result as any as IResult<any>);
+		if (solveResultTuple === undefined) {
+			return;
 		}
+
+		const [, result] = solveResultTuple;
+
+		// Save the mapping to the variable name to result map table
+		this.variableMap.set(variableName, result);
 	}
 
 	private substituteVariables(expression: string): string {

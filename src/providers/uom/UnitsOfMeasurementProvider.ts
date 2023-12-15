@@ -11,11 +11,12 @@ import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { INumericResult } from "@/results/definition/INumericResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
+import { UNIT_OF_MEASUREMENT_PROVIDER } from "@/utilities/constants/providers/Names";
 import convert, { Unit } from "convert-units";
 
 export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeasurementArithmeticSemantics> {
 	constructor() {
-		super("UnitsOfMeasurementProvider");
+		super(UNIT_OF_MEASUREMENT_PROVIDER);
 
 		this.semantics = grammar.UnitsOfMeasurementArithmetic.createSemantics();
 
@@ -78,22 +79,18 @@ export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeas
 		return UserSettings.getInstance().unitOfMeasurementProvider.enabled;
 	}
 
-	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
+	provide<T = UnitOfMeasurementResult | StringResult>(
+		expression: string
+	): T | undefined {
 		try {
 			const matchResult =
-				grammar.UnitsOfMeasurementArithmetic.match(sentence);
+				grammar.UnitsOfMeasurementArithmetic.match(expression);
 
 			if (matchResult.failed()) {
 				return undefined;
 			}
 
-			const result = this.semantics(matchResult).visit();
-
-			if (raw) {
-				return result;
-			}
-
-			return result.accept(this.formatVisitor);
+			return this.semantics(matchResult).visit();
 		} catch (e) {
 			logger.error(e);
 			return undefined;

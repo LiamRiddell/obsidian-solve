@@ -18,6 +18,7 @@ import UserSettings from "@/settings/UserSettings";
 import { autoFormatIntegerOrFloat } from "@/utilities/Number";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 import convert, { Unit } from "convert-units";
+import moment from "moment";
 
 export class ResultSubstitutionFormatVisitor
 	implements IGenericResultVisitor<string>
@@ -96,7 +97,7 @@ export class ResultSubstitutionFormatVisitor
 	}
 
 	visitDatetimeResult(result: IDatetimeResult): string {
-		return result.value.format(this.settings.datetimeResult.format);
+		return result.value.format(moment.defaultFormat);
 	}
 
 	visitStringResult(result: IStringResult): string {

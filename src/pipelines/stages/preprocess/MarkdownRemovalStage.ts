@@ -1,4 +1,4 @@
-import { BasePipelineStage } from "@/pipelines/definition/stages/BasePipelineStage";
+import { BasePipelineStage } from "@/pipelines/definition/stages/BaseSimplePipelineStage";
 
 export class MarkdownRemovalStage extends BasePipelineStage<string> {
 	// Ignored nodes e.g. block qoutes (>), lists (-), checked list ([ ]) will remove the

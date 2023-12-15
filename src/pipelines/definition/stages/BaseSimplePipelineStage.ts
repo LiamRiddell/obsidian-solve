@@ -1,4 +1,4 @@
-import { IPipelineStage } from "@/pipelines/definition/stages/IPipelineStage";
+import { IPipelineStage } from "@/pipelines/definition/stages/ISimplePipelineStage";
 
 export abstract class BasePipelineStage<T> implements IPipelineStage<T> {
 	private nextStage: IPipelineStage<T> | null = null;

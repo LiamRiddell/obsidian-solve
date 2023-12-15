@@ -7,12 +7,13 @@ import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
+import { FUNCTION_ARITHMETIC_PROVIDER } from "@/utilities/constants/providers/Names";
 import { degreesToRadians, radiansToDegrees } from "@/utilities/math/Angle";
 import { logBase } from "@/utilities/math/Log";
 
 export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionArithmeticSemantics> {
 	constructor() {
-		super("FunctionArithmeticProvider");
+		super(FUNCTION_ARITHMETIC_PROVIDER);
 
 		this.semantics = grammar.FunctionArithmetic.createSemantics();
 
@@ -52,21 +53,15 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 		return UserSettings.getInstance().functionArithmeticProvider.enabled;
 	}
 
-	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
+	provide<T = NumberResult | HexResult>(expression: string): T | undefined {
 		try {
-			const matchResult = grammar.FunctionArithmetic.match(sentence);
+			const matchResult = grammar.FunctionArithmetic.match(expression);
 
 			if (matchResult.failed()) {
 				return undefined;
 			}
 
-			const result = this.semantics(matchResult).visit();
-
-			if (raw) {
-				return result;
-			}
-
-			return result.accept(this.formatVisitor);
+			return this.semantics(matchResult).visit();
 		} catch (e) {
 			logger.error(e);
 			return undefined;

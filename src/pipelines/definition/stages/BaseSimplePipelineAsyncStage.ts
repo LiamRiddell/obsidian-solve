@@ -1,4 +1,4 @@
-import { IPipelineAsyncStage } from "@/pipelines/definition/stages/IPipelineAsyncStage";
+import { IPipelineAsyncStage } from "@/pipelines/definition/stages/ISimplePipelineAsyncStage";
 
 export abstract class BasePipelineAsyncStage<T>
 	implements IPipelineAsyncStage<T>

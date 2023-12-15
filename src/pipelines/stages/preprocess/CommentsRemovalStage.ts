@@ -1,4 +1,4 @@
-import { BasePipelineStage } from "@/pipelines/definition/stages/BasePipelineStage";
+import { BasePipelineStage } from "@/pipelines/definition/stages/BaseSimplePipelineStage";
 
 export class CommentsRemovalStage extends BasePipelineStage<string> {
 	// Matches for either # or // followed by any text.
