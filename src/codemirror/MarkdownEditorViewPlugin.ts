@@ -3,6 +3,7 @@ import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { ContextPipeline } from "@/pipelines/definition/ContextPipeline";
 import { Pipeline } from "@/pipelines/definition/SimplePipeline";
 import { SharedArithmeticInsertEqualSignStage } from "@/pipelines/stages/postprocess/ArithmeticPostProcessStage";
+import { SharedDebugInformationStage } from "@/pipelines/stages/postprocess/DebugInformationStage";
 import { SharedFormatResultStage } from "@/pipelines/stages/postprocess/FormatResultStage";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/preprocess/CommentsRemovalStage";
 import { SharedMarkdownRemovalStage } from "@/pipelines/stages/preprocess/MarkdownRemovalStage";
@@ -13,7 +14,6 @@ import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
-import { SharedDebugInformationStage } from "@/pipelines/stages/postprocess/DebugInformationStage";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
