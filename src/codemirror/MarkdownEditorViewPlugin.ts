@@ -180,9 +180,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					continue;
 				}
 
-				logger.debug("Before Pipeline:", lineText);
+				//logger.debug("Before Pipeline:", lineText);
 				lineText = this.preprocesser.process(lineText);
-				logger.debug("After Pipeline:", lineText);
+				//logger.debug("After Pipeline:", lineText);
 
 				// The line is valid and decoration can be provided.
 				const decoration = this.provideDecoration(
