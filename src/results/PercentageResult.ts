@@ -1,9 +1,7 @@
-import { EResultType } from "@/constants/EResultType";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class PercentageResult implements INumericResult {
-	type = EResultType.Percentage;
 	value: number;
 
 	constructor(value: number) {
