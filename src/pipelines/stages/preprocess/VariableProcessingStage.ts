@@ -6,8 +6,8 @@ import { ResultSubstitutionFormatVisitor } from "@/visitors/format/VariableSubst
 
 // Important: Since this stage is stateful it can not be used in a shared context.
 export class VariableProcessingStage extends BasePipelineStage<string> {
-	private variableAssignmentRegex = new RegExp(/^(\$\w+)\s+=/);
-	private variableSubstitutionRegex = new RegExp(/(\$\w+)/g);
+	private variableAssignmentRegex = new RegExp(/^(:\w+)\s+=/);
+	private variableSubstitutionRegex = new RegExp(/(:\w+)/g);
 	private resultSubstitutionVisitor = new ResultSubstitutionFormatVisitor();
 
 	private variableMap = new Map<string, IResult<any>>();
@@ -28,7 +28,7 @@ export class VariableProcessingStage extends BasePipelineStage<string> {
 	}
 
 	private assignVariable(variableName: string, expression: string): void {
-		// Locate the index of = in the variable assignment e.g $someVar (=) expression
+		// Locate the index of = in the variable assignment e.g :someVar (=) expression
 		const assignmentPosition = expression.indexOf("=");
 
 		if (assignmentPosition === -1) {

@@ -4,7 +4,7 @@ import { ResultSubstitutionFormatVisitor } from "@/visitors/format/VariableSubst
 
 // Important: Since this stage is stateful it can not be used in a shared context.
 export class PreviousResultSubstitutionStage extends BasePipelineStage<string> {
-	private previousResultSubstitutionRegex = new RegExp(/\$prev/gi);
+	private previousResultSubstitutionRegex = new RegExp(/:prev/gi);
 	private resultSubstitutionVisitor: ResultSubstitutionFormatVisitor;
 	private previousResult: IResult<any>;
 
