@@ -14,6 +14,7 @@ import { PercentageArithmeticProviderSettings } from "@/settings/properties/Perc
 import { PercentageResultSettings } from "@/settings/properties/PercentageResultSettings";
 import { UnitOfMeasurementProviderSettings } from "@/settings/properties/UnitOfMeasurementProviderSettings";
 import { UnitOfMeasurementResultSettings } from "@/settings/properties/UnitOfMeasurementResultSettings";
+import { VariableSettings } from "@/settings/properties/VariableSettings";
 import { VectorArithmeticProviderSettings } from "@/settings/properties/VectorArithmeticProviderSettings";
 
 export default class UserSettings {
@@ -22,6 +23,7 @@ export default class UserSettings {
 
 	public readonly engine: EngineSettings;
 	public readonly interface: InterfaceSettings;
+	public readonly variable: VariableSettings;
 
 	// Provider Settings
 	public readonly arithmeticProvider: ArithmeticProviderSettings;
@@ -46,6 +48,7 @@ export default class UserSettings {
 		// General
 		this.engine = new EngineSettings(this);
 		this.interface = new InterfaceSettings(this);
+		this.variable = new VariableSettings(this);
 
 		// Providers
 		this.arithmeticProvider = new ArithmeticProviderSettings(this);

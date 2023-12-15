@@ -12,11 +12,13 @@ import { IPercentageProviderSettings } from "@/settings/definition/IPercentageAr
 import { IPercentageResultSettings } from "@/settings/definition/IPercentageResultSettings";
 import { IUnitOfMeasurementProviderSettings } from "@/settings/definition/IUnitOfMeasurementProviderSettings";
 import { IUnitOfMeasurementResultSettings } from "@/settings/definition/IUnitOfMeasurementResultSettings";
+import { IVariableSettings } from "@/settings/definition/IVariableSettings";
 import { IVectorArithmeticProviderSettings } from "@/settings/definition/IVectorArithmeticProviderSettings";
 
 export interface IPluginSettings {
 	engine: IEngineSettings;
 	interface: IInterfaceSettings;
+	variable: IVariableSettings;
 
 	// Providers
 	arithmeticProvider: IArithmeticProviderSettings;

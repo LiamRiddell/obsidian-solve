@@ -8,6 +8,7 @@ import { SharedFormatResultStage } from "@/pipelines/stages/postprocess/FormatRe
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/preprocess/CommentsRemovalStage";
 import { SharedMarkdownRemovalStage } from "@/pipelines/stages/preprocess/MarkdownRemovalStage";
 import { PreviousResultSubstitutionStage } from "@/pipelines/stages/preprocess/PreviousResultSubstitutionStage";
+import { SharedVariableAssignRemovalStage } from "@/pipelines/stages/preprocess/VariableAssignRemovalStage";
 import { VariableProcessingStage } from "@/pipelines/stages/preprocess/VariableProcessingStage";
 import { IProvider } from "@/providers/IProvider";
 import { AnyResult } from "@/results/AnyResult";
@@ -43,6 +44,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 	private preprocesser: Pipeline<string>;
 	private postprocessor: ContextPipeline<[IProvider, AnyResult], string>;
+	private variableProcessingStage: VariableProcessingStage;
 	private previousResultSubstitutionStage: PreviousResultSubstitutionStage;
 
 	constructor(view: EditorView) {
@@ -50,15 +52,20 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		this.userSettings = UserSettings.getInstance();
 
+		// Setup any stateful pipeline stages.
 		this.previousResultSubstitutionStage =
 			new PreviousResultSubstitutionStage();
+		this.variableProcessingStage = new VariableProcessingStage();
 
+		// Setup the preprocessor pipeline
 		this.preprocesser = new Pipeline<string>()
 			.addStage(SharedMarkdownRemovalStage)
 			.addStage(SharedCommentsRemovalStage)
 			.addStage(this.previousResultSubstitutionStage)
-			.addStage(new VariableProcessingStage());
+			.addStage(this.variableProcessingStage)
+			.addStage(SharedVariableAssignRemovalStage);
 
+		// Setup the post processor pipeline
 		this.postprocessor = new ContextPipeline<
 			[IProvider, AnyResult],
 			string
@@ -76,11 +83,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				EPluginStatus.Solving
 			);
 
-			// console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
+			// Before building our next set of decorations we need to reset any state e.g. variables
+			this.variableProcessingStage.reset();
+
+			console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
 			this.decorations = this.buildDecorations(update.view);
-			// console.timeEnd(
-			// 	"[Solve] MarkdownEditorViewPlugin.buildDecorations"
-			// );
+			console.timeEnd(
+				"[Solve] MarkdownEditorViewPlugin.buildDecorations"
+			);
 
 			pluginEventBus.emit(
 				EPluginEvent.StatusBarUpdate,
@@ -180,9 +190,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					continue;
 				}
 
-				//logger.debug("Before Pipeline:", lineText);
+				// logger.debug("Before Pipeline:", lineText);
 				lineText = this.preprocesser.process(lineText);
-				//logger.debug("After Pipeline:", lineText);
+				// logger.debug("After Pipeline:", lineText);
 
 				// The line is valid and decoration can be provided.
 				const decoration = this.provideDecoration(

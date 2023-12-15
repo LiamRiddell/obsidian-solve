@@ -18,7 +18,7 @@ export class VariableProcessingStage extends BasePipelineStage<string> {
 
 		if (assignmentMatch) {
 			const variableName = assignmentMatch[1];
-			this.assignVariable(variableName, request);
+			request = this.assignVariable(variableName, request);
 		} else {
 			// Perform variable substitution
 			request = this.substituteVariables(request);
@@ -27,12 +27,12 @@ export class VariableProcessingStage extends BasePipelineStage<string> {
 		return request;
 	}
 
-	private assignVariable(variableName: string, expression: string): void {
+	private assignVariable(variableName: string, expression: string): string {
 		// Locate the index of = in the variable assignment e.g :someVar (=) expression
 		const assignmentPosition = expression.indexOf("=");
 
 		if (assignmentPosition === -1) {
-			return;
+			return expression;
 		}
 
 		// Get the solvable expression after the =
@@ -40,18 +40,34 @@ export class VariableProcessingStage extends BasePipelineStage<string> {
 			assignmentPosition + 1
 		);
 
-		// Solve the expression
-		const solveResultTuple =
-			solveProviderManager.provideFirst<AnyResult>(assignmentExpression);
+		// We need to run substitute variable here to make sure we replace any variables that are in the expression for the assignment
+		// e.g. :myVar = :someOtherVar + 20 / 2
+		const assignmentExpressionSubstituted =
+			this.substituteVariables(assignmentExpression);
 
+		// Update the original expression with the substituted variables
+		expression = expression.replace(
+			assignmentExpression,
+			assignmentExpressionSubstituted
+		);
+
+		// Solve the substituted expression
+		const solveResultTuple = solveProviderManager.provideFirst<AnyResult>(
+			assignmentExpressionSubstituted
+		);
+
+		// If failed to solve then return the substituted expression.
 		if (solveResultTuple === undefined) {
-			return;
+			return expression;
 		}
 
 		const [, result] = solveResultTuple;
 
 		// Save the mapping to the variable name to result map table
 		this.variableMap.set(variableName, result);
+
+		// Always return the substituted expression so that we can solve
+		return expression;
 	}
 
 	private substituteVariables(expression: string): string {
@@ -64,5 +80,9 @@ export class VariableProcessingStage extends BasePipelineStage<string> {
 
 			return this.resultSubstitutionVisitor.visit(variableResult);
 		});
+	}
+
+	public reset() {
+		this.variableMap.clear();
 	}
 }

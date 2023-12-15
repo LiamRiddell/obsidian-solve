@@ -19,6 +19,7 @@ export class SettingTab extends PluginSettingTab {
 		this.displayIntroduction();
 		this.displayEngineSettings();
 		this.displayInterfaceSettings();
+		this.displayVariablesSettings();
 
 		// Providers Settings
 		this.displayProviderManagementSettings();
@@ -57,6 +58,25 @@ export class SettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.engine.explicitMode)
 					.onChange(async (value) => {
 						this.plugin.settings.engine.explicitMode = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+	}
+
+	displayVariablesSettings() {
+		new Setting(this.containerEl).setName("Variable").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Show variable result")
+			.setDesc(
+				`Solve will display results at the end of variables. Default is ${DEFAULT_SETTINGS.variable.renderResult}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.variable.renderResult)
+					.onChange(async (value) => {
+						this.plugin.settings.variable.renderResult = value;
 
 						await this.plugin.saveSettings();
 					})
