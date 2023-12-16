@@ -7,6 +7,7 @@ import { SharedDebugInformationStage } from "@/pipelines/stages/postprocess/Debu
 import { SharedFormatResultStage } from "@/pipelines/stages/postprocess/FormatResultStage";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/preprocess/CommentsRemovalStage";
 import { SharedMarkdownRemovalStage } from "@/pipelines/stages/preprocess/MarkdownRemovalStage";
+import { SharedMathJaxRemovalStage } from "@/pipelines/stages/preprocess/MathJaxRemovalStage";
 import { PreviousResultSubstitutionStage } from "@/pipelines/stages/preprocess/PreviousResultSubstitutionStage";
 import { SharedVariableAssignRemovalStage } from "@/pipelines/stages/preprocess/VariableAssignRemovalStage";
 import { VariableProcessingStage } from "@/pipelines/stages/preprocess/VariableProcessingStage";
@@ -40,6 +41,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		"quote",
 		"list",
 		"HyperMD-list-line",
+		"math",
 	];
 
 	private preprocesser: Pipeline<string>;
@@ -61,6 +63,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.preprocesser = new Pipeline<string>()
 			.addStage(SharedMarkdownRemovalStage)
 			.addStage(SharedCommentsRemovalStage)
+			.addStage(SharedMathJaxRemovalStage)
 			.addStage(this.previousResultSubstitutionStage)
 			.addStage(this.variableProcessingStage)
 			.addStage(SharedVariableAssignRemovalStage);
