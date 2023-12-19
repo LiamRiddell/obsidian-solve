@@ -12,16 +12,13 @@ import {
 } from 'ohm-js';
 
 export interface ObsidianMarkdownParserActionDict<T> extends BaseActionDict<T> {
-  Fragment?: (this: NonterminalNode, arg0: IterationNode) => T;
-  NonEmptyLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: IterationNode) => T;
-  EmptyLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode) => T;
   Element?: (this: NonterminalNode, arg0: NonterminalNode) => T;
   Header?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
   Blockquote?: (this: NonterminalNode, arg0: IterationNode, arg1: IterationNode, arg2: NonterminalNode) => T;
   HorizontalRule?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: TerminalNode, arg3: IterationNode, arg4: TerminalNode) => T;
   UnorderedList?: (this: NonterminalNode, arg0: IterationNode, arg1: IterationNode, arg2: NonterminalNode) => T;
   OrderedList?: (this: NonterminalNode, arg0: IterationNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: NonterminalNode) => T;
-  Code?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: TerminalNode) => T;
+  CodeStartOrEnd?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode) => T;
   Paragraph?: (this: NonterminalNode, arg0: NonterminalNode) => T;
   nonEmptyLine?: (this: NonterminalNode, arg0: IterationNode, arg1: IterationNode) => T;
   notNewline?: (this: NonterminalNode, arg0: NonterminalNode) => T;

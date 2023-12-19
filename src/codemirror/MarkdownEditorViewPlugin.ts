@@ -1,4 +1,5 @@
 import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
+import { ObsidianMarkdownParser } from "@/document/DocumentFragmentParser";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { ContextPipeline } from "@/pipelines/definition/ContextPipeline";
 import { Pipeline } from "@/pipelines/definition/SimplePipeline";
@@ -13,8 +14,6 @@ import { IProvider } from "@/providers/IProvider";
 import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
-// @ts-expect-error
-import { DocumentFragmentParser } from "@/document/DocumentFragmentParser";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -41,7 +40,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		"math",
 	];
 
-	private documentFragmentParser: DocumentFragmentParser;
+	private obsidianMarkdownParser: ObsidianMarkdownParser;
 	private preprocesser: Pipeline<string>;
 	private postprocessor: ContextPipeline<[IProvider, AnyResult], string>;
 	private variableProcessingStage: VariableProcessingStage;
@@ -53,7 +52,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.userSettings = UserSettings.getInstance();
 
 		// Setup the document fragment parser
-		this.documentFragmentParser = new DocumentFragmentParser();
+		this.obsidianMarkdownParser = new ObsidianMarkdownParser();
 
 		// Setup any stateful pipeline stages.
 		this.previousResultSubstitutionStage =
@@ -114,50 +113,43 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		for (const { from, to } of visibleRanges) {
 			try {
-				// Slice the document to get a fragment for this visible range
-				const documentFragment = view.state.doc.sliceString(from, to);
-				// const documentFragmentTest = view.state.doc.slice(from, to);
-				// console.log(documentFragmentTest);
+				const rangeLines = view.state.doc.slice(from, to);
+
+				if (rangeLines.lines < 0) {
+					continue;
+				}
 
 				const rangeStartLine = view.state.doc.lineAt(from);
 
-				if (documentFragment) {
-					this.documentFragmentParser.parse(
-						documentFragment,
-						(text, relativeLineIndex, relativeColumnIndex) => {
-							const absoluteLineIndex =
-								rangeStartLine.number + relativeLineIndex;
+				for (let i = 0; i < rangeLines.lines; i++) {
+					const line =
+						i === 0
+							? rangeStartLine
+							: view.state.doc.line(rangeStartLine.number + i);
 
-							const line = view.state.doc.lineAt(
-								rangeStartLine.from + relativeColumnIndex
-							);
+					if (line.text.length === 0) {
+						continue;
+					}
 
-							// logger.debug("Before Pipeline:", line.text);
-							const lineText = this.preprocesser.process(
-								line.text
-							);
-							// logger.debug("After Pipeline:", lineText);
+					const elementText =
+						this.obsidianMarkdownParser.parseElement(line.text);
 
-							// The line is valid and decoration can be provided.
-							const decoration = this.provideDecoration(
-								lineText,
-								line.number
-							);
+					if (elementText) {
+						//logger.debug("Before Pipeline:", line.text);
+						const preprocessedLineText =
+							this.preprocesser.process(elementText);
+						//logger.debug("After Pipeline:", preprocessedLineText);
 
-							if (decoration) {
-								builder.add(line.to, line.to, decoration);
-							}
+						// The line is valid and decoration can be provided.
+						const decoration = this.provideDecoration(
+							preprocessedLineText,
+							line.number
+						);
 
-							if (text !== line.text.trim()) {
-								console.error(
-									`MISMATCH DETECTED: Relative ${relativeLineIndex} -> Absolute ${absoluteLineIndex}\n`,
-									text,
-									"\n@@@@@@@@@@@@@@@@@\n",
-									line.text
-								);
-							}
+						if (decoration) {
+							builder.add(line.to, line.to, decoration);
 						}
-					);
+					}
 				}
 			} catch (error) {
 				console.error(error);

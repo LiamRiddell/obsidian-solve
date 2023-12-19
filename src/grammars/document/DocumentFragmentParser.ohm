@@ -1,20 +1,11 @@
 ObsidianMarkdownParser {
-    Fragment 
-        = (EmptyLine | NonEmptyLine)*
-
-    NonEmptyLine
-        = Element newline?
-
-    EmptyLine
-        = spaces newline
-
     Element 
         = Header
         | Blockquote
         | HorizontalRule
         | UnorderedList
         | OrderedList
-        | Code
+        // | Code
         | Paragraph
 
     // ========= Elements =========
@@ -40,8 +31,8 @@ ObsidianMarkdownParser {
         = (digit+ ~(space+) ".") spaces nonEmptyLine
 
     // Code
-    Code
-        = "```" (~"```" any)* "```"
+    // Code
+    //     = "```" (~"```" any)* "```"
 
     CodeStartOrEnd
         = "```" nonEmptyLine
