@@ -16,7 +16,7 @@ import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
-import { syntaxTree } from "@codemirror/language";
+import { DocumentFragmentParser } from "@/document/DocumentFragmentParser";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -25,7 +25,6 @@ import {
 	PluginValue,
 	ViewUpdate,
 } from "@codemirror/view";
-import { SyntaxNodeRef } from "@lezer/common";
 import { EPluginEvent } from "../constants/EPluginEvent";
 import { EPluginStatus } from "../constants/EPluginStatus";
 import { solveProviderManager } from "../providers/ProviderManager";
@@ -44,6 +43,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		"math",
 	];
 
+	private documentFragmentParser: DocumentFragmentParser;
 	private preprocesser: Pipeline<string>;
 	private postprocessor: ContextPipeline<[IProvider, AnyResult], string>;
 	private variableProcessingStage: VariableProcessingStage;
@@ -53,6 +53,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		logger.debug(`[SolveViewPlugin] Constructer`);
 
 		this.userSettings = UserSettings.getInstance();
+
+		// Setup the document fragment parser
+		this.documentFragmentParser = new DocumentFragmentParser();
 
 		// Setup any stateful pipeline stages.
 		this.previousResultSubstitutionStage =
@@ -109,107 +112,89 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	buildDecorations(view: EditorView): DecorationSet {
 		const builder = new RangeSetBuilder<Decoration>();
 
-		const markdownDocumentSyntaxTree = syntaxTree(view.state);
-
 		const visibleRanges = view.visibleRanges;
-		const seenLines = new Set();
-
-		let firstNode = true;
-		let previousTo = 0;
-		let previousFrom = 0;
-		let wasLastChild = false;
 
 		for (const { from, to } of visibleRanges) {
-			const doNotSolveMask = new Array<[from: number, to: number]>();
+			try {
+				// Slice the document to get a fragment for this visible range
+				const documentFragment = view.state.doc.sliceString(from, to);
 
-			// Performant approach to ignoring nodes e.g. titles, code blocks, etc...
-			markdownDocumentSyntaxTree.iterate({
-				from,
-				to,
-				enter: (node: SyntaxNodeRef) => {
-					// console.log(
-					// 	node.type.name,
-					// 	node.from,
-					// 	node.to,
-					// 	view.state.doc.sliceString(node.from, node.to)
-					// );
+				const rangeStartLine = view.state.doc.lineAt(from);
 
-					if (this.isNodeIgnoredFromMask(node.type.name)) {
-						return;
-					}
+				if (documentFragment) {
+					this.documentFragmentParser.parse(
+						documentFragment,
+						(text, relativeLineIndex) => {
+							const absoluteLineIndex =
+								rangeStartLine.number + relativeLineIndex;
 
-					// logger.debug(node.type.id, node.type.name);
+							const line = view.state.doc.line(
+								absoluteLineIndex - 1
+							);
 
-					if (firstNode) {
-						firstNode = false;
-						previousTo = node.to;
-						previousFrom = node.from;
-					}
+							console.log(
+								"Text Node",
+								`Relative: ${relativeLineIndex} -> Absolute ${absoluteLineIndex}`,
+								text,
+								line.text,
+								text === line.text
+							);
 
-					const isNextTo = node.from - previousTo <= 1;
-
-					if (node.to <= previousTo || isNextTo) {
-						if (isNextTo) previousTo = node.to;
-
-						wasLastChild = true;
-					} else {
-						doNotSolveMask.push([previousFrom, previousTo]);
-						previousFrom = node.from;
-						previousTo = node.to;
-						wasLastChild = false;
-					}
-				},
-			});
-
-			if (wasLastChild) doNotSolveMask.push([previousFrom, previousTo]);
-
-			// Performant approach to iterating only line in the visible range.
-			const range = view.state.doc.iterRange(from, to);
-
-			let nextLineTextOffset = 0;
-
-			for (const lineTextRaw of range) {
-				const linePosition = from + nextLineTextOffset;
-
-				const line = view.state.doc.lineAt(linePosition);
-
-				let lineText = line.text.trim();
-
-				// Skip blank lines
-				if (!lineText || lineText.length === 0) {
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
+							console.log(line);
+						}
+					);
 				}
-
-				// Skip seen lines
-				if (seenLines.has(line.number)) {
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
-				}
-
-				// Skip if line is in mask range
-				if (this.isRangeInMask(doNotSolveMask, line.from, line.to)) {
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
-				}
-
-				// logger.debug("Before Pipeline:", lineText);
-				lineText = this.preprocesser.process(lineText);
-				// logger.debug("After Pipeline:", lineText);
-
-				// The line is valid and decoration can be provided.
-				const decoration = this.provideDecoration(
-					lineText,
-					line.number
-				);
-
-				if (decoration) {
-					builder.add(line.to, line.to, decoration);
-				}
-
-				seenLines.add(line.number);
-				nextLineTextOffset += lineTextRaw.length;
+			} catch (error) {
+				console.error(error);
 			}
+
+			// // Performant approach to iterating only line in the visible range.
+			// const range = view.state.doc.iterRange(from, to);
+
+			// let nextLineTextOffset = 0;
+
+			// for (const lineTextRaw of range) {
+			// 	const linePosition = from + nextLineTextOffset;
+
+			// 	const line = view.state.doc.lineAt(linePosition);
+
+			// 	let lineText = line.text.trim();
+
+			// 	// Skip blank lines
+			// 	if (!lineText || lineText.length === 0) {
+			// 		nextLineTextOffset += lineTextRaw.length;
+			// 		continue;
+			// 	}
+
+			// 	// Skip seen lines
+			// 	if (seenLines.has(line.number)) {
+			// 		nextLineTextOffset += lineTextRaw.length;
+			// 		continue;
+			// 	}
+
+			// 	// Skip if line is in mask range
+			// 	if (this.isRangeInMask(doNotSolveMask, line.from, line.to)) {
+			// 		nextLineTextOffset += lineTextRaw.length;
+			// 		continue;
+			// 	}
+
+			// 	// logger.debug("Before Pipeline:", lineText);
+			// 	lineText = this.preprocesser.process(lineText);
+			// 	// logger.debug("After Pipeline:", lineText);
+
+			// 	// The line is valid and decoration can be provided.
+			// 	const decoration = this.provideDecoration(
+			// 		lineText,
+			// 		line.number
+			// 	);
+
+			// 	if (decoration) {
+			// 		builder.add(line.to, line.to, decoration);
+			// 	}
+
+			// 	seenLines.add(line.number);
+			// 	nextLineTextOffset += lineTextRaw.length;
+			// }
 		}
 
 		return builder.finish();

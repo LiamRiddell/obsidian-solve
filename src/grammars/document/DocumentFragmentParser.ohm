@@ -1,0 +1,73 @@
+ObsidianMarkdownParser {
+    Fragment 
+        = (EmptyLine | NonEmptyLine)*
+
+    NonEmptyLine
+        = Element newline?
+
+    EmptyLine
+        = spaces newline
+
+    Element 
+        = Header
+        | Blockquote
+        | HorizontalRule
+        | UnorderedList
+        | OrderedList
+        | Code
+        | Paragraph
+
+    // ========= Elements =========
+  
+    // Heading
+    Header 
+        = ("######" | "#####" | "####" | "###" | "##" | "#") ~"#" spaces nonEmptyLine
+    
+    // Blockquote
+    Blockquote
+        = (">" spaces)+ nonEmptyLine
+
+    // Horizontal Rule
+    HorizontalRule
+        = ("*" | "-" | "_") space? ("*" | "-" | "_") space? ("*" | "-" | "_")
+
+    // Unordered List
+    UnorderedList
+        = (("-" | "*" | "+") spaces)+ nonEmptyLine
+
+    // Ordered List
+    OrderedList
+        = (digit+ ~(space+) ".") spaces nonEmptyLine
+
+    // Code
+    Code
+        = "```" (~"```" any)* "```"
+
+    // Links
+
+    // Images
+
+    // Tables
+
+    // Fenced Code Blocks
+
+    // Syntax Highlighting
+
+    // Task List
+    
+    // Paragraph
+    Paragraph 
+        = nonEmptyLine
+
+    // ========= Ignored Elements (NOTE) =========
+    // 1. Bold
+    // 2. Italic
+    // 3. Emoji Shortcodes
+    // 4. Highlight
+
+    // ========= Lexical Rules =========
+    nonEmptyLine = space* notNewline+
+    notNewline = ~newline any
+    spaces := (~newline space)*
+    newline = "\n" | "\r\n" | "\r"
+}
