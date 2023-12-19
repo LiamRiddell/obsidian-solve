@@ -9,13 +9,27 @@ export class MathSyntaxRemovalStage extends BasePipelineStage<string> {
 		const mathjaxMatch = this.mathjaxFormatRegex.exec(request);
 
 		if (mathjaxMatch) {
-			return mathjaxMatch[1];
+			const expression = mathjaxMatch[1];
+			const expressionEqualsIndex = expression.indexOf("=");
+
+			if (expressionEqualsIndex > -1) {
+				return expression.substring(expressionEqualsIndex + 1).trim();
+			}
+
+			return expression;
 		}
 
 		const latexMatch = this.latexFormatRegex.exec(request);
 
 		if (latexMatch) {
-			return latexMatch[1];
+			const expression = latexMatch[1];
+			const expressionEqualsIndex = expression.indexOf("=");
+
+			if (expressionEqualsIndex > -1) {
+				return expression.substring(expressionEqualsIndex + 1).trim();
+			}
+
+			return expression;
 		}
 
 		return request;
