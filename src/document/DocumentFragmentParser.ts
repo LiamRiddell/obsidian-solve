@@ -8,7 +8,11 @@ export class DocumentFragmentParser {
 
 	private relativeLineIndex: number;
 	private relativeColumnIndex: number;
-	private onTextNode: (text: string, relativeLineIndex: number) => void;
+	private onTextNode: (
+		text: string,
+		relativeLineIndex: number,
+		relativeColumnIndex: number
+	) => void;
 
 	constructor() {
 		this.semantics = grammar.createSemantics();
@@ -87,7 +91,8 @@ export class DocumentFragmentParser {
 				// logger.debug(`\t- Paragraph -> ${textNode.sourceString}`);
 				documentFragmentParser.onTextNode(
 					textNode.sourceString,
-					documentFragmentParser.relativeLineIndex
+					documentFragmentParser.relativeLineIndex,
+					documentFragmentParser.relativeColumnIndex
 				);
 			},
 
@@ -103,7 +108,11 @@ export class DocumentFragmentParser {
 
 	public parse(
 		documentFragment: string,
-		onTextNode: (text: string, relativeLineIndex: number) => void
+		onTextNode: (
+			text: string,
+			relativeLineIndex: number,
+			relativeColumnIndex: number
+		) => void
 	) {
 		try {
 			this.resetInternalState();

@@ -43,6 +43,9 @@ ObsidianMarkdownParser {
     Code
         = "```" (~"```" any)* "```"
 
+    CodeStartOrEnd
+        = "```" nonEmptyLine
+
     // Links
 
     // Images

@@ -6,8 +6,6 @@ import { SharedArithmeticInsertEqualSignStage } from "@/pipelines/stages/postpro
 import { SharedDebugInformationStage } from "@/pipelines/stages/postprocess/DebugInformationStage";
 import { SharedFormatResultStage } from "@/pipelines/stages/postprocess/FormatResultStage";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/preprocess/CommentsRemovalStage";
-import { SharedMarkdownRemovalStage } from "@/pipelines/stages/preprocess/MarkdownRemovalStage";
-import { SharedMathJaxRemovalStage } from "@/pipelines/stages/preprocess/MathJaxRemovalStage";
 import { PreviousResultSubstitutionStage } from "@/pipelines/stages/preprocess/PreviousResultSubstitutionStage";
 import { SharedVariableAssignRemovalStage } from "@/pipelines/stages/preprocess/VariableAssignRemovalStage";
 import { VariableProcessingStage } from "@/pipelines/stages/preprocess/VariableProcessingStage";
@@ -64,9 +62,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		// Setup the preprocessor pipeline
 		this.preprocesser = new Pipeline<string>()
-			.addStage(SharedMarkdownRemovalStage)
+			//.addStage(SharedMarkdownRemovalStage)
 			.addStage(SharedCommentsRemovalStage)
-			.addStage(SharedMathJaxRemovalStage)
+			//.addStage(SharedMathJaxRemovalStage)
 			.addStage(this.previousResultSubstitutionStage)
 			.addStage(this.variableProcessingStage)
 			.addStage(SharedVariableAssignRemovalStage);
@@ -118,29 +116,46 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			try {
 				// Slice the document to get a fragment for this visible range
 				const documentFragment = view.state.doc.sliceString(from, to);
+				// const documentFragmentTest = view.state.doc.slice(from, to);
+				// console.log(documentFragmentTest);
 
 				const rangeStartLine = view.state.doc.lineAt(from);
 
 				if (documentFragment) {
 					this.documentFragmentParser.parse(
 						documentFragment,
-						(text, relativeLineIndex) => {
+						(text, relativeLineIndex, relativeColumnIndex) => {
 							const absoluteLineIndex =
 								rangeStartLine.number + relativeLineIndex;
 
-							const line = view.state.doc.line(
-								absoluteLineIndex - 1
+							const line = view.state.doc.lineAt(
+								rangeStartLine.from + relativeColumnIndex
 							);
 
-							console.log(
-								"Text Node",
-								`Relative: ${relativeLineIndex} -> Absolute ${absoluteLineIndex}`,
-								text,
-								line.text,
-								text === line.text
+							// logger.debug("Before Pipeline:", line.text);
+							const lineText = this.preprocesser.process(
+								line.text
+							);
+							// logger.debug("After Pipeline:", lineText);
+
+							// The line is valid and decoration can be provided.
+							const decoration = this.provideDecoration(
+								lineText,
+								line.number
 							);
 
-							console.log(line);
+							if (decoration) {
+								builder.add(line.to, line.to, decoration);
+							}
+
+							if (text !== line.text.trim()) {
+								console.error(
+									`MISMATCH DETECTED: Relative ${relativeLineIndex} -> Absolute ${absoluteLineIndex}\n`,
+									text,
+									"\n@@@@@@@@@@@@@@@@@\n",
+									line.text
+								);
+							}
 						}
 					);
 				}
