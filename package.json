@@ -1,6 +1,6 @@
 {
 	"name": "solve",
-	"version": "0.9.0",
+	"version": "1.0.0",
 	"description": "Supercharge your notes in Obsdian with real-time calculations without AI fuss. From date magic ('Now + 20 days') to arithmetic flair ('10 + 5').",
 	"main": "main.js",
 	"scripts": {
