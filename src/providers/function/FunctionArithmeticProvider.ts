@@ -15,6 +15,9 @@ export class FunctionArithmeticProvider extends SemanticProviderBase<FunctionAri
 	constructor() {
 		super(FUNCTION_ARITHMETIC_PROVIDER);
 
+		// This can not be cacheable unfortunetly due to the fact we have Math.rand()
+		this.cacheable = false;
+
 		this.semantics = grammar.FunctionArithmetic.createSemantics();
 
 		this.semantics.addOperation<NumberResult | HexResult>("visit()", {

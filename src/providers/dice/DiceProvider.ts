@@ -10,6 +10,8 @@ export class DiceProvider extends SemanticProviderBase<DiceSemantics> {
 	constructor() {
 		super(DICE_PROVIDER);
 
+		this.cacheable = false;
+
 		this.semantics = grammar.createSemantics();
 
 		const rollDice = (from: number, to: number): number => {

@@ -1,6 +1,5 @@
 import { BasePipelineStage } from "@/pipelines/definition/stages/BaseSimplePipelineStage";
 import { solveProviderManager } from "@/providers/ProviderManager";
-import { AnyResult } from "@/results/AnyResult";
 import { IResult } from "@/results/definition/IResult";
 import { ResultSubstitutionFormatVisitor } from "@/visitors/format/VariableSubstitutionFormatVisitor";
 
@@ -52,7 +51,7 @@ export class VariableProcessingStage extends BasePipelineStage<string> {
 		);
 
 		// Solve the substituted expression
-		const solveResultTuple = solveProviderManager.provideFirst<AnyResult>(
+		const solveResultTuple = solveProviderManager.provideFirst(
 			assignmentExpressionSubstituted
 		);
 

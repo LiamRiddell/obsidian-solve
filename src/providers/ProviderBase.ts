@@ -5,9 +5,11 @@ import { IResult } from "@/results/definition/IResult";
 export class ProviderBase implements IProvider {
 	name: string;
 	eventBus: PluginEventBus;
+	cacheable: boolean;
 
 	constructor(name: string) {
 		this.name = name;
+		this.cacheable = true;
 	}
 
 	public enabled(): boolean {
