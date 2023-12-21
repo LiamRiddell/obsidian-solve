@@ -257,8 +257,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		// Initial implementation will show the first valid result from available providers.
-		const solveResultTuple =
-			solveProviderManager.provideFirst<AnyResult>(sentence);
+		const solveResultTuple = solveProviderManager.provideFirst(sentence);
 
 		if (solveResultTuple === undefined) {
 			return undefined;

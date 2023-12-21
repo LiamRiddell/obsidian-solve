@@ -18,6 +18,8 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 	constructor() {
 		super(DATETIME_PROVIDER);
 
+		this.cacheable = false;
+
 		this.semantics = grammar.createSemantics();
 
 		this.semantics.addOperation<DatetimeResult | StringResult | number>(
