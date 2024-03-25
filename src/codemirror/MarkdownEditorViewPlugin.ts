@@ -1,7 +1,6 @@
 import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
-import { ContextPipeline } from "@/pipelines/definition/ContextPipeline";
-import { Pipeline } from "@/pipelines/definition/SimplePipeline";
+import { StatefulPipeline } from "@/pipelines/definition/StatefulPipeline";
 import { SharedArithmeticInsertEqualSignStage } from "@/pipelines/stages/postprocess/ArithmeticPostProcessStage";
 import { SharedDebugInformationStage } from "@/pipelines/stages/postprocess/DebugInformationStage";
 import { SharedFormatResultStage } from "@/pipelines/stages/postprocess/FormatResultStage";
@@ -16,6 +15,8 @@ import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
+import { SharedExtractInlineSolveStage } from "@/pipelines/stages/preprocess/ExtractInlineSolveState";
+import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -30,7 +31,7 @@ import { EPluginEvent } from "../constants/EPluginEvent";
 import { EPluginStatus } from "../constants/EPluginStatus";
 import { solveProviderManager } from "../providers/ProviderManager";
 
-const DEBUG_MODE_ENABLED = true;
+const DEBUG_MODE_ENABLED = false;
 
 export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
@@ -44,8 +45,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		"math",
 	];
 
-	private preprocesser: Pipeline<string>;
-	private postprocessor: ContextPipeline<[IProvider, AnyResult], string>;
+	private preprocesser: StatefulPipeline<IPreprocessorState, string>;
+	private postprocessor: StatefulPipeline<[IProvider, AnyResult], string>;
 	private variableProcessingStage: VariableProcessingStage;
 	private previousResultSubstitutionStage: PreviousResultSubstitutionStage;
 
@@ -60,16 +61,17 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.variableProcessingStage = new VariableProcessingStage();
 
 		// Setup the preprocessor pipeline
-		this.preprocesser = new Pipeline<string>()
+		this.preprocesser = new StatefulPipeline<IPreprocessorState, string>()
 			.addStage(SharedMarkdownRemovalStage)
 			.addStage(SharedCommentsRemovalStage)
 			.addStage(SharedMathJaxRemovalStage)
+			.addStage(SharedExtractInlineSolveStage)
 			.addStage(this.previousResultSubstitutionStage)
 			.addStage(this.variableProcessingStage)
 			.addStage(SharedVariableAssignRemovalStage);
 
 		// Setup the post processor pipeline
-		this.postprocessor = new ContextPipeline<
+		this.postprocessor = new StatefulPipeline<
 			[IProvider, AnyResult],
 			string
 		>()
@@ -173,10 +175,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 				const line = view.state.doc.lineAt(linePosition);
 
-				let lineText = line.text.trim();
+				let expression = line.text.trim();
 
 				// Skip blank lines
-				if (!lineText || lineText.length === 0) {
+				if (!expression || expression.length === 0) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
@@ -193,18 +195,36 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					continue;
 				}
 
-				// logger.debug("Before Pipeline:", lineText);
-				lineText = this.preprocesser.process(lineText);
-				// logger.debug("After Pipeline:", lineText);
+				const state: IPreprocessorState = {
+					lineNumber: line.number,
+					originalLineText: expression,
+				};
+
+				logger.debug("Before Pipeline:", state, expression);
+				expression = this.preprocesser.process(state, expression);
+				logger.debug("After Pipeline:", state, expression);
 
 				// The line is valid and decoration can be provided.
-				const decoration = this.provideDecoration(
-					lineText,
-					line.number
-				);
+				const decoration = this.provideDecoration(state, expression);
 
 				if (decoration) {
-					builder.add(line.to, line.to, decoration);
+					if (state.isInlineSolve && state.inlineSolveIndex) {
+						// Result is displayed at the end of the inline solve position
+						const inlineSolvePosition =
+							line.from + // Start of the line
+							3 + // Unaccounted inline solve characters s``
+							state.inlineSolveIndex + // Position of the inline solve
+							expression.length; // Length of the inline solve
+
+						builder.add(
+							inlineSolvePosition,
+							inlineSolvePosition,
+							decoration
+						);
+					} else {
+						// Result is displayed at the end of the line.
+						builder.add(line.to, line.to, decoration);
+					}
 				}
 
 				seenLines.add(line.number);
@@ -241,15 +261,17 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		return false;
 	}
 
-	private provideDecoration(sentence: string, lineNumber: number) {
+	private provideDecoration(state: IPreprocessorState, expression: string) {
 		let isExplicitlyDefinedSentence = false;
 
 		// When explicit mode is enabled the sentence will end with = sign.
 		// This needs to be removed in order for grammars to match.
 		// TODO: Convert this into a context preprocessor stage
 		if (this.userSettings.engine.explicitMode) {
-			if (sentence.trimEnd().endsWith("=")) {
-				sentence = sentence.substring(0, sentence.length - 1).trimEnd();
+			if (expression.trimEnd().endsWith("=")) {
+				expression = expression
+					.substring(0, expression.length - 1)
+					.trimEnd();
 				isExplicitlyDefinedSentence = true;
 			} else {
 				return undefined;
@@ -257,24 +279,21 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		// Initial implementation will show the first valid result from available providers.
-		const solveResultTuple = solveProviderManager.provideFirst(sentence);
+		const solveResultTuple = solveProviderManager.provideFirst(expression);
 
 		if (solveResultTuple === undefined) {
 			return undefined;
 		}
 
 		// Post-process the result starting with empty string the pipeline will slowly build the result for the user.
-		let postprocessedResult = this.postprocessor.process(
-			solveResultTuple,
-			""
-		);
+		let result = this.postprocessor.process(solveResultTuple, "");
 
 		// If the input sentence and the output is the same value ignore it.
 		// For example, 10 = 10
-		const sentenceTrimmed = sentence.trim();
-		const resultTrimmed = postprocessedResult.startsWith("= ")
-			? postprocessedResult.substring(2).trim()
-			: postprocessedResult.trim();
+		const sentenceTrimmed = expression.trim();
+		const resultTrimmed = result.startsWith("= ")
+			? result.substring(2).trim()
+			: result.trim();
 
 		if (sentenceTrimmed.toLowerCase() === resultTrimmed.toLowerCase()) {
 			return undefined;
@@ -295,14 +314,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		// We need to add the debug information right before we display it. Otherwise we can cause issues with the above logic.
 		if (DEBUG_MODE_ENABLED) {
-			postprocessedResult = SharedDebugInformationStage.process(
+			result = SharedDebugInformationStage.process(
 				solveResultTuple,
-				postprocessedResult
+				result
 			);
 		}
 
 		return Decoration.widget({
-			widget: new ResultWidget(postprocessedResult, lineNumber),
+			widget: new ResultWidget(state, expression, result),
 			side: 1,
 		});
 	}

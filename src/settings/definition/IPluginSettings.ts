@@ -6,6 +6,7 @@ import { IEngineSettings } from "@/settings/definition/IEngineSettings";
 import { IFloatResultSettings } from "@/settings/definition/IFloatResultSettings";
 import { IFunctionArithmeticProviderSettings } from "@/settings/definition/IFuntionArithmeticProviderSettings";
 import { IHexResultSettings } from "@/settings/definition/IHexResultSettings";
+import { IInlineSolveSettings } from "@/settings/definition/IInlineSolveSettings";
 import { IIntegerResultSettings } from "@/settings/definition/IIntegerResultSettings";
 import { IInterfaceSettings } from "@/settings/definition/IInterfaceSettings";
 import { IPercentageProviderSettings } from "@/settings/definition/IPercentageArithmeticProviderSettings";
@@ -18,6 +19,7 @@ import { IVectorArithmeticProviderSettings } from "@/settings/definition/IVector
 export interface IPluginSettings {
 	engine: IEngineSettings;
 	interface: IInterfaceSettings;
+	inlineSolve: IInlineSolveSettings;
 	variable: IVariableSettings;
 
 	// Providers

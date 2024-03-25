@@ -1,17 +1,21 @@
-import { BasePipelineStage } from "@/pipelines/definition/stages/BaseSimplePipelineStage";
+import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
+import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
 import { solveProviderManager } from "@/providers/ProviderManager";
 import { IResult } from "@/results/definition/IResult";
 import { ResultSubstitutionFormatVisitor } from "@/visitors/format/VariableSubstitutionFormatVisitor";
 
 // Important: Since this stage is stateful it can not be used in a shared context.
-export class VariableProcessingStage extends BasePipelineStage<string> {
+export class VariableProcessingStage extends BaseStatefulPipelineStage<
+	IPreprocessorState,
+	string
+> {
 	private variableAssignmentRegex = new RegExp(/^(:\w+)\s+=/);
 	private variableSubstitutionRegex = new RegExp(/(:\w+)/g);
 	private resultSubstitutionVisitor = new ResultSubstitutionFormatVisitor();
 
 	private variableMap = new Map<string, IResult<any>>();
 
-	protected execute(request: string): string {
+	protected execute(state: IPreprocessorState, request: string): string {
 		// Check for variable assignment
 		const assignmentMatch = request.match(this.variableAssignmentRegex);
 

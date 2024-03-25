@@ -1,9 +1,9 @@
 import { UndefinedContextInPipelineError } from "@/errors/UndefinedContextInPipelineError";
-import { BaseContextPipelineStage } from "@/pipelines/definition/stages/BaseContextPipelineStage";
+import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
 import { IProvider } from "@/providers/IProvider";
 import { AnyResult } from "@/results/AnyResult";
 
-export class DebugInformationStage extends BaseContextPipelineStage<
+export class DebugInformationStage extends BaseStatefulPipelineStage<
 	[IProvider, AnyResult],
 	string
 > {

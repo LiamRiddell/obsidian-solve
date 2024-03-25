@@ -1,18 +1,24 @@
 import { EPluginEvent } from "@/constants/EPluginEvent";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
+import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
 import UserSettings from "@/settings/UserSettings";
 import { EditorView, WidgetType } from "@codemirror/view";
 
+// Optimise: Remove reliance on user settings
 export class ResultWidget extends WidgetType {
-	value: string;
-	lineNumber: number;
 	userSettings: UserSettings;
+	expression: string;
+	result: string;
+	lineNumber: number;
+	isInlineSolve: boolean;
 
-	constructor(value: string, lineNumber: number) {
+	constructor(state: IPreprocessorState, expression: string, result: string) {
 		super();
-		this.value = value;
-		this.lineNumber = lineNumber;
 		this.userSettings = UserSettings.getInstance();
+		this.expression = expression;
+		this.result = result;
+		this.lineNumber = state.lineNumber;
+		this.isInlineSolve = state.isInlineSolve || false;
 	}
 
 	toDOM(view: EditorView): HTMLElement {
@@ -28,7 +34,9 @@ export class ResultWidget extends WidgetType {
 			pluginEventBus.emit(
 				EPluginEvent.WriteResultToActiveDocumentLine,
 				this.lineNumber,
-				this.value
+				this.expression,
+				this.result,
+				this.isInlineSolve
 			);
 		});
 
@@ -53,7 +61,7 @@ export class ResultWidget extends WidgetType {
 			);
 		}
 
-		div.textContent = `${this.value}`;
+		div.textContent = `${this.result}`;
 
 		return div;
 	}

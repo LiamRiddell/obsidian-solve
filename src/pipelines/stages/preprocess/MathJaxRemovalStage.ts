@@ -1,11 +1,15 @@
-import { BasePipelineStage } from "@/pipelines/definition/stages/BaseSimplePipelineStage";
+import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
+import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
 
-export class MathSyntaxRemovalStage extends BasePipelineStage<string> {
+export class MathSyntaxRemovalStage extends BaseStatefulPipelineStage<
+	IPreprocessorState,
+	string
+> {
 	// Matches for any math syntax which starts and ends with `$$` for example $$10+20$$
 	private mathjaxFormatRegex = new RegExp(/^(?:\$\$(.+)\$\$)$/g);
 	private latexFormatRegex = new RegExp(/^(?:\$(.+)\$)$/g);
 
-	protected execute(request: string): string {
+	protected execute(state: IPreprocessorState, request: string): string {
 		const mathjaxMatch = this.mathjaxFormatRegex.exec(request);
 
 		if (mathjaxMatch) {

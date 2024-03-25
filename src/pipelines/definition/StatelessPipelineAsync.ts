@@ -1,11 +1,13 @@
 import { EmptyPipelineError } from "@/errors/EmptyPipelineError";
-import { IPipelineAsyncStage } from "@/pipelines/definition/stages/ISimplePipelineAsyncStage";
+import { IStatelessPipelineAsyncStage } from "@/pipelines/definition/stages/IStatelessPipelineAsyncStage";
 
-export class PipelineAsync<T> {
-	private firstStage: IPipelineAsyncStage<T> | null = null;
-	private lastStage: IPipelineAsyncStage<T> | null = null;
+export class StatelessPipelineAsync<T> {
+	private firstStage: IStatelessPipelineAsyncStage<T> | null = null;
+	private lastStage: IStatelessPipelineAsyncStage<T> | null = null;
 
-	addStage(stage: IPipelineAsyncStage<T>): PipelineAsync<T> {
+	addStage(
+		stage: IStatelessPipelineAsyncStage<T>
+	): StatelessPipelineAsync<T> {
 		if (!this.firstStage) {
 			this.firstStage = this.lastStage = stage;
 		} else {

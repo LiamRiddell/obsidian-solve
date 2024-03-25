@@ -19,6 +19,7 @@ export class SettingTab extends PluginSettingTab {
 		this.displayIntroduction();
 		this.displayEngineSettings();
 		this.displayInterfaceSettings();
+		this.displayInlineSolveSettings();
 		this.displayVariablesSettings();
 
 		// Providers Settings
@@ -64,6 +65,29 @@ export class SettingTab extends PluginSettingTab {
 			);
 	}
 
+	displayInlineSolveSettings() {
+		new Setting(this.containerEl).setName("Inline Solve").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Include expression when committing")
+			.setDesc(
+				`Solve will include the expression in the format \`EXPRESSION = RESULT\` when committing e.g. '2 + 2 = 4'. Default is ${DEFAULT_SETTINGS.inlineSolve.includeExpressionOnCommit}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.inlineSolve
+							.includeExpressionOnCommit
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.inlineSolve.includeExpressionOnCommit =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+	}
+
 	displayVariablesSettings() {
 		new Setting(this.containerEl).setName("Variable").setHeading();
 
@@ -85,7 +109,7 @@ export class SettingTab extends PluginSettingTab {
 
 	displayProviderManagementSettings() {
 		new Setting(this.containerEl)
-			.setName("Provider management")
+			.setName("Provider Management")
 			.setHeading();
 
 		new Setting(this.containerEl)

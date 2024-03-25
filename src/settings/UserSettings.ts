@@ -8,6 +8,7 @@ import { EngineSettings } from "@/settings/properties/EngineSettings";
 import { FloatResultSettings } from "@/settings/properties/FloatResultSettings";
 import { FunctionArithmeticProviderSettings } from "@/settings/properties/FunctionArithmeticProviderSettings";
 import { HexResultSettings } from "@/settings/properties/HexResultSettings";
+import { InlineSolveSettings } from "@/settings/properties/InlineSolveSettings";
 import { IntegerResultSettings } from "@/settings/properties/IntegerResultSettings";
 import { InterfaceSettings } from "@/settings/properties/InterfaceSettings";
 import { PercentageArithmeticProviderSettings } from "@/settings/properties/PercentageArithmeticProviderSettings";
@@ -23,6 +24,7 @@ export default class UserSettings {
 
 	public readonly engine: EngineSettings;
 	public readonly interface: InterfaceSettings;
+	public readonly inlineSolve: InlineSolveSettings;
 	public readonly variable: VariableSettings;
 
 	// Provider Settings
@@ -48,6 +50,7 @@ export default class UserSettings {
 		// General
 		this.engine = new EngineSettings(this);
 		this.interface = new InterfaceSettings(this);
+		this.inlineSolve = new InlineSolveSettings(this);
 		this.variable = new VariableSettings(this);
 
 		// Providers

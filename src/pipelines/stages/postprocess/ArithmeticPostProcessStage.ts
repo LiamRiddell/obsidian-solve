@@ -1,10 +1,10 @@
-import { BaseContextPipelineStage } from "@/pipelines/definition/stages/BaseContextPipelineStage";
+import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
 import { IProvider } from "@/providers/IProvider";
 import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { BASIC_ARITHMETIC_PROVIDER } from "@/utilities/constants/providers/Names";
 
-export class ArithmeticInsertEqualSignStage extends BaseContextPipelineStage<
+export class ArithmeticInsertEqualSignStage extends BaseStatefulPipelineStage<
 	[IProvider, AnyResult],
 	string
 > {

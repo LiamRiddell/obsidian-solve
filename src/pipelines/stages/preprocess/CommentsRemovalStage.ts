@@ -1,10 +1,14 @@
-import { BasePipelineStage } from "@/pipelines/definition/stages/BaseSimplePipelineStage";
+import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
+import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
 
-export class CommentsRemovalStage extends BasePipelineStage<string> {
+export class CommentsRemovalStage extends BaseStatefulPipelineStage<
+	IPreprocessorState,
+	string
+> {
 	// Matches for either # or // followed by any text.
 	private commentsRemovalRegex = new RegExp(/((?:#|\/\/).+)/);
 
-	protected execute(request: string): string {
+	protected execute(state: IPreprocessorState, request: string): string {
 		return request.replace(this.commentsRemovalRegex, "");
 	}
 }

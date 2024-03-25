@@ -1,11 +1,13 @@
-import { IPipelineAsyncStage } from "@/pipelines/definition/stages/ISimplePipelineAsyncStage";
+import { IStatelessPipelineAsyncStage } from "@/pipelines/definition/stages/IStatelessPipelineAsyncStage";
 
 export abstract class BasePipelineAsyncStage<T>
-	implements IPipelineAsyncStage<T>
+	implements IStatelessPipelineAsyncStage<T>
 {
-	private nextStage: IPipelineAsyncStage<T> | null = null;
+	private nextStage: IStatelessPipelineAsyncStage<T> | null = null;
 
-	next(stage: IPipelineAsyncStage<T>): IPipelineAsyncStage<T> {
+	next(
+		stage: IStatelessPipelineAsyncStage<T>
+	): IStatelessPipelineAsyncStage<T> {
 		this.nextStage = stage;
 		return stage;
 	}
@@ -15,6 +17,5 @@ export abstract class BasePipelineAsyncStage<T>
 		return this.nextStage ? this.nextStage.process(request) : request;
 	}
 
-	// Execute the stages user code.
 	protected abstract execute(request: T): Promise<T>;
 }

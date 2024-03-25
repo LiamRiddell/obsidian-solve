@@ -237,7 +237,12 @@ export default class SolvePlugin extends Plugin {
 		}
 	}
 
-	private async onWriteResultEvent(lineNumber: number, resultValue: string) {
+	private async onWriteResultEvent(
+		lineNumber: number,
+		expression: string,
+		result: string,
+		isInlineSolve?: boolean
+	) {
 		const lineNumberZeroIndexed = Math.max(0, lineNumber - 1);
 
 		let lineText = this.app.workspace.activeEditor?.editor?.getLine(
@@ -257,10 +262,17 @@ export default class SolvePlugin extends Plugin {
 			lineText = insertAtIndex(
 				lineText,
 				commentsBeginIndex,
-				` ${resultValue} ` // Whitespace normalised for format.. Expression Result Comment
+				` ${result} ` // Whitespace normalised for format.. Expression Result Comment
+			);
+		} else if (isInlineSolve) {
+			lineText = lineText.replace(
+				`s\`${expression}\``,
+				this.settings.inlineSolve.includeExpressionOnCommit
+					? `\`${expression} = ${result}\``
+					: `\`${result}\``
 			);
 		} else {
-			lineText = `${lineText?.trimEnd()} ${resultValue}`;
+			lineText = `${lineText?.trimEnd()} ${result}`;
 		}
 
 		this.app.workspace.activeEditor?.editor?.setLine(

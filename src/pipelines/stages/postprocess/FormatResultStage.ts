@@ -1,11 +1,11 @@
 import { UndefinedContextInPipelineError } from "@/errors/UndefinedContextInPipelineError";
-import { BaseContextPipelineStage } from "@/pipelines/definition/stages/BaseContextPipelineStage";
+import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
 import { IProvider } from "@/providers/IProvider";
 import { AnyResult } from "@/results/AnyResult";
 import { IResult } from "@/results/definition/IResult";
 import { FormatVisitor } from "@/visitors/format/FormatVisitor";
 
-export class FormatResultStage extends BaseContextPipelineStage<
+export class FormatResultStage extends BaseStatefulPipelineStage<
 	[IProvider, AnyResult],
 	string
 > {

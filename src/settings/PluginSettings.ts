@@ -15,6 +15,10 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		animationDuration: "200ms",
 	},
 
+	inlineSolve: {
+		includeExpressionOnCommit: false,
+	},
+
 	variable: {
 		renderResult: true,
 	},
