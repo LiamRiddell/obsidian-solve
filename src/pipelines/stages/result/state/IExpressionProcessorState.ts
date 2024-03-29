@@ -1,4 +1,4 @@
-export interface IPreprocessorState {
+export interface IExpressionProcessorState {
 	lineNumber: number;
 	originalLineText: string;
 

@@ -1,18 +1,22 @@
 import { EPluginEvent } from "@/constants/EPluginEvent";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
-import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
+import { IExpressionProcessorState } from "@/pipelines/stages/result/state/IExpressionProcessorState";
 import UserSettings from "@/settings/UserSettings";
 import { EditorView, WidgetType } from "@codemirror/view";
 
 // Optimise: Remove reliance on user settings
-export class ResultWidget extends WidgetType {
+export class ExpressionResultWidget extends WidgetType {
 	userSettings: UserSettings;
 	expression: string;
 	result: string;
 	lineNumber: number;
 	isInlineSolve: boolean;
 
-	constructor(state: IPreprocessorState, expression: string, result: string) {
+	constructor(
+		state: IExpressionProcessorState,
+		expression: string,
+		result: string
+	) {
 		super();
 		this.userSettings = UserSettings.getInstance();
 		this.expression = expression;

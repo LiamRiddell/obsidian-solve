@@ -1,22 +1,22 @@
-import { ResultWidget } from "@/codemirror/widgets/ResultWidget";
+import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWidget";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { StatefulPipeline } from "@/pipelines/definition/StatefulPipeline";
-import { SharedArithmeticInsertEqualSignStage } from "@/pipelines/stages/postprocess/ArithmeticPostProcessStage";
-import { SharedDebugInformationStage } from "@/pipelines/stages/postprocess/DebugInformationStage";
-import { SharedFormatResultStage } from "@/pipelines/stages/postprocess/FormatResultStage";
-import { SharedCommentsRemovalStage } from "@/pipelines/stages/preprocess/CommentsRemovalStage";
-import { SharedMarkdownRemovalStage } from "@/pipelines/stages/preprocess/MarkdownRemovalStage";
-import { SharedMathJaxRemovalStage } from "@/pipelines/stages/preprocess/MathJaxRemovalStage";
-import { PreviousResultSubstitutionStage } from "@/pipelines/stages/preprocess/PreviousResultSubstitutionStage";
-import { SharedVariableAssignRemovalStage } from "@/pipelines/stages/preprocess/VariableAssignRemovalStage";
-import { VariableProcessingStage } from "@/pipelines/stages/preprocess/VariableProcessingStage";
+import { SharedArithmeticInsertEqualSignStage } from "@/pipelines/stages/expression/ArithmeticPostProcessStage";
+import { SharedDebugInformationStage } from "@/pipelines/stages/expression/DebugInformationStage";
+import { SharedFormatResultStage } from "@/pipelines/stages/expression/FormatResultStage";
+import { SharedCommentsRemovalStage } from "@/pipelines/stages/result/CommentsRemovalStage";
+import { SharedExtractInlineSolveStage } from "@/pipelines/stages/result/ExtractInlineSolveState";
+import { SharedMarkdownRemovalStage } from "@/pipelines/stages/result/MarkdownRemovalStage";
+import { SharedMathJaxRemovalStage } from "@/pipelines/stages/result/MathJaxRemovalStage";
+import { PreviousResultSubstitutionStage } from "@/pipelines/stages/result/PreviousResultSubstitutionStage";
+import { SharedVariableAssignRemovalStage } from "@/pipelines/stages/result/VariableAssignRemovalStage";
+import { VariableProcessingStage } from "@/pipelines/stages/result/VariableProcessingStage";
+import { IExpressionProcessorState } from "@/pipelines/stages/result/state/IExpressionProcessorState";
 import { IProvider } from "@/providers/IProvider";
 import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
-import { SharedExtractInlineSolveStage } from "@/pipelines/stages/preprocess/ExtractInlineSolveState";
-import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -45,8 +45,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		"math",
 	];
 
-	private preprocesser: StatefulPipeline<IPreprocessorState, string>;
-	private postprocessor: StatefulPipeline<[IProvider, AnyResult], string>;
+	private expressionProcesser: StatefulPipeline<
+		IExpressionProcessorState,
+		string
+	>;
+	private resultProcessor: StatefulPipeline<[IProvider, AnyResult], string>;
 	private variableProcessingStage: VariableProcessingStage;
 	private previousResultSubstitutionStage: PreviousResultSubstitutionStage;
 
@@ -60,8 +63,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			new PreviousResultSubstitutionStage();
 		this.variableProcessingStage = new VariableProcessingStage();
 
-		// Setup the preprocessor pipeline
-		this.preprocesser = new StatefulPipeline<IPreprocessorState, string>()
+		// Setup the expression processor pipeline
+		this.expressionProcesser = new StatefulPipeline<
+			IExpressionProcessorState,
+			string
+		>()
 			.addStage(SharedMarkdownRemovalStage)
 			.addStage(SharedCommentsRemovalStage)
 			.addStage(SharedMathJaxRemovalStage)
@@ -71,7 +77,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			.addStage(SharedVariableAssignRemovalStage);
 
 		// Setup the post processor pipeline
-		this.postprocessor = new StatefulPipeline<
+		this.resultProcessor = new StatefulPipeline<
 			[IProvider, AnyResult],
 			string
 		>()
@@ -195,14 +201,17 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					continue;
 				}
 
-				const state: IPreprocessorState = {
+				const state: IExpressionProcessorState = {
 					lineNumber: line.number,
 					originalLineText: expression,
 				};
 
-				logger.debug("Before Pipeline:", state, expression);
-				expression = this.preprocesser.process(state, expression);
-				logger.debug("After Pipeline:", state, expression);
+				logger.debug("Before Expression Processor:", state, expression);
+				expression = this.expressionProcesser.process(
+					state,
+					expression
+				);
+				logger.debug("After Expression Processor:", state, expression);
 
 				// The line is valid and decoration can be provided.
 				const decoration = this.provideDecoration(state, expression);
@@ -261,12 +270,15 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		return false;
 	}
 
-	private provideDecoration(state: IPreprocessorState, expression: string) {
+	private provideDecoration(
+		state: IExpressionProcessorState,
+		expression: string
+	) {
 		let isExplicitlyDefinedSentence = false;
 
 		// When explicit mode is enabled the sentence will end with = sign.
 		// This needs to be removed in order for grammars to match.
-		// TODO: Convert this into a context preprocessor stage
+		// TODO: Convert this into a expression processor stage
 		if (this.userSettings.engine.explicitMode) {
 			if (expression.trimEnd().endsWith("=")) {
 				expression = expression
@@ -286,7 +298,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		// Post-process the result starting with empty string the pipeline will slowly build the result for the user.
-		let result = this.postprocessor.process(solveResultTuple, "");
+		let result = this.resultProcessor.process(solveResultTuple, "");
 
 		// If the input sentence and the output is the same value ignore it.
 		// For example, 10 = 10
@@ -321,7 +333,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		return Decoration.widget({
-			widget: new ResultWidget(state, expression, result),
+			widget: new ExpressionResultWidget(state, expression, result),
 			side: 1,
 		});
 	}

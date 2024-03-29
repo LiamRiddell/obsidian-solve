@@ -1,14 +1,17 @@
 import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
-import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
+import { IExpressionProcessorState } from "@/pipelines/stages/result/state/IExpressionProcessorState";
 
 export class ExtractInlineSolveStage extends BaseStatefulPipelineStage<
-	IPreprocessorState,
+	IExpressionProcessorState,
 	string
 > {
 	// Matches for either s`EXPRESSION` and will return the first instance.
 	private inlineSolveRegex = new RegExp(/s`([^`]*)`/);
 
-	protected execute(state: IPreprocessorState, request: string): string {
+	protected execute(
+		state: IExpressionProcessorState,
+		request: string
+	): string {
 		const match = request.match(this.inlineSolveRegex);
 
 		if (match) {

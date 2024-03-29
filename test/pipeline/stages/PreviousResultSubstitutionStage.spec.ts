@@ -1,9 +1,9 @@
 import { PreviousResultSubstitutionStage } from "@/pipelines/stages/preprocess/PreviousResultSubstitutionStage";
-import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
+import { IExpressionProcessorState } from "@/pipelines/stages/preprocess/state/IExpressionProcessorState";
 import { NumberResult } from "@/results/NumberResult";
 import { beforeAll, describe, expect, test } from "@jest/globals";
 
-let state: IPreprocessorState;
+let state: IExpressionProcessorState;
 let stage: PreviousResultSubstitutionStage;
 
 beforeAll(() => {

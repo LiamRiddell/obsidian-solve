@@ -1,11 +1,11 @@
 import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
-import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
+import { IExpressionProcessorState } from "@/pipelines/stages/result/state/IExpressionProcessorState";
 import { IResult } from "@/results/definition/IResult";
 import { ResultSubstitutionFormatVisitor } from "@/visitors/format/VariableSubstitutionFormatVisitor";
 
 // Important: Since this stage is stateful it can not be used in a shared context.
 export class PreviousResultSubstitutionStage extends BaseStatefulPipelineStage<
-	IPreprocessorState,
+	IExpressionProcessorState,
 	string
 > {
 	private previousResultSubstitutionRegex = new RegExp(/:prev/gi);
@@ -17,7 +17,10 @@ export class PreviousResultSubstitutionStage extends BaseStatefulPipelineStage<
 		this.resultSubstitutionVisitor = new ResultSubstitutionFormatVisitor();
 	}
 
-	protected execute(state: IPreprocessorState, request: string): string {
+	protected execute(
+		state: IExpressionProcessorState,
+		request: string
+	): string {
 		// If there is no previouds result then return the original request.
 		if (this.previousResult === undefined) {
 			return request;

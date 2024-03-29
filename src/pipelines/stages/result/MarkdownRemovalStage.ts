@@ -1,8 +1,8 @@
 import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
-import { IPreprocessorState } from "@/pipelines/stages/preprocess/state/IPreprocessorState";
+import { IExpressionProcessorState } from "@/pipelines/stages/result/state/IExpressionProcessorState";
 
 export class MarkdownRemovalStage extends BaseStatefulPipelineStage<
-	IPreprocessorState,
+	IExpressionProcessorState,
 	string
 > {
 	// Ignored nodes e.g. block qoutes (>), lists (-), checked list ([ ]) will remove the
@@ -10,7 +10,10 @@ export class MarkdownRemovalStage extends BaseStatefulPipelineStage<
 		/^(?:(?:[-+*>]|(?:\[\s\])|(?:\d+\.))\s)+/m
 	);
 
-	protected execute(state: IPreprocessorState, request: string): string {
+	protected execute(
+		state: IExpressionProcessorState,
+		request: string
+	): string {
 		return request.replace(this.markdownReplacementRegex, "");
 	}
 }
