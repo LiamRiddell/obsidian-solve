@@ -1,5 +1,5 @@
 import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
-import { IExpressionProcessorState } from "@/pipelines/stages/result/state/IExpressionProcessorState";
+import { IExpressionProcessorState } from "@/pipelines/stages/expression/state/IExpressionProcessorState";
 
 export class ExtractInlineSolveStage extends BaseStatefulPipelineStage<
 	IExpressionProcessorState,

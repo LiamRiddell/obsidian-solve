@@ -100,7 +100,7 @@ BasicArithmetic {
     = &(whole ",") whole ("," whole)* ("." whole)
 
   englishDecimal
-    = whole "." digit+ ~","
+    = whole "." digit+
 
   whole
     = digit+

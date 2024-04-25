@@ -1,5 +1,5 @@
 import { BaseStatefulPipelineStage } from "@/pipelines/definition/stages/BaseStatefulPipelineStage";
-import { IExpressionProcessorState } from "@/pipelines/stages/result/state/IExpressionProcessorState";
+import { IExpressionProcessorState } from "@/pipelines/stages/expression/state/IExpressionProcessorState";
 import { solveProviderManager } from "@/providers/ProviderManager";
 import { IResult } from "@/results/definition/IResult";
 import { ResultSubstitutionFormatVisitor } from "@/visitors/format/VariableSubstitutionFormatVisitor";

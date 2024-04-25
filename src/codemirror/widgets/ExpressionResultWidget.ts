@@ -1,6 +1,6 @@
 import { EPluginEvent } from "@/constants/EPluginEvent";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
-import { IExpressionProcessorState } from "@/pipelines/stages/result/state/IExpressionProcessorState";
+import { IExpressionProcessorState } from "@/pipelines/stages/expression/state/IExpressionProcessorState";
 import UserSettings from "@/settings/UserSettings";
 import { EditorView, WidgetType } from "@codemirror/view";
 
