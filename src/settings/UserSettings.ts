@@ -11,6 +11,7 @@ import { HexResultSettings } from "@/settings/properties/HexResultSettings";
 import { InlineSolveSettings } from "@/settings/properties/InlineSolveSettings";
 import { IntegerResultSettings } from "@/settings/properties/IntegerResultSettings";
 import { InterfaceSettings } from "@/settings/properties/InterfaceSettings";
+import { NumberResultSettings } from "@/settings/properties/NumberResultSettings";
 import { PercentageArithmeticProviderSettings } from "@/settings/properties/PercentageArithmeticProviderSettings";
 import { PercentageResultSettings } from "@/settings/properties/PercentageResultSettings";
 import { UnitOfMeasurementProviderSettings } from "@/settings/properties/UnitOfMeasurementProviderSettings";
@@ -37,6 +38,7 @@ export default class UserSettings {
 	public readonly diceProvider: DiceProviderSettings;
 
 	// Result Settings
+	public readonly numberResult: NumberResultSettings;
 	public readonly integerResult: IntegerResultSettings;
 	public readonly floatResult: FloatResultSettings;
 	public readonly percentageResult: PercentageResultSettings;
@@ -69,6 +71,7 @@ export default class UserSettings {
 		this.diceProvider = new DiceProviderSettings(this);
 
 		// Results
+		this.numberResult = new NumberResultSettings(this);
 		this.integerResult = new IntegerResultSettings(this);
 		this.floatResult = new FloatResultSettings(this);
 		this.percentageResult = new PercentageResultSettings(this);

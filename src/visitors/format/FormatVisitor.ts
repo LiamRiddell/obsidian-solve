@@ -67,9 +67,21 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 	}
 
 	visitNumberResult(result: NumberResult): string {
+		let enableThousandsSeparator = false;
+
+		if (Number.isInteger(result.value)) {
+			enableThousandsSeparator =
+				this.settings.integerResult.enableSeperator;
+		} else {
+			enableThousandsSeparator =
+				this.settings.floatResult.enableSeperator;
+		}
+
 		return autoFormatIntegerOrFloat(
 			result.value,
-			this.settings.floatResult.decimalPlaces
+			this.settings.floatResult.decimalPlaces,
+			enableThousandsSeparator,
+			this.settings.numberResult.decimalSeparatorLocale
 		).toString();
 	}
 

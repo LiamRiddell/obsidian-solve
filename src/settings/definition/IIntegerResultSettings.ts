@@ -1,1 +1,3 @@
-export interface IIntegerResultSettings {}
+export interface IIntegerResultSettings {
+	enableSeperator: boolean;
+}

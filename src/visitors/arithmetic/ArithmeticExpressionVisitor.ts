@@ -32,7 +32,31 @@ export class ArithmeticExpressionVisitor {
 		return new HexResult(hexValue);
 	}
 
-	visitNumber(numString: string): INumericResult {
+	visitNumber(numString: string, decimalSeparator?: string): INumericResult {
+		switch (decimalSeparator) {
+			// Non-English
+			case ",":
+				// Coerce the number to default format e.g. 124.200,200 -> 124200.200
+				if (numString.indexOf(".") > -1) {
+					numString = numString
+						// Replace comma with temp character || e.g. 124,200 -> 124||200
+						.replace(",", "||")
+						// Replace the fullstops with nothing e.g. 124.200 -> 124200
+						.replace(".", "")
+						// Replace the temp character back e.g. 124||200 -> 124.200
+						.replace("||", ".");
+				}
+				break;
+
+			// English
+			case ".":
+				// Replace commas with nothing e.g. 124,200.200 -> 124200.200
+				if (numString.indexOf(",") > -1) {
+					numString = numString.replace(",", "");
+				}
+				break;
+		}
+
 		return new NumberResult(parseFloat(numString));
 	}
 }

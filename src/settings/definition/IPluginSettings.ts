@@ -9,6 +9,7 @@ import { IHexResultSettings } from "@/settings/definition/IHexResultSettings";
 import { IInlineSolveSettings } from "@/settings/definition/IInlineSolveSettings";
 import { IIntegerResultSettings } from "@/settings/definition/IIntegerResultSettings";
 import { IInterfaceSettings } from "@/settings/definition/IInterfaceSettings";
+import { INumberResultSettings } from "@/settings/definition/INumberResultSettings";
 import { IPercentageProviderSettings } from "@/settings/definition/IPercentageArithmeticProviderSettings";
 import { IPercentageResultSettings } from "@/settings/definition/IPercentageResultSettings";
 import { IUnitOfMeasurementProviderSettings } from "@/settings/definition/IUnitOfMeasurementProviderSettings";
@@ -32,6 +33,7 @@ export interface IPluginSettings {
 	diceProvider: IDiceProviderSettings;
 
 	// Results
+	numberResult: INumberResultSettings;
 	integerResult: IIntegerResultSettings;
 	floatResult: IFloatResultSettings;
 	percentageResult: IPercentageResultSettings;

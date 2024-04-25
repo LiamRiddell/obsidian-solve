@@ -49,8 +49,14 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	},
 
 	// Results
-	integerResult: {},
+	numberResult: {
+		decimalSeparatorLocale: "en-US",
+	},
+	integerResult: {
+		enableSeperator: false,
+	},
 	floatResult: {
+		enableSeperator: false,
 		decimalPlaces: 2,
 	},
 	percentageResult: {

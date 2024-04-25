@@ -1,6 +1,7 @@
 import { BasicArithmeticActionDict } from "@/grammars/arithmetic/BasicArithmetic.ohm-bundle";
 import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
+import UserSettings from "@/settings/UserSettings";
 import { AdditionVisitor } from "@/visitors/arithmetic/AdditionVisitor";
 import { ArithmeticExpression } from "@/visitors/arithmetic/ArithmeticExpressionVisitor";
 import { DivisionVisitor } from "@/visitors/arithmetic/DivisionVisitor";
@@ -71,8 +72,37 @@ export const basicArithmeticSemanticActions: BasicArithmeticActionDict<
 	hex(_, _1) {
 		return ArithmeticExpression.visitHex(this.sourceString);
 	},
-	number_fract(_, _1, _2) {
-		return ArithmeticExpression.visitNumber(this.sourceString);
+	number_nonEnglish(_) {
+		return ArithmeticExpression.visitNumber(this.sourceString, ",");
+	},
+	number_nonEnglishDecimal(_) {
+		const userDecimalSeparatorLocale =
+			UserSettings.getInstance().numberResult.decimalSeparatorLocale;
+
+		// Ambiguis format detected
+		// NOTE: If the user locale is English, the grammer will match 127.0 as a non-English number
+		// this is a temporary solution until grammar is updated
+		if (userDecimalSeparatorLocale === "en-US") {
+			return ArithmeticExpression.visitNumber(this.sourceString, ".");
+		}
+
+		return ArithmeticExpression.visitNumber(this.sourceString, ",");
+	},
+	number_english(_) {
+		return ArithmeticExpression.visitNumber(this.sourceString, ".");
+	},
+	number_englishDecimal(_) {
+		const userDecimalSeparatorLocale =
+			UserSettings.getInstance().numberResult.decimalSeparatorLocale;
+
+		// Ambiguis format detected
+		// NOTE: If the user locale is Non-English, the grammer will match 127,0 as a English number
+		// this is a temporary solution until grammar is updated
+		if (userDecimalSeparatorLocale === "de-DE") {
+			return ArithmeticExpression.visitNumber(this.sourceString, ",");
+		}
+
+		return ArithmeticExpression.visitNumber(this.sourceString, ".");
 	},
 	number_whole(_) {
 		return ArithmeticExpression.visitNumber(this.sourceString);

@@ -1,6 +1,7 @@
 import { ANIMATE_CSS_TRANSITIONS_OPTIONS } from "@/constants/AnimateCssOptions";
 import { EDatetimeParsingFormat } from "@/constants/EDatetimeFormat";
 import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
+import { SUPPORTED_SEPARATOR_LOCALES } from "@/constants/SupportedSeparators";
 import SolvePlugin from "@/main";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { App, PluginSettingTab, Setting } from "obsidian";
@@ -28,7 +29,8 @@ export class SettingTab extends PluginSettingTab {
 		this.displayDatetimeProviderSettings();
 
 		// Reuslts
-		//this.displayIntegerSettings();
+		this.displayNumberSettings();
+		this.displayIntegerSettings();
 		this.displayFloatSettings();
 		this.displayPercentageSettings();
 		this.displayDatetimeSettings();
@@ -421,12 +423,73 @@ export class SettingTab extends PluginSettingTab {
 			});
 	}
 
+	displayNumberSettings() {
+		new Setting(this.containerEl)
+			.setName("Number Result (Shared)")
+			.setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Decimal seperator")
+			.setDesc(
+				`Specify the seperator format to be used for decimals. Default is ${"English"}`
+			)
+			.addDropdown((dropdown) => {
+				const value =
+					this.plugin.settings.numberResult.decimalSeparatorLocale;
+
+				dropdown.addOptions(SUPPORTED_SEPARATOR_LOCALES);
+
+				dropdown.setValue(value);
+
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.numberResult.decimalSeparatorLocale =
+						value;
+					await this.plugin.saveSettings();
+				});
+			});
+	}
+
 	displayIntegerSettings() {
 		new Setting(this.containerEl).setName("Integer Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Display thousand separators")
+			.setDesc(
+				`Adds thousand separators to integer results. Default is ${DEFAULT_SETTINGS.integerResult.enableSeperator}`
+			)
+			.addToggle((toggle) => {
+				const value =
+					this.plugin.settings.integerResult.enableSeperator;
+
+				toggle.setValue(value);
+
+				toggle.onChange(async (value) => {
+					this.plugin.settings.integerResult.enableSeperator = value;
+
+					await this.plugin.saveSettings();
+				});
+			});
 	}
 
 	displayFloatSettings() {
 		new Setting(this.containerEl).setName("Float Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Display thousand separators")
+			.setDesc(
+				`Adds thousand separators to float results. Default is ${DEFAULT_SETTINGS.floatResult.enableSeperator}`
+			)
+			.addToggle((toggle) => {
+				const value = this.plugin.settings.floatResult.enableSeperator;
+
+				toggle.setValue(value);
+
+				toggle.onChange(async (value) => {
+					this.plugin.settings.floatResult.enableSeperator = value;
+
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(this.containerEl)
 			.setName("Decimal places")

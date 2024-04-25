@@ -25,6 +25,10 @@ export class ResultCache {
 
 		return value;
 	}
+
+	clear() {
+		this.lfuCache.clear();
+	}
 }
 
 export const GlobalResultCache = new ResultCache(200);

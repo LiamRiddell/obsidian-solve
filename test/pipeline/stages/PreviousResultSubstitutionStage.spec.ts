@@ -1,5 +1,5 @@
-import { PreviousResultSubstitutionStage } from "@/pipelines/stages/preprocess/PreviousResultSubstitutionStage";
-import { IExpressionProcessorState } from "@/pipelines/stages/preprocess/state/IExpressionProcessorState";
+import { PreviousResultSubstitutionStage } from "@/pipelines/stages/expression/PreviousResultSubstitutionStage";
+import { IExpressionProcessorState } from "@/pipelines/stages/expression/state/IExpressionProcessorState";
 import { NumberResult } from "@/results/NumberResult";
 import { beforeAll, describe, expect, test } from "@jest/globals";
 

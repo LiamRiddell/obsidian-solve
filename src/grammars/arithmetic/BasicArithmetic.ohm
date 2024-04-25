@@ -84,9 +84,27 @@ BasicArithmetic {
     | caseInsensitive<"E">
 
   number
-    = digit* "." digit+  -- fract
-    | digit+             -- whole
-  
+  = nonEnglishNumber    -- nonEnglish
+    | nonEnglishDecimal -- nonEnglishDecimal
+    | englishNumber     -- english
+    | englishDecimal    -- englishDecimal
+    | whole             -- whole
+
+  nonEnglishNumber
+    = &(whole ".") whole ("." whole)* ("," whole)
+    
+  nonEnglishDecimal
+    = whole "," digit+ ~"."
+
+  englishNumber
+    = &(whole ",") whole ("," whole)* ("." whole)
+
+  englishDecimal
+    = whole "." digit+ ~","
+
+  whole
+    = digit+
+
   hex
     = "0x" hexDigit+
     | hexDigit+ "h"

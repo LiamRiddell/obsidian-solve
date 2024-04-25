@@ -1,3 +1,4 @@
+import { GlobalResultCache } from "@/cache/ResultCache";
 import { MarkdownEditorViewPlugin } from "@/codemirror/MarkdownEditorViewPlugin";
 import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@/constants/EPluginEvent";
@@ -71,6 +72,8 @@ export default class SolvePlugin extends Plugin {
 		logger.debug("[Solve] Settings Saved", rawSettings);
 
 		await this.saveData(rawSettings);
+
+		GlobalResultCache.clear();
 
 		this.app.workspace.updateOptions();
 	}

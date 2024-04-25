@@ -44,7 +44,7 @@ export class LFUCache<K, V> {
 		newSet.add(key);
 	}
 
-	get(key: K): V | undefined {
+	public get(key: K): V | undefined {
 		const item = this.cache.get(key);
 
 		if (item) {
@@ -55,7 +55,7 @@ export class LFUCache<K, V> {
 		return undefined;
 	}
 
-	set(key: K, value: V): void {
+	public set(key: K, value: V): void {
 		const item = this.cache.get(key);
 
 		if (item) {
@@ -98,5 +98,12 @@ export class LFUCache<K, V> {
 		}
 
 		freqSet.add(key);
+	}
+
+	public clear(): void {
+		this.cache.clear();
+		this.frequencies.clear();
+		this.minFrequency = 0;
+		this.order = 0;
 	}
 }
