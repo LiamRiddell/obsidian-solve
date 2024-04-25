@@ -51,9 +51,8 @@ export class PercentageArithmeticProvider extends SemanticProviderBase<Percentag
 				);
 			},
 			percentage(numberNode, _) {
-				return new PercentageResult(
-					parseFloat(numberNode.sourceString) / 100
-				);
+				const number = numberNode.visit();
+				return new PercentageResult(number.value / 100);
 			},
 		});
 	}
