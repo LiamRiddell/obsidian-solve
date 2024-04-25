@@ -100,7 +100,8 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 	}
 
 	visitPercentageResult(result: PercentageResult): string {
-		return `${result.value.toFixed(
+		const nonDecimalPercentage = result.value * 100;
+		return `${nonDecimalPercentage.toFixed(
 			this.settings.percentageResult.decimalPlaces
 		)}%`;
 	}

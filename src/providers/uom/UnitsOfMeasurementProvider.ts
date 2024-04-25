@@ -69,7 +69,7 @@ export class UnitsOfMeasurementProvider extends SemanticProviderBase<UnitsOfMeas
 			},
 			percentage(numberNode, _) {
 				return new PercentageResult(
-					parseFloat(numberNode.sourceString)
+					parseFloat(numberNode.sourceString) / 100
 				);
 			},
 		});

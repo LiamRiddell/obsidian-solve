@@ -31,7 +31,7 @@ import { EPluginEvent } from "../constants/EPluginEvent";
 import { EPluginStatus } from "../constants/EPluginStatus";
 import { solveProviderManager } from "../providers/ProviderManager";
 
-const DEBUG_MODE_ENABLED = false;
+const DEBUG_MODE_ENABLED = true;
 
 export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
@@ -206,12 +206,12 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					originalLineText: expression,
 				};
 
-				logger.debug("Before Expression Processor:", state, expression);
+				// logger.debug("Before Expression Processor:", state, expression);
 				expression = this.expressionProcesser.process(
 					state,
 					expression
 				);
-				logger.debug("After Expression Processor:", state, expression);
+				// logger.debug("After Expression Processor:", state, expression);
 
 				// The line is valid and decoration can be provided.
 				const decoration = this.provideDecoration(state, expression);

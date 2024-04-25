@@ -1,6 +1,7 @@
 import { UnsupportedCoercionOperationError } from "@/errors/UnsupportedCoercionOperationError";
 import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
+import { PercentageResult } from "@/results/PercentageResult";
 import { UnitOfMeasurementResult } from "@/results/UnitOfMeasurementResult";
 import { IResult } from "@/results/definition/IResult";
 import { ICoercionResultVisitor } from "@/visitors/definition/ICoercionResultVisitor";
@@ -15,7 +16,8 @@ export class NumberCoercionVisitor
 
 		if (
 			visited instanceof HexResult ||
-			visited instanceof UnitOfMeasurementResult
+			visited instanceof UnitOfMeasurementResult ||
+			visited instanceof PercentageResult
 		) {
 			return new NumberResult(visited.value);
 		}
