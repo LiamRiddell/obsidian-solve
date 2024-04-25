@@ -31,7 +31,7 @@ import { EPluginEvent } from "../constants/EPluginEvent";
 import { EPluginStatus } from "../constants/EPluginStatus";
 import { solveProviderManager } from "../providers/ProviderManager";
 
-const DEBUG_MODE_ENABLED = true;
+const DEBUG_MODE_ENABLED = false;
 
 export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
