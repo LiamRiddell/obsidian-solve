@@ -1,5 +1,4 @@
 import { INumericResult } from "@/results/definition/INumericResult";
-import { logger } from "@/utilities/Logger";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class PercentageResult implements INumericResult {
@@ -10,7 +9,6 @@ export class PercentageResult implements INumericResult {
 	}
 
 	accept<T>(visitor: IGenericResultVisitor<T>): T {
-		logger.debug("[PercentageResult] accept", visitor);
 		return visitor.visit(this);
 	}
 }
