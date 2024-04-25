@@ -520,6 +520,25 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Percentage Result").setHeading();
 
 		new Setting(this.containerEl)
+			.setName("Display thousand separators")
+			.setDesc(
+				`Adds thousand separators to percentage results. Default is ${DEFAULT_SETTINGS.percentageResult.enableSeperator}`
+			)
+			.addToggle((toggle) => {
+				const value =
+					this.plugin.settings.percentageResult.enableSeperator;
+
+				toggle.setValue(value);
+
+				toggle.onChange(async (value) => {
+					this.plugin.settings.percentageResult.enableSeperator =
+						value;
+
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(this.containerEl)
 			.setName("Decimal places")
 			.setDesc(
 				`Adjust the number of decimal places, setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.percentageResult.decimalPlaces}`

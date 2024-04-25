@@ -60,6 +60,7 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		decimalPlaces: 2,
 	},
 	percentageResult: {
+		enableSeperator: false,
 		decimalPlaces: 2,
 	},
 	datetimeResult: {

@@ -100,10 +100,14 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 	}
 
 	visitPercentageResult(result: PercentageResult): string {
-		const nonDecimalPercentage = result.value * 100;
-		return `${nonDecimalPercentage.toFixed(
-			this.settings.percentageResult.decimalPlaces
-		)}%`;
+		const percentage = autoFormatIntegerOrFloat(
+			result.value * 100,
+			this.settings.percentageResult.decimalPlaces,
+			this.settings.percentageResult.enableSeperator,
+			this.settings.numberResult.decimalSeparatorLocale
+		);
+
+		return `${percentage}%`;
 	}
 
 	visitDatetimeResult(result: IDatetimeResult): string {
