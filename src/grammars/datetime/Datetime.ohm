@@ -69,16 +69,25 @@ Datetime {
     =  (twoDigit | oneDigit) ":" (twoDigit | oneDigit) ":" (twoDigit | oneDigit)
 
   datetimeIso8601
-    = fourDigit "-" twoDigit "-" twoDigit "T"? (twoDigit ":" twoDigit ":" twoDigit)? ("." digit+)? ("Z" | timeZone)?
+    = fourDigit "-" twoDigit "-" twoDigit ("T" | space)? (timeWithMilliseconds | timeWithSeconds)?  ("Z" | timeZoneColon | timeZoneHours)?
+
+	timeWithMilliseconds
+    	= twoDigit ":" twoDigit ":" twoDigit "." digit+
+    
+  timeWithSeconds
+    = twoDigit ":" twoDigit ":" twoDigit
 
   datetimeFormatEuropeanOrUs
     = (twoDigit | oneDigit) "/" (twoDigit | oneDigit) "/" (fourDigit | twoDigit) time?
     | (twoDigit | oneDigit) "-" (twoDigit | oneDigit) "-" (fourDigit | twoDigit) time?
     | (twoDigit | oneDigit) "." (twoDigit | oneDigit) "." (fourDigit | twoDigit) time?
     
-  timeZone
+  timeZoneColon
  	 = "+" digit+ ":" digit+
  	 | "-" digit+ ":" digit+
+     
+  timeZoneHours
+  	= "+" fourDigit
 
   add 
   	= "+"

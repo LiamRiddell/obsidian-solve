@@ -113,23 +113,7 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 						`${Math.max(timeUntil, 0)} ${unitNode.sourceString}`
 					);
 				},
-
-				datetimeIso8601(
-					_,
-					_1,
-					_2,
-					_3,
-					_4,
-					_5,
-					_6,
-					_7,
-					_8,
-					_9,
-					_10,
-					_11,
-					_12,
-					_13
-				) {
+				datetimeIso8601(_, _1, _2, _3, _4, _5, _6, _7) {
 					return new DatetimeResult(moment(this.sourceString));
 				},
 				datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {

@@ -69,10 +69,10 @@ class ProviderManager {
 
 	private registerCoreProviders() {
 		// Order of precedence
+		this.registerProvider(new DatetimeProvider());
 		this.registerProvider(new BasicArithmeticProvider());
 		this.registerProvider(new PercentageArithmeticProvider());
 		this.registerProvider(new UnitsOfMeasurementProvider());
-		this.registerProvider(new DatetimeProvider());
 		this.registerProvider(new FunctionArithmeticProvider());
 		this.registerProvider(new VectorArithmeticProvider());
 		this.registerProvider(new DiceProvider());

@@ -27,7 +27,7 @@ describe("Types", () => {
 		expect(new NumberResult(2.0).accept(formatVisitor)).toBe("2"));
 
 	test("Percentage", () =>
-		expect(new PercentageResult(83).accept(formatVisitor)).toBe("83.00%"));
+		expect(new PercentageResult(0.83).accept(formatVisitor)).toBe("83%"));
 
 	test("Datetime", () =>
 		expect(
