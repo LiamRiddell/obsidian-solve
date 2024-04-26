@@ -231,6 +231,25 @@ export class SettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		new Setting(this.containerEl)
+			.setName("Binary (BigInteger)")
+			.setDesc(
+				`Enable the binary (BigInteger) provider e.g. 0b10101 >> 4, right shift. Default is ${DEFAULT_SETTINGS.bigIntegerArithmeticProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.bigIntegerArithmeticProvider
+							.enabled
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.bigIntegerArithmeticProvider.enabled =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayInterfaceSettings() {

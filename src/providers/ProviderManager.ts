@@ -1,6 +1,7 @@
 import { GlobalResultCache } from "@/cache/ResultCache";
 import { IProvider } from "@/providers/IProvider";
 import { BasicArithmeticProvider } from "@/providers/arithmetic/BasicArithmeticProvider";
+import { BigIntegerArithmeticProvider } from "@/providers/biginteger/BigIntegerArithmeticProvider";
 import { DatetimeProvider } from "@/providers/datetime/DatetimeProvider";
 import { DiceProvider } from "@/providers/dice/DiceProvider";
 import { FunctionArithmeticProvider } from "@/providers/function/FunctionArithmeticProvider";
@@ -71,6 +72,7 @@ class ProviderManager {
 		// Order of precedence
 		this.registerProvider(new DatetimeProvider());
 		this.registerProvider(new BasicArithmeticProvider());
+		this.registerProvider(new BigIntegerArithmeticProvider());
 		this.registerProvider(new PercentageArithmeticProvider());
 		this.registerProvider(new UnitsOfMeasurementProvider());
 		this.registerProvider(new FunctionArithmeticProvider());

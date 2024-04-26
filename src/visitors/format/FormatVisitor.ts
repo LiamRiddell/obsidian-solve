@@ -1,4 +1,6 @@
+import { ERadix } from "@/constants/ERadix";
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
+import { BigIntResult } from "@/results/BigIntResult";
 import { DatetimeResult } from "@/results/DatetimeResult";
 import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
@@ -45,6 +47,10 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 
 		if (visited instanceof StringResult) {
 			return this.visitStringResult(visited);
+		}
+
+		if (visited instanceof BigIntResult) {
+			return this.visitBigIntResult(visited);
 		}
 
 		if (visited instanceof Vector2Result) {
@@ -116,6 +122,22 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 
 	visitStringResult(result: IStringResult): string {
 		return result.value;
+	}
+
+	visitBigIntResult(result: BigIntResult): string {
+		switch (result.radix) {
+			case ERadix.Binary:
+				return `0b${result.value.toString(result.radix)}`;
+
+			case ERadix.Decimal:
+				return result.value.toString(result.radix);
+
+			case ERadix.Hexadecimal:
+				return `0x${result.value.toString(result.radix)}`.toUpperCase();
+
+			default:
+				return result.value.toString(result.radix);
+		}
 	}
 
 	visitVector2Result(result: IVector2Result): string {

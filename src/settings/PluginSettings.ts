@@ -47,6 +47,9 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	diceProvider: {
 		enabled: true,
 	},
+	bigIntegerArithmeticProvider: {
+		enabled: true,
+	},
 
 	// Results
 	numberResult: {

@@ -1,0 +1,78 @@
+BigIntArithmetic {
+    Expression
+        = Bitwise
+
+    // Potentially bug here AS may need to be Bitwise operator Bitwise
+    Bitwise
+        = Bitwise "<<" AS -- leftShift
+        | Bitwise ">>>" AS -- unsignedRightShift
+        | Bitwise ">>" AS -- rightShift
+        | Bitwise "&" AS -- AND
+        | Bitwise "^" AS -- XOR
+        | Bitwise "|" AS -- OR
+        | AS
+
+    // Addition or Subtraction
+    AS
+        = AS add MD  -- addition
+        | AS subtract MD  -- subtraction
+        | MD
+
+    // Multiply or Divide
+    MD
+        = MD multiply E  -- multiplication
+        | MD divide E  -- division
+        | MD remainder E  -- remainder
+        | E
+
+    // Exponent
+    E
+        = P exponent E  -- exponent
+        | P
+
+    // Parenthesis
+    P
+        = "(" Expression ")"  -- parenthesis
+        | Primitive
+
+    Primitive
+        = hex
+        | binary
+        | bigInteger
+
+    // Lexical Rules
+    add 
+        = "+"
+
+    subtract 
+        = "-"
+        
+    multiply 
+        = "*"
+        | "\\*" // Escaped \* for markdown
+        | "\u{00D7}" // ×
+        | caseInsensitive<"x">
+        
+    divide
+        = "/"
+        | "\u{00F7}" // ÷
+
+    remainder
+        = "%"
+
+    exponent
+        = "**"
+
+    binary
+        = "0b" binaryDigit+
+
+    binaryDigit
+        = "0" | "1"
+
+    bigInteger
+        = digit+
+
+    hex
+        = "0x" hexDigit+
+        | hexDigit+ "h"
+} 

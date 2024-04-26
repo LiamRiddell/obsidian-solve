@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { IPluginSettings } from "@/settings/definition/IPluginSettings";
 import { ArithmeticProviderSettings } from "@/settings/properties/ArithmeticProviderSettings";
+import { BigIntegerArithmeticProviderSettings } from "@/settings/properties/BigIntegerArithmeticProviderSettings";
 import { DatetimeProviderSettings } from "@/settings/properties/DatetimeProviderSettings";
 import { DatetimeResultSettings } from "@/settings/properties/DatetimeResultSettings";
 import { DiceProviderSettings } from "@/settings/properties/DiceProviderSettings";
@@ -36,6 +37,7 @@ export default class UserSettings {
 	public readonly datetimeProvider: DatetimeProviderSettings;
 	public readonly unitOfMeasurementProvider: UnitOfMeasurementProviderSettings;
 	public readonly diceProvider: DiceProviderSettings;
+	public readonly bigIntegerArithmeticProvider: BigIntegerArithmeticProviderSettings;
 
 	// Result Settings
 	public readonly numberResult: NumberResultSettings;
@@ -69,6 +71,8 @@ export default class UserSettings {
 			this
 		);
 		this.diceProvider = new DiceProviderSettings(this);
+		this.bigIntegerArithmeticProvider =
+			new BigIntegerArithmeticProviderSettings(this);
 
 		// Results
 		this.numberResult = new NumberResultSettings(this);

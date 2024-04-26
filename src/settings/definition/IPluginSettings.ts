@@ -1,4 +1,5 @@
 import { IArithmeticProviderSettings } from "@/settings/definition/IArithmeticProviderSettings";
+import { IBigIntegerArithmeticProviderSettings } from "@/settings/definition/IBigIntegerArithmeticProviderSettings";
 import { IDatetimeProviderSettings } from "@/settings/definition/IDatetimeProviderSettings";
 import { IDatetimeResultSettings } from "@/settings/definition/IDatetimeResultSettings";
 import { IDiceProviderSettings } from "@/settings/definition/IDiceProviderSettings";
@@ -31,6 +32,7 @@ export interface IPluginSettings {
 	datetimeProvider: IDatetimeProviderSettings;
 	unitOfMeasurementProvider: IUnitOfMeasurementProviderSettings;
 	diceProvider: IDiceProviderSettings;
+	bigIntegerArithmeticProvider: IBigIntegerArithmeticProviderSettings;
 
 	// Results
 	numberResult: INumberResultSettings;
