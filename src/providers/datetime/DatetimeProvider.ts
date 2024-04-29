@@ -11,11 +11,14 @@ import {
 	getNextDayOfWeek,
 	getPreviousDayOfWeek,
 } from "@/utilities/Datetime";
+import { DATETIME_PROVIDER } from "@/utilities/constants/providers/Names";
 import moment from "moment";
 
 export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 	constructor() {
-		super("DatetimeProvider");
+		super(DATETIME_PROVIDER);
+
+		this.cacheable = false;
 
 		this.semantics = grammar.createSemantics();
 
@@ -110,23 +113,7 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 						`${Math.max(timeUntil, 0)} ${unitNode.sourceString}`
 					);
 				},
-
-				datetimeIso8601(
-					_,
-					_1,
-					_2,
-					_3,
-					_4,
-					_5,
-					_6,
-					_7,
-					_8,
-					_9,
-					_10,
-					_11,
-					_12,
-					_13
-				) {
+				datetimeIso8601(_, _1, _2, _3, _4, _5, _6, _7) {
 					return new DatetimeResult(moment(this.sourceString));
 				},
 				datetimeFormatEuropeanOrUs(dOrM, _, mOrD, _1, year, time) {
@@ -160,21 +147,17 @@ export class DatetimeProvider extends SemanticProviderBase<DatetimeSemantics> {
 		return UserSettings.getInstance().datetimeProvider.enabled;
 	}
 
-	provide<T = string>(sentence: string, raw: boolean = true): T | undefined {
+	provide<T = DatetimeResult | StringResult>(
+		expression: string
+	): T | undefined {
 		try {
-			const matchResult = grammar.match(sentence);
+			const matchResult = grammar.match(expression);
 
 			if (matchResult.failed()) {
 				return undefined;
 			}
 
-			const result = this.semantics(matchResult).visit();
-
-			if (raw) {
-				return result;
-			}
-
-			return result.accept(this.formatVisitor);
+			return this.semantics(matchResult).visit();
 		} catch (e) {
 			return undefined;
 		}

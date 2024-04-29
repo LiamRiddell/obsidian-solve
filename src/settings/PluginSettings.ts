@@ -15,6 +15,14 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		animationDuration: "200ms",
 	},
 
+	inlineSolve: {
+		includeExpressionOnCommit: false,
+	},
+
+	variable: {
+		renderResult: true,
+	},
+
 	// Providers
 	arithmeticProvider: {
 		enabled: true,
@@ -39,13 +47,23 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	diceProvider: {
 		enabled: true,
 	},
+	bigIntegerArithmeticProvider: {
+		enabled: true,
+	},
 
 	// Results
-	integerResult: {},
+	numberResult: {
+		decimalSeparatorLocale: "en-US",
+	},
+	integerResult: {
+		enableSeperator: false,
+	},
 	floatResult: {
+		enableSeperator: false,
 		decimalPlaces: 2,
 	},
 	percentageResult: {
+		enableSeperator: false,
 		decimalPlaces: 2,
 	},
 	datetimeResult: {

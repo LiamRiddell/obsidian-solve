@@ -1,9 +1,7 @@
-import { EResultType } from "@/constants/EResultType";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class UnitOfMeasurementResult implements INumericResult {
-	type = EResultType.UnitOfMeasurement;
 	value: number;
 	unit: string;
 

@@ -1,9 +1,7 @@
-import { EResultType } from "@/constants/EResultType";
 import { INumericResult } from "@/results/definition/INumericResult";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 
 export class HexResult implements INumericResult {
-	type = EResultType.Hex;
 	value: number;
 
 	constructor(value: number) {

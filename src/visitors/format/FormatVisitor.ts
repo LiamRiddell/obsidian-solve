@@ -1,4 +1,6 @@
+import { ERadix } from "@/constants/ERadix";
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
+import { BigIntResult } from "@/results/BigIntResult";
 import { DatetimeResult } from "@/results/DatetimeResult";
 import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
@@ -47,6 +49,10 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 			return this.visitStringResult(visited);
 		}
 
+		if (visited instanceof BigIntResult) {
+			return this.visitBigIntResult(visited);
+		}
+
 		if (visited instanceof Vector2Result) {
 			return this.visitVector2Result(visited);
 		}
@@ -67,9 +73,21 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 	}
 
 	visitNumberResult(result: NumberResult): string {
+		let enableThousandsSeparator = false;
+
+		if (Number.isInteger(result.value)) {
+			enableThousandsSeparator =
+				this.settings.integerResult.enableSeperator;
+		} else {
+			enableThousandsSeparator =
+				this.settings.floatResult.enableSeperator;
+		}
+
 		return autoFormatIntegerOrFloat(
 			result.value,
-			this.settings.floatResult.decimalPlaces
+			this.settings.floatResult.decimalPlaces,
+			enableThousandsSeparator,
+			this.settings.numberResult.decimalSeparatorLocale
 		).toString();
 	}
 
@@ -88,9 +106,14 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 	}
 
 	visitPercentageResult(result: PercentageResult): string {
-		return `${result.value.toFixed(
-			this.settings.percentageResult.decimalPlaces
-		)}%`;
+		const percentage = autoFormatIntegerOrFloat(
+			result.value * 100,
+			this.settings.percentageResult.decimalPlaces,
+			this.settings.percentageResult.enableSeperator,
+			this.settings.numberResult.decimalSeparatorLocale
+		);
+
+		return `${percentage}%`;
 	}
 
 	visitDatetimeResult(result: IDatetimeResult): string {
@@ -99,6 +122,22 @@ export class FormatVisitor implements IGenericResultVisitor<string> {
 
 	visitStringResult(result: IStringResult): string {
 		return result.value;
+	}
+
+	visitBigIntResult(result: BigIntResult): string {
+		switch (result.radix) {
+			case ERadix.Binary:
+				return `0b${result.value.toString(result.radix)}`;
+
+			case ERadix.Decimal:
+				return result.value.toString(result.radix);
+
+			case ERadix.Hexadecimal:
+				return `0x${result.value.toString(result.radix)}`.toUpperCase();
+
+			default:
+				return result.value.toString(result.radix);
+		}
 	}
 
 	visitVector2Result(result: IVector2Result): string {

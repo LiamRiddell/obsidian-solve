@@ -1,4 +1,6 @@
+import { ERadix } from "@/constants/ERadix";
 import { UnsupportedVisitorOperationError } from "@/errors/UnsupportedVisitorOperationError";
+import { BigIntResult } from "@/results/BigIntResult";
 import { DatetimeResult } from "@/results/DatetimeResult";
 import { HexResult } from "@/results/HexResult";
 import { NumberResult } from "@/results/NumberResult";
@@ -18,6 +20,7 @@ import UserSettings from "@/settings/UserSettings";
 import { autoFormatIntegerOrFloat } from "@/utilities/Number";
 import { IGenericResultVisitor } from "@/visitors/definition/IGenericResultVisitor";
 import convert, { Unit } from "convert-units";
+import moment from "moment";
 
 export class ResultSubstitutionFormatVisitor
 	implements IGenericResultVisitor<string>
@@ -65,6 +68,10 @@ export class ResultSubstitutionFormatVisitor
 			return this.visitUnitOfMeasurementResult(visited);
 		}
 
+		if (visited instanceof BigIntResult) {
+			return this.visitBigIntResult(visited);
+		}
+
 		throw new UnsupportedVisitorOperationError();
 	}
 
@@ -96,7 +103,7 @@ export class ResultSubstitutionFormatVisitor
 	}
 
 	visitDatetimeResult(result: IDatetimeResult): string {
-		return result.value.format(this.settings.datetimeResult.format);
+		return result.value.format(moment.defaultFormat);
 	}
 
 	visitStringResult(result: IStringResult): string {
@@ -171,5 +178,23 @@ export class ResultSubstitutionFormatVisitor
 		}
 
 		return `${value} ${unit}`;
+	}
+
+	visitBigIntResult(visited: BigIntResult): string {
+		switch (visited.radix) {
+			case ERadix.Binary:
+				return `0b${visited.value.toString(visited.radix)}`;
+
+			case ERadix.Decimal:
+				return visited.value.toString(visited.radix);
+
+			case ERadix.Hexadecimal:
+				return `0x${visited.value.toString(
+					visited.radix
+				)}`.toUpperCase();
+
+			default:
+				return visited.value.toString(visited.radix);
+		}
 	}
 }

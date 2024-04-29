@@ -7,7 +7,7 @@ export function expectProviderResultAndType<T extends IResult<any>>(
 	expression: string,
 	expected: T
 ) {
-	const result = provider.provide<T>(expression, true);
+	const result = provider.provide<T>(expression);
 
 	expect(result).toBeDefined();
 

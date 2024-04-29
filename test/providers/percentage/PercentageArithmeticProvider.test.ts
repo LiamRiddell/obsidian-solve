@@ -15,7 +15,7 @@ describe("Primitive", () => {
 		expectProviderResultAndType<PercentageResult>(
 			provider,
 			"10%",
-			new PercentageResult(10.0)
+			new PercentageResult(0.1)
 		);
 	});
 });
@@ -36,13 +36,37 @@ describe("Addition", () => {
 			new NumberResult(10.15)
 		);
 	});
+
+	test("100 + 50%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100 + 50%",
+			new NumberResult(150)
+		);
+	});
+
+	test("50% + 100", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"50% + 100",
+			new NumberResult(100.5)
+		);
+	});
+
+	test("50% + 30%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"50% + 30%",
+			new NumberResult(0.8)
+		);
+	});
 });
 
 describe("Subtraction", () => {
-	test("10.0 - 15%", () => {
+	test("10 - 15%", () => {
 		expectProviderResultAndType<NumberResult>(
 			provider,
-			"10.0 - 15%",
+			"10 - 15%",
 			new NumberResult(8.5)
 		);
 	});
@@ -54,6 +78,30 @@ describe("Subtraction", () => {
 			new NumberResult(-9.85)
 		);
 	});
+
+	test("100 - 50%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100 - 50%",
+			new NumberResult(50)
+		);
+	});
+
+	test("50% - 100", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"50% - 100",
+			new NumberResult(-99.5)
+		);
+	});
+
+	test("50% - 30%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"50% - 30%",
+			new NumberResult(0.35)
+		);
+	});
 });
 
 describe("Multiplication", () => {
@@ -61,7 +109,7 @@ describe("Multiplication", () => {
 		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 * 15%",
-			new NumberResult(15)
+			new NumberResult(1.5)
 		);
 	});
 
@@ -72,6 +120,30 @@ describe("Multiplication", () => {
 			new NumberResult(1.5)
 		);
 	});
+
+	test("100 * 50%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"100 * 50%",
+			new NumberResult(50)
+		);
+	});
+
+	test("50% * 100", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"50% * 100",
+			new NumberResult(50)
+		);
+	});
+
+	test("50% * 30%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"50% * 30%",
+			new NumberResult(0.15)
+		);
+	});
 });
 
 describe("Division", () => {
@@ -79,7 +151,15 @@ describe("Division", () => {
 		expectProviderResultAndType<NumberResult>(
 			provider,
 			"10 / 10%",
-			new NumberResult(10)
+			new NumberResult(100)
+		);
+	});
+
+	test("20 / 10%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"20 / 10%",
+			new NumberResult(200)
 		);
 	});
 
@@ -90,22 +170,28 @@ describe("Division", () => {
 			new NumberResult(0.1)
 		);
 	});
-});
 
-describe("Exponent", () => {
-	test("10 ^ 20%", () => {
+	test("100 / 50%", () => {
 		expectProviderResultAndType<NumberResult>(
 			provider,
-			"10 ^ 20%",
-			new NumberResult(100)
+			"100 / 50%",
+			new NumberResult(200)
 		);
 	});
 
-	test("150% ^ 10", () => {
+	test("50% / 100", () => {
 		expectProviderResultAndType<NumberResult>(
 			provider,
-			"150% ^ 10",
-			new NumberResult(57.6650390625)
+			"50% / 100",
+			new NumberResult(0.005)
+		);
+	});
+
+	test("50% / 30%", () => {
+		expectProviderResultAndType<NumberResult>(
+			provider,
+			"50% / 30%",
+			new NumberResult(0.5 / 0.3)
 		);
 	});
 });
@@ -135,7 +221,7 @@ describe("Percentage Increase/Decrease", () => {
 		expectProviderResultAndType<PercentageResult>(
 			provider,
 			"800 to 1000",
-			new PercentageResult(25)
+			new PercentageResult(0.25)
 		);
 	});
 
@@ -143,7 +229,7 @@ describe("Percentage Increase/Decrease", () => {
 		expectProviderResultAndType<PercentageResult>(
 			provider,
 			"800 to 400",
-			new PercentageResult(-50)
+			new PercentageResult(-0.5)
 		);
 	});
 });

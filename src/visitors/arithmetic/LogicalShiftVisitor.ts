@@ -28,10 +28,6 @@ export class LogicalShiftLeftVisitor
 			return this.hex(visited, this.right);
 		}
 
-		if (visited instanceof PercentageResult) {
-			return this.percentage(visited, this.right);
-		}
-
 		if (visited instanceof UnitOfMeasurementResult) {
 			return this.unitOfMeasurement(visited, this.right);
 		}
@@ -41,20 +37,12 @@ export class LogicalShiftLeftVisitor
 
 	private number(left: NumberResult, right: INumericResult) {
 		const coercedRight = NumberCoercion.visit(right);
-
 		return new NumberResult(left.value << coercedRight.value);
 	}
 
 	private hex(left: HexResult, right: INumericResult) {
 		const coercedRight = HexCoercion.visit(right);
-
 		return new HexResult(left.value << coercedRight.value);
-	}
-
-	private percentage(left: PercentageResult, right: INumericResult) {
-		const coercedRight = NumberCoercion.visit(right);
-
-		return new NumberResult((left.value / 100) << coercedRight.value);
 	}
 
 	private unitOfMeasurement(

@@ -1,22 +1,22 @@
 import { PluginEventBus } from "@/eventbus/PluginEventBus";
 import { IProvider } from "@/providers/IProvider";
-import { FormatVisitor } from "@/visitors/format/FormatVisitor";
+import { IResult } from "@/results/definition/IResult";
 
 export class ProviderBase implements IProvider {
 	name: string;
 	eventBus: PluginEventBus;
-	formatVisitor: FormatVisitor;
+	cacheable: boolean;
 
 	constructor(name: string) {
 		this.name = name;
-		this.formatVisitor = new FormatVisitor();
+		this.cacheable = true;
 	}
 
 	public enabled(): boolean {
 		throw new Error("Method not implemented.");
 	}
 
-	public provide<T = string>(sentence: string, raw: boolean): T | undefined {
+	public provide<T = IResult<any>>(expression: string): T | undefined {
 		throw new Error("Method not implemented.");
 	}
 }

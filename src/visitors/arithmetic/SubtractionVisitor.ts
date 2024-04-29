@@ -44,7 +44,6 @@ export class SubtractionVisitor
 		}
 
 		const coercedRight = NumberCoercion.visit(right);
-
 		return new NumberResult(left.value - coercedRight.value);
 	}
 
@@ -56,18 +55,18 @@ export class SubtractionVisitor
 		}
 
 		const coercedRight = HexCoercion.visit(right);
-
 		return new HexResult(left.value - coercedRight.value);
 	}
 
 	private percentage(left: PercentageResult, right: INumericResult) {
 		if (right instanceof PercentageResult) {
-			return new NumberResult(left.value / 100 - right.value / 100);
+			return new NumberResult(
+				left.value - percentageOf(right.value, left.value)
+			);
 		}
 
 		const coercedRight = NumberCoercion.visit(right);
-
-		return new NumberResult(left.value / 100 - coercedRight.value);
+		return new NumberResult(left.value - coercedRight.value);
 	}
 
 	private unitOfMeasurement(

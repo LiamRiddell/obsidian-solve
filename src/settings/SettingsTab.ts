@@ -1,6 +1,7 @@
 import { ANIMATE_CSS_TRANSITIONS_OPTIONS } from "@/constants/AnimateCssOptions";
 import { EDatetimeParsingFormat } from "@/constants/EDatetimeFormat";
 import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
+import { SUPPORTED_SEPARATOR_LOCALES } from "@/constants/SupportedSeparators";
 import SolvePlugin from "@/main";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { App, PluginSettingTab, Setting } from "obsidian";
@@ -19,6 +20,8 @@ export class SettingTab extends PluginSettingTab {
 		this.displayIntroduction();
 		this.displayEngineSettings();
 		this.displayInterfaceSettings();
+		this.displayInlineSolveSettings();
+		this.displayVariablesSettings();
 
 		// Providers Settings
 		this.displayProviderManagementSettings();
@@ -26,7 +29,8 @@ export class SettingTab extends PluginSettingTab {
 		this.displayDatetimeProviderSettings();
 
 		// Reuslts
-		//this.displayIntegerSettings();
+		this.displayNumberSettings();
+		this.displayIntegerSettings();
 		this.displayFloatSettings();
 		this.displayPercentageSettings();
 		this.displayDatetimeSettings();
@@ -63,9 +67,51 @@ export class SettingTab extends PluginSettingTab {
 			);
 	}
 
+	displayInlineSolveSettings() {
+		new Setting(this.containerEl).setName("Inline Solve").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Include expression when committing")
+			.setDesc(
+				`Solve will include the expression in the format \`EXPRESSION = RESULT\` when committing e.g. '2 + 2 = 4'. Default is ${DEFAULT_SETTINGS.inlineSolve.includeExpressionOnCommit}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.inlineSolve
+							.includeExpressionOnCommit
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.inlineSolve.includeExpressionOnCommit =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+	}
+
+	displayVariablesSettings() {
+		new Setting(this.containerEl).setName("Variable").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Show variable result")
+			.setDesc(
+				`Solve will display results at the end of variables. Default is ${DEFAULT_SETTINGS.variable.renderResult}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.variable.renderResult)
+					.onChange(async (value) => {
+						this.plugin.settings.variable.renderResult = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+	}
+
 	displayProviderManagementSettings() {
 		new Setting(this.containerEl)
-			.setName("Provider management")
+			.setName("Provider Management")
 			.setHeading();
 
 		new Setting(this.containerEl)
@@ -181,6 +227,25 @@ export class SettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.diceProvider.enabled)
 					.onChange(async (value) => {
 						this.plugin.settings.diceProvider.enabled = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Binary (BigInteger)")
+			.setDesc(
+				`Enable the binary (BigInteger) provider e.g. 0b10101 >> 4, right shift. Default is ${DEFAULT_SETTINGS.bigIntegerArithmeticProvider.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.bigIntegerArithmeticProvider
+							.enabled
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.bigIntegerArithmeticProvider.enabled =
+							value;
 
 						await this.plugin.saveSettings();
 					})
@@ -377,12 +442,73 @@ export class SettingTab extends PluginSettingTab {
 			});
 	}
 
+	displayNumberSettings() {
+		new Setting(this.containerEl)
+			.setName("Number Result (Shared)")
+			.setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Decimal seperator")
+			.setDesc(
+				`Specify the seperator format to be used for decimals. Default is ${"English"}`
+			)
+			.addDropdown((dropdown) => {
+				const value =
+					this.plugin.settings.numberResult.decimalSeparatorLocale;
+
+				dropdown.addOptions(SUPPORTED_SEPARATOR_LOCALES);
+
+				dropdown.setValue(value);
+
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.numberResult.decimalSeparatorLocale =
+						value;
+					await this.plugin.saveSettings();
+				});
+			});
+	}
+
 	displayIntegerSettings() {
 		new Setting(this.containerEl).setName("Integer Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Display thousand separators")
+			.setDesc(
+				`Adds thousand separators to integer results. Default is ${DEFAULT_SETTINGS.integerResult.enableSeperator}`
+			)
+			.addToggle((toggle) => {
+				const value =
+					this.plugin.settings.integerResult.enableSeperator;
+
+				toggle.setValue(value);
+
+				toggle.onChange(async (value) => {
+					this.plugin.settings.integerResult.enableSeperator = value;
+
+					await this.plugin.saveSettings();
+				});
+			});
 	}
 
 	displayFloatSettings() {
 		new Setting(this.containerEl).setName("Float Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Display thousand separators")
+			.setDesc(
+				`Adds thousand separators to float results. Default is ${DEFAULT_SETTINGS.floatResult.enableSeperator}`
+			)
+			.addToggle((toggle) => {
+				const value = this.plugin.settings.floatResult.enableSeperator;
+
+				toggle.setValue(value);
+
+				toggle.onChange(async (value) => {
+					this.plugin.settings.floatResult.enableSeperator = value;
+
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(this.containerEl)
 			.setName("Decimal places")
@@ -411,6 +537,25 @@ export class SettingTab extends PluginSettingTab {
 
 	displayPercentageSettings() {
 		new Setting(this.containerEl).setName("Percentage Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Display thousand separators")
+			.setDesc(
+				`Adds thousand separators to percentage results. Default is ${DEFAULT_SETTINGS.percentageResult.enableSeperator}`
+			)
+			.addToggle((toggle) => {
+				const value =
+					this.plugin.settings.percentageResult.enableSeperator;
+
+				toggle.setValue(value);
+
+				toggle.onChange(async (value) => {
+					this.plugin.settings.percentageResult.enableSeperator =
+						value;
+
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(this.containerEl)
 			.setName("Decimal places")

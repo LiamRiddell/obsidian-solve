@@ -30,9 +30,12 @@ export interface DatetimeActionDict<T> extends BaseActionDict<T> {
   twoDigit?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode) => T;
   fourDigit?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode, arg3: NonterminalNode) => T;
   time?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode) => T;
-  datetimeIso8601?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode, arg6: IterationNode, arg7: IterationNode, arg8: IterationNode, arg9: IterationNode, arg10: IterationNode, arg11: IterationNode, arg12: IterationNode, arg13: IterationNode) => T;
+  datetimeIso8601?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode, arg6: IterationNode, arg7: IterationNode) => T;
+  timeWithMilliseconds?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: TerminalNode, arg6: IterationNode) => T;
+  timeWithSeconds?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode) => T;
   datetimeFormatEuropeanOrUs?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: TerminalNode, arg4: NonterminalNode, arg5: IterationNode) => T;
-  timeZone?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: TerminalNode, arg3: IterationNode) => T;
+  timeZoneColon?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: TerminalNode, arg3: IterationNode) => T;
+  timeZoneHours?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode) => T;
   add?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode) => T;
   subtract?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode) => T;
   now?: (this: NonterminalNode, arg0: NonterminalNode) => T;

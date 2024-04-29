@@ -1,11 +1,14 @@
+import { GlobalResultCache } from "@/cache/ResultCache";
 import { IProvider } from "@/providers/IProvider";
 import { BasicArithmeticProvider } from "@/providers/arithmetic/BasicArithmeticProvider";
+import { BigIntegerArithmeticProvider } from "@/providers/biginteger/BigIntegerArithmeticProvider";
 import { DatetimeProvider } from "@/providers/datetime/DatetimeProvider";
 import { DiceProvider } from "@/providers/dice/DiceProvider";
 import { FunctionArithmeticProvider } from "@/providers/function/FunctionArithmeticProvider";
 import { PercentageArithmeticProvider } from "@/providers/percentage/PercentageArithmeticProvider";
 import { UnitsOfMeasurementProvider } from "@/providers/uom/UnitsOfMeasurementProvider";
 import { VectorArithmeticProvider } from "@/providers/vector/VectorArithmeticProvider";
+import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { fastHash } from "@/utilities/FastHash";
 import { logger } from "@/utilities/Logger";
@@ -25,10 +28,15 @@ class ProviderManager {
 		this.providersMap.set(fastHash(provider.name), provider);
 	}
 
-	public provideFirst<T>(
-		sentence: string,
-		raw: boolean = false
-	): T | undefined {
+	public provideFirst(
+		expression: string
+	): [IProvider, AnyResult] | undefined {
+		const cachedProviderResultTuple = GlobalResultCache.get(expression);
+
+		if (cachedProviderResultTuple) {
+			return cachedProviderResultTuple;
+		}
+
 		for (const [, provider] of this.providersMap) {
 			try {
 				// Skip providers that are not enabled
@@ -36,26 +44,21 @@ class ProviderManager {
 					continue;
 				}
 
-				let result = provider.provide(sentence, raw);
+				const result = provider.provide<AnyResult>(expression);
 
-				if (result !== undefined) {
-					if (raw) {
-						return result as T;
-					}
-
-					if (
-						!this.settings.engine.explicitMode &&
-						this.settings.arithmeticProvider
-					) {
-						result = `= ${result}`;
-					}
-
-					return (
-						this._debugMode
-							? `${result} [${provider.name}]`
-							: `${result}`
-					) as T;
+				if (result === undefined) {
+					continue;
 				}
+
+				if (provider.cacheable) {
+					// Setting the cache returns the tuple back for simplicity.
+					return GlobalResultCache.set(expression, [
+						provider,
+						result,
+					]);
+				}
+
+				return [provider, result];
 			} catch (error) {
 				logger.error(error);
 				continue;
@@ -67,10 +70,11 @@ class ProviderManager {
 
 	private registerCoreProviders() {
 		// Order of precedence
-		this.registerProvider(new UnitsOfMeasurementProvider());
 		this.registerProvider(new DatetimeProvider());
-		this.registerProvider(new PercentageArithmeticProvider());
 		this.registerProvider(new BasicArithmeticProvider());
+		this.registerProvider(new BigIntegerArithmeticProvider());
+		this.registerProvider(new PercentageArithmeticProvider());
+		this.registerProvider(new UnitsOfMeasurementProvider());
 		this.registerProvider(new FunctionArithmeticProvider());
 		this.registerProvider(new VectorArithmeticProvider());
 		this.registerProvider(new DiceProvider());
