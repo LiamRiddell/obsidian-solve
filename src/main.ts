@@ -268,12 +268,26 @@ export default class SolvePlugin extends Plugin {
 				` ${result} ` // Whitespace normalised for format.. Expression Result Comment
 			);
 		} else if (isInlineSolve) {
-			lineText = lineText.replace(
-				`s\`${expression}\``,
-				this.settings.inlineSolve.includeExpressionOnCommit
-					? `\`${expression} = ${result}\``
-					: `\`${result}\``
-			);
+			// Remove the equals from the result if the user does not want it.
+			const shouldIncludeEquals = this.settings.inlineSolve.includeEqualsOnCommit
+				&& !this.settings.inlineSolve.includeExpressionOnCommit;
+			let resultString = result.toString();
+			resultString = shouldIncludeEquals
+				? resultString
+				: resultString.replace(/^= /, "");
+
+			// Build the replacement text, adding the source expression if required.
+			let replacementText = this.settings.inlineSolve.includeExpressionOnCommit
+				? `${expression} = ${resultString}`
+				: `${resultString}`;
+
+			// Add the backticks if requested.
+			replacementText = this.settings.inlineSolve.includeBackticksOnCommit
+				? `\`${replacementText}\``
+				: replacementText;
+
+			// Build the full line replacement.
+			lineText = lineText.replace(`s\`${expression}\``, replacementText);
 		} else {
 			lineText = `${lineText?.trimEnd()} ${result}`;
 		}

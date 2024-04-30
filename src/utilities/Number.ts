@@ -8,13 +8,13 @@ export function autoFormatIntegerOrFloat(
 		return includeThousandSeparators
 			? number.toLocaleString(decimalSeparatorLocale, {
 					maximumFractionDigits: 0,
-			  })
+			})
 			: Math.trunc(number);
 	}
 
 	return includeThousandSeparators
 		? number.toLocaleString(decimalSeparatorLocale, {
 				maximumFractionDigits: decimalPlaces,
-		  })
+		})
 		: number.toFixed(decimalPlaces);
 }

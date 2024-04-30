@@ -88,6 +88,34 @@ export class SettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		new Setting(this.containerEl)
+			.setName("Include backticks when committing")
+			.setDesc(`Solve will enclose the committed expression in backticks when committing. Default is ${DEFAULT_SETTINGS.inlineSolve.includeBackticksOnCommit}`)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.inlineSolve.includeBackticksOnCommit)
+					.onChange(async (value) => {
+						this.plugin.settings.inlineSolve.includeBackticksOnCommit =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Include equals when committing")
+			.setDesc(`Solve will include the equals when committing. Has no effect if solve is set to include the expression. Default is ${DEFAULT_SETTINGS.inlineSolve.includeBackticksOnCommit}`)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.inlineSolve.includeEqualsOnCommit)
+					.onChange(async (value) => {
+						this.plugin.settings.inlineSolve.includeEqualsOnCommit =
+							value;
+
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayVariablesSettings() {
