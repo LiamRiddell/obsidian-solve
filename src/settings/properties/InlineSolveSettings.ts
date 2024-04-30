@@ -14,4 +14,26 @@ export class InlineSolveSettings {
 	set includeExpressionOnCommit(value: boolean) {
 		this.parent.settings.inlineSolve.includeExpressionOnCommit = value;
 	}
+
+	get includeBackticksOnCommit(): boolean {
+		return (
+			this.parent.settings.inlineSolve.includeBackticksOnCommit ??
+			DEFAULT_SETTINGS.inlineSolve.includeBackticksOnCommit
+		)
+	}
+
+	set includeBackticksOnCommit(value: boolean) {
+		this.parent.settings.inlineSolve.includeBackticksOnCommit = value;
+	}
+
+	get includeEqualsOnCommit(): boolean {
+		return (
+			this.parent.settings.inlineSolve.includeEqualsOnCommit ??
+			DEFAULT_SETTINGS.inlineSolve.includeEqualsOnCommit
+		)
+	}
+
+	set includeEqualsOnCommit(value: boolean) {
+		this.parent.settings.inlineSolve.includeEqualsOnCommit = value;
+	}
 }

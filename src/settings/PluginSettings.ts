@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 
 	inlineSolve: {
 		includeExpressionOnCommit: false,
+		includeBackticksOnCommit: true,
+		includeEqualsOnCommit: true,
 	},
 
 	variable: {
