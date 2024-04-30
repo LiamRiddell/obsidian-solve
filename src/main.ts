@@ -269,15 +269,19 @@ export default class SolvePlugin extends Plugin {
 			);
 		} else if (isInlineSolve) {
 			// Remove the equals from the result if the user does not want it.
-			const shouldIncludeEquals = this.settings.inlineSolve.includeEqualsOnCommit
-				&& !this.settings.inlineSolve.includeExpressionOnCommit;
+			const shouldIncludeEquals =
+				this.settings.inlineSolve.includeEqualsOnCommit &&
+				!this.settings.inlineSolve.includeExpressionOnCommit;
+
 			let resultString = result.toString();
+
 			resultString = shouldIncludeEquals
 				? resultString
 				: resultString.replace(/^= /, "");
 
 			// Build the replacement text, adding the source expression if required.
-			let replacementText = this.settings.inlineSolve.includeExpressionOnCommit
+			let replacementText = this.settings.inlineSolve
+				.includeExpressionOnCommit
 				? `${expression} = ${resultString}`
 				: `${resultString}`;
 
