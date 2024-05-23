@@ -97,11 +97,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			// Before building our next set of decorations we need to reset any state e.g. variables
 			this.variableProcessingStage.reset();
 
-			console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
+			// console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
 			this.decorations = this.buildDecorations(update.view);
-			console.timeEnd(
-				"[Solve] MarkdownEditorViewPlugin.buildDecorations"
-			);
+			// console.timeEnd(
+			// 	"[Solve] MarkdownEditorViewPlugin.buildDecorations"
+			// );
 
 			pluginEventBus.emit(
 				EPluginEvent.StatusBarUpdate,

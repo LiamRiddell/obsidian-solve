@@ -12,7 +12,9 @@ export class ExtractInlineSolveStage extends BaseStatefulPipelineStage<
 		state: IExpressionProcessorState,
 		request: string
 	): string {
-		const match = request.match(this.inlineSolveRegex);
+		// IMPORTANT: We match the raw input expression and not the processed expression because
+		// 	          in cases where their is markdown elments e.g.lists, qouotes, etc...
+		const match = state.originalLineText.match(this.inlineSolveRegex);
 
 		if (match) {
 			state.isInlineSolve = true;
