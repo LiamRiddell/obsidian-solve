@@ -180,6 +180,8 @@ UnitsOfMeasurementArithmetic <: BasicArithmetic {
         | "mm"
         | "m"
         | "cm"
+        | "yd"
+        | "km"
         | "ft"
         | "in"
         | "F"

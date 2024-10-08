@@ -164,6 +164,8 @@ const allSupportedUnits = [
 	"m",
 	"cm",
 	"ft",
+	"yd",
+	"km",
 	"in",
 	"F",
 	"Kb",
