@@ -17,6 +17,7 @@ import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
+import { SharedExplicitModeRemovalStage } from "@/pipelines/stages/expression/ExplicitModeRemovalStage";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -74,6 +75,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			.addStage(SharedExtractInlineSolveStage)
 			.addStage(this.previousResultSubstitutionStage)
 			.addStage(this.variableProcessingStage)
+			.addStage(SharedExplicitModeRemovalStage)
 			.addStage(SharedVariableAssignRemovalStage);
 
 		// Setup the post processor pipeline
@@ -204,14 +206,15 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				const state: IExpressionProcessorState = {
 					lineNumber: line.number,
 					originalLineText: expression,
+					isAllowedExplcitModeExpression: false,
 				};
 
-				// logger.debug("Before Expression Processor:", state, expression);
+				//logger.debug("Before Expression Processor:", state, expression);
 				expression = this.expressionProcesser.process(
 					state,
 					expression
 				);
-				// logger.debug("After Expression Processor:", state, expression);
+				//logger.debug("After Expression Processor:", state, expression);
 
 				// The line is valid and decoration can be provided.
 				const decoration = this.provideDecoration(state, expression);
@@ -274,20 +277,19 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		state: IExpressionProcessorState,
 		expression: string
 	) {
-		let isExplicitlyDefinedSentence = false;
-
 		// When explicit mode is enabled the sentence will end with = sign.
 		// This needs to be removed in order for grammars to match.
-		// TODO: Convert this into a expression processor stage
-		if (this.userSettings.engine.explicitMode) {
-			if (expression.trimEnd().endsWith("=")) {
-				expression = expression
-					.substring(0, expression.length - 1)
-					.trimEnd();
-				isExplicitlyDefinedSentence = true;
-			} else {
-				return undefined;
-			}
+		if (
+			this.userSettings.engine.explicitMode &&
+			!state.isAllowedExplcitModeExpression
+		) {
+			// logger.debug(
+			// 	"MarkdownEditorViewPlugin.provideDecoration: This is not an allowed explicit mode expression.",
+			// 	expression,
+			// 	state
+			// );
+
+			return undefined;
 		}
 
 		// Initial implementation will show the first valid result from available providers.
@@ -308,14 +310,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			: result.trim();
 
 		if (sentenceTrimmed.toLowerCase() === resultTrimmed.toLowerCase()) {
-			return undefined;
-		}
-
-		// If we're in explicit mode, we should only show the result if it was defined explicitly `=`
-		if (
-			this.userSettings.engine.explicitMode &&
-			!isExplicitlyDefinedSentence
-		) {
 			return undefined;
 		}
 
