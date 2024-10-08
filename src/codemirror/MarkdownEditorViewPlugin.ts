@@ -277,8 +277,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		state: IExpressionProcessorState,
 		expression: string
 	) {
-		// When explicit mode is enabled the sentence will end with = sign.
-		// This needs to be removed in order for grammars to match.
+		// If explicit mode is enabled then only process allowed expressions
 		if (
 			this.userSettings.engine.explicitMode &&
 			!state.isAllowedExplicitModeExpression
