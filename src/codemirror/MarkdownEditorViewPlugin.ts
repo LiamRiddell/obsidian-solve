@@ -2,6 +2,7 @@ import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWid
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { StatefulPipeline } from "@/pipelines/definition/StatefulPipeline";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/expression/CommentsRemovalStage";
+import { SharedExplicitModeRemovalStage } from "@/pipelines/stages/expression/ExplicitModeRemovalStage";
 import { SharedExtractInlineSolveStage } from "@/pipelines/stages/expression/ExtractInlineSolveState";
 import { SharedMarkdownRemovalStage } from "@/pipelines/stages/expression/MarkdownRemovalStage";
 import { SharedMathJaxRemovalStage } from "@/pipelines/stages/expression/MathJaxRemovalStage";
@@ -17,7 +18,6 @@ import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
-import { SharedExplicitModeRemovalStage } from "@/pipelines/stages/expression/ExplicitModeRemovalStage";
 import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {

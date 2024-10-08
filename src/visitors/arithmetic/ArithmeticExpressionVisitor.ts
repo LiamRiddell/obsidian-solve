@@ -36,9 +36,6 @@ export class ArithmeticExpressionVisitor {
 		numString: string,
 		decimalSeparatorLocale: string
 	): INumericResult {
-		//decimalSeparatorLocale &&
-		//console.log(decimalSeparatorLocale, numString);
-
 		switch (decimalSeparatorLocale) {
 			case "de-DE":
 				numString = numString
@@ -56,8 +53,6 @@ export class ArithmeticExpressionVisitor {
 				}
 				break;
 		}
-
-		//decimalSeparatorLocale && console.log(`=> ${numString}`);
 
 		return new NumberResult(parseFloat(numString));
 	}

@@ -10,6 +10,8 @@ export class DiceProvider extends SemanticProviderBase<DiceSemantics> {
 	constructor() {
 		super(DICE_PROVIDER);
 
+		const settings = UserSettings.getInstance();
+
 		this.cacheable = false;
 
 		this.semantics = grammar.createSemantics();
@@ -24,33 +26,41 @@ export class DiceProvider extends SemanticProviderBase<DiceSemantics> {
 			return Math.floor(Math.random() * (to - from + 1)) + from;
 		};
 
-		this.semantics.addOperation<NumberResult>("visit()", {
-			Roll(
-				_,
-				rollOpenNode,
-				fromPrimitiveNode,
-				rollSeperatorNode,
-				toPrimitiveNode,
-				rollEndNode
-			) {
-				const from = fromPrimitiveNode.visit();
-				const to = toPrimitiveNode.visit();
+		this.semantics
+			.addOperation<NumberResult>("visit()", {
+				Roll(
+					_,
+					rollOpenNode,
+					fromPrimitiveNode,
+					rollSeperatorNode,
+					toPrimitiveNode,
+					rollEndNode
+				) {
+					const from = fromPrimitiveNode.visit();
+					const to = toPrimitiveNode.visit();
 
-				return new NumberResult(rollDice(from.value, to.value));
-			},
-			Primitive_positive(_, e) {
-				return ArithmeticExpression.visitPositive(e.visit());
-			},
-			Primitive_negative(_, e) {
-				return ArithmeticExpression.visitNegative(e.visit());
-			},
-			number_fract(_, _1, _2) {
-				return ArithmeticExpression.visitNumber(this.sourceString);
-			},
-			number_whole(_) {
-				return ArithmeticExpression.visitNumber(this.sourceString);
-			},
-		});
+					return new NumberResult(rollDice(from.value, to.value));
+				},
+				Primitive_positive(_, e) {
+					return ArithmeticExpression.visitPositive(e.visit());
+				},
+				Primitive_negative(_, e) {
+					return ArithmeticExpression.visitNegative(e.visit());
+				},
+				number_fract(_, _1, _2) {
+					return ArithmeticExpression.visitNumber(
+						this.sourceString,
+						settings.numberResult.decimalSeparatorLocale
+					);
+				},
+				number_whole(_) {
+					return ArithmeticExpression.visitNumber(
+						this.sourceString,
+						settings.numberResult.decimalSeparatorLocale
+					);
+				},
+			})
+			.bind(this);
 	}
 
 	enabled() {
