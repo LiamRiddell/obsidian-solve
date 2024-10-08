@@ -83,24 +83,13 @@ BasicArithmetic {
   	= caseInsensitive<"PI"> 
     | caseInsensitive<"E">
 
+  // Lazy: It will match anything like 1214.200.2442,200 the visitor decides how to interpret
   number
-  = nonEnglishNumber    -- nonEnglish
-    | nonEnglishDecimal -- nonEnglishDecimal
-    | englishNumber     -- english
-    | englishDecimal    -- englishDecimal
-    | whole             -- whole
+    = (separator? digit)+
 
-  nonEnglishNumber
-    = &(whole ".") whole ("." whole)* ("," whole)
-    
-  nonEnglishDecimal
-    = whole "," digit+ ~"."
-
-  englishNumber
-    = &(whole ",") whole ("," whole)* ("." whole)
-
-  englishDecimal
-    = whole "." digit+
+  // The separator can be a comma or a period, detected in the visitor
+  separator
+    = "." | ","
 
   whole
     = digit+

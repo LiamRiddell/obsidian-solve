@@ -37,16 +37,8 @@ export interface BasicArithmeticActionDict<T> extends BaseActionDict<T> {
   modulo?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode) => T;
   exponent?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode) => T;
   constant?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  number_nonEnglish?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  number_nonEnglishDecimal?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  number_english?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  number_englishDecimal?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  number_whole?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  number?: (this: NonterminalNode, arg0: NonterminalNode) => T;
-  nonEnglishNumber?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: IterationNode, arg4: IterationNode, arg5: TerminalNode, arg6: NonterminalNode) => T;
-  nonEnglishDecimal?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode) => T;
-  englishNumber?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode, arg3: IterationNode, arg4: IterationNode, arg5: TerminalNode, arg6: NonterminalNode) => T;
-  englishDecimal?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode) => T;
+  number?: (this: NonterminalNode, arg0: IterationNode, arg1: IterationNode) => T;
+  separator?: (this: NonterminalNode, arg0: TerminalNode) => T;
   whole?: (this: NonterminalNode, arg0: IterationNode) => T;
   hex?: (this: NonterminalNode, arg0: IterationNode | TerminalNode, arg1: IterationNode | TerminalNode) => T;
 }

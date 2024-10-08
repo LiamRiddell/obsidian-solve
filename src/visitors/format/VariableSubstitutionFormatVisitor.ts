@@ -78,7 +78,9 @@ export class ResultSubstitutionFormatVisitor
 	visitNumberResult(result: NumberResult): string {
 		return autoFormatIntegerOrFloat(
 			result.value,
-			this.settings.floatResult.decimalPlaces
+			this.settings.floatResult.decimalPlaces,
+			false,
+			this.settings.numberResult.decimalSeparatorLocale
 		).toString();
 	}
 
