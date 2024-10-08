@@ -7,5 +7,5 @@ export interface IExpressionProcessorState {
 	inlineSolveIndex?: number;
 
 	// Explicit solve support
-	isAllowedExplcitModeExpression?: boolean;
+	isAllowedExplicitModeExpression?: boolean;
 }

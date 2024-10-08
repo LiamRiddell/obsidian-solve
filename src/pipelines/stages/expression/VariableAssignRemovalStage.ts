@@ -21,7 +21,7 @@ export class VariableAssignRemovalStage extends BaseStatefulPipelineStage<
 			settings.engine.explicitMode &&
 			this.variableAssignReplacementRegex.test(request)
 		) {
-			state.isAllowedExplcitModeExpression = true;
+			state.isAllowedExplicitModeExpression = true;
 			logger.debug(
 				"VariableAssignRemovalStage: Detected Variable Assignment Allowing Through Explicit Mode"
 			);

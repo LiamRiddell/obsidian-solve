@@ -19,7 +19,7 @@ export class ExplicitModeRemovalStage extends BaseStatefulPipelineStage<
 
 			// Update the state for the decoration provider to know if this
 			// should be allowed past the explicit mode filter.
-			state.isAllowedExplcitModeExpression = true;
+			state.isAllowedExplicitModeExpression = true;
 		}
 
 		return request;

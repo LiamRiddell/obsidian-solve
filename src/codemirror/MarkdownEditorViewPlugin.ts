@@ -206,7 +206,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				const state: IExpressionProcessorState = {
 					lineNumber: line.number,
 					originalLineText: expression,
-					isAllowedExplcitModeExpression: false,
+					isAllowedExplicitModeExpression: false,
 				};
 
 				//logger.debug("Before Expression Processor:", state, expression);
@@ -281,7 +281,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		// This needs to be removed in order for grammars to match.
 		if (
 			this.userSettings.engine.explicitMode &&
-			!state.isAllowedExplcitModeExpression
+			!state.isAllowedExplicitModeExpression
 		) {
 			// logger.debug(
 			// 	"MarkdownEditorViewPlugin.provideDecoration: This is not an allowed explicit mode expression.",
