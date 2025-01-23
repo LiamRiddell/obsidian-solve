@@ -4,7 +4,8 @@ export interface IExpressionProcessorState {
 
 	// Inline solve support
 	isInlineSolve?: boolean;
-	inlineSolveIndex?: number;
+	inlineSolveIndices?: number[];
+	inlineMatches?: string[];
 
 	// Explicit solve support
 	isAllowedExplicitModeExpression?: boolean;

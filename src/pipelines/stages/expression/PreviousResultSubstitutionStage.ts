@@ -21,7 +21,7 @@ export class PreviousResultSubstitutionStage extends BaseStatefulPipelineStage<
 		state: IExpressionProcessorState,
 		request: string
 	): string {
-		// If there is no previouds result then return the original request.
+		// If there is no previous result then return the original request.
 		if (this.previousResult === undefined) {
 			return request;
 		}

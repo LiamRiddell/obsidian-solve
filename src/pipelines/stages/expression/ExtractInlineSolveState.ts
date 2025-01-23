@@ -3,23 +3,28 @@ import { IExpressionProcessorState } from "@/pipelines/stages/expression/state/I
 
 export class ExtractInlineSolveStage extends BaseStatefulPipelineStage<
 	IExpressionProcessorState,
-	string
+	string[]
 > {
-	// Matches for either s`EXPRESSION` and will return the first instance.
-	private inlineSolveRegex = new RegExp(/s`([^`]*)`/);
+	// Matches for either s`EXPRESSION`.
+	private inlineSolveRegex = new RegExp(/s`([^`]*)`/g);
 
 	protected execute(
 		state: IExpressionProcessorState,
-		request: string
-	): string {
+		request: string[]
+	): string[] {
 		// IMPORTANT: We match the raw input expression and not the processed expression because
-		// 	          in cases where their is markdown elments e.g.lists, qouotes, etc...
-		const match = state.originalLineText.match(this.inlineSolveRegex);
+		// 	          in cases where there are markdown elements e.g.lists, quotes, etc...
+		const matches: string[] = [];
+		const indices: number[] = [];
+		for (const match of state.originalLineText.matchAll(this.inlineSolveRegex)) {
+			matches.push(match[1]);
+			indices.push(match.index!);
+		}
 
-		if (match) {
+		if (matches.length > 0) {
 			state.isInlineSolve = true;
-			state.inlineSolveIndex = match.index;
-			return match[1];
+			state.inlineSolveIndices = indices;
+			return matches;
 		}
 
 		return request;

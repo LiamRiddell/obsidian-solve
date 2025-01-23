@@ -50,6 +50,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		IExpressionProcessorState,
 		string
 	>;
+	private expressionProcesserArray: StatefulPipeline<
+		IExpressionProcessorState,
+		string[]
+	>;
+	private expressionProcesserFinal: StatefulPipeline<
+		IExpressionProcessorState,
+		string
+	>;
 	private resultProcessor: StatefulPipeline<[IProvider, AnyResult], string>;
 	private variableProcessingStage: VariableProcessingStage;
 	private previousResultSubstitutionStage: PreviousResultSubstitutionStage;
@@ -72,7 +80,17 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			.addStage(SharedMarkdownRemovalStage)
 			.addStage(SharedCommentsRemovalStage)
 			.addStage(SharedMathJaxRemovalStage)
-			.addStage(SharedExtractInlineSolveStage)
+
+		this.expressionProcesserArray = new StatefulPipeline<
+			IExpressionProcessorState,
+			string[]
+		>()
+			.addStage(SharedExtractInlineSolveStage);
+		
+		this.expressionProcesserFinal = new StatefulPipeline<
+			IExpressionProcessorState,
+			string
+		>()	
 			.addStage(this.previousResultSubstitutionStage)
 			.addStage(this.variableProcessingStage)
 			.addStage(SharedExplicitModeRemovalStage)
@@ -183,7 +201,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 				const line = view.state.doc.lineAt(linePosition);
 
-				let expression = line.text.trim();
+				let expression = line.text.trimStart();
+				let padding = line.text.length - expression.length;
+				expression = expression.trimEnd();
 
 				// Skip blank lines
 				if (!expression || expression.length === 0) {
@@ -216,17 +236,32 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				);
 				//logger.debug("After Expression Processor:", state, expression);
 
-				// The line is valid and decoration can be provided.
-				const decoration = this.provideDecoration(state, expression);
+				let inlineExpressions = this.expressionProcesserArray.process(
+					state,
+					[expression]
+				);
 
-				if (decoration) {
-					if (state.isInlineSolve && state.inlineSolveIndex) {
+				for (let i = 0; i < inlineExpressions.length; i++) {
+					const inlineExpression = inlineExpressions[i]
+					expression = this.expressionProcesserFinal.process(
+						state,
+						inlineExpression
+					);
+
+					// The line is valid and decoration can be provided.
+					const decoration = this.provideDecoration(state, expression);
+					if (!decoration) {
+						continue;
+					}
+
+					if (state.isInlineSolve && state.inlineSolveIndices) {
 						// Result is displayed at the end of the inline solve position
 						const inlineSolvePosition =
 							line.from + // Start of the line
 							3 + // Unaccounted inline solve characters s``
-							state.inlineSolveIndex + // Position of the inline solve
-							expression.length; // Length of the inline solve
+							state.inlineSolveIndices[i] + // Position of the inline solve
+							padding + // Length of removed whitespace
+							inlineExpression.length; // Length of the inline solve
 
 						builder.add(
 							inlineSolvePosition,
