@@ -1,1 +1,1 @@
-export { ISolverVisitor } from "./ISolverVisitor";
+export type { ISolverVisitor } from "./ISolverVisitor";

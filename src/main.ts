@@ -4,7 +4,6 @@ import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@/constants/EPluginEvent";
 import { EPluginStatus } from "@/constants/EPluginStatus";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
-import { solveProviderManager } from "@/providers/ProviderManager";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { SettingTab } from "@/settings/SettingsTab";
 import UserSettings from "@/settings/UserSettings";

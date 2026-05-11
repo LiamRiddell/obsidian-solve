@@ -74,3 +74,13 @@ animate.css/animate.min.css:
   * Copyright (c) 2020 Animate.css
   *)
 */
+
+/* Solve Syntax Highlighting */
+.cm-solve-number { color: var(--text-accent); }
+.cm-solve-keyword { color: var(--text-muted); font-style: italic; }
+.cm-solve-operator { color: var(--text-normal); }
+.cm-solve-function { color: var(--color-blue); }
+.cm-solve-variable { color: var(--color-orange); }
+.cm-solve-string { color: var(--color-green); }
+.cm-solve-unit { color: var(--text-faint); }
+.cm-solve-error { background: var(--background-modifier-error); }

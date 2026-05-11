@@ -1,5 +1,5 @@
 import { OpCode } from "@/engine/parser/OpCode";
-import { Value, numberValue, stringValue, bigIntValue, hexValue, uomValue, vectorValue } from "@/engine/vm/Value";
+import { Value, numberValue, stringValue, bigIntValue, hexValue, vectorValue } from "@/engine/vm/Value";
 import { OpRegistry, type VM } from "@/engine/vm/OpRegistry";
 
 export function createVM(registry: OpRegistry): VM {
@@ -129,25 +129,6 @@ const to = vm.popNumber();
 			case OpCode.DATE_NOW:
 				vm.push(new Value('datetime', Date.now()));
 				break;
-			case OpCode.LOAD_VAR: {
-				const varIdx = opcodes[ip++];
-				const varName = strings[varIdx];
-				const val = vm.getVar(varName);
-				if (val !== undefined) {
-					vm.push(val);
-				} else {
-					vm.push(numberValue(0));
-				}
-				break;
-			}
-			case OpCode.STORE_VAR: {
-				const val = vm.pop();
-				const varIdx = opcodes[ip++];
-				const varName = strings[varIdx];
-				vm.setVar(varName, val);
-				vm.push(val);
-				break;
-			}
 			case OpCode.LOAD_VAR: {
 				const varIdx = opcodes[ip++];
 				const varName = strings[varIdx];

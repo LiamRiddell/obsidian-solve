@@ -1,4 +1,5 @@
 import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWidget";
+import { SolveHighlightProvider } from "@/codemirror/SolveHighlightProvider";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { StatefulPipeline } from "@/pipelines/definition/StatefulPipeline";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/expression/CommentsRemovalStage";
@@ -34,6 +35,14 @@ import { solveProviderManager } from "../providers/ProviderManager";
 
 const DEBUG_MODE_ENABLED = false;
 
+interface CachedLineDecorations {
+  lineText: string;
+  widgetDeco: Decoration | null;
+  isInlineSolve: boolean;
+  inlineOffsets: number[] | null;
+  highlightRanges: Array<{from: number; to: number; deco: Decoration}>;
+}
+
 export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
 	private userSettings: UserSettings;
@@ -61,6 +70,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private resultProcessor: StatefulPipeline<[IProvider, AnyResult], string>;
 	private variableProcessingStage: VariableProcessingStage;
 	private previousResultSubstitutionStage: PreviousResultSubstitutionStage;
+	private highlightProvider: SolveHighlightProvider;
+	private lineDecorationCache: Map<number, CachedLineDecorations> = new Map();
+	private dirtyLines: Set<number> = new Set();
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructer`);
@@ -105,23 +117,31 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			.addStage(SharedArithmeticInsertEqualSignStage);
 
 		this.decorations = this.buildDecorations(view);
+
+		this.highlightProvider = new SolveHighlightProvider();
 	}
 
-	update(update: ViewUpdate) {
+update(update: ViewUpdate) {
+		if (update.docChanged) {
+			this.highlightProvider.invalidateCache();
+			update.changes.iterChanges((fromA, toA) => {
+				const startLine = update.view.state.doc.lineAt(fromA).number;
+				const endLine = update.view.state.doc.lineAt(toA).number;
+				for (let l = startLine; l <= endLine; l++) {
+					this.lineDecorationCache.delete(l);
+				}
+			});
+		}
+
 		if (update.docChanged || update.viewportChanged) {
 			pluginEventBus.emit(
 				EPluginEvent.StatusBarUpdate,
 				EPluginStatus.Solving
 			);
 
-			// Before building our next set of decorations we need to reset any state e.g. variables
 			this.variableProcessingStage.reset();
 
-			// console.time("[Solve] MarkdownEditorViewPlugin.buildDecorations");
 			this.decorations = this.buildDecorations(update.view);
-			// console.timeEnd(
-			// 	"[Solve] MarkdownEditorViewPlugin.buildDecorations"
-			// );
 
 			pluginEventBus.emit(
 				EPluginEvent.StatusBarUpdate,
@@ -202,7 +222,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				const line = view.state.doc.lineAt(linePosition);
 
 				let expression = line.text.trimStart();
-				let padding = line.text.length - expression.length;
+				const padding = line.text.length - expression.length;
 				expression = expression.trimEnd();
 
 				// Skip blank lines
@@ -236,7 +256,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				);
 				//logger.debug("After Expression Processor:", state, expression);
 
-				let inlineExpressions = this.expressionProcesserArray.process(
+				const inlineExpressions = this.expressionProcesserArray.process(
 					state,
 					[expression]
 				);
@@ -271,6 +291,34 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					} else {
 						// Result is displayed at the end of the line.
 						builder.add(line.to, line.to, decoration);
+					}
+				}
+
+				if (!state.isInlineSolve) {
+					const cached = this.lineDecorationCache.get(line.number);
+					if (cached && cached.lineText === line.text) {
+						for (const hr of cached.highlightRanges) {
+							builder.add(hr.from, hr.to, hr.deco);
+						}
+					} else {
+						const ranges = this.highlightProvider.getLineHighlights(line.text, line.number);
+						if (ranges.length > 0) {
+							const highlightRanges = ranges.map(r => ({
+								from: line.from + r.from,
+								to: line.from + r.to,
+								deco: Decoration.mark({ class: r.className }),
+							}));
+							for (const hr of highlightRanges) {
+								builder.add(hr.from, hr.to, hr.deco);
+							}
+							this.lineDecorationCache.set(line.number, {
+								lineText: line.text,
+								widgetDeco: null,
+								isInlineSolve: false,
+								inlineOffsets: null,
+								highlightRanges,
+							});
+						}
 					}
 				}
 

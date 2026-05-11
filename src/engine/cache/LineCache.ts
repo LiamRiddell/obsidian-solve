@@ -6,13 +6,20 @@ export interface BytecodeSnapshot {
   strings: string[];
 }
 
+export interface HighlightRange {
+  from: number;
+  to: number;
+  className: string;
+}
+
 export class LineCacheEntry {
   constructor(
     public result: Value,
     public bytecode: BytecodeSnapshot,
     public readVariables: string[],
     public writeVariable: string | null,
-    public dirty: boolean
+    public dirty: boolean,
+    public highlights: HighlightRange[] = []
   ) {}
 }
 

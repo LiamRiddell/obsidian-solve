@@ -1,7 +1,7 @@
 import moo from "moo";
 import { Token } from "@/engine/lexer/Token";
 import { LexerState } from "@/engine/lexer/LexerState";
-import { sharedTokenRegistry } from "@/engine/lexer/registry/TokenRegistry";
+import { getTokenHighlightClass } from "@/engine/lexer/TokenHighlightMap";
 
 const knownUnits = new Set([
   "mm", "cm", "m", "km", "in", "ft", "yd", "mi",
@@ -34,13 +34,6 @@ function phraseType(map: Record<string, string>): (text: string) => string {
   for (const [k, v] of Object.entries(map)) lowered[k.toLowerCase()] = v;
   return (text: string) => lowered[text.toLowerCase()] || "IDENT";
 }
-
-const phraseMap: Record<string, string> = {
-  "to the power of": "CARET",
-  "power of": "CARET",
-  "increase by": "INCREASE_BY",
-  "decrease by": "DECREASE_BY",
-};
 
 const keywordMap: Record<string, string> = {
   pi: "PI",
@@ -171,12 +164,31 @@ export class Lexer {
     return this.mooLexer[Symbol.iterator]() as Iterator<Token>;
   }
 
-  getState(): LexerState {
+getState(): LexerState {
     return this.currentState;
   }
 
   setState(state: LexerState): void {
     this.currentState = state;
+  }
+
+  getHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] {
+    this.reset(lineText);
+    const result: {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] = [];
+    for (const token of this) {
+      if (token.type === "WS" || token.type === "NEWLINE") {
+        continue;
+      }
+      result.push({
+        type: token.type,
+        value: token.value,
+        offset: token.offset,
+        col: token.col,
+        length: token.value.length,
+        className: getTokenHighlightClass(token.type),
+      });
+    }
+return result;
   }
 }
 
