@@ -1,5 +1,7 @@
 import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWidget";
 import { SolveHighlightProvider } from "@/codemirror/SolveHighlightProvider";
+import { ExpressionEngine } from "@/engine/engine/ExpressionEngine";
+import { Value } from "@/engine/vm/Value";
 import { StatefulPipeline } from "@/pipelines/definition/StatefulPipeline";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/expression/CommentsRemovalStage";
 import { SharedExplicitModeRemovalStage } from "@/pipelines/stages/expression/ExplicitModeRemovalStage";
@@ -65,6 +67,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private variableProcessingStage: VariableProcessingStage;
 	private previousResultSubstitutionStage: PreviousResultSubstitutionStage;
 	private highlightProvider: SolveHighlightProvider;
+	private expressionEngine: ExpressionEngine;
 	private lineDecorationCache: Map<number, CachedLineDecorations> = new Map();
 	private dirtyLines: Set<number> = new Set();
 
@@ -111,6 +114,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			.addStage(SharedArithmeticInsertEqualSignStage);
 
 		this.highlightProvider = new SolveHighlightProvider();
+		this.expressionEngine = new ExpressionEngine();
 
 		this.decorations = this.buildDecorations(view);
 	}
@@ -261,7 +265,7 @@ update(update: ViewUpdate) {
 						inlineExpression
 					);
 
-					const decoration = this.provideDecoration(state, expression);
+					const decoration = this.provideDecoration(state, expression, line.text, line.number);
 					if (!decoration) {
 						continue;
 					}
@@ -333,34 +337,22 @@ update(update: ViewUpdate) {
 
 	private provideDecoration(
 		state: IExpressionProcessorState,
-		expression: string
+		expression: string,
+		lineText: string,
+		lineNumber: number
 	) {
-		// If explicit mode is enabled then only process allowed expressions
 		if (
 			this.userSettings.engine.explicitMode &&
 			!state.isAllowedExplicitModeExpression
 		) {
-			// logger.debug(
-			// 	"MarkdownEditorViewPlugin.provideDecoration: This is not an allowed explicit mode expression.",
-			// 	expression,
-			// 	state
-			// );
-
 			return undefined;
 		}
 
-		// Initial implementation will show the first valid result from available providers.
-		const solveResultTuple = solveProviderManager.provideFirst(expression);
-
-		if (solveResultTuple === undefined) {
+		const result = this.computeResult(expression, lineNumber, lineText);
+		if (result === undefined) {
 			return undefined;
 		}
 
-		// Post-process the result starting with empty string the pipeline will slowly build the result for the user.
-		let result = this.resultProcessor.process(solveResultTuple, "");
-
-		// If the input sentence and the output is the same value ignore it.
-		// For example, 10 = 10
 		const sentenceTrimmed = expression.trim();
 		const resultTrimmed = result.startsWith("= ")
 			? result.substring(2).trim()
@@ -370,22 +362,59 @@ update(update: ViewUpdate) {
 			return undefined;
 		}
 
-		// Updates the previous solve to be the new solve that's passed the checks
-		this.previousResultSubstitutionStage.setPreviousResult(
-			solveResultTuple[1] // Result
-		);
-
-		// We need to add the debug information right before we display it. Otherwise we can cause issues with the above logic.
 		if (DEBUG_MODE_ENABLED) {
-			result = SharedDebugInformationStage.process(
-				solveResultTuple,
-				result
-			);
+			// result already includes debug info from computeResult
 		}
 
 		return Decoration.widget({
 			widget: new ExpressionResultWidget(state, expression, result),
 			side: 1,
 		});
+	}
+
+	private computeResult(expression: string, lineNumber: number, lineText: string): string | undefined {
+		try {
+			const value = this.expressionEngine.evaluateLine(lineNumber, lineText);
+			const result = this.formatValue(value);
+			return result;
+		} catch {
+			// Fall back to old provider pipeline
+		}
+
+		const solveResultTuple = solveProviderManager.provideFirst(expression);
+		if (solveResultTuple === undefined) {
+			return undefined;
+		}
+
+		let result = this.resultProcessor.process(solveResultTuple, "");
+		this.previousResultSubstitutionStage.setPreviousResult(
+			solveResultTuple[1]
+		);
+		return result;
+	}
+
+	private formatValue(value: Value): string {
+		switch (value.type) {
+			case 'number':
+				return `= ${value.value}`;
+			case 'hex':
+				return `= 0x${(value.value as number).toString(16).toUpperCase()}`;
+			case 'bigint':
+				return `= ${value.value}`;
+			case 'string':
+				return `= ${value.value}`;
+			case 'boolean':
+				return `= ${value.value}`;
+			case 'datetime':
+				return `= ${new Date(value.value as number).toLocaleString()}`;
+			case 'uom':
+				return `= ${value.value} ${value.unit}`;
+			case 'vector2':
+			case 'vector3':
+			case 'vector4':
+				return `= [${(value.value as number[]).join(', ')}]`;
+			default:
+				return `= ${value.value}`;
+		}
 	}
 }

@@ -15,6 +15,8 @@ import { registerFunctionParselets } from "@/providers/function/parselets/index"
 import { registerDatetimeParselets } from "@/providers/datetime/parselets/index";
 import { registerDiceParselets } from "@/providers/dice/parselets/index";
 import { registerVariableParselets } from "@/providers/variables/parselets/index";
+import { registerUomParselets } from "@/providers/uom/parselets/index";
+import { registerVectorParselets } from "@/providers/vector/parselets/index";
 import { TokenTypes } from "@/engine/lexer/Token";
 
 export class ExpressionEngine {
@@ -34,6 +36,8 @@ export class ExpressionEngine {
     registerDatetimeParselets(this.registry);
     registerDiceParselets(this.registry);
     registerVariableParselets(this.registry);
+    registerUomParselets(this.registry);
+    registerVectorParselets(this.registry);
     this.parser = new Parser(this.registry);
   }
 

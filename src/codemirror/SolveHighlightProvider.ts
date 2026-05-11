@@ -8,6 +8,8 @@ import { registerFunctionParselets } from "@/providers/function/parselets/index"
 import { registerDatetimeParselets } from "@/providers/datetime/parselets/index";
 import { registerDiceParselets } from "@/providers/dice/parselets/index";
 import { registerVariableParselets } from "@/providers/variables/parselets/index";
+import { registerUomParselets } from "@/providers/uom/parselets/index";
+import { registerVectorParselets } from "@/providers/vector/parselets/index";
 
 export class SolveHighlightProvider {
   private lexer: Lexer;
@@ -26,6 +28,8 @@ export class SolveHighlightProvider {
       registerDatetimeParselets(reg);
       registerDiceParselets(reg);
       registerVariableParselets(reg);
+      registerUomParselets(reg);
+      registerVectorParselets(reg);
       this.parser = new Parser(reg);
     }
   }
