@@ -1,0 +1,63 @@
+export interface Token {
+	type: string;
+	value: string;
+	text: string;
+	offset: number;
+	lineBreaks: number;
+	line: number;
+	col: number;
+}
+
+export const TokenTypes = {
+  NUMBER: "NUMBER",
+  STRING: "STRING",
+  IDENT: "IDENT",
+  PLUS: "PLUS",
+  MINUS: "MINUS",
+  STAR: "STAR",
+  SLASH: "SLASH",
+  CARET: "CARET",
+  PERCENT: "PERCENT",
+  LSHIFT: "LSHIFT",
+  RSHIFT: "RSHIFT",
+  LPAREN: "LPAREN",
+  RPAREN: "RPAREN",
+  LBRACKET: "LBRACKET",
+  RBRACKET: "RBRACKET",
+  LBRACE: "LBRACE",
+  RBRACE: "RBRACE",
+  COMMA: "COMMA",
+  DOT: "DOT",
+  COLON: "COLON",
+  SEMICOLON: "SEMICOLON",
+  EQUALS: "EQUALS",
+  DOLLAR: "DOLLAR",
+  KEYWORD: "KEYWORD",
+  EOF: "EOF",
+  ERROR: "ERROR",
+  WS: "WS",
+  NEWLINE: "NEWLINE",
+  DATETIME_LITERAL: "DATETIME_LITERAL",
+  DURATION: "DURATION",
+  UNIT: "UNIT",
+  ROLL: "ROLL",
+  PI: "PI",
+  E: "E",
+  MOD: "MOD",
+  OF: "OF",
+  INCREASE_BY: "INCREASE_BY",
+  DECREASE_BY: "DECREASE_BY",
+  NOW: "NOW",
+  TODAY: "TODAY",
+  TOMORROW: "TOMORROW",
+  YESTERDAY: "YESTERDAY",
+  DURATION_DAY: "DURATION_DAY",
+  DURATION_WEEK: "DURATION_WEEK",
+  DURATION_MONTH: "DURATION_MONTH",
+  DURATION_YEAR: "DURATION_YEAR",
+  DURATION_HOUR: "DURATION_HOUR",
+  DURATION_MINUTE: "DURATION_MINUTE",
+  DURATION_SECOND: "DURATION_SECOND",
+} as const;
+
+export type TokenType = (typeof TokenTypes)[keyof typeof TokenTypes];
