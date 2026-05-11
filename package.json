@@ -8,7 +8,6 @@
 		"lint": "npx eslint --fix src",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "jest",
-		"ohm": "npx ohm generateBundles --withTypes src/grammars/**/*.ohm",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [],
@@ -17,8 +16,6 @@
 	"devDependencies": {
 		"@jest/globals": "^29.6.2",
 		"@lezer/common": "^1.0.3",
-		"@ohm-js/cli": "https://gitpkg.now.sh/LiamRiddell/ohm/packages/cli?cli-includes",
-		"@types/convert-units": "^2.3.8",
 		"@types/node": "16.18.39",
 		"@typescript-eslint/eslint-plugin": "6.2.0",
 		"@typescript-eslint/parser": "6.2.0",
@@ -36,7 +33,6 @@
 		"animate.css": "^4.1.1",
 		"convert-units": "^2.3.4",
 		"moment": "^2.29.4",
-		"moo": "^0.5.3",
-		"ohm-js": "^17.1.0"
+		"moo": "^0.5.3"
 	}
 }

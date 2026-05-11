@@ -1,4 +1,3 @@
-import { GlobalResultCache } from "@/cache/ResultCache";
 import { MarkdownEditorViewPlugin } from "@/codemirror/MarkdownEditorViewPlugin";
 import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@/constants/EPluginEvent";
@@ -58,8 +57,6 @@ await this.registerSettings();
 		logger.debug("[Solve] Settings Saved", rawSettings);
 
 		await this.saveData(rawSettings);
-
-		GlobalResultCache.clear();
 
 		this.app.workspace.updateOptions();
 	}
