@@ -4,6 +4,7 @@ import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@/constants/EPluginEvent";
 import { EPluginStatus } from "@/constants/EPluginStatus";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
+import { solveAPI, SolveAPI } from "@/engine/api/SolveAPI";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { SettingTab } from "@/settings/SettingsTab";
 import UserSettings from "@/settings/UserSettings";
@@ -38,6 +39,12 @@ await this.registerSettings();
 		logger.debug(`[Solve] Added: Status Bar Companion`);
 
 		await this.registerCommands();
+
+		pluginEventBus.emit(EPluginEvent.SolveEngineReady, solveAPI);
+		logger.debug(`[Solve] Fired: SolveEngineReady`);
+
+		pluginEventBus.emit(EPluginEvent.SolveEngineReady, solveAPI);
+		logger.debug(`[Solve] Fired: SolveEngineReady`);
 	}
 
 	public onunload() {
