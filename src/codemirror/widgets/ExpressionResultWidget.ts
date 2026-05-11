@@ -1,6 +1,5 @@
 import { EPluginEvent } from "@/constants/EPluginEvent";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
-import { IExpressionProcessorState } from "@/pipelines/stages/expression/state/IExpressionProcessorState";
 import UserSettings from "@/settings/UserSettings";
 import { EditorView, WidgetType } from "@codemirror/view";
 
@@ -13,7 +12,8 @@ export class ExpressionResultWidget extends WidgetType {
 	isInlineSolve: boolean;
 
 	constructor(
-		state: IExpressionProcessorState,
+		lineNumber: number,
+		isInlineSolve: boolean,
 		expression: string,
 		result: string
 	) {
@@ -21,8 +21,8 @@ export class ExpressionResultWidget extends WidgetType {
 		this.userSettings = UserSettings.getInstance();
 		this.expression = expression;
 		this.result = result;
-		this.lineNumber = state.lineNumber;
-		this.isInlineSolve = state.isInlineSolve || false;
+		this.lineNumber = lineNumber;
+		this.isInlineSolve = isInlineSolve;
 	}
 
 	toDOM(view: EditorView): HTMLElement {

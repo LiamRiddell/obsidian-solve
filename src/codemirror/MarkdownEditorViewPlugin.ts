@@ -2,21 +2,6 @@ import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWid
 import { SolveHighlightProvider } from "@/codemirror/SolveHighlightProvider";
 import { ExpressionEngine } from "@/engine/engine/ExpressionEngine";
 import { Value } from "@/engine/vm/Value";
-import { StatefulPipeline } from "@/pipelines/definition/StatefulPipeline";
-import { SharedCommentsRemovalStage } from "@/pipelines/stages/expression/CommentsRemovalStage";
-import { SharedExplicitModeRemovalStage } from "@/pipelines/stages/expression/ExplicitModeRemovalStage";
-import { SharedExtractInlineSolveStage } from "@/pipelines/stages/expression/ExtractInlineSolveState";
-import { SharedMarkdownRemovalStage } from "@/pipelines/stages/expression/MarkdownRemovalStage";
-import { SharedMathJaxRemovalStage } from "@/pipelines/stages/expression/MathJaxRemovalStage";
-import { PreviousResultSubstitutionStage } from "@/pipelines/stages/expression/PreviousResultSubstitutionStage";
-import { SharedVariableAssignRemovalStage } from "@/pipelines/stages/expression/VariableAssignRemovalStage";
-import { VariableProcessingStage } from "@/pipelines/stages/expression/VariableProcessingStage";
-import { IExpressionProcessorState } from "@/pipelines/stages/expression/state/IExpressionProcessorState";
-import { SharedArithmeticInsertEqualSignStage } from "@/pipelines/stages/result/ArithmeticPostProcessStage";
-import { SharedDebugInformationStage } from "@/pipelines/stages/result/DebugInformationStage";
-import { SharedFormatResultStage } from "@/pipelines/stages/result/FormatResultStage";
-import { IProvider } from "@/providers/IProvider";
-import { AnyResult } from "@/results/AnyResult";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
@@ -30,7 +15,6 @@ import {
 	ViewUpdate,
 } from "@codemirror/view";
 import { SyntaxNodeRef } from "@lezer/common";
-import { solveProviderManager } from "../providers/ProviderManager";
 
 const DEBUG_MODE_ENABLED = false;
 
@@ -42,77 +26,15 @@ interface CachedLineDecorations {
 export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
 	private userSettings: UserSettings;
-
-	private ignoreNodeForMaskString = [
-		"Document",
-		"quote",
-		"list",
-		"HyperMD-list-line",
-		"math",
-	];
-
-	private expressionProcesser: StatefulPipeline<
-		IExpressionProcessorState,
-		string
-	>;
-	private expressionProcesserArray: StatefulPipeline<
-		IExpressionProcessorState,
-		string[]
-	>;
-	private expressionProcesserFinal: StatefulPipeline<
-		IExpressionProcessorState,
-		string
-	>;
-	private resultProcessor: StatefulPipeline<[IProvider, AnyResult], string>;
-	private variableProcessingStage: VariableProcessingStage;
-	private previousResultSubstitutionStage: PreviousResultSubstitutionStage;
 	private highlightProvider: SolveHighlightProvider;
 	private expressionEngine: ExpressionEngine;
 	private lineDecorationCache: Map<number, CachedLineDecorations> = new Map();
 	private dirtyLines: Set<number> = new Set();
 
 	constructor(view: EditorView) {
-		logger.debug(`[SolveViewPlugin] Constructer`);
+		logger.debug(`[SolveViewPlugin] Constructor`);
 
 		this.userSettings = UserSettings.getInstance();
-
-		// Setup any stateful pipeline stages.
-		this.previousResultSubstitutionStage =
-			new PreviousResultSubstitutionStage();
-		this.variableProcessingStage = new VariableProcessingStage();
-
-		// Setup the expression processor pipeline
-		this.expressionProcesser = new StatefulPipeline<
-			IExpressionProcessorState,
-			string
-		>()
-			.addStage(SharedMarkdownRemovalStage)
-			.addStage(SharedCommentsRemovalStage)
-			.addStage(SharedMathJaxRemovalStage)
-
-		this.expressionProcesserArray = new StatefulPipeline<
-			IExpressionProcessorState,
-			string[]
-		>()
-			.addStage(SharedExtractInlineSolveStage);
-		
-		this.expressionProcesserFinal = new StatefulPipeline<
-			IExpressionProcessorState,
-			string
-		>()	
-			.addStage(this.previousResultSubstitutionStage)
-			.addStage(this.variableProcessingStage)
-			.addStage(SharedExplicitModeRemovalStage)
-			.addStage(SharedVariableAssignRemovalStage);
-
-		// Setup the post processor pipeline
-		this.resultProcessor = new StatefulPipeline<
-			[IProvider, AnyResult],
-			string
-		>()
-			.addStage(SharedFormatResultStage)
-			.addStage(SharedArithmeticInsertEqualSignStage);
-
 		this.highlightProvider = new SolveHighlightProvider();
 		this.expressionEngine = new ExpressionEngine();
 
@@ -133,10 +55,6 @@ update(update: ViewUpdate) {
 		}
 
 		if (update.docChanged || update.viewportChanged) {
-			if (update.docChanged) {
-				this.variableProcessingStage.reset();
-			}
-
 			this.decorations = this.buildDecorations(update.view);
 		}
 	}
@@ -163,7 +81,6 @@ update(update: ViewUpdate) {
 		for (const { from, to } of visibleRanges) {
 			const doNotSolveMask = new Array<[from: number, to: number]>();
 
-			// Performant approach to ignoring nodes e.g. titles, code blocks, etc...
 			markdownDocumentSyntaxTree.iterate({
 				from,
 				to,
@@ -182,7 +99,6 @@ update(update: ViewUpdate) {
 
 					if (node.to <= previousTo || isNextTo) {
 						if (isNextTo) previousTo = node.to;
-
 						wasLastChild = true;
 					} else {
 						doNotSolveMask.push([previousFrom, previousTo]);
@@ -195,30 +111,24 @@ update(update: ViewUpdate) {
 
 			if (wasLastChild) doNotSolveMask.push([previousFrom, previousTo]);
 
-			// Performant approach to iterating only line in the visible range.
 			const range = view.state.doc.iterRange(from, to);
-
 			let nextLineTextOffset = 0;
 
 			for (const lineTextRaw of range) {
 				const linePosition = from + nextLineTextOffset;
-
 				const line = view.state.doc.lineAt(linePosition);
 
-				// Skip seen lines
 				if (seenLines.has(line.number)) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
 				seenLines.add(line.number);
 
-				// Skip if line is in mask range
 				if (this.isRangeInMask(doNotSolveMask, line.from, line.to)) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
 
-				// Check cache first: if we have a non-dirty cached entry with matching text, reuse it
 				if (!this.dirtyLines.has(line.number)) {
 					const cached = this.lineDecorationCache.get(line.number);
 					if (cached && cached.lineText === line.text) {
@@ -230,71 +140,16 @@ update(update: ViewUpdate) {
 					}
 				}
 
-				let expression = line.text.trimStart();
-				const padding = line.text.length - expression.length;
-				expression = expression.trimEnd();
-
-				// Skip blank lines
-				if (!expression || expression.length === 0) {
+				if (!line.text.trim() || line.text.trim().length === 0) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
 
-				const state: IExpressionProcessorState = {
-					lineNumber: line.number,
-					originalLineText: expression,
-					isAllowedExplicitModeExpression: false,
-				};
-
-				expression = this.expressionProcesser.process(
-					state,
-					expression
-				);
-
-				const inlineExpressions = this.expressionProcesserArray.process(
-					state,
-					[expression]
-				);
-
 				const decorations: Array<{from: number; to: number; deco: Decoration}> = [];
 
-				for (let i = 0; i < inlineExpressions.length; i++) {
-					const inlineExpression = inlineExpressions[i]
-					expression = this.expressionProcesserFinal.process(
-						state,
-						inlineExpression
-					);
+				this.buildLineDecorations(line.text, line.from, line.to, line.number, decorations);
 
-					const decoration = this.provideDecoration(state, expression, line.text, line.number);
-					if (!decoration) {
-						continue;
-					}
-
-					if (state.isInlineSolve && state.inlineSolveIndices) {
-						const inlineSolvePosition =
-							line.from +
-							3 +
-							state.inlineSolveIndices[i] +
-							padding +
-							inlineExpression.length;
-
-						decorations.push({ from: inlineSolvePosition, to: inlineSolvePosition, deco: decoration });
-					} else {
-						decorations.push({ from: line.to, to: line.to, deco: decoration });
-					}
-				}
-
-				if (!state.isInlineSolve) {
-					const ranges = this.highlightProvider.getLineHighlights(line.text, line.number);
-					for (const r of ranges) {
-						const from = line.from + r.from;
-						const to = line.from + r.to;
-						const deco = Decoration.mark({ class: r.className });
-						decorations.push({ from, to, deco });
-					}
-				}
-
-				decorations.sort((a, b) => a.from - b.from || a.deco.spec.side - b.deco.spec.side);
+				decorations.sort((a, b) => a.from - b.from || (a.deco.spec.side ?? 0) - (b.deco.spec.side ?? 0));
 				for (const d of decorations) {
 					builder.add(d.from, d.to, d.deco);
 				}
@@ -309,88 +164,90 @@ update(update: ViewUpdate) {
 		return builder.finish();
 	}
 
-	private isNodeIgnoredFromMask(name: string) {
-		for (let i = 0; i < this.ignoreNodeForMaskString.length; i++) {
-			const nodeName = this.ignoreNodeForMaskString[i];
-
-			if (name.startsWith(nodeName)) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	private isRangeInMask(
-		mask: [from: number, to: number][],
-		from: number,
-		to: number
-	): boolean {
-		for (let i = 0; i < mask.length; i++) {
-			const [maskFrom, maskTo] = mask[i];
-
-			if (from >= maskFrom && to <= maskTo) return true;
-		}
-
-		return false;
-	}
-
-	private provideDecoration(
-		state: IExpressionProcessorState,
-		expression: string,
+	private buildLineDecorations(
 		lineText: string,
-		lineNumber: number
-	) {
-		if (
-			this.userSettings.engine.explicitMode &&
-			!state.isAllowedExplicitModeExpression
-		) {
-			return undefined;
+		lineFrom: number,
+		lineTo: number,
+		lineNumber: number,
+		decorations: Array<{from: number; to: number; deco: Decoration}>
+	): void {
+		const inlineSolvePositions = this.findInlineSolves(lineText);
+
+		if (inlineSolvePositions.length > 0) {
+			let offset = 0;
+			for (const isp of inlineSolvePositions) {
+				const expr = isp.expression;
+				const lineExpr = expr.trim();
+				if (!lineExpr) continue;
+
+				const result = this.evaluateLine(lineNumber, lineExpr);
+				if (result === undefined) continue;
+
+				const widgetPos = lineFrom + isp.start + 3 + offset;
+				decorations.push({
+					from: widgetPos,
+					to: widgetPos,
+					deco: Decoration.widget({
+						widget: new ExpressionResultWidget(lineNumber, true, lineExpr, result),
+						side: 1,
+					}),
+				});
+			}
+
+			this.addHighlightDecorations(lineText, lineFrom, lineNumber, decorations);
+		} else {
+			const expression = lineText.trim();
+			if (!expression) return;
+
+			const result = this.evaluateLine(lineNumber, expression);
+			if (result !== undefined) {
+				decorations.push({
+					from: lineTo,
+					to: lineTo,
+					deco: Decoration.widget({
+						widget: new ExpressionResultWidget(lineNumber, false, expression, result),
+						side: 1,
+					}),
+				});
+			}
+
+			this.addHighlightDecorations(lineText, lineFrom, lineNumber, decorations);
 		}
-
-		const result = this.computeResult(expression, lineNumber, lineText);
-		if (result === undefined) {
-			return undefined;
-		}
-
-		const sentenceTrimmed = expression.trim();
-		const resultTrimmed = result.startsWith("= ")
-			? result.substring(2).trim()
-			: result.trim();
-
-		if (sentenceTrimmed.toLowerCase() === resultTrimmed.toLowerCase()) {
-			return undefined;
-		}
-
-		if (DEBUG_MODE_ENABLED) {
-			// result already includes debug info from computeResult
-		}
-
-		return Decoration.widget({
-			widget: new ExpressionResultWidget(state, expression, result),
-			side: 1,
-		});
 	}
 
-	private computeResult(expression: string, lineNumber: number, lineText: string): string | undefined {
-		try {
-			const value = this.expressionEngine.evaluateLine(lineNumber, lineText);
-			const result = this.formatValue(value);
-			return result;
-		} catch {
-			// Fall back to old provider pipeline
+	private findInlineSolves(lineText: string): Array<{start: number; expression: string}> {
+		const results: Array<{start: number; expression: string}> = [];
+		const regex = /s`([^`]*)`/g;
+		let match: RegExpExecArray | null;
+		while ((match = regex.exec(lineText)) !== null) {
+			results.push({ start: match.index, expression: match[1] });
 		}
+		return results;
+	}
 
-		const solveResultTuple = solveProviderManager.provideFirst(expression);
-		if (solveResultTuple === undefined) {
+	private evaluateLine(lineNumber: number, expression: string): string | undefined {
+		try {
+			const value = this.expressionEngine.evaluateLine(lineNumber, expression);
+			return this.formatValue(value);
+		} catch {
 			return undefined;
 		}
+	}
 
-		let result = this.resultProcessor.process(solveResultTuple, "");
-		this.previousResultSubstitutionStage.setPreviousResult(
-			solveResultTuple[1]
-		);
-		return result;
+	private addHighlightDecorations(
+		lineText: string,
+		lineFrom: number,
+		lineNumber: number,
+		decorations: Array<{from: number; to: number; deco: Decoration}>
+	): void {
+		const ranges = this.highlightProvider.getLineHighlights(lineText, lineNumber);
+		for (const r of ranges) {
+			decorations.push({
+				from: lineFrom + r.from,
+				to: lineFrom + r.to,
+				deco: Decoration.mark({ class: r.className }),
+			});
+		}
 	}
 
 	private formatValue(value: Value): string {
@@ -416,5 +273,35 @@ update(update: ViewUpdate) {
 			default:
 				return `= ${value.value}`;
 		}
+	}
+
+	private isNodeIgnoredFromMask(name: string) {
+		for (let i = 0; i < this.ignoreNodeForMaskString.length; i++) {
+			const nodeName = this.ignoreNodeForMaskString[i];
+			if (name.startsWith(nodeName)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private ignoreNodeForMaskString = [
+		"Document",
+		"quote",
+		"list",
+		"HyperMD-list-line",
+		"math",
+	];
+
+	private isRangeInMask(
+		mask: [from: number, to: number][],
+		from: number,
+		to: number
+	): boolean {
+		for (let i = 0; i < mask.length; i++) {
+			const [maskFrom, maskTo] = mask[i];
+			if (from >= maskFrom && to <= maskTo) return true;
+		}
+		return false;
 	}
 }
