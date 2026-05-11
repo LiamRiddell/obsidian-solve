@@ -94,6 +94,8 @@ const config = {
 	moduleNameMapper: {
 		"@/(.*)": "<rootDir>/src/$1",
 		"test/(.*)": "<rootDir>/test/$1",
+		"^@codemirror/language$": "<rootDir>/test/__mocks__/codemirror-language.ts",
+		"^@lezer/common$": "<rootDir>/test/__mocks__/lezer-common.ts",
 	},
 
 	// An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader

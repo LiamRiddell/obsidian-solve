@@ -1,6 +1,5 @@
 import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWidget";
 import { SolveHighlightProvider } from "@/codemirror/SolveHighlightProvider";
-import { pluginEventBus } from "@/eventbus/PluginEventBus";
 import { StatefulPipeline } from "@/pipelines/definition/StatefulPipeline";
 import { SharedCommentsRemovalStage } from "@/pipelines/stages/expression/CommentsRemovalStage";
 import { SharedExplicitModeRemovalStage } from "@/pipelines/stages/expression/ExplicitModeRemovalStage";
@@ -29,18 +28,13 @@ import {
 	ViewUpdate,
 } from "@codemirror/view";
 import { SyntaxNodeRef } from "@lezer/common";
-import { EPluginEvent } from "../constants/EPluginEvent";
-import { EPluginStatus } from "../constants/EPluginStatus";
 import { solveProviderManager } from "../providers/ProviderManager";
 
 const DEBUG_MODE_ENABLED = false;
 
 interface CachedLineDecorations {
   lineText: string;
-  widgetDeco: Decoration | null;
-  isInlineSolve: boolean;
-  inlineOffsets: number[] | null;
-  highlightRanges: Array<{from: number; to: number; deco: Decoration}>;
+  decorations: Array<{from: number; to: number; deco: Decoration}>;
 }
 
 export class MarkdownEditorViewPlugin implements PluginValue {
@@ -116,9 +110,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			.addStage(SharedFormatResultStage)
 			.addStage(SharedArithmeticInsertEqualSignStage);
 
-		this.decorations = this.buildDecorations(view);
-
 		this.highlightProvider = new SolveHighlightProvider();
+
+		this.decorations = this.buildDecorations(view);
 	}
 
 update(update: ViewUpdate) {
@@ -129,29 +123,24 @@ update(update: ViewUpdate) {
 				const endLine = update.view.state.doc.lineAt(toA).number;
 				for (let l = startLine; l <= endLine; l++) {
 					this.lineDecorationCache.delete(l);
+					this.dirtyLines.add(l);
 				}
 			});
 		}
 
 		if (update.docChanged || update.viewportChanged) {
-			pluginEventBus.emit(
-				EPluginEvent.StatusBarUpdate,
-				EPluginStatus.Solving
-			);
-
-			this.variableProcessingStage.reset();
+			if (update.docChanged) {
+				this.variableProcessingStage.reset();
+			}
 
 			this.decorations = this.buildDecorations(update.view);
-
-			pluginEventBus.emit(
-				EPluginEvent.StatusBarUpdate,
-				EPluginStatus.Idle
-			);
 		}
 	}
 
 	destroy() {
 		logger.debug(`[SolveViewPlugin] Destroyed`);
+		this.lineDecorationCache.clear();
+		this.dirtyLines.clear();
 	}
 
 	buildDecorations(view: EditorView): DecorationSet {
@@ -175,18 +164,9 @@ update(update: ViewUpdate) {
 				from,
 				to,
 				enter: (node: SyntaxNodeRef) => {
-					// console.log(
-					// 	node.type.name,
-					// 	node.from,
-					// 	node.to,
-					// 	view.state.doc.sliceString(node.from, node.to)
-					// );
-
 					if (this.isNodeIgnoredFromMask(node.type.name)) {
 						return;
 					}
-
-					// logger.debug(node.type.id, node.type.name);
 
 					if (firstNode) {
 						firstNode = false;
@@ -221,6 +201,31 @@ update(update: ViewUpdate) {
 
 				const line = view.state.doc.lineAt(linePosition);
 
+				// Skip seen lines
+				if (seenLines.has(line.number)) {
+					nextLineTextOffset += lineTextRaw.length;
+					continue;
+				}
+				seenLines.add(line.number);
+
+				// Skip if line is in mask range
+				if (this.isRangeInMask(doNotSolveMask, line.from, line.to)) {
+					nextLineTextOffset += lineTextRaw.length;
+					continue;
+				}
+
+				// Check cache first: if we have a non-dirty cached entry with matching text, reuse it
+				if (!this.dirtyLines.has(line.number)) {
+					const cached = this.lineDecorationCache.get(line.number);
+					if (cached && cached.lineText === line.text) {
+						for (const d of cached.decorations) {
+							builder.add(d.from, d.to, d.deco);
+						}
+						nextLineTextOffset += lineTextRaw.length;
+						continue;
+					}
+				}
+
 				let expression = line.text.trimStart();
 				const padding = line.text.length - expression.length;
 				expression = expression.trimEnd();
@@ -231,35 +236,23 @@ update(update: ViewUpdate) {
 					continue;
 				}
 
-				// Skip seen lines
-				if (seenLines.has(line.number)) {
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
-				}
-
-				// Skip if line is in mask range
-				if (this.isRangeInMask(doNotSolveMask, line.from, line.to)) {
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
-				}
-
 				const state: IExpressionProcessorState = {
 					lineNumber: line.number,
 					originalLineText: expression,
 					isAllowedExplicitModeExpression: false,
 				};
 
-				//logger.debug("Before Expression Processor:", state, expression);
 				expression = this.expressionProcesser.process(
 					state,
 					expression
 				);
-				//logger.debug("After Expression Processor:", state, expression);
 
 				const inlineExpressions = this.expressionProcesserArray.process(
 					state,
 					[expression]
 				);
+
+				const decorations: Array<{from: number; to: number; deco: Decoration}> = [];
 
 				for (let i = 0; i < inlineExpressions.length; i++) {
 					const inlineExpression = inlineExpressions[i]
@@ -268,61 +261,43 @@ update(update: ViewUpdate) {
 						inlineExpression
 					);
 
-					// The line is valid and decoration can be provided.
 					const decoration = this.provideDecoration(state, expression);
 					if (!decoration) {
 						continue;
 					}
 
 					if (state.isInlineSolve && state.inlineSolveIndices) {
-						// Result is displayed at the end of the inline solve position
 						const inlineSolvePosition =
-							line.from + // Start of the line
-							3 + // Unaccounted inline solve characters s``
-							state.inlineSolveIndices[i] + // Position of the inline solve
-							padding + // Length of removed whitespace
-							inlineExpression.length; // Length of the inline solve
+							line.from +
+							3 +
+							state.inlineSolveIndices[i] +
+							padding +
+							inlineExpression.length;
 
-						builder.add(
-							inlineSolvePosition,
-							inlineSolvePosition,
-							decoration
-						);
+						decorations.push({ from: inlineSolvePosition, to: inlineSolvePosition, deco: decoration });
 					} else {
-						// Result is displayed at the end of the line.
-						builder.add(line.to, line.to, decoration);
+						decorations.push({ from: line.to, to: line.to, deco: decoration });
 					}
 				}
 
 				if (!state.isInlineSolve) {
-					const cached = this.lineDecorationCache.get(line.number);
-					if (cached && cached.lineText === line.text) {
-						for (const hr of cached.highlightRanges) {
-							builder.add(hr.from, hr.to, hr.deco);
-						}
-					} else {
-						const ranges = this.highlightProvider.getLineHighlights(line.text, line.number);
-						if (ranges.length > 0) {
-							const highlightRanges = ranges.map(r => ({
-								from: line.from + r.from,
-								to: line.from + r.to,
-								deco: Decoration.mark({ class: r.className }),
-							}));
-							for (const hr of highlightRanges) {
-								builder.add(hr.from, hr.to, hr.deco);
-							}
-							this.lineDecorationCache.set(line.number, {
-								lineText: line.text,
-								widgetDeco: null,
-								isInlineSolve: false,
-								inlineOffsets: null,
-								highlightRanges,
-							});
-						}
+					const ranges = this.highlightProvider.getLineHighlights(line.text, line.number);
+					for (const r of ranges) {
+						const from = line.from + r.from;
+						const to = line.from + r.to;
+						const deco = Decoration.mark({ class: r.className });
+						decorations.push({ from, to, deco });
 					}
 				}
 
-				seenLines.add(line.number);
+				decorations.sort((a, b) => a.from - b.from || a.deco.spec.side - b.deco.spec.side);
+				for (const d of decorations) {
+					builder.add(d.from, d.to, d.deco);
+				}
+
+				this.lineDecorationCache.set(line.number, { lineText: line.text, decorations });
+				this.dirtyLines.delete(line.number);
+
 				nextLineTextOffset += lineTextRaw.length;
 			}
 		}
