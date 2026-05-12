@@ -11,8 +11,17 @@ export interface ISolveAPI {
   registerInfixParselet(tokenType: string, parselet: InfixParselet): void;
   registerOpcodeHandler(registration: IOpcodeHandlerRegistration): void;
   registerVariableSource(source: IVariableSource): void;
+  registerPackage(pkg: ISolvePackage): void;
   getOpCode(): typeof OpCode;
   Value: typeof Value;
+}
+
+export interface ISolvePackage {
+  name: string;
+  prefixParselets?: Array<{ tokenType: string; parselet: PrefixParselet }>;
+  infixParselets?: Array<{ tokenType: string; parselet: InfixParselet }>;
+  opcodeHandlers?: IOpcodeHandlerRegistration[];
+  variableSources?: IVariableSource[];
 }
 
 export class SolveAPI implements ISolveAPI {
@@ -32,6 +41,29 @@ export class SolveAPI implements ISolveAPI {
 
   registerVariableSource(source: IVariableSource): void {
     sharedVariableResolver.registerSource(source);
+  }
+
+  registerPackage(pkg: ISolvePackage): void {
+    if (pkg.prefixParselets) {
+      for (const pp of pkg.prefixParselets) {
+        this.registerPrefixParselet(pp.tokenType, pp.parselet);
+      }
+    }
+    if (pkg.infixParselets) {
+      for (const ip of pkg.infixParselets) {
+        this.registerInfixParselet(ip.tokenType, ip.parselet);
+      }
+    }
+    if (pkg.opcodeHandlers) {
+      for (const oh of pkg.opcodeHandlers) {
+        this.registerOpcodeHandler(oh);
+      }
+    }
+    if (pkg.variableSources) {
+      for (const vs of pkg.variableSources) {
+        this.registerVariableSource(vs);
+      }
+    }
   }
 
   getOpCode(): typeof OpCode {

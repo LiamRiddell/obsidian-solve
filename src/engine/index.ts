@@ -19,7 +19,9 @@ export type { OpcodeHandler, IOpcodeHandlerRegistration, VM } from "./vm/OpRegis
 
 export { ExpressionEngine } from "./engine/ExpressionEngine";
 export { SolveAPI, solveAPI } from "./api/SolveAPI";
-export type { ISolveAPI } from "./api/SolveAPI";
+export type { ISolveAPI, ISolvePackage } from "./api/SolveAPI";
+
+export { GrammarDSL, createGrammarDSL } from "./compiler/GrammarDSL";
 
 export { LineCache, LineCacheEntry } from "./cache/LineCache";
 export { DependencyGraph } from "./vm/DependencyGraph";
