@@ -1,5 +1,5 @@
 import { OpCode } from "@/engine/parser/OpCode";
-import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, vectorValue } from "@/engine/vm/Value";
+import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, vectorValue, uomValue } from "@/engine/vm/Value";
 import { OpRegistry, type VM } from "@/engine/vm/OpRegistry";
 
 export function createVM(registry: OpRegistry): VM {
@@ -205,9 +205,35 @@ const to = vm.popNumber();
 				vm.push(vectorValue(components));
 				break;
 			}
+			case OpCode.VEC_ADD: {
+				const r = vm.popNumber();
+				const l = vm.popNumber();
+				vm.push(numberValue(l + r));
+				break;
+			}
+			case OpCode.VEC_SUB: {
+				const r = vm.popNumber();
+				const l = vm.popNumber();
+				vm.push(numberValue(l - r));
+				break;
+			}
 			case OpCode.DATE_NOW:
 				vm.push(new Value(ValueType.Datetime, Date.now()));
 				break;
+			case OpCode.DATE_ADD:
+			case OpCode.DATE_SUB: {
+				const dur = vm.popNumber();
+				const dt = vm.popNumber();
+				const sign = op === OpCode.DATE_ADD ? 1 : -1;
+				vm.push(new Value(ValueType.Datetime, dt + sign * dur));
+				break;
+			}
+			case OpCode.UOM_CONVERT: {
+				const unit = vm.popString();
+				const val = vm.popNumber();
+				vm.push(uomValue(val, unit));
+				break;
+			}
 			case OpCode.LOAD_VAR: {
 				const varIdx = opcodes[ip++];
 				const varName = strings[varIdx];
