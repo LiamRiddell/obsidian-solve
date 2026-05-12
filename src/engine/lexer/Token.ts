@@ -10,6 +10,7 @@ export interface Token {
 
 export const TokenTypes = {
   NUMBER: "NUMBER",
+  BIGINT: "BIGINT",
   STRING: "STRING",
   IDENT: "IDENT",
   PLUS: "PLUS",
@@ -33,6 +34,9 @@ export const TokenTypes = {
   EQUALS: "EQUALS",
   DOLLAR: "DOLLAR",
   QUESTION: "QUESTION",
+  BIT_AND: "BIT_AND",
+  BIT_OR: "BIT_OR",
+  BIT_NOT: "BIT_NOT",
   KEYWORD: "KEYWORD",
   EOF: "EOF",
   ERROR: "ERROR",

@@ -5,9 +5,16 @@ import { BytecodeBuilder } from "@/engine/parser/BytecodeBuilder";
 import { OpCode } from "@/engine/parser/OpCode";
 
 export class VectorParselet implements PrefixParselet {
+  private dimension: number;
+
+  constructor(dimension = 0) {
+    this.dimension = dimension;
+  }
+
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+    parser.consume("LPAREN");
     let count = 0;
-    if (parser.peek()?.type !== "RBRACKET") {
+    if (parser.peek()?.type !== "RPAREN") {
       parser.parseExpression(0, builder);
       count++;
       while (parser.match("COMMA")) {
@@ -15,8 +22,8 @@ export class VectorParselet implements PrefixParselet {
         count++;
       }
     }
-    parser.consume("RBRACKET");
+    parser.consume("RPAREN");
     builder.emitOpcode(OpCode.VEC_NEW);
-    builder.emitIndex(count);
+    builder.emitIndex(this.dimension > 0 ? this.dimension : count);
   }
 }

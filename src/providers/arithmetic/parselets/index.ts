@@ -27,4 +27,12 @@ export function registerArithmeticParselets(registry: ParseletRegistry): void {
   registry.registerInfix("SLASH", new BinaryOpParselet(BindingPower.Product, OpCode.DIV));
   registry.registerInfix("MOD", new BinaryOpParselet(BindingPower.Product, OpCode.MOD));
   registry.registerInfix("CARET", new BinaryOpParselet(BindingPower.Exponent, OpCode.EXP));
+
+  registry.registerInfix("TIMES_BY", new BinaryOpParselet(BindingPower.Product, OpCode.MUL));
+  registry.registerInfix("MULTIPLY_BY", new BinaryOpParselet(BindingPower.Product, OpCode.MUL));
+  registry.registerInfix("DIVIDE_BY", new BinaryOpParselet(BindingPower.Product, OpCode.DIV));
+  registry.registerInfix("LSHIFT", new BinaryOpParselet(BindingPower.Sum, OpCode.LSHIFT));
+  registry.registerInfix("RSHIFT", new BinaryOpParselet(BindingPower.Sum, OpCode.RSHIFT));
+  registry.registerInfix("BIT_AND", new BinaryOpParselet(BindingPower.Product, OpCode.BIT_AND));
+  registry.registerInfix("BIT_OR", new BinaryOpParselet(BindingPower.Sum, OpCode.BIT_OR));
 }

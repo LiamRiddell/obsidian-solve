@@ -6,7 +6,9 @@ import { VectorParselet } from "./VectorParselet";
 import { VectorAddParselet, VectorSubParselet, VectorDotParselet } from "./VectorOpParselets";
 
 export function registerVectorParselets(registry: ParseletRegistry): void {
-  registry.registerPrefix("LBRACKET", new VectorParselet());
+  registry.registerPrefix("VEC2", new VectorParselet(2));
+  registry.registerPrefix("VEC3", new VectorParselet(3));
+  registry.registerPrefix("VEC4", new VectorParselet(4));
   registry.registerInfix("VEC_ADD", new VectorAddParselet());
   registry.registerInfix("VEC_SUB", new VectorSubParselet());
   registry.registerInfix("VEC_DOT", new VectorDotParselet());

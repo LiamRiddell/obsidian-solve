@@ -56,7 +56,11 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
 				break;
 			case OpCode.NEG: {
 				const v = vm.pop();
-				vm.push(numberValue(-v.toNumber()));
+				if (v.type === ValueType.BigInt) {
+					vm.push(bigIntValue(-(v.value as bigint)));
+				} else {
+					vm.push(numberValue(-v.toNumber()));
+				}
 				break;
 			}
 			case OpCode.POS: {
@@ -66,32 +70,107 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
 			}
 			case OpCode.ADD: {
 				const r = vm.pop(), l = vm.pop();
-				vm.push(numberValue(l.toNumber() + r.toNumber()));
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) + BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() + r.toNumber()));
+				}
 				break;
 			}
 			case OpCode.SUB: {
 				const r = vm.pop(), l = vm.pop();
-				vm.push(numberValue(l.toNumber() - r.toNumber()));
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) - BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() - r.toNumber()));
+				}
 				break;
 			}
 			case OpCode.MUL: {
 				const r = vm.pop(), l = vm.pop();
-				vm.push(numberValue(l.toNumber() * r.toNumber()));
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) * BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() * r.toNumber()));
+				}
 				break;
 			}
 			case OpCode.DIV: {
 				const r = vm.pop(), l = vm.pop();
-				vm.push(numberValue(l.toNumber() / r.toNumber()));
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) / BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() / r.toNumber()));
+				}
 				break;
 			}
 			case OpCode.MOD: {
 				const r = vm.pop(), l = vm.pop();
-				vm.push(numberValue(l.toNumber() % r.toNumber()));
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) % BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() % r.toNumber()));
+				}
 				break;
 			}
 			case OpCode.EXP: {
 				const r = vm.pop(), l = vm.pop();
 				vm.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
+				break;
+			}
+
+			case OpCode.LSHIFT: {
+				const r = vm.pop(), l = vm.pop();
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) << BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() << r.toNumber()));
+				}
+				break;
+			}
+			case OpCode.RSHIFT: {
+				const r = vm.pop(), l = vm.pop();
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) >> BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() >> r.toNumber()));
+				}
+				break;
+			}
+			case OpCode.BIT_AND: {
+				const r = vm.pop(), l = vm.pop();
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) & BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() & r.toNumber()));
+				}
+				break;
+			}
+			case OpCode.BIT_OR: {
+				const r = vm.pop(), l = vm.pop();
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) | BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() | r.toNumber()));
+				}
+				break;
+			}
+			case OpCode.BIT_XOR: {
+				const r = vm.pop(), l = vm.pop();
+				if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+					vm.push(bigIntValue(BigInt(l.toNumber()) ^ BigInt(r.toNumber())));
+				} else {
+					vm.push(numberValue(l.toNumber() ^ r.toNumber()));
+				}
+				break;
+			}
+			case OpCode.BIT_NOT: {
+				const v = vm.pop();
+				if (v.type === ValueType.BigInt) {
+					vm.push(bigIntValue(~(v.value as bigint)));
+				} else {
+					vm.push(numberValue(~v.toNumber()));
+				}
 				break;
 			}
 			case OpCode.TO_NUMBER: {

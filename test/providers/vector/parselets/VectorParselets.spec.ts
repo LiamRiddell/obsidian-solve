@@ -42,29 +42,35 @@ function parseAndExecute(input: string): Value {
 }
 
 describe("Vector Parselets", () => {
-  test("vec2: [1, 2]", () => {
-    const result = parseAndExecute("[1, 2]");
+  test("vec2(1, 2)", () => {
+    const result = parseAndExecute("vec2(1, 2)");
     expect(result.isVector()).toBe(true);
     expect((result.value as number[]).length).toBe(2);
     expect((result.value as number[])[0]).toBe(1);
     expect((result.value as number[])[1]).toBe(2);
   });
 
-  test("vec2 with expressions: [1 + 2, 3 * 4]", () => {
-    const result = parseAndExecute("[1 + 2, 3 * 4]");
+  test("vec2 with expressions: vec2(1 + 2, 3 * 4)", () => {
+    const result = parseAndExecute("vec2(1 + 2, 3 * 4)");
     expect(result.isVector()).toBe(true);
     expect((result.value as number[])[0]).toBe(3);
     expect((result.value as number[])[1]).toBe(12);
   });
 
-  test("vec3: [1, 2, 3]", () => {
-    const result = parseAndExecute("[1, 2, 3]");
+  test("vec3: vec3(1, 2, 3)", () => {
+    const result = parseAndExecute("vec3(1, 2, 3)");
     expect(result.isVector()).toBe(true);
     expect((result.value as number[]).length).toBe(3);
   });
 
-  test("nested vector containing arithmetic", () => {
-    const result = parseAndExecute("[10 * 2 / 4, 2]");
+  test("vec4: vec4(1, 2, 3, 4)", () => {
+    const result = parseAndExecute("vec4(1, 2, 3, 4)");
+    expect(result.isVector()).toBe(true);
+    expect((result.value as number[]).length).toBe(4);
+  });
+
+  test("nested arithmetic", () => {
+    const result = parseAndExecute("vec2(10 * 2 / 4, 2)");
     expect(result.isVector()).toBe(true);
     expect((result.value as number[])[0]).toBe(5);
     expect((result.value as number[])[1]).toBe(2);
