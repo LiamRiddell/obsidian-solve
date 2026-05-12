@@ -1,7 +1,8 @@
 import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWidget";
 import { SolveHighlightProvider } from "@/codemirror/SolveHighlightProvider";
 import { ExpressionEngine } from "@/engine/engine/ExpressionEngine";
-import { Value, ValueType } from "@/engine/vm/Value";
+import { Value } from "@/engine/vm/Value";
+import { formatValue } from "@/engine/format/FormatEngine";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
@@ -36,7 +37,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		this.userSettings = UserSettings.getInstance();
 		this.highlightProvider = new SolveHighlightProvider();
-		this.expressionEngine = new ExpressionEngine();
+		this.expressionEngine = new ExpressionEngine(this.userSettings.settings.engine.locale);
 
 		this.decorations = this.buildDecorations(view);
 	}
@@ -228,7 +229,7 @@ update(update: ViewUpdate) {
 	private evaluateLine(lineNumber: number, expression: string): string | undefined {
 		try {
 			const value = this.expressionEngine.evaluateLine(lineNumber, expression);
-			return this.formatValue(value);
+			return formatValue(value);
 		} catch {
 			return undefined;
 		}
@@ -247,31 +248,6 @@ update(update: ViewUpdate) {
 				to: lineFrom + r.to,
 				deco: Decoration.mark({ class: r.className }),
 			});
-		}
-	}
-
-	private formatValue(value: Value): string {
-		switch (value.type) {
-			case ValueType.Number:
-				return `= ${value.value}`;
-			case ValueType.Hex:
-				return `= 0x${(value.value as number).toString(16).toUpperCase()}`;
-			case ValueType.BigInt:
-				return `= ${value.value}`;
-			case ValueType.String:
-				return `= ${value.value}`;
-			case ValueType.Boolean:
-				return `= ${value.value}`;
-			case ValueType.Datetime:
-				return `= ${new Date(value.value as number).toLocaleString()}`;
-			case ValueType.Uom:
-				return `= ${value.value} ${value.unit}`;
-			case ValueType.Vector2:
-			case ValueType.Vector3:
-			case ValueType.Vector4:
-				return `= [${(value.value as number[]).join(', ')}]`;
-			default:
-				return `= ${String(value.value)}`;
 		}
 	}
 

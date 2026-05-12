@@ -4,8 +4,8 @@ import { Token } from "./Token";
 export class ExpressionLexer {
   private inner: MarkdownLexer;
 
-  constructor() {
-    this.inner = new MarkdownLexer("expression");
+  constructor(localeCode = "en") {
+    this.inner = new MarkdownLexer(localeCode, "expression");
   }
 
   reset(input: string): void {

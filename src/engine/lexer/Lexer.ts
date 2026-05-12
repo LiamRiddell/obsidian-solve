@@ -9,8 +9,8 @@ export class Lexer {
   private peekedToken: Token | undefined;
   private hasPeeked = false;
 
-  constructor() {
-    this.expressionLexer = new ExpressionLexer();
+  constructor(localeCode = "en") {
+    this.expressionLexer = new ExpressionLexer(localeCode);
   }
 
   reset(input: string, state?: LexerState): void {
@@ -65,4 +65,4 @@ export class Lexer {
   }
 }
 
-export const sharedLexer = new Lexer();
+export const sharedLexer = new Lexer("en");

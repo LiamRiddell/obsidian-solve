@@ -5,6 +5,7 @@ import moment from "moment";
 export const DEFAULT_SETTINGS: IPluginSettings = {
 	engine: {
 		explicitMode: false,
+		locale: "en",
 	},
 
 	interface: {

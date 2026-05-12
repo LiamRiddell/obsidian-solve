@@ -25,11 +25,12 @@ export class ExpressionEngine {
   private lineCache = new LineCache();
   private scopeManager = new ScopeManager();
   private memoCache = new MemoCache();
-  private lexer = new Lexer();
+  private lexer: Lexer;
   private registry: ParseletRegistry;
   private parser: Parser;
 
-  constructor() {
+  constructor(localeCode = "en") {
+    this.lexer = new Lexer(localeCode);
     this.registry = new ParseletRegistry();
     registerArithmeticParselets(this.registry);
     registerPercentageParselets(this.registry);
