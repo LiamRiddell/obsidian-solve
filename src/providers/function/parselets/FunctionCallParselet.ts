@@ -6,17 +6,16 @@ import { OpCode } from "@/engine/parser/OpCode";
 import { BindingPower } from "@/engine/parser/BindingPower";
 
 const builtinNameToIndex: Record<string, number> = {
-  sqrt: 0,
-  abs: 1,
-  sin: 2,
-  cos: 3,
-  tan: 4,
-  log: 5,
-  ceil: 6,
-  floor: 7,
-  round: 8,
-  min: 9,
-  max: 10,
+  sqrt: 0, abs: 1, sin: 2, cos: 3, tan: 4, log: 5,
+  ceil: 6, floor: 7, round: 8, min: 9, max: 10,
+  asin: 11, acos: 12, atan: 13, atan2: 14,
+  sinh: 15, cosh: 16, tanh: 17,
+  asinh: 18, acosh: 19, atanh: 20,
+  cbrt: 21, clz32: 22, expm1: 23, exp: 24,
+  fround: 25, hypot: 26, imul: 27,
+  log10: 28, log1p: 29, log2: 30,
+  pow: 31, random: 32, sign: 33, trunc: 34,
+  degtorad: 35, radtodeg: 36,
 };
 
 export class FunctionCallParselet implements PrefixParselet {
