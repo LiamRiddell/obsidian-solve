@@ -117,4 +117,58 @@ describe("Datetime Parselets", () => {
     expect(elapsed).toBeGreaterThanOrEqual(9995);
     expect(elapsed).toBeLessThanOrEqual(10010);
   });
+
+  test("now - 10 seconds yields timestamp - ~10000", () => {
+    const now = Date.now();
+    const result = parseAndExecute("now - 10 seconds");
+    const elapsed = (result.value as number) - now;
+    expect(elapsed).toBeGreaterThanOrEqual(-10010);
+    expect(elapsed).toBeLessThanOrEqual(-9995);
+  });
+
+  test("now + 5 minutes yields ~300000", () => {
+    const now = Date.now();
+    const result = parseAndExecute("now + 5 minutes");
+    const elapsed = (result.value as number) - now;
+    expect(elapsed).toBeGreaterThanOrEqual(299000);
+    expect(elapsed).toBeLessThanOrEqual(301000);
+  });
+
+  test("now + 2 hours yields ~7200000", () => {
+    const now = Date.now();
+    const result = parseAndExecute("now + 2 hours");
+    const elapsed = (result.value as number) - now;
+    expect(elapsed).toBeGreaterThanOrEqual(7190000);
+    expect(elapsed).toBeLessThanOrEqual(7210000);
+  });
+
+  test("today + 3 days yields ~259200000", () => {
+    const now = Date.now();
+    const result = parseAndExecute("today + 3 days");
+    const elapsed = (result.value as number) - now;
+    expect(elapsed).toBeGreaterThanOrEqual(259000000);
+    expect(elapsed).toBeLessThanOrEqual(260000000);
+  });
+
+  test("yesterday + 1 day = tomorrow", () => {
+    const yesterday = parseAndExecute("yesterday");
+    const result = parseAndExecute("yesterday + 1 day");
+    const diff = (result.value as number) - (yesterday.value as number);
+    expect(diff).toBeCloseTo(86400000, -2);
+  });
+
+  test("tomorrow - 1 day = today (or yesterday)", () => {
+    const tomorrow = parseAndExecute("tomorrow");
+    const result = parseAndExecute("tomorrow - 1 day");
+    const diff = (result.value as number) - (tomorrow.value as number);
+    expect(diff).toBeCloseTo(-86400000, -2);
+  });
+
+  test("now + 1 week yields ~604800000", () => {
+    const now = Date.now();
+    const result = parseAndExecute("now + 1 week");
+    const elapsed = (result.value as number) - now;
+    expect(elapsed).toBeGreaterThanOrEqual(604000000);
+    expect(elapsed).toBeLessThanOrEqual(606000000);
+  });
 });

@@ -75,4 +75,26 @@ describe("Vector Parselets", () => {
     expect((result.value as number[])[0]).toBe(5);
     expect((result.value as number[])[1]).toBe(2);
   });
+
+  test("vec2 with unary: vec2(-3, +5)", () => {
+    const result = parseAndExecute("vec2(-3, +5)");
+    expect(result.isVector()).toBe(true);
+    expect((result.value as number[])[0]).toBe(-3);
+    expect((result.value as number[])[1]).toBe(5);
+  });
+
+  test("vec2 with exponent: vec2(3^2, 2^3)", () => {
+    const result = parseAndExecute("vec2(3^2, 2^3)");
+    expect(result.isVector()).toBe(true);
+    expect((result.value as number[])[0]).toBe(9);
+    expect((result.value as number[])[1]).toBe(8);
+  });
+
+  test("vec3 with arithmetic: vec3(1+2, 3*4, 10/2)", () => {
+    const result = parseAndExecute("vec3(1+2, 3*4, 10/2)");
+    expect(result.isVector()).toBe(true);
+    expect((result.value as number[])[0]).toBe(3);
+    expect((result.value as number[])[1]).toBe(12);
+    expect((result.value as number[])[2]).toBe(5);
+  });
 });

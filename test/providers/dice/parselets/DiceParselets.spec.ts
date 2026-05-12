@@ -74,4 +74,44 @@ describe("Dice Parselets", () => {
       expect(val).toBeLessThanOrEqual(16);
     }
   });
+
+  test("roll in expression: roll(2, 5) * 2", () => {
+    for (let i = 0; i < 10; i++) {
+      const result = parseAndExecute("roll(2, 5) * 2");
+      const val = result.toNumber();
+      expect(val % 2).toBe(0);
+      expect(val).toBeGreaterThanOrEqual(4);
+      expect(val).toBeLessThanOrEqual(10);
+    }
+  });
+
+  test("roll with exponential: roll(1, 2) ^ 3", () => {
+    for (let i = 0; i < 10; i++) {
+      const result = parseAndExecute("roll(1, 2) ^ 3");
+      const val = result.toNumber();
+      expect(val === 1 || val === 8).toBe(true);
+    }
+  });
+
+  test("from keyword: from parselet registration", () => {
+    const lexer = new Lexer();
+    lexer.reset("from 1 to 10");
+    const types: string[] = [];
+    for (const t of lexer) {
+      if (t.type === "WS") continue;
+      types.push(t.type);
+    }
+    expect(types).toContain("FROM");
+  });
+
+  test("between keyword: between parselet registration", () => {
+    const lexer = new Lexer();
+    lexer.reset("between 1 and 10");
+    const types: string[] = [];
+    for (const t of lexer) {
+      if (t.type === "WS") continue;
+      types.push(t.type);
+    }
+    expect(types).toContain("BETWEEN");
+  });
 });

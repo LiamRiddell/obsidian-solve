@@ -36,8 +36,8 @@ export class MarkdownLexer {
     const expressionRules: moo.Rules = {
       WS: { match: /[ \t]+/, lineBreaks: false },
       NEWLINE: { match: /\n+/, lineBreaks: true },
-      NUMBER: /(?:0[xX][0-9a-fA-F]+(?:h\b)?|0[bB][01]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/,
       BIGINT: /\d+n/,
+      NUMBER: /(?:0[xX][0-9a-fA-F]+(?:h\b)?|0[bB][01]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/,
       PLUS: "+", MINUS: "-", STAR: "*", SLASH: "/", CARET: "^", PERCENT: "%",
       LSHIFT: "<<", RSHIFT: ">>", BIT_AND: "&", BIT_OR: "|", BIT_NOT: "~", BANG: "!",
       LPAREN: "(", RPAREN: ")", LBRACKET: "[", RBRACKET: "]",

@@ -76,4 +76,40 @@ describe("Percentage Parselets", () => {
   test("percentage division: 50% / 25%", () => {
     expect(parseAndExecute("50% / 25%")).toBe(2);
   });
+
+  test("percentage increase: increase 100 by 10% = 110", () => {
+    expect(parseAndExecute("increase 100 by 10%")).toBeCloseTo(110);
+  });
+
+  test("percentage decrease: decrease 100 by 10% = 90", () => {
+    expect(parseAndExecute("decrease 100 by 10%")).toBeCloseTo(90);
+  });
+
+  test("percentage increase by 50%: increase 200 by 50% = 300", () => {
+    expect(parseAndExecute("increase 200 by 50%")).toBeCloseTo(300);
+  });
+
+  test("percentage decrease by 25%: decrease 80 by 25% = 60", () => {
+    expect(parseAndExecute("decrease 80 by 25%")).toBeCloseTo(60);
+  });
+
+  test("increase by phrase keyword: increase 100 by 10%", () => {
+    expect(parseAndExecute("increase 100 by 10%")).toBeCloseTo(110);
+  });
+
+  test("decrease by phrase keyword: decrease 100 by 10%", () => {
+    expect(parseAndExecute("decrease 100 by 10%")).toBeCloseTo(90);
+  });
+
+  test("percentage of with expression: 50% of (40 + 60) = 50", () => {
+    expect(parseAndExecute("50% of (40 + 60)")).toBe(50);
+  });
+
+  test("percentage combined with arithmetic: 10% of 200 + 5 = 25", () => {
+    expect(parseAndExecute("10% of 200 + 5")).toBe(25);
+  });
+
+  test("BODMAS with percentage: 50% of 200 + 10% of 100 = 110", () => {
+    expect(parseAndExecute("50% of 200 + 10% of 100")).toBe(110);
+  });
 });
