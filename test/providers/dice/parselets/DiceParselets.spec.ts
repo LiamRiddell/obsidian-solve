@@ -8,7 +8,7 @@ import { registerArithmeticParselets } from "@/providers/arithmetic/parselets/in
 import { registerDiceParselets } from "@/providers/dice/parselets/index";
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
-import { Value } from "@/engine/vm/Value";
+import { Value, ValueType } from "@/engine/vm/Value";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -45,7 +45,7 @@ describe("Dice Parselets", () => {
   test("roll(1, 6) returns a number between 1 and 6", () => {
     for (let i = 0; i < 20; i++) {
       const result = parseAndExecute("roll(1, 6)");
-      expect(result.type).toBe("number");
+      expect(result.type).toBe(ValueType.Number);
       const val = result.toNumber();
       expect(val).toBeGreaterThanOrEqual(1);
       expect(val).toBeLessThanOrEqual(6);

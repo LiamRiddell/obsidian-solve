@@ -1,7 +1,7 @@
 import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWidget";
 import { SolveHighlightProvider } from "@/codemirror/SolveHighlightProvider";
 import { ExpressionEngine } from "@/engine/engine/ExpressionEngine";
-import { Value } from "@/engine/vm/Value";
+import { Value, ValueType } from "@/engine/vm/Value";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
 // @ts-expect-error
@@ -252,26 +252,26 @@ update(update: ViewUpdate) {
 
 	private formatValue(value: Value): string {
 		switch (value.type) {
-			case 'number':
+			case ValueType.Number:
 				return `= ${value.value}`;
-			case 'hex':
+			case ValueType.Hex:
 				return `= 0x${(value.value as number).toString(16).toUpperCase()}`;
-			case 'bigint':
+			case ValueType.BigInt:
 				return `= ${value.value}`;
-			case 'string':
+			case ValueType.String:
 				return `= ${value.value}`;
-			case 'boolean':
+			case ValueType.Boolean:
 				return `= ${value.value}`;
-			case 'datetime':
+			case ValueType.Datetime:
 				return `= ${new Date(value.value as number).toLocaleString()}`;
-			case 'uom':
+			case ValueType.Uom:
 				return `= ${value.value} ${value.unit}`;
-			case 'vector2':
-			case 'vector3':
-			case 'vector4':
+			case ValueType.Vector2:
+			case ValueType.Vector3:
+			case ValueType.Vector4:
 				return `= [${(value.value as number[]).join(', ')}]`;
 			default:
-				return `= ${value.value}`;
+				return `= ${String(value.value)}`;
 		}
 	}
 

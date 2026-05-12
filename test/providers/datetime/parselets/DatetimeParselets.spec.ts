@@ -8,7 +8,7 @@ import { registerArithmeticParselets } from "@/providers/arithmetic/parselets/in
 import { registerDatetimeParselets } from "@/providers/datetime/parselets/index";
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
-import { Value, numberValue } from "@/engine/vm/Value";
+import { Value, ValueType, numberValue } from "@/engine/vm/Value";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -46,7 +46,7 @@ describe("Datetime Parselets", () => {
     const before = Date.now();
     const result = parseAndExecute("now");
     const after = Date.now();
-    expect(result.type).toBe("datetime");
+    expect(result.type).toBe(ValueType.Datetime);
     expect((result.value as number)).toBeGreaterThanOrEqual(before);
     expect((result.value as number)).toBeLessThanOrEqual(after);
   });
@@ -55,7 +55,7 @@ describe("Datetime Parselets", () => {
     const before = Date.now();
     const result = parseAndExecute("today");
     const after = Date.now();
-    expect(result.type).toBe("datetime");
+    expect(result.type).toBe(ValueType.Datetime);
     expect((result.value as number)).toBeGreaterThanOrEqual(before);
     expect((result.value as number)).toBeLessThanOrEqual(after);
   });

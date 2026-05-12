@@ -2,6 +2,7 @@ import { describe, expect, test } from "@jest/globals";
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
 import { OpCode } from "@/engine/parser/OpCode";
+import { ValueType } from "@/engine/vm/Value";
 
 function bc(ops: number[], numbers: number[] = [], strings: string[] = []): { opcodes: Uint8Array; numbers: Float64Array; strings: string[] } {
   return {
@@ -99,7 +100,7 @@ describe("VM executeBytecode", () => {
     const before = Date.now();
     const result = executeBytecode(bc([OpCode.DATE_NOW, OpCode.HALT]), vm);
     const after = Date.now();
-    expect(result!.type).toBe("datetime");
+    expect(result!.type).toBe(ValueType.Datetime);
     expect((result!.value as number)).toBeGreaterThanOrEqual(before);
     expect((result!.value as number)).toBeLessThanOrEqual(after);
   });
@@ -117,7 +118,7 @@ describe("VM executeBytecode", () => {
   test("VEC_NEW creates vector from components", () => {
     const vm = createVM(sharedOpRegistry);
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.VEC_NEW, 3, OpCode.HALT], [10, 20, 30]), vm);
-    expect(result!.type).toBe("vector3");
+    expect(result!.type).toBe(ValueType.Vector3);
     expect(result!.value).toEqual([10, 20, 30]);
   });
 
@@ -160,13 +161,13 @@ describe("VM executeBytecode", () => {
   test("PUSH_BIGINT", () => {
     const vm = createVM(sharedOpRegistry);
     const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.HALT], [9007199254740991]), vm);
-    expect(result!.type).toBe("bigint");
+    expect(result!.type).toBe(ValueType.BigInt);
   });
 
   test("PUSH_HEX", () => {
     const vm = createVM(sharedOpRegistry);
     const result = executeBytecode(bc([OpCode.PUSH_HEX, 0, OpCode.HALT], [255]), vm);
-    expect(result!.type).toBe("hex");
+    expect(result!.type).toBe(ValueType.Hex);
     expect(result!.toNumber()).toBe(255);
   });
 

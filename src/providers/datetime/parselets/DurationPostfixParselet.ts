@@ -3,6 +3,7 @@ import { Parser } from "@/engine/parser/Parser";
 import { Token } from "@/engine/lexer/Token";
 import { BytecodeBuilder } from "@/engine/parser/BytecodeBuilder";
 import { OpCode } from "@/engine/parser/OpCode";
+import { BindingPower } from "@/engine/parser/BindingPower";
 
 const MS_PER = {
   DURATION_SECOND: 1000,
@@ -18,7 +19,7 @@ export class DurationPostfixParselet implements InfixParselet {
   constructor(private readonly tokenType: string) {}
 
   getBindingPower(): number {
-    return 70;
+    return BindingPower.Postfix;
   }
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {

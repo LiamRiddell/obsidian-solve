@@ -1,8 +1,7 @@
 export { DependencyGraph } from "./DependencyGraph";
 export { ScopeManager } from "./ScopeManager";
 export { MemoCache } from "./MemoCache";
-export { Value, numberValue, hexValue, bigIntValue, stringValue, uomValue, vectorValue } from "./Value";
-export type { ValueType } from "./Value";
+export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, vectorValue } from "./Value";
 export { createVM, executeBytecode } from "./VM";
 export type { Bytecode } from "./VM";
 export { OpRegistry, sharedOpRegistry } from "./OpRegistry";

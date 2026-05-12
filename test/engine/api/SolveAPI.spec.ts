@@ -1,7 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { solveAPI, SolveAPI } from "@/engine/api/SolveAPI";
 import { OpCode } from "@/engine/parser/OpCode";
-import { Value, numberValue } from "@/engine/vm/Value";
+import { Value, ValueType, numberValue } from "@/engine/vm/Value";
 import { sharedOpRegistry, type VM } from "@/engine/vm/OpRegistry";
 import { sharedVariableResolver } from "@/engine/variables/VariableResolver";
 import { IVariableSource } from "@/engine/variables/IVariableSource";
@@ -20,7 +20,7 @@ describe("SolveAPI", () => {
 
   test("Value is accessible via solveAPI.Value", () => {
     expect(solveAPI.Value).toBe(Value);
-    const v = new solveAPI.Value("number", 42);
+    const v = new solveAPI.Value(ValueType.Number, 42);
     expect(v.toNumber()).toBe(42);
   });
 

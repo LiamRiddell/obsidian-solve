@@ -1,5 +1,5 @@
 import { OpCode } from "@/engine/parser/OpCode";
-import { Value, numberValue, stringValue, bigIntValue, hexValue, vectorValue } from "@/engine/vm/Value";
+import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, vectorValue } from "@/engine/vm/Value";
 import { OpRegistry, type VM } from "@/engine/vm/OpRegistry";
 
 export function createVM(registry: OpRegistry): VM {
@@ -52,7 +52,7 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
 				break;
 			}
 			case OpCode.PUSH_BOOLEAN:
-				vm.push(new Value('boolean', opcodes[ip++] === 1));
+				vm.push(new Value(ValueType.Boolean, opcodes[ip++] === 1));
 				break;
 			case OpCode.NEG: {
 				const v = vm.pop();
@@ -127,7 +127,7 @@ const to = vm.popNumber();
 				break;
 			}
 			case OpCode.DATE_NOW:
-				vm.push(new Value('datetime', Date.now()));
+				vm.push(new Value(ValueType.Datetime, Date.now()));
 				break;
 			case OpCode.LOAD_VAR: {
 				const varIdx = opcodes[ip++];

@@ -114,4 +114,17 @@ describe("Full pipeline: Lexer → Parser → BytecodeBuilder → VM", () => {
   test("complex expression", () => {
     expect(fullEval("2 * (3 + 4) - 5 ^ 2")).toBe(-11);
   });
+
+  // Issue #82: Function calls must produce correct numeric values
+  test("round(55/5) returns 11", () => {
+    expect(fullEval("round(55/5)")).toBe(11);
+  });
+
+  test("sin(pi/2) returns 1", () => {
+    expect(fullEval("sin(pi/2)")).toBeCloseTo(1, 10);
+  });
+
+  test("sin(pi/2)*2 returns 2", () => {
+    expect(fullEval("sin(pi/2)*2")).toBeCloseTo(2, 10);
+  });
 });

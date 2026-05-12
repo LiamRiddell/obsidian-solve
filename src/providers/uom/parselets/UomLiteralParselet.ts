@@ -3,24 +3,12 @@ import { Parser } from "@/engine/parser/Parser";
 import { Token } from "@/engine/lexer/Token";
 import { BytecodeBuilder } from "@/engine/parser/BytecodeBuilder";
 import { OpCode } from "@/engine/parser/OpCode";
-
-const knownUnits = new Set([
-  "mm", "cm", "m", "km", "in", "ft", "yd", "mi",
-  "g", "kg", "lb", "oz",
-  "ml", "l", "gal", "cup",
-  "s", "min", "h", "day", "week", "month", "year",
-  "C", "F", "K",
-  "Hz", "kHz", "MHz", "GHz",
-  "W", "kW", "MW", "GW",
-  "V", "kV", "mV",
-  "A", "kA", "mA",
-  "Pa", "kPa", "MPa", "bar", "psi",
-  "USD", "EUR", "GBP", "JPY",
-]);
+import { BindingPower } from "@/engine/parser/BindingPower";
+import { isKnownUnit } from "@/engine/lexer/units";
 
 export class UomLiteralParselet implements InfixParselet {
   getBindingPower(): number {
-    return 70;
+    return BindingPower.Postfix;
   }
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
@@ -31,6 +19,4 @@ export class UomLiteralParselet implements InfixParselet {
   }
 }
 
-export function isKnownUnit(text: string): boolean {
-  return knownUnits.has(text.toLowerCase());
-}
+export { isKnownUnit };

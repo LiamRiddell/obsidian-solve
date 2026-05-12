@@ -3,10 +3,11 @@ import { Parser } from "@/engine/parser/Parser";
 import { Token } from "@/engine/lexer/Token";
 import { BytecodeBuilder } from "@/engine/parser/BytecodeBuilder";
 import { OpCode } from "@/engine/parser/OpCode";
+import { BindingPower } from "@/engine/parser/BindingPower";
 
 export class PercentParselet implements InfixParselet {
   getBindingPower(): number {
-    return 60;
+    return BindingPower.Prefix;
   }
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
