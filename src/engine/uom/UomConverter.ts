@@ -12,6 +12,9 @@ export const unitAliases: Record<string, string> = {
   years: "year",
   floz: "fl-oz",
   mph: "m/h",
+  c: "C",
+  f: "F",
+  k: "K",
 };
 
 export function resolveUnit(unit: string): string {
