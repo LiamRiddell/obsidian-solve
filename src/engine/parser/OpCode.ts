@@ -56,7 +56,9 @@ export enum OpCode {
 
 	// UoM
 	UOM_CONVERT = 80,
-	UOM_GET_VALUE = 81,
+	UOM_CONVERT_TO = 81,
+	UOM_GET_VALUE = 82,
+	UOM_BEST = 83,
 
 	// Datetime
 	DATE_NOW = 90,
