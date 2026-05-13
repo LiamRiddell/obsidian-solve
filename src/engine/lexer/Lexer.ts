@@ -1,21 +1,21 @@
-import { ExpressionLexer } from "./ExpressionLexer";
+import { MarkdownLexer } from "./MarkdownLexer";
 import { Token } from "@/engine/lexer/Token";
 import { LexerState } from "@/engine/lexer/LexerState";
 import { getTokenHighlightClass } from "@/engine/lexer/TokenHighlightMap";
 
 export class Lexer {
-  private expressionLexer: ExpressionLexer;
+  private markdownLexer: MarkdownLexer;
   private currentState: LexerState = LexerState.Main;
   private peekedToken: Token | undefined;
   private hasPeeked = false;
 
   constructor(localeCode = "en") {
-    this.expressionLexer = new ExpressionLexer(localeCode);
+    this.markdownLexer = new MarkdownLexer(localeCode, "main");
   }
 
   reset(input: string, state?: LexerState): void {
     this.currentState = state ?? LexerState.Main;
-    this.expressionLexer.reset(input);
+    this.markdownLexer.reset(input);
     this.hasPeeked = false;
     this.peekedToken = undefined;
   }
@@ -25,7 +25,7 @@ export class Lexer {
       this.hasPeeked = false;
       return this.peekedToken;
     }
-    return this.expressionLexer.next();
+    return this.markdownLexer.next();
   }
 
   peek(): Token | undefined {
@@ -36,7 +36,7 @@ export class Lexer {
   }
 
   [Symbol.iterator](): Iterator<Token> {
-    return this.expressionLexer[Symbol.iterator]();
+    return this.markdownLexer[Symbol.iterator]();
   }
 
   getState(): LexerState {
