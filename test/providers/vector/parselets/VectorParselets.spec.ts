@@ -8,7 +8,7 @@ import { registerArithmeticParselets } from "@/providers/arithmetic/parselets/in
 import { registerVectorParselets } from "@/providers/vector/parselets/index";
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
-import { Value } from "@/engine/vm/Value";
+import { Value, ValueType } from "@/engine/vm/Value";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);

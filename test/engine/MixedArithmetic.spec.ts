@@ -14,7 +14,7 @@ import { registerFunctionParselets } from "@/providers/function/parselets/index"
 import { registerDatetimeParselets } from "@/providers/datetime/parselets/index";
 import { registerDiceParselets } from "@/providers/dice/parselets/index";
 import { TokenTypes } from "@/engine/lexer/Token";
-import { Value } from "@/engine/vm/Value";
+import { Value, ValueType } from "@/engine/vm/Value";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);

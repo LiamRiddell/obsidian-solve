@@ -8,7 +8,7 @@ import { registerArithmeticParselets } from "@/providers/arithmetic/parselets/in
 import { registerVariableParselets } from "@/providers/variables/parselets/index";
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
-import { Value } from "@/engine/vm/Value";
+import { Value, ValueType } from "@/engine/vm/Value";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -44,11 +44,13 @@ function parseAndExecute(input: string): Value {
 describe("Variable Parselets", () => {
   test("variable assignment stores and returns value", () => {
     const result = parseAndExecute(":x = 42");
+    expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(42);
   });
 
   test("variable read returns stored value", () => {
     const result = parseAndExecute(":x = 5 + 3");
+    expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(8);
   });
 
@@ -84,16 +86,19 @@ describe("Variable Parselets", () => {
       { opcodes: vm2Uint8, numbers: vm2Float64, strings: program2.strings },
       vm2
     );
+    expect(result2!.type).toBe(ValueType.Number);
     expect(result2!.toNumber()).toBe(15);
   });
 
   test("variable assignment with expression RHS", () => {
     const result = parseAndExecute(":total = 10 + 20 * 3");
+    expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(70);
   });
 
   test("unset variable read returns 0", () => {
     const result = parseAndExecute(":undefinedVar");
+    expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(0);
   });
 });
