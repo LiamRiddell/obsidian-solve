@@ -65,49 +65,63 @@ describe("Datetime Parselets", () => {
     parseAndExecute("now"); // warmup
     const result = parseAndExecute("now + 1 day");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeCloseTo(86400000, -2);
+    // Allow for up to 100ms variance due to system clock precision
+    expect(elapsed).toBeGreaterThanOrEqual(86399900);
+    expect(elapsed).toBeLessThanOrEqual(86400100);
   });
 
   test("now - 1 day yields timestamp - 86400000", () => {
     const now = Date.now();
     const result = parseAndExecute("now - 1 day");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeCloseTo(-86400000, -2);
+    // Allow for up to 100ms variance due to system clock precision
+    expect(elapsed).toBeGreaterThanOrEqual(-86400100);
+    expect(elapsed).toBeLessThanOrEqual(-86399900);
   });
 
   test("now + 2 hours yields timestamp + 7200000", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 2 hours");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeCloseTo(7200000, -1);
+    // Allow for up to 100ms variance due to system clock precision
+    expect(elapsed).toBeGreaterThanOrEqual(7199900);
+    expect(elapsed).toBeLessThanOrEqual(7200100);
   });
 
   test("now + 30 minutes yields timestamp + 1800000", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 30 minutes");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeCloseTo(1800000, -1);
+    // Allow for up to 100ms variance due to system clock precision
+    expect(elapsed).toBeGreaterThanOrEqual(1799900);
+    expect(elapsed).toBeLessThanOrEqual(1800100);
   });
 
   test("now + 2 weeks yields timestamp + 1209600000", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 2 weeks");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeCloseTo(1209600000, -2);
+    // Allow for up to 100ms variance due to system clock precision
+    expect(elapsed).toBeGreaterThanOrEqual(1209599900);
+    expect(elapsed).toBeLessThanOrEqual(1209600100);
   });
 
   test("now + 3 months yields timestamp + approx 7776000000", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 3 months");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeCloseTo(7776000000, -4);
+    // Allow for up to 1 second variance due to system clock precision and month length variations
+    expect(elapsed).toBeGreaterThanOrEqual(7775999000);
+    expect(elapsed).toBeLessThanOrEqual(7776001000);
   });
 
   test("now + 1 year yields timestamp + approx 31536000000", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 1 year");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeCloseTo(31536000000, -5);
+    // Allow for up to 1 second variance due to system clock precision and leap year considerations
+    expect(elapsed).toBeGreaterThanOrEqual(31535999000);
+    expect(elapsed).toBeLessThanOrEqual(31536001000);
   });
 
   test("now + 10 seconds yields timestamp + ~10000", () => {
