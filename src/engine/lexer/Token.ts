@@ -33,6 +33,8 @@ export const TokenTypes = {
   SEMICOLON: "SEMICOLON",
   EQUALS: "EQUALS",
   DOLLAR: "DOLLAR",
+  POUND: "POUND",
+  EURO: "EURO",
   QUESTION: "QUESTION",
   BIT_AND: "BIT_AND",
   BIT_OR: "BIT_OR",

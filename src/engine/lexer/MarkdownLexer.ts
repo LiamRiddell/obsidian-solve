@@ -42,7 +42,7 @@ export class MarkdownLexer {
       LSHIFT: "<<", RSHIFT: ">>", BIT_AND: "&", BIT_OR: "|", BIT_NOT: "~", BANG: "!",
       LPAREN: "(", RPAREN: ")", LBRACKET: "[", RBRACKET: "]",
       LBRACE: "{", RBRACE: "}",
-      COMMA: ",", DOT: ".", COLON: ":", SEMICOLON: ";", EQUALS: "=", DOLLAR: "$",
+      COMMA: ",", DOT: ".", COLON: ":", SEMICOLON: ";", EQUALS: "=", DOLLAR: "$", POUND: "£", EURO: "€",
       QUESTION: "?",
       TO_THE_POWER_OF: { match: /\b[Tt][Oo] [Tt][Hh][Ee] [Pp][Oo][Ww][Ee][Rr] [Oo][Ff]\b/, type: phraseType({ "to the power of": "CARET" }) },
       POWER_OF: { match: /\b[Pp][Oo][Ww][Ee][Rr] [Oo][Ff]\b/, type: phraseType({ "power of": "CARET" }) },

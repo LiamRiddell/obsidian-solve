@@ -11,6 +11,23 @@ export const knownUnits = new Set([
   "usd", "eur", "gbp", "jpy",
   "deg", "rad", "grad",
   "b", "kb", "mb", "gb", "tb", "bit",
+  "aud", "cad", "chf", "cny", "sek", "nok", "dkk", "nzd",
+  "krw", "sgd", "hkd", "twd", "inr", "brl", "zar", "mxn",
+  "rub", "try", "sar", "aed", "ils", "pln", "czk", "huf",
+  "thb", "idr", "myr", "php", "clp", "cop", "ars", "ngn",
+  "egp", "pkr", "bdt", "vnd", "kes", "xof", "xaf", "mad",
+  "qar", "kwd", "omr", "bhd", "jod", "lkr", "mmk", "uzs",
+  "kzt", "ron", "bgn", "hrk", "isk", "uah", "gel", "azn",
+  "btn", "bnd", "bob", "bwp", "byn", "bzd", "cdf", "crc",
+  "cup", "dop", "dzd", "ern", "etb", "fjd", "fkp", "gmd",
+  "gnf", "gyd", "hnl", "htg", "jmd", "kgz", "khr", "kmf",
+  "kyd", "lak", "lbp", "lrd", "lsl", "lyd", "mdl", "mga",
+  "mkd", "mnt", "mop", "mru", "mur", "mvr", "mwk", "mzn",
+  "nad", "nio", "npr", "pgk", "pyg", "rsd", "rwf", "sbd",
+  "scr", "sdg", "shp", "sle", "sos", "srd", "ssp", "stn",
+  "svc", "syp", "szl", "tjs", "tmt", "tnd", "top", "ttd",
+  "tzs", "ugx", "uyu", "veb", "vuv", "wst", "xcd", "xdr",
+  "xpf", "yer", "zmw", "zwl",
 ]);
 
 export function isKnownUnit(text: string): boolean {

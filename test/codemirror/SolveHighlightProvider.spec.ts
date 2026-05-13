@@ -55,9 +55,12 @@ describe("SolveHighlightProvider", () => {
     expect(colonRange!.to).toBe(1);
   });
 
-  test("dollar without variable parselet produces no highlights", () => {
+  test("dollar with currency parselet produces highlights", () => {
     const ranges = provider.getLineHighlights("$x");
-    expect(ranges).toHaveLength(0);
+    expect(ranges.length).toBeGreaterThanOrEqual(1);
+    expect(ranges[0].className).toBe("cm-solve-variable");
+    expect(ranges[0].from).toBe(0);
+    expect(ranges[0].to).toBe(1);
   });
 
   test("completely invalid text produces no highlights", () => {
