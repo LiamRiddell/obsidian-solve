@@ -1,7 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { Lexer } from "@/engine/lexer/Lexer";
 import { ExpressionEngine } from "@/engine/engine/ExpressionEngine";
-import { Value } from "@/engine/vm/Value";
+import { Value, ValueType } from "@/engine/vm/Value";
 
 describe("Engine Breakage Tests", () => {
   describe("Obsidian Markdown Superset", () => {
@@ -64,17 +64,20 @@ describe("Engine Breakage Tests", () => {
       const result = engine.evaluateLine(1, "1 + 2 😊");
       // Should handle the expression part and ignore the emoji
       expect(result).toBeDefined();
+      expect(result.type).toBe(ValueType.Number);
     });
 
     test("handles unicode math operators", () => {
       const engine = new ExpressionEngine();
       const result = engine.evaluateLine(1, "2 × 3");
+      expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(6);
     });
 
     test("handles unicode division", () => {
       const engine = new ExpressionEngine();
       const result = engine.evaluateLine(1, "6 ÷ 3");
+      expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(2);
     });
 
@@ -94,6 +97,7 @@ describe("Engine Breakage Tests", () => {
     test("handles mixed unicode and expressions", () => {
       const engine = new ExpressionEngine();
       const result = engine.evaluateLine(1, "1 + 2");
+      expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(3);
     });
 
@@ -102,6 +106,7 @@ describe("Engine Breakage Tests", () => {
       // This might not work as expected, but should not crash
       const result = engine.evaluateLine(1, "5");
       expect(result).toBeDefined();
+      expect(result.type).toBe(ValueType.Number);
     });
   });
 
@@ -162,12 +167,14 @@ describe("Engine Breakage Tests", () => {
       const engine = new ExpressionEngine();
       // This tests the lexer's ability to handle complex lines
       const result = engine.evaluateLine(1, "1 + 2");
+      expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(3);
     });
 
     test("handles special characters in expressions", () => {
       const engine = new ExpressionEngine();
       const result = engine.evaluateLine(1, "(1 + 2) * 3");
+      expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(9);
     });
 
@@ -183,6 +190,7 @@ describe("Engine Breakage Tests", () => {
       // Emojis as variables might not be supported, but should not crash
       const result = engine.evaluateLine(1, "5");
       expect(result).toBeDefined();
+      expect(result.type).toBe(ValueType.Number);
     });
   });
 
@@ -283,6 +291,8 @@ Expression: 3 * 4
       // Should handle gracefully (might return Infinity or throw)
       const result = engine.evaluateLine(1, "1 / 0");
       expect(result).toBeDefined();
+      // Division by zero should still return a Number type (Infinity)
+      expect(result.type).toBe(ValueType.Number);
     });
 
     test("handles invalid expressions", () => {

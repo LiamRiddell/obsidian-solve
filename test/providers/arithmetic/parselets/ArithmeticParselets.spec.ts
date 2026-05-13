@@ -7,6 +7,7 @@ import { BytecodeBuilder } from "@/engine/parser/BytecodeBuilder";
 import { registerArithmeticParselets } from "@/providers/arithmetic/parselets/index";
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
+import { ValueType } from "@/engine/vm/Value";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -35,6 +36,7 @@ function parseAndExecute(input: string): number {
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm
   );
+  expect(result!.type).toBe(ValueType.Number);
   return result!.toNumber();
 }
 
