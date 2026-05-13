@@ -1,7 +1,6 @@
 import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWidget";
 import { SolveHighlightProvider } from "@/codemirror/SolveHighlightProvider";
 import { ExpressionEngine } from "@/engine/engine/ExpressionEngine";
-import { MarkdownLexer } from "@/engine/lexer/MarkdownLexer";
 import { Value } from "@/engine/vm/Value";
 import { formatValue } from "@/engine/format/FormatEngine";
 import UserSettings from "@/settings/UserSettings";
@@ -29,7 +28,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private expressionEngine: ExpressionEngine;
 	private lineDecorationCache: Map<number, CachedLineDecorations> = new Map();
 	private dirtyLines: Set<number> = new Set();
-	private lexer: MarkdownLexer;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructor`);
@@ -37,7 +35,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.userSettings = UserSettings.getInstance();
 		this.highlightProvider = new SolveHighlightProvider();
 		this.expressionEngine = new ExpressionEngine(this.userSettings.settings.engine.locale);
-		this.lexer = new MarkdownLexer(this.userSettings.settings.engine.locale, "main");
 
 		this.decorations = this.buildDecorations(view);
 	}
@@ -102,12 +99,6 @@ update(update: ViewUpdate) {
 					continue;
 				}
 
-				// Check if the line is a markdown construct using the lexer
-				if (this.isMarkdownConstruct(line.text)) {
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
-				}
-
 				const decorations: Array<{from: number; to: number; deco: Decoration}> = [];
 
 				this.buildLineDecorations(line.text, line.from, line.to, line.number, decorations);
@@ -125,26 +116,6 @@ update(update: ViewUpdate) {
 		}
 
 		return builder.finish();
-	}
-
-	private isMarkdownConstruct(lineText: string): boolean {
-		// Check for multi-line constructs (code blocks, MathJax blocks)
-		// This is a simple heuristic and may not be perfect
-		if (lineText.trim().startsWith("$$") || lineText.trim().endsWith("$$")) {
-			return true;
-		}
-		if (lineText.trim().startsWith("```") || lineText.trim().endsWith("```")) {
-			return true;
-		}
-
-		// Use the lexer to check for single-line markdown constructs
-		this.lexer.reset(lineText);
-		const firstToken = this.lexer.next();
-		if (firstToken && firstToken.type.startsWith("MD_")) {
-			return true;
-		}
-
-		return false;
 	}
 
 	private buildLineDecorations(
@@ -177,7 +148,9 @@ update(update: ViewUpdate) {
 				});
 			}
 
-			this.addHighlightDecorations(lineText, lineFrom, lineNumber, decorations);
+			// Note: We intentionally do NOT call addHighlightDecorations here
+			// because the line may contain markdown syntax (e.g., "# Result: s`1 + 2`")
+			// and we only want to highlight the expression parts, not the surrounding text.
 		} else {
 			const expression = lineText.trim();
 			if (!expression) return;

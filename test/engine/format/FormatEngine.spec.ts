@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import { formatValue } from "@/engine/format/FormatEngine";
 import { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, vectorValue } from "@/engine/vm/Value";
-import { getLocale } from "@/constants/locales";
+import { getLocale } from "@/engine/constants/locales";
 
 describe("FormatEngine", () => {
   it("formats number values", () => {

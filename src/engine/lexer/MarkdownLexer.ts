@@ -1,7 +1,7 @@
 import moo from "moo";
 import { knownUnits } from "@/engine/lexer/units";
 import { Token } from "@/engine/lexer/Token";
-import { getLocale, type ILocale } from "@/constants/locales";
+import { getLocale, type ILocale } from "@/engine/constants/locales";
 
 function ciKeywords(map: Record<string, string>): (text: string) => string {
   const lowered: Record<string, string> = {};
@@ -28,6 +28,12 @@ export class MarkdownLexer {
   private mooLexer: moo.Lexer;
   private localeCode: string;
 
+  /**
+   * @param localeCode - The locale code for internationalization (default: "en").
+   * @param initialState - The initial moo state to start lexing in (default: "main").
+   *                       States: "main" (full document), "expression" (raw expressions),
+   *                       "heading", "blockquote", "list_item", "inline", "inline_solve".
+   */
   constructor(localeCode = "en", initialState = "main") {
     this.localeCode = localeCode;
     const locale = getLocale(localeCode);
@@ -63,8 +69,8 @@ export class MarkdownLexer {
       // Markdown markers
       MD_HEADING_MARKER: { match: /^(?:#{1,6})\s/, push: "heading" },
       MD_BLOCKQUOTE_MARKER: { match: /^>\s/, push: "blockquote" },
-      MD_LIST_MARKER: { match: /^(?:\s*)[-*+]\s(?![*\-+/\s])/, push: "list_item" },
-      MD_ORDERED_LIST_MARKER: { match: /^(?:\s*)\d+\.\s(?![*\-+/\s])/, push: "list_item" },
+      MD_LIST_MARKER: { match: /^(?:\s*)[-*]\s/, push: "list_item" },
+      MD_ORDERED_LIST_MARKER: { match: /^(?:\s*)\d+\.\s/, push: "list_item" },
       // Code blocks and MathJax blocks (multi-line)
       MD_CODE_BLOCK: { match: /```[\s\S]*?```/, lineBreaks: true },
       MD_MATH_BLOCK: { match: /\$\$[\s\S]*?\$\$/, lineBreaks: true },
@@ -85,6 +91,8 @@ export class MarkdownLexer {
 
     const headingRules: moo.Rules = {
       // Tokenize heading content
+      BACKTICK_OPEN: { match: "`", push: "inline" },
+      INLINE_SOLVE_START: { match: /s`/, push: "inline_solve" },
       ...expressionRules,
       // When line ends, pop back to main state
       NEWLINE: { match: /\n+/, lineBreaks: true, pop: 1 },
@@ -92,6 +100,8 @@ export class MarkdownLexer {
 
     const blockquoteRules: moo.Rules = {
       // Tokenize blockquote content
+      BACKTICK_OPEN: { match: "`", push: "inline" },
+      INLINE_SOLVE_START: { match: /s`/, push: "inline_solve" },
       ...expressionRules,
       // When line ends, pop back to main state
       NEWLINE: { match: /\n+/, lineBreaks: true, pop: 1 },
@@ -99,6 +109,8 @@ export class MarkdownLexer {
 
     const listItemRules: moo.Rules = {
       // Tokenize list item content
+      BACKTICK_OPEN: { match: "`", push: "inline" },
+      INLINE_SOLVE_START: { match: /s`/, push: "inline_solve" },
       ...expressionRules,
       // When line ends, pop back to main state
       NEWLINE: { match: /\n+/, lineBreaks: true, pop: 1 },

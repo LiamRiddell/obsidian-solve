@@ -1,5 +1,5 @@
 import { Value, ValueType } from "@/engine/vm/Value";
-import { getLocale, type ILocale } from "@/constants/locales";
+import { getLocale, type ILocale } from "@/engine/constants/locales";
 import { autoFormatIntegerOrFloat } from "@/utilities/Number";
 import UserSettings from "@/settings/UserSettings";
 
