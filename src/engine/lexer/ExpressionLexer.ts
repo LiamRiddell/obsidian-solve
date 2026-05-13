@@ -5,7 +5,7 @@ export class ExpressionLexer {
   private inner: MarkdownLexer;
 
   constructor(localeCode = "en") {
-    this.inner = new MarkdownLexer(localeCode, "expression");
+    this.inner = new MarkdownLexer(localeCode, "main");
   }
 
   reset(input: string): void {

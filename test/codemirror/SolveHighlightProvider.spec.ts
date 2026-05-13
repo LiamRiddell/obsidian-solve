@@ -116,4 +116,64 @@ describe("SolveHighlightProvider", () => {
     const after = provider.getLineHighlights("1 + 2");
     expect(after).toEqual([{ from: 0, to: 1, className: "cm-solve-number" }, { from: 2, to: 3, className: "cm-solve-operator" }, { from: 4, to: 5, className: "cm-solve-number" }]);
   });
+
+  test("inline solve expression s`1 + 2` is tokenized correctly", () => {
+    const ranges = provider.getLineHighlights("s`1 + 2`");
+    // The lexer should tokenize the expression inside the backticks
+    // The BACKTICK_OPEN and BACKTICK_CLOSE tokens should be filtered out
+    // The expression tokens (NUMBER, PLUS, NUMBER) should be highlighted
+    expect(ranges.length).toBeGreaterThanOrEqual(3);
+    const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
+    const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
+    expect(numberRanges.length).toBeGreaterThanOrEqual(2);
+    expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("inline solve expression with multiple operations", () => {
+    const ranges = provider.getLineHighlights("s`1 + 2 * 3`");
+    expect(ranges.length).toBeGreaterThanOrEqual(5);
+    const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
+    const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
+    expect(numberRanges.length).toBeGreaterThanOrEqual(3);
+    expect(operatorRanges.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("inline solve expression with function call", () => {
+    const ranges = provider.getLineHighlights("s`sqrt(4)`");
+    expect(ranges.length).toBeGreaterThanOrEqual(2);
+    const funcRange = ranges.find(r => r.className === "cm-solve-function");
+    const numRange = ranges.find(r => r.className === "cm-solve-number");
+    expect(funcRange).toBeDefined();
+    expect(numRange).toBeDefined();
+  });
+
+  test("markdown list marker is filtered out", () => {
+    // The lexer should detect the list marker and filter it out
+    // Only the expression tokens should be highlighted
+    const ranges = provider.getLineHighlights("- 1 + 2");
+    expect(ranges.length).toBeGreaterThanOrEqual(3);
+    const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
+    const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
+    expect(numberRanges.length).toBeGreaterThanOrEqual(2);
+    expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("markdown heading marker is filtered out", () => {
+    // The lexer should detect the heading marker and filter it out
+    // The heading content should not be highlighted
+    const ranges = provider.getLineHighlights("# Heading");
+    // Since "Heading" is not a valid expression, no ranges should be highlighted
+    expect(ranges).toHaveLength(0);
+  });
+
+  test("blockquote marker is filtered out", () => {
+    // The lexer should detect the blockquote marker and filter it out
+    // Only the expression tokens should be highlighted
+    const ranges = provider.getLineHighlights("> 1 + 2");
+    expect(ranges.length).toBeGreaterThanOrEqual(3);
+    const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
+    const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
+    expect(numberRanges.length).toBeGreaterThanOrEqual(2);
+    expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
+  });
 });

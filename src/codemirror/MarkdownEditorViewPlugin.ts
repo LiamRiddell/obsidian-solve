@@ -1,12 +1,11 @@
 import { ExpressionResultWidget } from "@/codemirror/widgets/ExpressionResultWidget";
 import { SolveHighlightProvider } from "@/codemirror/SolveHighlightProvider";
 import { ExpressionEngine } from "@/engine/engine/ExpressionEngine";
+import { MarkdownLexer } from "@/engine/lexer/MarkdownLexer";
 import { Value } from "@/engine/vm/Value";
 import { formatValue } from "@/engine/format/FormatEngine";
 import UserSettings from "@/settings/UserSettings";
 import { logger } from "@/utilities/Logger";
-// @ts-expect-error
-import { syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -15,7 +14,6 @@ import {
 	PluginValue,
 	ViewUpdate,
 } from "@codemirror/view";
-import { SyntaxNodeRef } from "@lezer/common";
 
 const DEBUG_MODE_ENABLED = false;
 
@@ -31,6 +29,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private expressionEngine: ExpressionEngine;
 	private lineDecorationCache: Map<number, CachedLineDecorations> = new Map();
 	private dirtyLines: Set<number> = new Set();
+	private lexer: MarkdownLexer;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructor`);
@@ -38,6 +37,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.userSettings = UserSettings.getInstance();
 		this.highlightProvider = new SolveHighlightProvider();
 		this.expressionEngine = new ExpressionEngine(this.userSettings.settings.engine.locale);
+		this.lexer = new MarkdownLexer(this.userSettings.settings.engine.locale, "main");
 
 		this.decorations = this.buildDecorations(view);
 	}
@@ -69,49 +69,10 @@ update(update: ViewUpdate) {
 	buildDecorations(view: EditorView): DecorationSet {
 		const builder = new RangeSetBuilder<Decoration>();
 
-		const markdownDocumentSyntaxTree = syntaxTree(view.state);
-
 		const visibleRanges = view.visibleRanges;
 		const seenLines = new Set();
 
-		let firstNode = true;
-		let previousTo = 0;
-		let previousFrom = 0;
-		let wasLastChild = false;
-
 		for (const { from, to } of visibleRanges) {
-			const doNotSolveMask = new Array<[from: number, to: number]>();
-
-			markdownDocumentSyntaxTree.iterate({
-				from,
-				to,
-				enter: (node: SyntaxNodeRef) => {
-					if (this.isNodeIgnoredFromMask(node.type.name)) {
-						return;
-					}
-
-					if (firstNode) {
-						firstNode = false;
-						previousTo = node.to;
-						previousFrom = node.from;
-					}
-
-					const isNextTo = node.from - previousTo <= 1;
-
-					if (node.to <= previousTo || isNextTo) {
-						if (isNextTo) previousTo = node.to;
-						wasLastChild = true;
-					} else {
-						doNotSolveMask.push([previousFrom, previousTo]);
-						previousFrom = node.from;
-						previousTo = node.to;
-						wasLastChild = false;
-					}
-				},
-			});
-
-			if (wasLastChild) doNotSolveMask.push([previousFrom, previousTo]);
-
 			const range = view.state.doc.iterRange(from, to);
 			let nextLineTextOffset = 0;
 
@@ -125,11 +86,6 @@ update(update: ViewUpdate) {
 				}
 				seenLines.add(line.number);
 
-				if (this.isRangeInMask(doNotSolveMask, line.from, line.to)) {
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
-				}
-
 				if (!this.dirtyLines.has(line.number)) {
 					const cached = this.lineDecorationCache.get(line.number);
 					if (cached && cached.lineText === line.text) {
@@ -142,6 +98,12 @@ update(update: ViewUpdate) {
 				}
 
 				if (!line.text.trim() || line.text.trim().length === 0) {
+					nextLineTextOffset += lineTextRaw.length;
+					continue;
+				}
+
+				// Check if the line is a markdown construct using the lexer
+				if (this.isMarkdownConstruct(line.text)) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
@@ -163,6 +125,26 @@ update(update: ViewUpdate) {
 		}
 
 		return builder.finish();
+	}
+
+	private isMarkdownConstruct(lineText: string): boolean {
+		// Check for multi-line constructs (code blocks, MathJax blocks)
+		// This is a simple heuristic and may not be perfect
+		if (lineText.trim().startsWith("$$") || lineText.trim().endsWith("$$")) {
+			return true;
+		}
+		if (lineText.trim().startsWith("```") || lineText.trim().endsWith("```")) {
+			return true;
+		}
+
+		// Use the lexer to check for single-line markdown constructs
+		this.lexer.reset(lineText);
+		const firstToken = this.lexer.next();
+		if (firstToken && firstToken.type.startsWith("MD_")) {
+			return true;
+		}
+
+		return false;
 	}
 
 	private buildLineDecorations(
@@ -249,35 +231,5 @@ update(update: ViewUpdate) {
 				deco: Decoration.mark({ class: r.className }),
 			});
 		}
-	}
-
-	private isNodeIgnoredFromMask(name: string) {
-		for (let i = 0; i < this.ignoreNodeForMaskString.length; i++) {
-			const nodeName = this.ignoreNodeForMaskString[i];
-			if (name.startsWith(nodeName)) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	private ignoreNodeForMaskString = [
-		"Document",
-		"quote",
-		"list",
-		"HyperMD-list-line",
-		"math",
-	];
-
-	private isRangeInMask(
-		mask: [from: number, to: number][],
-		from: number,
-		to: number
-	): boolean {
-		for (let i = 0; i < mask.length; i++) {
-			const [maskFrom, maskTo] = mask[i];
-			if (from >= maskFrom && to <= maskTo) return true;
-		}
-		return false;
 	}
 }

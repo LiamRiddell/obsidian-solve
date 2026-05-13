@@ -52,6 +52,8 @@ export class Lexer {
     const result: {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] = [];
     for (const token of this) {
       if (token.type === "WS" || token.type === "NEWLINE") continue;
+      if (token.type.startsWith("MD_")) continue; // Filter out markdown tokens
+      if (token.type === "INLINE_SOLVE_START" || token.type === "BACKTICK_CLOSE") continue; // Filter out inline solve markers
       result.push({
         type: token.type,
         value: token.value,

@@ -52,6 +52,7 @@ export class ExpressionEngine {
     this.lexer.reset(lineText);
     for (const t of this.lexer) {
       if (t.type === TokenTypes.WS) continue;
+      if (t.type.startsWith("MD_")) continue; // Filter out markdown tokens
       tokens.push(t);
     }
 

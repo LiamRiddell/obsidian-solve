@@ -77,14 +77,14 @@ describe("Lexer", () => {
 		expect(tokens).toEqual(["pi", "plus", "minus", "times"]);
 	});
 
-test("tokenizes inline solve markers", () => {
+  test("tokenizes inline solve markers", () => {
     const lexer = new Lexer();
     lexer.reset("s`1 + 2`");
     const tokens: string[] = [];
     for (const t of lexer) {
       if (t.type !== "WS") tokens.push(t.type);
     }
-    expect(tokens).toContain("BACKTICK_OPEN");
+    expect(tokens).toContain("INLINE_SOLVE_START");
   });
 
 	test("peek returns next token without consuming", () => {
