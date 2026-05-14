@@ -1,12 +1,12 @@
-import convert, { Unit } from "convert-units";
+import convert from "convert";
 
 export function convertUnitOfMeasurementValue(
   fromValue: number,
   fromUnit: string,
   toUnit: string
 ): number {
-  return convert(fromValue)
-    .from(fromUnit as Unit)
-    .to(toUnit as Unit);
+  // The convert package returns a number when converting to a specific unit
+  const result = convert(fromValue, fromUnit as any).to(toUnit as any);
+  return result as unknown as number;
 }
 

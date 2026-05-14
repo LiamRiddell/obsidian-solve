@@ -141,7 +141,7 @@ export function runEngine(expression: string): DebugResult {
                 const numbers = new Float64Array(result.program.numbers);
                 const strings = result.program.strings;
                 numbers.forEach((num, idx) => { constants.push({ type: 'number', value: num, index: idx }); });
-                strings.forEach((str, idx) => { constants.push({ type: 'string', value: str, index: idx }); });
+                strings.forEach((str: string, idx: number) => { constants.push({ type: 'string', value: str, index: idx }); });
 
                 // AST
                 ast = JSON.stringify(result.program, null, 2);

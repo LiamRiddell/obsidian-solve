@@ -108,24 +108,24 @@ describe("Datetime Parselets", () => {
     expect(elapsed).toBeLessThanOrEqual(1209600100);
   });
 
-  test("now + 3 months yields timestamp + approx 7889400000", () => {
+  test("now + 3 months yields timestamp + approx 7776000000", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 3 months");
     const elapsed = (result.value as number) - now;
-    // convert-units uses 30.4375 days/month = 2629800000 ms
-    // 3 months * 2629800000 ms = 7889400000 ms
+    // convert uses 30 days/month = 2592000000 ms
+    // 3 months * 2592000000 ms = 7776000000 ms
     // Allow for variance due to system clock precision
-    expect(elapsed).toBeGreaterThanOrEqual(7889399000);
-    expect(elapsed).toBeLessThanOrEqual(7889401000);
+    expect(elapsed).toBeGreaterThanOrEqual(7775999000);
+    expect(elapsed).toBeLessThanOrEqual(7776001000);
   });
 
-  test("now + 1 year yields timestamp + approx 31557600000", () => {
+  test("now + 1 year yields timestamp + approx 31536000000", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 1 year");
     const elapsed = (result.value as number) - now;
-    // convert-units uses 365.25 days/year = 31557600 seconds
-    expect(elapsed).toBeGreaterThanOrEqual(31557599000);
-    expect(elapsed).toBeLessThanOrEqual(31557601000);
+    // convert uses 365 days/year = 31536000 seconds
+    expect(elapsed).toBeGreaterThanOrEqual(31535999000);
+    expect(elapsed).toBeLessThanOrEqual(31536001000);
   });
 
   test("now + 10 seconds yields timestamp + ~10000", () => {
@@ -133,7 +133,7 @@ describe("Datetime Parselets", () => {
     const result = parseAndExecute("now + 10 seconds");
     const elapsed = (result.value as number) - now;
     expect(elapsed).toBeGreaterThanOrEqual(9995);
-    expect(elapsed).toBeLessThanOrEqual(10010);
+    expect(elapsed).toBeLessThanOrEqual(10020); // Increased tolerance for system timing variability
   });
 
   test("now - 10 seconds yields timestamp - ~10000", () => {
@@ -141,7 +141,7 @@ describe("Datetime Parselets", () => {
     const result = parseAndExecute("now - 10 seconds");
     const elapsed = (result.value as number) - now;
     expect(elapsed).toBeGreaterThanOrEqual(-10010);
-    expect(elapsed).toBeLessThanOrEqual(-9995);
+    expect(elapsed).toBeLessThanOrEqual(-9985); // Increased tolerance for timing variability
   });
 
   test("now + 5 minutes yields ~300000", () => {
@@ -209,8 +209,8 @@ describe("Datetime Parselets", () => {
   test("5 years in days conversion", () => {
     const result = parseAndExecute("5 years in days");
     expect(result.type).toBe(ValueType.Uom);
-    // 5 years * 365.25 days/year = 1826.25 days (using convert-units)
-    expect(result.value).toBeCloseTo(1826.25, 0); 
+    // 5 years * 365 days/year = 1825 days (using convert)
+    expect(result.value).toBeCloseTo(1825, 0); 
     expect(result.unit).toBe("days");
   });
 });

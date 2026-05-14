@@ -1,5 +1,4 @@
 import { Value } from "@/engine/vm/Value";
-import { BytecodeSnapshot } from "@/engine/cache/LineCache";
 
 export interface InlineSolvePosition {
     start: number;

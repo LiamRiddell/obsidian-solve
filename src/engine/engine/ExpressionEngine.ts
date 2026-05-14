@@ -89,7 +89,7 @@ export class ExpressionEngine {
       const inlineSolves = this.findInlineSolvesInLine(lineText, lineNumber);
       const hasInlineSolves = inlineSolves.length > 0;
 
-      let parsedLine: ParsedLine = {
+      const parsedLine: ParsedLine = {
         lineNumber,
         text: lineText,
         startPosition,

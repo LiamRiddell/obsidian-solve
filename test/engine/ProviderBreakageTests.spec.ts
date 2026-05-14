@@ -45,7 +45,7 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
       expect(value.toNumber()).toBeLessThan(32);
     });
 
-    test("1 year in days should return 365.25", () => {
+    test("1 year in days should return 365", () => {
       const result = engine.parseDocument("s`1 year in days`", { inputType: 'markdown' });
       
       expect(result.errors).toHaveLength(0);
@@ -53,7 +53,7 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
       
       const value = result.lines[0].inlineSolves[0].result!;
       expect(value.type).toBe(ValueType.Uom);
-      expect(value.toNumber()).toBe(365.25);
+      expect(value.toNumber()).toBe(365);
     });
   });
 

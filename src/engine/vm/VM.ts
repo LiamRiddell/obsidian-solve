@@ -151,7 +151,9 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
             if (unit) {
               try {
                 durMs = convertUnit(r.toNumber(), unit, "ms");
-              } catch {}
+              } catch {
+                // Ignore conversion errors
+              }
             }
           } else {
             durMs = r.toNumber();
@@ -172,7 +174,9 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
             if (unit) {
               try {
                 durMs = convertUnit(r.toNumber(), unit, "ms");
-              } catch {}
+              } catch {
+                // Ignore conversion errors
+              }
             }
           } else {
             durMs = r.toNumber();
