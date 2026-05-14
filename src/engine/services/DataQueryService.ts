@@ -1,12 +1,13 @@
 /**
  * Production-grade data query service with worker orchestration
- * Provides two-way binding, plugin support, and scalable architecture
+ * Refactored to act as a Virtual Query Client orchestrating a background worker
  */
 
-import { DataSourceConfig, QueryRequest, QueryResponse, SubscriptionRequest, PluginRegistration } from "@/workers/DataQueryWorker";
+import { QueryClient, QueryObserver, QueryFunctionContext } from "@tanstack/query-core";
+import { DataSourceConfig, FetchRequest, FetchResponse } from "@/workers/DataQueryWorker";
 
 // Re-export types from DataQueryWorker
-export type { DataSourceConfig, PluginRegistration };
+export type { DataSourceConfig };
 
 // ============================================================================
 // SERVICE TYPES & INTERFACES
@@ -19,18 +20,9 @@ export interface ServiceConfig {
   cacheSize: number;
 }
 
-export interface Subscription {
-  id: string;
-  dataSourceId: string;
-  queryKey: string[];
-  callback: (data: any, error?: string) => void;
-  unsubscribe: () => void;
-}
-
 export interface DataSourceHandle {
   id: string;
   config: DataSourceConfig;
-  subscribe: (queryKey: string[], callback: (data: any, error?: string) => void) => Subscription;
   get: (queryKey: string[]) => Promise<any>;
   getSync: (queryKey: string[]) => any | null;
   refresh: () => void;
@@ -44,21 +36,40 @@ export interface DataSourceHandle {
 export class DataQueryService {
   private worker: Worker | null = null;
   private config: ServiceConfig;
+  private queryClient: QueryClient;
   private dataSources: Map<string, DataSourceHandle> = new Map();
   private localCache: Map<string, { data: any; timestamp: number }> = new Map();
-  private pendingQueries: Map<string, { resolve: (value: any) => void; reject: (reason?: any) => void }> =
+  private pendingQueries: Map<string, { resolve: (value: any) => void; reject: (reason?: any) => void; dataSourceId: string; queryKey: string[] }> =
     new Map();
-  private subscriptions: Map<string, Subscription> = new Map();
   private queryCount = 0;
+  
+  // Event listeners for cache updates
+  private cacheUpdateListeners: Set<(dataSourceId: string, queryKey: string[], data: any) => void> = new Set();
+  // Event listeners for errors
+  private errorListeners: Set<(dataSourceId: string, queryKey: string[], error: string) => void> = new Set();
 
   constructor(config: Partial<ServiceConfig> = {}) {
     this.config = {
       useWorker: true,
-      workerUrl: "/workers/DataQueryWorker.ts",
+      workerUrl: this.getWorkerUrl(),
       maxConcurrentQueries: 100,
       cacheSize: 1000,
       ...config,
     };
+
+    // Initialize TanStack Query Client
+    this.queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 5 * 60 * 1000, // 5 minutes
+          gcTime: 10 * 60 * 1000, // 10 minutes
+          retry: 3,
+          retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 5000),
+          refetchOnWindowFocus: false,
+          refetchOnReconnect: true,
+        },
+      },
+    });
 
     if (this.config.useWorker && typeof Worker !== "undefined") {
       this.initializeWorker();
@@ -66,6 +77,15 @@ export class DataQueryService {
 
     // Start cache cleanup
     setInterval(() => this.cleanupCache(), 30000); // Every 30 seconds
+  }
+
+  private getWorkerUrl(): string {
+    // Check if we're in a playground environment
+    if (typeof window !== 'undefined' && window.location.pathname.includes('playground')) {
+      return new URL('../playground/src/data-query.worker.ts', window.location.href).href;
+    }
+    // Default worker path for the plugin
+    return "/workers/DataQueryWorker.ts";
   }
 
   // ------------------------------------------------------------------------
@@ -90,24 +110,12 @@ export class DataQueryService {
     const { type, payload } = event.data;
 
     switch (type) {
-      case "QUERY_RESULT":
-        this.handleQueryResult(payload);
+      case "FETCH_RESPONSE":
+        this.handleFetchResponse(payload);
         break;
 
-      case "QUERY_ERROR":
-        this.handleQueryError(payload);
-        break;
-
-      case "SUBSCRIPTION_UPDATE":
-        this.handleSubscriptionUpdate(payload);
-        break;
-
-      case "SUBSCRIPTION_REGISTERED":
-        console.log("[DataQueryService] Subscription registered:", payload.callbackId);
-        break;
-
-      case "SUBSCRIPTION_UNREGISTERED":
-        console.log("[DataQueryService] Subscription unregistered:", payload.callbackId);
+      case "FETCH_ERROR":
+        this.handleFetchError(payload);
         break;
 
       case "DATA_SOURCE_REGISTERED":
@@ -138,7 +146,6 @@ export class DataQueryService {
     const handle: DataSourceHandle = {
       id: config.id,
       config,
-      subscribe: (queryKey, callback) => this.subscribe(config.id, queryKey, callback),
       get: (queryKey) => this.get(config.id, queryKey),
       getSync: (queryKey) => this.getSync(config.id, queryKey),
       refresh: () => this.refreshDataSource(config.id),
@@ -161,13 +168,6 @@ export class DataQueryService {
   unregisterDataSource(dataSourceId: string): void {
     const handle = this.dataSources.get(dataSourceId);
     if (handle) {
-      // Unsubscribe all subscriptions for this data source
-      for (const [subId, subscription] of this.subscriptions) {
-        if (subscription.dataSourceId === dataSourceId) {
-          this.unsubscribe(subId);
-        }
-      }
-
       this.dataSources.delete(dataSourceId);
 
       if (this.worker) {
@@ -183,22 +183,13 @@ export class DataQueryService {
   // PLUGIN MANAGEMENT
   // ------------------------------------------------------------------------
 
-  registerPlugin(plugin: PluginRegistration): void {
-    if (this.worker) {
-      this.worker.postMessage({
-        type: "REGISTER_PLUGIN",
-        payload: plugin,
-      });
-    }
+  registerPlugin(plugin: any): void {
+    // Plugins are now handled natively in the worker
+    console.log("[DataQueryService] Plugin registration deprecated - using native worker handlers");
   }
 
   unregisterPlugin(pluginId: string): void {
-    if (this.worker) {
-      this.worker.postMessage({
-        type: "UNREGISTER_PLUGIN",
-        payload: { pluginId },
-      });
-    }
+    // No-op: plugins are now handled natively in the worker
   }
 
   // ------------------------------------------------------------------------
@@ -213,9 +204,9 @@ export class DataQueryService {
       return cached.data;
     }
 
-    // Execute query
+    // Execute query via Virtual Query Client
     const requestId = `${this.queryCount++}-${Date.now()}`;
-    const request: QueryRequest = {
+    const request: FetchRequest = {
       id: requestId,
       dataSourceId,
       queryKey,
@@ -223,11 +214,11 @@ export class DataQueryService {
     };
 
     return new Promise((resolve, reject) => {
-      this.pendingQueries.set(requestId, { resolve, reject });
+      this.pendingQueries.set(requestId, { resolve, reject, dataSourceId, queryKey });
 
       if (this.worker && this.config.useWorker) {
         this.worker.postMessage({
-          type: "EXECUTE_QUERY",
+          type: "FETCH_REQUEST",
           payload: request,
         });
       } else {
@@ -243,7 +234,7 @@ export class DataQueryService {
     return cached?.data ?? null;
   }
 
-  private async executeInMainThread(request: QueryRequest): Promise<any> {
+  private async executeInMainThread(request: FetchRequest): Promise<any> {
     const dataSource = this.dataSources.get(request.dataSourceId);
     if (!dataSource) {
       throw new Error(`Data source not found: ${request.dataSourceId}`);
@@ -279,130 +270,29 @@ export class DataQueryService {
   }
 
   // ------------------------------------------------------------------------
-  // SUBSCRIPTION MANAGEMENT (Two-Way Binding)
-  // ------------------------------------------------------------------------
-
-  subscribe(
-    dataSourceId: string,
-    queryKey: string[],
-    callback: (data: any, error?: string) => void
-  ): Subscription {
-    const subscriptionId = `${dataSourceId}-${JSON.stringify(queryKey)}-${Date.now()}`;
-    
-    const subscription: Subscription = {
-      id: subscriptionId,
-      dataSourceId,
-      queryKey,
-      callback,
-      unsubscribe: () => this.unsubscribe(subscriptionId),
-    };
-
-    this.subscriptions.set(subscriptionId, subscription);
-
-    // Register with worker if available
-    if (this.worker && this.config.useWorker) {
-      const request: SubscriptionRequest = {
-        id: subscriptionId,
-        dataSourceId,
-        queryKey,
-        callbackId: subscriptionId,
-      };
-
-      this.worker.postMessage({
-        type: "SUBSCRIBE",
-        payload: request,
-      });
-    } else {
-      // Fallback: poll for updates
-      this.startPolling(subscription);
-    }
-
-    return subscription;
-  }
-
-  private unsubscribe(subscriptionId: string): void {
-    const subscription = this.subscriptions.get(subscriptionId);
-    if (subscription) {
-      if (this.worker && this.config.useWorker) {
-        this.worker.postMessage({
-          type: "UNSUBSCRIBE",
-          payload: { callbackId: subscriptionId },
-        });
-      }
-      
-      this.subscriptions.delete(subscriptionId);
-    }
-  }
-
-  private startPolling(subscription: Subscription): void {
-    // Simple polling fallback for main thread execution
-    const poll = async () => {
-      if (!this.subscriptions.has(subscription.id)) return;
-
-      try {
-        const data = await this.get(subscription.dataSourceId, subscription.queryKey);
-        subscription.callback(data);
-      } catch (error) {
-        subscription.callback(null, error instanceof Error ? error.message : String(error));
-      }
-
-      // Poll every 30 seconds
-      setTimeout(poll, 30000);
-    };
-
-    poll();
-  }
-
-  // ------------------------------------------------------------------------
   // TWO-WAY BINDING: REFRESH MECHANISMS
   // ------------------------------------------------------------------------
 
-  refreshSubscription(subscriptionId: string): void {
-    if (this.worker && this.config.useWorker) {
-      this.worker.postMessage({
-        type: "REFRESH_SUBSCRIPTION",
-        payload: { callbackId: subscriptionId },
-      });
-    } else {
-      // Fallback: trigger manual refresh
-      const subscription = this.subscriptions.get(subscriptionId);
-      if (subscription) {
-        this.get(subscription.dataSourceId, subscription.queryKey)
-          .then((data) => subscription.callback(data))
-          .catch((error) =>
-            subscription.callback(null, error.message)
-          );
-      }
-    }
-  }
-
   refreshDataSource(dataSourceId: string): void {
-    if (this.worker && this.config.useWorker) {
-      this.worker.postMessage({
-        type: "REFRESH_DATA_SOURCE",
-        payload: { dataSourceId },
-      });
-    } else {
-      // Refresh all subscriptions for this data source
-      for (const subscription of this.subscriptions.values()) {
-        if (subscription.dataSourceId === dataSourceId) {
-          this.refreshSubscription(subscription.id);
-        }
-      }
-    }
+    // Refresh all active queries for this data source via TanStack Query
+    // This is handled automatically by TanStack Query's cache invalidation
+    // For manual refresh, we can use queryClient.invalidateQueries
+    const cache = this.queryClient.getQueryCache();
+    const queries = cache.findAll({ queryKey: [dataSourceId] });
+    queries.forEach(query => {
+      this.queryClient.invalidateQueries({ queryKey: query.queryKey });
+    });
   }
 
   refreshAll(): void {
-    for (const dataSourceId of this.dataSources.keys()) {
-      this.refreshDataSource(dataSourceId);
-    }
+    this.queryClient.invalidateQueries();
   }
 
   // ------------------------------------------------------------------------
   // MESSAGE HANDLERS
   // ------------------------------------------------------------------------
 
-  private handleQueryResult(response: QueryResponse): void {
+  private handleFetchResponse(response: FetchResponse): void {
     const pending = this.pendingQueries.get(response.id);
     if (pending) {
       pending.resolve(response.data);
@@ -414,39 +304,20 @@ export class DataQueryService {
         data: response.data,
         timestamp: Date.now(),
       });
+      
+      // Emit cache update event
+      this.emitCacheUpdate(response.dataSourceId, response.queryKey, response.data);
     }
   }
 
-  private handleQueryError(error: { id: string; error: string }): void {
+  private handleFetchError(error: { id: string; error: string }): void {
     const pending = this.pendingQueries.get(error.id);
     if (pending) {
       pending.reject(new Error(error.error));
       this.pendingQueries.delete(error.id);
-    }
-  }
-
-  private handleSubscriptionUpdate(payload: {
-    callbackId: string;
-    queryKey: string[];
-    result: any;
-  }): void {
-    const subscription = this.subscriptions.get(payload.callbackId);
-    if (subscription) {
-      if (payload.result.error) {
-        subscription.callback(null, payload.result.error);
-      } else {
-        subscription.callback(payload.result.data);
-      }
-
-      // Update local cache
-      const cacheKey = this.getCacheKey(
-        subscription.dataSourceId,
-        payload.queryKey
-      );
-      this.localCache.set(cacheKey, {
-        data: payload.result.data,
-        timestamp: Date.now(),
-      });
+      
+      // Emit error event
+      this.emitError(pending.dataSourceId, pending.queryKey, error.error);
     }
   }
 
@@ -483,11 +354,6 @@ export class DataQueryService {
   // ------------------------------------------------------------------------
 
   destroy(): void {
-    // Unsubscribe all
-    for (const subscription of this.subscriptions.values()) {
-      subscription.unsubscribe();
-    }
-
     // Close worker
     if (this.worker) {
       this.worker.terminate();
@@ -497,8 +363,52 @@ export class DataQueryService {
     // Clear caches
     this.localCache.clear();
     this.pendingQueries.clear();
-    this.subscriptions.clear();
     this.dataSources.clear();
+    
+    // Clear TanStack Query cache
+    this.queryClient.clear();
+  }
+  
+  // ------------------------------------------------------------------------
+  // TANSTACK QUERY ACCESS
+  // ------------------------------------------------------------------------
+
+  getQueryClient(): QueryClient {
+    return this.queryClient;
+  }
+  
+  // ------------------------------------------------------------------------
+  // EVENT LISTENERS
+  // ------------------------------------------------------------------------
+
+  onCacheUpdate(listener: (dataSourceId: string, queryKey: string[], data: any) => void): () => void {
+    this.cacheUpdateListeners.add(listener);
+    return () => this.cacheUpdateListeners.delete(listener);
+  }
+
+  onError(listener: (dataSourceId: string, queryKey: string[], error: string) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
+  }
+
+  private emitCacheUpdate(dataSourceId: string, queryKey: string[], data: any): void {
+    this.cacheUpdateListeners.forEach(listener => {
+      try {
+        listener(dataSourceId, queryKey, data);
+      } catch (error) {
+        console.error("[DataQueryService] Error in cache update listener:", error);
+      }
+    });
+  }
+
+  private emitError(dataSourceId: string, queryKey: string[], error: string): void {
+    this.errorListeners.forEach(listener => {
+      try {
+        listener(dataSourceId, queryKey, error);
+      } catch (err) {
+        console.error("[DataQueryService] Error in error listener:", err);
+      }
+    });
   }
 }
 

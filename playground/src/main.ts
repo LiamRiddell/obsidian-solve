@@ -21,6 +21,8 @@ const constantsDisplay = document.getElementById('constants-display') as HTMLDiv
 const variablesDisplay = document.getElementById('variables-display') as HTMLDivElement;
 const markdownOutlineDisplay = document.getElementById('markdown-outline-display') as HTMLDivElement;
 const groupTokensCheckbox = document.getElementById('group-tokens') as HTMLInputElement;
+const datastoreDisplay = document.getElementById('datastore-display') as HTMLDivElement;
+const backgroundThreadDisplay = document.getElementById('background-thread-display') as HTMLDivElement;
 
 const isDev = typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.DEV;
 
@@ -35,6 +37,39 @@ let runId = 0;
 let currentResult: DebugResult | null = null;
 
 const engineWorker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' });
+const dataQueryWorker = new Worker(new URL('./data-query.worker.ts', import.meta.url), { type: 'module' });
+
+// Data query worker message handler
+dataQueryWorker.onmessage = (e: MessageEvent) => {
+    const { type, payload } = e.data;
+    
+    switch (type) {
+        case "FETCH_STARTED":
+            renderDataStoreUpdate(payload, 'loading');
+            break;
+        case "FETCH_RESPONSE":
+            renderDataStoreUpdate(payload, 'success');
+            break;
+        case "FETCH_ERROR":
+            renderDataStoreUpdate(payload, 'error');
+            break;
+        case "STATUS_RESPONSE":
+            renderBackgroundThreadStatus(payload);
+            break;
+        case "DATA_SOURCE_REGISTERED":
+            renderDataStoreUpdate(payload, 'registered');
+            break;
+    }
+};
+
+// Register currency data source
+dataQueryWorker.postMessage({
+    type: 'REGISTER_DATA_SOURCE',
+    payload: {
+        id: 'currency',
+        type: 'currency',
+    },
+});
 engineWorker.onmessage = (e: MessageEvent<{ id: number; result?: DebugResult; error?: string }>) => {
     const { id, result, error } = e.data;
     if (id !== runId) return;
@@ -119,6 +154,113 @@ const editor = new EditorView({
 });
 
 function renderAll(result: DebugResult): void {
+    renderLineResults(result.lineResults);
+    renderErrors(result.errors);
+    renderStats(result.stats);
+    // Always render debug data in playground
+    renderTokens(result.rawTokens);
+    renderAST(result.ast);
+    renderOpcodes(result.opcodes);
+    renderConstants(result.constants);
+    renderVariables(result.variables);
+    renderMarkdownOutline(result.markdownOutline);
+    const effects: {from: number; to: number; deco: Decoration}[] = [];
+    for (const lr of result.lineResults) {
+        if (!lr.result || lr.error) continue;
+        const line = editor.state.doc.line(lr.lineNumber);
+        effects.push({ from: line.to, to: line.to, deco: Decoration.widget({ widget: new ResultWidget(lr.result, lr.type), side: 1 }) });
+    }
+    if (effects.length > 0) editor.dispatch({ effects: resultEffect.of(effects) });
+}
+    
+    // Data sources
+    const sourcesHeader = document.createElement('div');
+    sourcesHeader.className = 'status-section';
+    sourcesHeader.innerHTML = `<strong>Data Sources:</strong> ${payload.dataSources.length}`;
+    container.appendChild(sourcesHeader);
+    
+    if (payload.dataSources.length > 0) {
+        const sourcesList = document.createElement('div');
+        sourcesList.className = 'sources-list';
+        payload.dataSources.forEach((source: string) => {
+            const sourceEl = document.createElement('div');
+            sourceEl.className = 'source-item';
+            sourceEl.textContent = source;
+            sourcesList.appendChild(sourceEl);
+        });
+        container.appendChild(sourcesList);
+    }
+    
+    backgroundThreadDisplay.appendChild(container);
+}
+
+let datastoreState: Map<string, any> = new Map();
+
+function renderDataStoreUpdate(payload: any, status: string): void {
+    if (!datastoreDisplay) return;
+    
+    const key = `${payload.dataSourceId}:${JSON.stringify(payload.queryKey)}`;
+    
+    switch (status) {
+        case 'loading':
+            datastoreState.set(key, {
+                ...payload,
+                status: 'loading',
+                timestamp: Date.now()
+            });
+            break;
+        case 'success':
+            datastoreState.set(key, {
+                ...payload,
+                status: 'success',
+                timestamp: Date.now()
+            });
+            break;
+        case 'error':
+            datastoreState.set(key, {
+                ...payload,
+                status: 'error',
+                timestamp: Date.now()
+            });
+            break;
+        case 'registered':
+            // Just update the display, don't store registration
+            break;
+    }
+    
+    datastoreDisplay.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'datastore-entries';
+    
+    if (datastoreState.size === 0) {
+        container.innerHTML = '<span class="empty">No data in store</span>';
+    } else {
+        datastoreState.forEach((entry, key) => {
+            const entryEl = document.createElement('div');
+            entryEl.className = `datastore-entry ${entry.status}`;
+            
+            const timeAgo = Date.now() - entry.timestamp;
+            const timeStr = timeAgo < 1000 ? `${timeAgo}ms` : `${(timeAgo / 1000).toFixed(1)}s`;
+            
+            entryEl.innerHTML = `
+                <div class="entry-key">${key}</div>
+                <div class="entry-status">${entry.status}</div>
+                <div class="entry-time">${timeStr} ago</div>
+                ${entry.data ? `<div class="entry-value">${JSON.stringify(entry.data).substring(0, 50)}${JSON.stringify(entry.data).length > 50 ? '...' : ''}</div>` : ''}
+                ${entry.error ? `<div class="entry-error">${entry.error}</div>` : ''}
+            `;
+            
+            container.appendChild(entryEl);
+        });
+    }
+    
+    datastoreDisplay.appendChild(container);
+}
+
+// Periodically update background thread status
+setInterval(() => {
+    dataQueryWorker.postMessage({ type: 'GET_STATUS' });
+}, 1000);
     renderLineResults(result.lineResults);
     renderErrors(result.errors);
     renderStats(result.stats);
@@ -346,6 +488,120 @@ function renderErrors(errors: string[]): void {
     if (errors.length === 0) { errorsDisplay.innerHTML = '<span class="success">No errors</span>'; return; }
     errors.forEach(error => { const div = document.createElement('div'); div.className = 'error'; if (error.includes('\n    at ')) div.innerHTML = `<pre>${error}</pre>`; else div.textContent = error; errorsDisplay.appendChild(div); });
 }
+
+function renderBackgroundThreadStatus(payload: any): void {
+    if (!backgroundThreadDisplay) return;
+    
+    backgroundThreadDisplay.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'thread-status';
+    
+    // Active requests
+    const requestsHeader = document.createElement('div');
+    requestsHeader.className = 'status-section';
+    requestsHeader.innerHTML = `<strong>Active Requests:</strong> ${payload.activeRequests.length}`;
+    container.appendChild(requestsHeader);
+    
+    if (payload.activeRequests.length > 0) {
+        const requestsList = document.createElement('div');
+        requestsList.className = 'requests-list';
+        payload.activeRequests.forEach((id: string) => {
+            const requestEl = document.createElement('div');
+            requestEl.className = 'request-item loading';
+            requestEl.textContent = `Request ${id}`;
+            requestsList.appendChild(requestEl);
+        });
+        container.appendChild(requestsList);
+    }
+    
+    // Data sources
+    const sourcesHeader = document.createElement('div');
+    sourcesHeader.className = 'status-section';
+    sourcesHeader.innerHTML = `<strong>Data Sources:</strong> ${payload.dataSources.length}`;
+    container.appendChild(sourcesHeader);
+    
+    if (payload.dataSources.length > 0) {
+        const sourcesList = document.createElement('div');
+        sourcesList.className = 'sources-list';
+        payload.dataSources.forEach((source: string) => {
+            const sourceEl = document.createElement('div');
+            sourceEl.className = 'source-item';
+            sourceEl.textContent = source;
+            sourcesList.appendChild(sourceEl);
+        });
+        container.appendChild(sourcesList);
+    }
+    
+    backgroundThreadDisplay.appendChild(container);
+}
+
+let datastoreState: Map<string, any> = new Map();
+
+function renderDataStoreUpdate(payload: any, status: string): void {
+    if (!datastoreDisplay) return;
+    
+    const key = `${payload.dataSourceId}:${JSON.stringify(payload.queryKey)}`;
+    
+    switch (status) {
+        case 'loading':
+            datastoreState.set(key, {
+                ...payload,
+                status: 'loading',
+                timestamp: Date.now()
+            });
+            break;
+        case 'success':
+            datastoreState.set(key, {
+                ...payload,
+                status: 'success',
+                timestamp: Date.now()
+            });
+            break;
+        case 'error':
+            datastoreState.set(key, {
+                ...payload,
+                status: 'error',
+                timestamp: Date.now()
+            });
+            break;
+        case 'registered':
+            // Just update the display, don't store registration
+            break;
+    }
+    
+    datastoreDisplay.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'datastore-entries';
+    
+    if (datastoreState.size === 0) {
+        container.innerHTML = '<span class="empty">No data in store</span>';
+    } else {
+        datastoreState.forEach((entry, key) => {
+            const entryEl = document.createElement('div');
+            entryEl.className = `datastore-entry ${entry.status}`;
+            
+            const timeAgo = Date.now() - entry.timestamp;
+            const timeStr = timeAgo < 1000 ? `${timeAgo}ms` : `${(timeAgo / 1000).toFixed(1)}s`;
+            
+            entryEl.innerHTML = `
+                <div class="entry-key">${key}</div>
+                <div class="entry-status">${entry.status}</div>
+                <div class="entry-time">${timeStr} ago</div>
+                ${entry.data ? `<div class="entry-value">${JSON.stringify(entry.data).substring(0, 50)}${JSON.stringify(entry.data).length > 50 ? '...' : ''}</div>` : ''}
+                ${entry.error ? `<div class="entry-error">${entry.error}</div>` : ''}
+            `;
+            
+            container.appendChild(entryEl);
+        });
+    }
+    
+    datastoreDisplay.appendChild(container);
+}
+
+// Periodically update background thread status
+setInterval(() => {
+    dataQueryWorker.postMessage({ type: 'GET_STATUS' });
+}, 1000);
 
 renderExamplesSidebar();
 populateFullDocExamples();

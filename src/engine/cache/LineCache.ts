@@ -24,49 +24,73 @@ export class LineCacheEntry {
 }
 
 export class LineCache {
-  private entries: Map<number, LineCacheEntry> = new Map();
-  private dirtyLines: Set<number> = new Set();
+  private entries: Map<string, LineCacheEntry> = new Map();
+  private dirtyLines: Set<string> = new Set();
 
-  get(line: number): LineCacheEntry | undefined {
-    return this.entries.get(line);
+  private getKey(line: number, expression?: string): string {
+    return expression ? `${line}:${expression}` : `${line}`;
   }
 
-  set(line: number, entry: LineCacheEntry): void {
-    this.entries.set(line, entry);
+  get(line: number, expression?: string): LineCacheEntry | undefined {
+    return this.entries.get(this.getKey(line, expression));
   }
 
-  markDirty(line: number): void {
-    const entry = this.entries.get(line);
+  set(line: number, entry: LineCacheEntry, expression?: string): void {
+    this.entries.set(this.getKey(line, expression), entry);
+  }
+
+  markDirty(line: number, expression?: string): void {
+    const key = this.getKey(line, expression);
+    const entry = this.entries.get(key);
     if (entry) {
       entry.dirty = true;
     }
-    this.dirtyLines.add(line);
+    this.dirtyLines.add(key);
   }
 
-  markClean(line: number): void {
-    const entry = this.entries.get(line);
+  markClean(line: number, expression?: string): void {
+    const key = this.getKey(line, expression);
+    const entry = this.entries.get(key);
     if (entry) {
       entry.dirty = false;
     }
-    this.dirtyLines.delete(line);
+    this.dirtyLines.delete(key);
   }
 
-  isDirty(line: number): boolean {
-    const entry = this.entries.get(line);
+  isDirty(line: number, expression?: string): boolean {
+    const key = this.getKey(line, expression);
+    const entry = this.entries.get(key);
     return entry ? entry.dirty : false;
   }
 
   getDirtyLines(): Set<number> {
-    return new Set(this.dirtyLines);
+    // Return line numbers for any dirty entries
+    const dirtyLineNumbers = new Set<number>();
+    for (const key of this.dirtyLines) {
+      const line = parseInt(key.split(':')[0]);
+      dirtyLineNumbers.add(line);
+    }
+    return dirtyLineNumbers;
   }
 
-  has(line: number): boolean {
-    return this.entries.has(line);
+  has(line: number, expression?: string): boolean {
+    return this.entries.has(this.getKey(line, expression));
   }
 
-  remove(line: number): void {
-    this.entries.delete(line);
-    this.dirtyLines.delete(line);
+  remove(line: number, expression?: string): void {
+    const key = this.getKey(line, expression);
+    this.entries.delete(key);
+    this.dirtyLines.delete(key);
+  }
+
+  removeAllForLine(line: number): void {
+    const prefix = `${line}:`;
+    for (const key of Array.from(this.entries.keys())) {
+      if (key === `${line}` || key.startsWith(prefix)) {
+        this.entries.delete(key);
+        this.dirtyLines.delete(key);
+      }
+    }
   }
 
   clear(): void {

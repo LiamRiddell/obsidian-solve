@@ -14,7 +14,7 @@ describe("ExpressionEngine", () => {
     const result = engine.evaluateLine(1, "42");
     expect(result.toNumber()).toBe(42);
 
-    const cached = engine.getLineCache().get(1);
+    const cached = engine.getLineCache().get(1, "42");
     expect(cached).toBeDefined();
     expect(cached!.result.toNumber()).toBe(42);
   });
@@ -22,7 +22,7 @@ describe("ExpressionEngine", () => {
   test("reEvaluateLine re-executes cached bytecode", () => {
     const engine = new ExpressionEngine();
     engine.evaluateLine(1, "5 + 5");
-    const result = engine.reEvaluateLine(1);
+    const result = engine.reEvaluateLine(1, "5 + 5");
     expect(result!.toNumber()).toBe(10);
   });
 

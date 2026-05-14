@@ -230,7 +230,7 @@ export class ExpressionEngine {
 
     if (tokens.length === 0) {
       const v = numberValue(0);
-      this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: [], numbers: [], strings: [] }, [], null, false));
+      this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: [], numbers: [], strings: [] }, [], null, false), expression);
       const debug = this.diagnosticMode ? { tokens, parselets, program: { opcodes: [], numbers: [], strings: [] } } : undefined;
       return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] }, debug };
     }
@@ -270,7 +270,7 @@ export class ExpressionEngine {
           reads,
           writes.length > 0 ? writes[0] : null,
           false
-        ));
+        ), expression);
       }
 
       const debug = this.diagnosticMode ? { tokens, parselets, program } : undefined;
@@ -326,8 +326,8 @@ export class ExpressionEngine {
     return 'Expression';
   }
 
-  reEvaluateLine(lineNumber: number): Value | undefined {
-    const entry = this.lineCache.get(lineNumber);
+  reEvaluateLine(lineNumber: number, expression: string): Value | undefined {
+    const entry = this.lineCache.get(lineNumber, expression);
     if (!entry) return undefined;
 
     const program = entry.bytecode;
@@ -342,7 +342,7 @@ export class ExpressionEngine {
 
     if (result) {
       entry.result = result;
-      this.lineCache.markClean(lineNumber);
+      this.lineCache.markClean(lineNumber, expression);
     }
 
     return result;

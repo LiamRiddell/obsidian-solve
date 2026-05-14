@@ -1,9 +1,9 @@
 /**
  * Production-grade scalable data query worker
- * Supports multiple data sources, plugin integration, and two-way binding
+ * Refactored to act as a pure fetch executor for the main thread Virtual Query Client
  */
 
-import { QueryClient, QueryObserver, QueryFunctionContext } from "@tanstack/query-core";
+import { QueryFunctionContext } from "@tanstack/query-core";
 
 // ============================================================================
 // CORE TYPES & INTERFACES
@@ -21,7 +21,7 @@ export interface DataSourceConfig {
   retry?: number;
 }
 
-export interface QueryRequest {
+export interface FetchRequest {
   id: string;
   dataSourceId: string;
   queryKey: string[];
@@ -29,28 +29,13 @@ export interface QueryRequest {
   timestamp: number;
 }
 
-export interface QueryResponse {
+export interface FetchResponse {
   id: string;
   dataSourceId: string;
   queryKey: string[];
   data: any;
   error?: string;
   timestamp: number;
-  cached: boolean;
-}
-
-export interface SubscriptionRequest {
-  id: string;
-  dataSourceId: string;
-  queryKey: string[];
-  callbackId: string;
-}
-
-export interface PluginRegistration {
-  id: string;
-  dataSourceId: string;
-  queryFunction: (context: QueryFunctionContext) => Promise<any>;
-  priority?: number;
 }
 
 // ============================================================================
@@ -58,30 +43,10 @@ export interface PluginRegistration {
 // ============================================================================
 
 export class DataQueryWorker {
-  private queryClient: QueryClient;
   private dataSources: Map<string, DataSourceConfig> = new Map();
-  private observers: Map<string, QueryObserver<any, any, any, any>> = new Map();
-  private subscriptions: Map<string, Set<string>> = new Map(); // queryKey -> callbackIds
-  private plugins: Map<string, PluginRegistration> = new Map();
-  private pendingRequests: Map<string, { resolve: (value: any) => void; reject: (reason?: any) => void }> =
-    new Map();
 
   constructor() {
-    this.queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          staleTime: 5 * 60 * 1000, // 5 minutes
-          gcTime: 10 * 60 * 1000, // 10 minutes
-          retry: 3,
-          retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 5000),
-          refetchOnWindowFocus: false,
-          refetchOnReconnect: true,
-        },
-      },
-    });
-
-    // Start periodic cleanup
-    setInterval(() => this.cleanup(), 60000); // Every minute
+    // No QueryClient needed - main thread handles caching
   }
 
   // ------------------------------------------------------------------------
@@ -98,7 +63,6 @@ export class DataQueryWorker {
 
   unregisterDataSource(dataSourceId: string): void {
     this.dataSources.delete(dataSourceId);
-    this.cleanupObserversForDataSource(dataSourceId);
     this.postMessage({
       type: "DATA_SOURCE_UNREGISTERED",
       payload: { dataSourceId },
@@ -106,79 +70,39 @@ export class DataQueryWorker {
   }
 
   // ------------------------------------------------------------------------
-  // PLUGIN MANAGEMENT
+  // FETCH EXECUTION (Replaces executeQuery)
   // ------------------------------------------------------------------------
 
-  registerPlugin(plugin: PluginRegistration): void {
-    this.plugins.set(plugin.id, plugin);
-    this.postMessage({
-      type: "PLUGIN_REGISTERED",
-      payload: { pluginId: plugin.id, dataSourceId: plugin.dataSourceId },
-    });
-  }
-
-  unregisterPlugin(pluginId: string): void {
-    this.plugins.delete(pluginId);
-  }
-
-  private getPluginForDataSource(
-    dataSourceId: string
-  ): PluginRegistration | undefined {
-    const plugins = Array.from(this.plugins.values()).filter(
-      (p) => p.dataSourceId === dataSourceId
-    );
-    // Return highest priority plugin
-    return plugins.sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
-  }
-
-  // ------------------------------------------------------------------------
-  // QUERY EXECUTION
-  // ------------------------------------------------------------------------
-
-  async executeQuery(request: QueryRequest): Promise<QueryResponse> {
+  async executeFetch(request: FetchRequest): Promise<FetchResponse> {
     const dataSource = this.dataSources.get(request.dataSourceId);
     if (!dataSource) {
       return {
         id: request.id,
         dataSourceId: request.dataSourceId,
+        queryKey: request.queryKey,
         data: null,
         error: `Data source not found: ${request.dataSourceId}`,
         timestamp: Date.now(),
-        cached: false,
       };
     }
 
-    // Check cache first (synchronous)
-    const cached = this.queryClient
-      .getQueryCache()
-      .find({ queryKey: request.queryKey });
-    if (cached?.state.data !== undefined) {
-      return {
-        id: request.id,
-        dataSourceId: request.dataSourceId,
-        queryKey: request.queryKey,
-        data: cached.state.data,
-        timestamp: Date.now(),
-        cached: true,
-      };
-    }
-
-    // Execute query with plugin support
+    // Execute query based on data source type
     try {
-      const plugin = this.getPluginForDataSource(request.dataSourceId);
-      const data = await this.queryClient.fetchQuery({
-        queryKey: request.queryKey,
-        queryFn: async (context) => {
-          if (plugin) {
-            return plugin.queryFunction(context);
-          }
-          // Default fetch implementation
-          return this.defaultQueryFunction(context, dataSource);
-        },
-        staleTime: dataSource.staleTime,
-        gcTime: dataSource.gcTime,
-        retry: dataSource.retry,
-      });
+      let data: any;
+      
+      // Handle currency data source natively
+      if (request.dataSourceId === "currency" || dataSource.type === "currency") {
+        data = await this.handleCurrencyQuery(request.queryKey);
+      } else {
+        // Default fetch implementation for other data sources
+        const context: QueryFunctionContext = {
+          queryKey: request.queryKey,
+          meta: undefined,
+          signal: undefined,
+          pageParam: undefined,
+        };
+        data = await this.defaultQueryFunction(context, dataSource);
+      }
 
       return {
         id: request.id,
@@ -186,7 +110,6 @@ export class DataQueryWorker {
         queryKey: request.queryKey,
         data,
         timestamp: Date.now(),
-        cached: false,
       };
     } catch (error) {
       return {
@@ -196,9 +119,53 @@ export class DataQueryWorker {
         data: null,
         error: error instanceof Error ? error.message : String(error),
         timestamp: Date.now(),
-        cached: false,
       };
     }
+  }
+
+  // ------------------------------------------------------------------------
+  // CURRENCY DATA SOURCE HANDLER
+  // ------------------------------------------------------------------------
+
+  private async handleCurrencyQuery(queryKey: string[]): Promise<number> {
+    // queryKey format: ["currency", "from", "to"]
+    const [, from, to] = queryKey;
+    
+    if (!from || !to) {
+      throw new Error("Invalid currency query key");
+    }
+
+    // For same currency, return 1
+    if (from.toUpperCase() === to.toUpperCase()) {
+      return 1;
+    }
+
+    // Fetch from Frankfurter API
+    const response = await fetch("https://api.frankfurter.dev/v2/rates?base=USD");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Parse the rates and calculate the specific rate requested
+    const rates: Record<string, number> = { USD: 1.0 };
+    
+    if (data.rates) {
+      Object.entries(data.rates).forEach(([currency, rate]) => {
+        rates[currency] = rate as number;
+      });
+    }
+
+    const fromUpper = from?.toUpperCase();
+    const toUpper = to?.toUpperCase();
+
+    if (!rates[fromUpper] || !rates[toUpper]) {
+      return 1; // Fallback rate
+    }
+
+    // Calculate cross rate
+    return rates[toUpper] / rates[fromUpper];
   }
 
   private async defaultQueryFunction(
@@ -223,148 +190,6 @@ export class DataQueryWorker {
     }
 
     return response.json();
-  }
-
-  // ------------------------------------------------------------------------
-  // SUBSCRIPTION MANAGEMENT (Two-Way Binding)
-  // ------------------------------------------------------------------------
-
-  subscribe(request: SubscriptionRequest): void {
-    const dataSource = this.dataSources.get(request.dataSourceId);
-    if (!dataSource) {
-      this.postMessage({
-        type: "SUBSCRIPTION_ERROR",
-        payload: {
-          error: `Data source not found: ${request.dataSourceId}`,
-          callbackId: request.callbackId,
-        },
-      });
-      return;
-    }
-
-    const observer = new QueryObserver(this.queryClient, {
-      queryKey: request.queryKey,
-      queryFn: async (context) => {
-        const plugin = this.getPluginForDataSource(request.dataSourceId);
-        if (plugin) {
-          return plugin.queryFunction(context);
-        }
-        return this.defaultQueryFunction(context, dataSource);
-      },
-      staleTime: dataSource.staleTime,
-      gcTime: dataSource.gcTime,
-      retry: dataSource.retry,
-    });
-
-    observer.subscribe((result) => {
-      this.postMessage({
-        type: "SUBSCRIPTION_UPDATE",
-        payload: {
-          callbackId: request.callbackId,
-          queryKey: request.queryKey,
-          result: {
-            data: result.data,
-            error: result.error?.message,
-            isLoading: result.isLoading,
-            isSuccess: result.isSuccess,
-            isError: result.isError,
-            timestamp: Date.now(),
-          },
-        },
-      });
-    });
-
-    this.observers.set(request.callbackId, observer);
-    
-    // Track subscriptions by query key
-    const queryKeyStr = JSON.stringify(request.queryKey);
-    if (!this.subscriptions.has(queryKeyStr)) {
-      this.subscriptions.set(queryKeyStr, new Set());
-    }
-    this.subscriptions.get(queryKeyStr)!.add(request.callbackId);
-
-    this.postMessage({
-      type: "SUBSCRIPTION_REGISTERED",
-      payload: { callbackId: request.callbackId, queryKey: request.queryKey },
-    });
-  }
-
-  unsubscribe(callbackId: string): void {
-    const observer = this.observers.get(callbackId);
-    if (observer) {
-      observer.destroy();
-      this.observers.delete(callbackId);
-    }
-
-    // Remove from subscriptions tracking
-    for (const [queryKeyStr, callbacks] of this.subscriptions) {
-      if (callbacks.has(callbackId)) {
-        callbacks.delete(callbackId);
-        if (callbacks.size === 0) {
-          this.subscriptions.delete(queryKeyStr);
-        }
-        break;
-      }
-    }
-
-    this.postMessage({
-      type: "SUBSCRIPTION_UNREGISTERED",
-      payload: { callbackId },
-    });
-  }
-
-  // ------------------------------------------------------------------------
-  // TWO-WAY BINDING: REFRESH FROM MAIN THREAD
-  // ------------------------------------------------------------------------
-
-  refreshSubscription(callbackId: string): void {
-    const observer = this.observers.get(callbackId);
-    if (observer) {
-      observer.refetch();
-    }
-  }
-
-  refreshDataSource(dataSourceId: string): void {
-    for (const observer of this.observers.values()) {
-      const queryKey = observer.getCurrentResult().data?.queryKey;
-      if (queryKey && this.isQueryKeyForDataSource(queryKey, dataSourceId)) {
-        observer.refetch();
-      }
-    }
-  }
-
-  private isQueryKeyForDataSource(
-    queryKey: string[],
-    dataSourceId: string
-  ): boolean {
-    // Assuming first element of queryKey is dataSourceId
-    return queryKey[0] === dataSourceId;
-  }
-
-  // ------------------------------------------------------------------------
-  // MEMORY MANAGEMENT & CLEANUP
-  // ------------------------------------------------------------------------
-
-  private cleanup(): void {
-    // Clean up old queries
-    this.queryClient.clean();
-    
-    // Enforce cache limits
-    const cache = this.queryClient.getQueryCache();
-    const queries = cache.findAll();
-    if (queries.length > 1000) {
-      const toRemove = queries.slice(0, queries.length - 1000);
-      toRemove.forEach((q) => q.remove());
-    }
-  }
-
-  private cleanupObserversForDataSource(dataSourceId: string): void {
-    for (const [callbackId, observer] of this.observers) {
-      const queryKey = observer.options.queryKey;
-      if (queryKey && queryKey[0] === dataSourceId) {
-        this.unsubscribe(callbackId);
-      }
-    }
   }
 
   // ------------------------------------------------------------------------
@@ -398,47 +223,23 @@ export class DataQueryWorker {
         this.unregisterDataSource(payload.dataSourceId);
         break;
 
-      case "REGISTER_PLUGIN":
-        this.registerPlugin(payload);
-        break;
-
-      case "UNREGISTER_PLUGIN":
-        this.unregisterPlugin(payload.pluginId);
-        break;
-
-      case "EXECUTE_QUERY":
-        this.executeQuery(payload)
+      case "FETCH_REQUEST":
+        this.executeFetch(payload)
           .then((response) => {
             this.postMessage({
-              type: "QUERY_RESULT",
+              type: "FETCH_RESPONSE",
               payload: response,
             });
           })
           .catch((error) => {
             this.postMessage({
-              type: "QUERY_ERROR",
+              type: "FETCH_ERROR",
               payload: {
                 id: payload.id,
                 error: error.message,
               },
             });
           });
-        break;
-
-      case "SUBSCRIBE":
-        this.subscribe(payload);
-        break;
-
-      case "UNSUBSCRIBE":
-        this.unsubscribe(payload.callbackId);
-        break;
-
-      case "REFRESH_SUBSCRIPTION":
-        this.refreshSubscription(payload.callbackId);
-        break;
-
-      case "REFRESH_DATA_SOURCE":
-        this.refreshDataSource(payload.dataSourceId);
         break;
     }
   }

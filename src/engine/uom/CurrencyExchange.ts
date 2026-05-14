@@ -3,8 +3,7 @@
  * Integrates with DataQueryService for worker-based execution
  */
 
-import { dataQueryService, DataSourceConfig, PluginRegistration } from "@/engine/services/DataQueryService";
-import { QueryFunctionContext } from "@tanstack/query-core";
+import { dataQueryService, DataSourceConfig } from "@/engine/services/DataQueryService";
 
 // ============================================================================
 // CURRENCY DATA SOURCE CONFIGURATION
@@ -29,6 +28,8 @@ const currencyDataSourceConfig: DataSourceConfig = {
 export class CurrencyExchangeService {
   private dataSourceHandle: any;
   private subscriptions: Map<string, any> = new Map();
+  private cacheUpdateUnsubscribe: () => void;
+  private errorUnsubscribe: () => void;
 
   constructor() {
     // Register currency data source
@@ -36,35 +37,8 @@ export class CurrencyExchangeService {
       currencyDataSourceConfig
     );
 
-    // Register currency-specific plugin
-    this.registerCurrencyPlugin();
-  }
-
-  // ------------------------------------------------------------------------
-  // PLUGIN REGISTRATION
-  // ------------------------------------------------------------------------
-
-  private registerCurrencyPlugin(): void {
-    const currencyPlugin: PluginRegistration = {
-      id: "currency-plugin",
-      dataSourceId: CURRENCY_DATA_SOURCE_ID,
-      priority: 1,
-      queryFunction: async (context: QueryFunctionContext) => {
-        // Custom currency query logic
-        const [, from, to] = context.queryKey;
-        
-        // Fetch from API
-        const response = await fetch(
-          `https://api.frankfurter.dev/v2/rates?base=USD`
-        );
-        const data = await response.json();
-        
-        // Parse and calculate rate
-        return this.calculateRate(data, from as string, to as string);
-      },
-    };
-
-    dataQueryService.registerPlugin(currencyPlugin);
+    // Currency logic is now handled natively in the worker
+    // No plugin registration needed
   }
 
   // ------------------------------------------------------------------------
@@ -83,7 +57,7 @@ export class CurrencyExchangeService {
     }
     
     const queryKey = ["currency", from, to];
-    const rate = this.dataSourceHandle.getSync("currency", queryKey);
+    const rate = this.dataSourceHandle.getSync(queryKey);
     
     // If rate is not in cache, try to calculate it from fallback rates
     if (rate === null) {
@@ -153,14 +127,28 @@ export class CurrencyExchangeService {
     callback: (rate: number, error?: string) => void
   ): () => void {
     const queryKey = ["currency", from, to];
-    const subscription = this.dataSourceHandle.subscribe(queryKey, callback);
+    const queryKeyStr = JSON.stringify(queryKey);
     
-    const subscriptionId = `${from}-${to}-${Date.now()}`;
-    this.subscriptions.set(subscriptionId, subscription);
+    if (!this.subscriptions.has(queryKeyStr)) {
+      this.subscriptions.set(queryKeyStr, new Set());
+    }
+    this.subscriptions.get(queryKeyStr)!.add(callback);
     
+    // Immediately return current rate if available
+    const currentRate = this.getRateSync(from, to);
+    if (currentRate !== null) {
+      callback(currentRate);
+    }
+    
+    // Return unsubscribe function
     return () => {
-      subscription.unsubscribe();
-      this.subscriptions.delete(subscriptionId);
+      const subscribers = this.subscriptions.get(queryKeyStr);
+      if (subscribers) {
+        subscribers.delete(callback);
+        if (subscribers.size === 0) {
+          this.subscriptions.delete(queryKeyStr);
+        }
+      }
     };
   }
 
@@ -194,39 +182,22 @@ export class CurrencyExchangeService {
   }
 
   // ------------------------------------------------------------------------
-  // PRIVATE HELPERS
-  // ------------------------------------------------------------------------
-
-  private calculateRate(apiData: any, from: string, to: string): number {
-    // Parse Frankfurter API response
-    const rates: Record<string, number> = { USD: 1.0 };
-    
-    if (apiData && apiData.rates) {
-      Object.entries(apiData.rates).forEach(([currency, rate]) => {
-        rates[currency] = rate as number;
-      });
-    }
-
-    const fromUpper = from.toUpperCase();
-    const toUpper = to.toUpperCase();
-
-    if (fromUpper === toUpper) return 1;
-    if (!rates[fromUpper] || !rates[toUpper]) return 1;
-
-    // Calculate cross rate
-    return rates[toUpper] / rates[fromUpper];
-  }
-
-  // ------------------------------------------------------------------------
   // SHUTDOWN
   // ------------------------------------------------------------------------
 
   destroy(): void {
     // Unsubscribe all
-    for (const subscription of this.subscriptions.values()) {
-      subscription.unsubscribe();
-    }
     this.subscriptions.clear();
+    
+    // Unsubscribe from cache updates
+    if (this.cacheUpdateUnsubscribe) {
+      this.cacheUpdateUnsubscribe();
+    }
+    
+    // Unsubscribe from errors
+    if (this.errorUnsubscribe) {
+      this.errorUnsubscribe();
+    }
 
     // Unregister data source
     this.dataSourceHandle.destroy();

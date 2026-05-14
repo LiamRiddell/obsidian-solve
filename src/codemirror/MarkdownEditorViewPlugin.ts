@@ -13,6 +13,7 @@ import {
 	PluginValue,
 	ViewUpdate,
 } from "@codemirror/view";
+import { dataQueryService } from "@/engine/services/DataQueryService";
 
 interface CachedLineDecorations {
 	lineText: string;
@@ -26,6 +27,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private expressionEngine: ExpressionEngine;
 	private lineDecorationCache: Map<number, CachedLineDecorations> = new Map();
 	private dirtyLines: Set<number> = new Set();
+	private cacheUpdateUnsubscribe: () => void;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructor`);
@@ -33,6 +35,17 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.userSettings = UserSettings.getInstance();
 		this.highlightProvider = new SolveHighlightProvider();
 		this.expressionEngine = new ExpressionEngine(this.userSettings.settings.engine.locale);
+
+		// Subscribe to cache updates from DataQueryService
+		this.cacheUpdateUnsubscribe = dataQueryService.onCacheUpdate((dataSourceId, queryKey, data) => {
+			// Mark only affected lines as dirty using the dependency graph
+			const affectedLines = this.expressionEngine.getDag().getAffectedLinesByDataSource(dataSourceId, queryKey);
+			for (const line of affectedLines) {
+				this.dirtyLines.add(line);
+			}
+			// Trigger a re-render by dispatching a dummy transaction
+			view.dispatch({});
+		});
 
 		this.decorations = this.buildDecorations(view);
 	}
@@ -45,11 +58,12 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				const endLine = update.view.state.doc.lineAt(toA).number;
 				const newEndLine = update.view.state.doc.lineAt(toB).number;
 				
-				// Clear cache for affected lines
-				for (let l = startLine; l <= endLine; l++) {
-					this.lineDecorationCache.delete(l);
-					this.dirtyLines.add(l);
-				}
+			// Clear cache for affected lines
+			for (let l = startLine; l <= endLine; l++) {
+				this.lineDecorationCache.delete(l);
+				this.dirtyLines.add(l);
+				this.expressionEngine.getLineCache().removeAllForLine(l);
+			}
 				
 				// If line count changed, clear cache for all lines after the change
 				if (newEndLine !== endLine) {
@@ -57,6 +71,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					for (let l = Math.min(endLine, newEndLine) + 1; l <= maxLine; l++) {
 						this.lineDecorationCache.delete(l);
 						this.dirtyLines.add(l);
+						this.expressionEngine.getLineCache().removeAllForLine(l);
 					}
 				}
 			});
@@ -71,6 +86,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		logger.debug(`[SolveViewPlugin] Destroyed`);
 		this.lineDecorationCache.clear();
 		this.dirtyLines.clear();
+		if (this.cacheUpdateUnsubscribe) {
+			this.cacheUpdateUnsubscribe();
+		}
 	}
 
 	buildDecorations(view: EditorView): DecorationSet {
