@@ -45,7 +45,7 @@ function getNanoTime(): number {
 function formatType(val: Value): string {
     const typeNames: Record<number, string> = {
         0: 'Number', 1: 'Hex', 2: 'BigInt', 3: 'String',
-        4: 'Datetime', 5: 'Percentage', 6: 'Timespan',
+        4: 'Datetime', 5: 'Percentage', 6: 'Uom',
         7: 'Vector2', 8: 'Vector3', 9: 'Vector4',
         10: 'Boolean', 11: 'Unit'
     };
