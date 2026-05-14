@@ -31,7 +31,7 @@
 	},
 	"dependencies": {
 		"animate.css": "^4.1.1",
-		"convert-units": "^2.3.4",
+		"convert": "^7.0.0",
 		"moment": "^2.29.4",
 		"moo": "^0.5.3"
 	}
