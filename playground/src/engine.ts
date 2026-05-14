@@ -117,7 +117,9 @@ export function runEngine(expression: string): DebugResult {
 
             // Always collect debug data in playground environment
             if (result.tokens) {
-                rawTokens.push(...result.tokens);
+                // Set the correct line number on each token
+                const tokensWithLine = result.tokens.map(t => ({ ...t, line: lineNum }));
+                rawTokens.push(...tokensWithLine);
             }
             if (result.debug?.parselets) {
                 parselets.push(...result.debug.parselets);

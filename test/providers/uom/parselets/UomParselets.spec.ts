@@ -10,32 +10,39 @@ import { registerPercentageParselets } from "@/providers/percentage/parselets/in
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
 import { Value, ValueType } from "@/engine/vm/Value";
-import { sharedCurrencyExchange } from "@/engine/uom/CurrencyExchange";
+import { currencyExchangeService } from "@/engine/uom/CurrencyExchange";
+import { dataQueryService } from "@/engine/services/DataQueryService";
 
-// Mock fetch and load rates before all tests
+// Mock fetch and setup test environment
 beforeAll(async () => {
-  const mockFetch = jest.fn().mockImplementation(async () => ({
-    ok: true,
-    json: async () => [
-      { base: "USD", quote: "EUR", rate: 0.854 },
-      { base: "USD", quote: "GBP", rate: 0.739 },
-      { base: "USD", quote: "JPY", rate: 151.5 },
-    ],
-  }));
+  // Mock fetch for tests
+  const mockFetch = jest.fn().mockImplementation(async (url: string) => {
+    if (url.includes("frankfurter")) {
+      return {
+        ok: true,
+        json: async () => ({
+          rates: {
+            EUR: 0.854,
+            GBP: 0.739,
+            JPY: 151.5,
+          },
+        }),
+      };
+    }
+    return { ok: false };
+  });
   (global as any).fetch = mockFetch;
 
-  sharedCurrencyExchange.refreshRates();
+  // Use main thread execution for tests (no worker)
+  (dataQueryService as any).config.useWorker = false;
+
+  // Pre-populate cache with test rates
+  await currencyExchangeService.getRate("USD", "EUR");
+  await currencyExchangeService.getRate("USD", "GBP");
+  await currencyExchangeService.getRate("USD", "JPY");
   
-  // Wait for rates to load
-  let attempts = 0;
-  while (!sharedCurrencyExchange.hasRates() && attempts < 50) {
-    await new Promise(resolve => setTimeout(resolve, 50));
-    attempts++;
-  }
-  
-  if (!sharedCurrencyExchange.hasRates()) {
-    console.error("Failed to load rates in beforeAll");
-  }
+  // Wait a bit for async operations
+  await new Promise(resolve => setTimeout(resolve, 100));
 });
 
 function tokenize(lexer: Lexer, input: string) {

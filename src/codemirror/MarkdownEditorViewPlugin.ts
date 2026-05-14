@@ -40,12 +40,24 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	update(update: ViewUpdate) {
 		if (update.docChanged) {
 			this.highlightProvider.invalidateCache();
-			update.changes.iterChanges((fromA, toA) => {
+			update.changes.iterChanges((fromA, toA, fromB, toB) => {
 				const startLine = update.view.state.doc.lineAt(fromA).number;
 				const endLine = update.view.state.doc.lineAt(toA).number;
+				const newEndLine = update.view.state.doc.lineAt(toB).number;
+				
+				// Clear cache for affected lines
 				for (let l = startLine; l <= endLine; l++) {
 					this.lineDecorationCache.delete(l);
 					this.dirtyLines.add(l);
+				}
+				
+				// If line count changed, clear cache for all lines after the change
+				if (newEndLine !== endLine) {
+					const maxLine = update.view.state.doc.lines;
+					for (let l = Math.min(endLine, newEndLine) + 1; l <= maxLine; l++) {
+						this.lineDecorationCache.delete(l);
+						this.dirtyLines.add(l);
+					}
 				}
 			});
 		}

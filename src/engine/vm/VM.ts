@@ -41,8 +41,10 @@ function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: string | 
       return { lv: l.toNumber(), rv: rvConverted, unit: l.unit, sameMeasure: true };
     }
     if (isCurrency) {
-      const rvConverted = sharedCurrencyExchange.convert(r.toNumber(), r.unit!, l.unit!);
-      return { lv: l.toNumber(), rv: rvConverted, unit: l.unit, sameMeasure: true };
+      const rvConverted = sharedCurrencyExchange.convertSync(r.toNumber(), r.unit!, l.unit!);
+      if (rvConverted !== null) {
+        return { lv: l.toNumber(), rv: rvConverted, unit: l.unit, sameMeasure: true };
+      }
     }
     return { lv: l.toNumber(), rv: r.toNumber(), unit: undefined, sameMeasure: false };
   }
@@ -363,8 +365,12 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
           const converted = convertUnit(val, fromUnit, toUnit);
           vm.push(uomValue(converted, toUnit));
         } else if (isCurrency) {
-          const converted = sharedCurrencyExchange.convert(val, fromUnit, toUnit);
-          vm.push(uomValue(converted, toUnit));
+          const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
+          if (converted !== null) {
+            vm.push(uomValue(converted, toUnit));
+          } else {
+            vm.push(uomValue(val, fromUnit));
+          }
         } else {
           vm.push(uomValue(val, fromUnit));
         }

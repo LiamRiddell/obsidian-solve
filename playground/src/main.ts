@@ -206,15 +206,13 @@ function renderTokens(tokens: Token[]): void {
     if (tokens.length === 0) { container.innerHTML = '<span class="empty">No tokens</span>'; tokensDisplay.appendChild(container); return; }
     const groupByLine = groupTokensCheckbox && groupTokensCheckbox.checked;
     if (groupByLine) {
-        // Group tokens by line number using offset information
+        // Group tokens by line number using the token's line field
         const lines: Map<number, Token[]> = new Map();
         for (const token of tokens) {
             if (token.type === 'WS' || token.type === 'NEWLINE') continue;
-            // Estimate line number from offset (assuming roughly equal line lengths)
-            // This is a simplified approach - in a real implementation, we'd need proper line number tracking
-            const estimatedLine = Math.floor(token.offset / 50) + 1; // Rough estimate
-            if (!lines.has(estimatedLine)) lines.set(estimatedLine, []);
-            lines.get(estimatedLine)!.push(token);
+            const lineNum = token.line || 1;
+            if (!lines.has(lineNum)) lines.set(lineNum, []);
+            lines.get(lineNum)!.push(token);
         }
         
         const wrapper = document.createElement('div'); wrapper.className = 'token-groups';
