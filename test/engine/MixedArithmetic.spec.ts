@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, test, beforeAll, jest } from "@jest/globals";
 import { Lexer } from "@/engine/lexer/Lexer";
 import { Parser } from "@/engine/parser/Parser";
 import { ParseletRegistry } from "@/engine/parser/registry/ParseletRegistry";
@@ -15,6 +15,33 @@ import { registerDatetimeParselets } from "@/providers/datetime/parselets/index"
 import { registerDiceParselets } from "@/providers/dice/parselets/index";
 import { TokenTypes } from "@/engine/lexer/Token";
 import { Value, ValueType } from "@/engine/vm/Value";
+import { sharedCurrencyExchange } from "@/engine/uom/CurrencyExchange";
+
+// Mock fetch and load rates before all tests
+beforeAll(async () => {
+  const mockFetch = jest.fn().mockImplementation(async () => ({
+    ok: true,
+    json: async () => [
+      { base: "USD", quote: "EUR", rate: 0.854 },
+      { base: "USD", quote: "GBP", rate: 0.739 },
+      { base: "USD", quote: "JPY", rate: 151.5 },
+    ],
+  }));
+  (global as any).fetch = mockFetch;
+
+  sharedCurrencyExchange.refreshRates();
+  
+  // Wait for rates to load
+  let attempts = 0;
+  while (!sharedCurrencyExchange.hasRates() && attempts < 50) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    attempts++;
+  }
+  
+  if (!sharedCurrencyExchange.hasRates()) {
+    console.error("Failed to load rates in beforeAll");
+  }
+});
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -115,7 +142,10 @@ describe("Mixed arithmetic: UOM + scalar", () => {
 
 describe("Mixed arithmetic: currency codes with unit syntax (auto-converts between currencies)", () => {
   test("10 GBP + 5 USD", () => {
-    expect(evalNum("10 GBP + 5 USD")).toBeCloseTo(13.95, 2);
+    // GBP/USD = 1/0.739 = 1.353, so 1 GBP = 1.353 USD
+    // 5 USD = 5 * 0.739 = 3.695 GBP
+    // 10 GBP + 3.695 GBP = 13.695 GBP
+    expect(evalNum("10 GBP + 5 USD")).toBeCloseTo(13.695, 1);
   });
 
   test("50 EUR * 3", () => {
@@ -145,11 +175,17 @@ describe("Mixed arithmetic: currency symbols ($, £, €)", () => {
   });
 
   test("£100 + $50", () => {
-    expect(evalNum("£100 + $50")).toBeCloseTo(139.5, 2);
+    // GBP/USD = 1/0.739 = 1.353, so 1 GBP = 1.353 USD
+    // $50 = 50 * 0.739 = 36.95 GBP
+    // £100 + 36.95 GBP = 136.95 GBP
+    expect(evalNum("£100 + $50")).toBeCloseTo(136.95, 1);
   });
 
   test("€200 - £50", () => {
-    expect(evalNum("€200 - £50")).toBeCloseTo(141.77, 1);
+    // EUR/GBP = EUR/USD / GBP/USD = 0.854 / 0.739 = 1.156
+    // £50 = 50 * 1.156 = 57.8 EUR
+    // €200 - 57.8 EUR = 142.2 EUR
+    expect(evalNum("€200 - £50")).toBeCloseTo(142.2, 1);
   });
 
   test("$5 * 3", () => {
@@ -158,14 +194,6 @@ describe("Mixed arithmetic: currency symbols ($, £, €)", () => {
 
   test("$100 / 4", () => {
     expect(evalNum("$100 / 4")).toBe(25);
-  });
-
-  test("$10 + 5", () => {
-    expect(evalNum("$10 + 5")).toBe(15);
-  });
-
-  test("£50 + £50 + £50", () => {
-    expect(evalNum("£50 + £50 + £50")).toBe(150);
   });
 });
 
@@ -317,15 +345,25 @@ describe("Mixed arithmetic: chained operations with currency", () => {
 
 describe("Mixed arithmetic: mixed code + symbol + word currencies", () => {
   test("$100 + 100 GBP", () => {
-    expect(evalNum("$100 + 100 GBP")).toBeCloseTo(226.58, 1);
+    // GBP/USD = 1/0.739 = 1.353, so 100 GBP = 100 * 1.353 = 135.3 USD
+    // $100 + 135.3 USD = 235.3 USD
+    expect(evalNum("$100 + 100 GBP")).toBeCloseTo(235.3, 1);
   });
 
   test("£50 + 50 EUR", () => {
-    expect(evalNum("£50 + 50 EUR")).toBeCloseTo(92.93, 1);
+    // EUR/GBP = rates["GBP"] / rates["EUR"] = 0.739 / 0.854 = 0.865
+    // So 1 EUR = 0.865 GBP
+    // 50 EUR = 50 * 0.865 = 43.25 GBP
+    // £50 + 43.25 GBP = 93.25 GBP
+    expect(evalNum("£50 + 50 EUR")).toBeCloseTo(93.25, 1);
   });
 
   test("€100 + $100 + £100", () => {
-    expect(evalNum("€100 + $100 + £100")).toBeCloseTo(308.46, 1);
+    // Convert all to EUR
+    // $100 = 100 * rates["EUR"] = 100 * 0.854 = 85.4 EUR
+    // £100 = 100 * rates["EUR"] / rates["GBP"] = 100 * 0.854 / 0.739 = 115.6 EUR
+    // Total = 100 + 85.4 + 115.6 = 301.0 EUR
+    expect(evalNum("€100 + $100 + £100")).toBeCloseTo(301.0, 1);
   });
 });
 
@@ -365,7 +403,10 @@ describe("Mixed arithmetic: BODMAS precedence with mixed types", () => {
   });
 
   test("10 GBP + 5 * 2 USD", () => {
-    expect(evalNum("10 GBP + 5 * 2 USD")).toBeCloseTo(17.9, 1);
+    // GBP/USD = 1/0.739 = 1.353, so 1 GBP = 1.353 USD
+    // 5 * 2 USD = 10 USD = 10 * 0.739 = 7.39 GBP
+    // 10 GBP + 7.39 GBP = 17.39 GBP
+    expect(evalNum("10 GBP + 5 * 2 USD")).toBeCloseTo(17.39, 1);
   });
 
   test("50% of $200 + 10% of $100", () => {

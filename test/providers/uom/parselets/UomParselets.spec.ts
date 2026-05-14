@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, test, beforeAll, jest } from "@jest/globals";
 import { Lexer } from "@/engine/lexer/Lexer";
 import { TokenTypes } from "@/engine/lexer/Token";
 import { Parser } from "@/engine/parser/Parser";
@@ -10,6 +10,33 @@ import { registerPercentageParselets } from "@/providers/percentage/parselets/in
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
 import { Value, ValueType } from "@/engine/vm/Value";
+import { sharedCurrencyExchange } from "@/engine/uom/CurrencyExchange";
+
+// Mock fetch and load rates before all tests
+beforeAll(async () => {
+  const mockFetch = jest.fn().mockImplementation(async () => ({
+    ok: true,
+    json: async () => [
+      { base: "USD", quote: "EUR", rate: 0.854 },
+      { base: "USD", quote: "GBP", rate: 0.739 },
+      { base: "USD", quote: "JPY", rate: 151.5 },
+    ],
+  }));
+  (global as any).fetch = mockFetch;
+
+  sharedCurrencyExchange.refreshRates();
+  
+  // Wait for rates to load
+  let attempts = 0;
+  while (!sharedCurrencyExchange.hasRates() && attempts < 50) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    attempts++;
+  }
+  
+  if (!sharedCurrencyExchange.hasRates()) {
+    console.error("Failed to load rates in beforeAll");
+  }
+});
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);

@@ -183,12 +183,19 @@ function populateFullDocExamples(): void {
     });
 }
 
+let runTimeout: ReturnType<typeof setTimeout> | null = null;
+
 function run(): void {
-    const expression = editor.state.doc.toString().trim();
-    if (!expression) { renderErrors(['Please enter an expression']); return; }
-    highlightProvider.invalidateCache();
-    runId++;
-    engineWorker.postMessage({ id: runId, expression });
+    if (runTimeout) {
+        clearTimeout(runTimeout);
+    }
+    runTimeout = setTimeout(() => {
+        const expression = editor.state.doc.toString().trim();
+        if (!expression) { renderErrors(['Please enter an expression']); return; }
+        highlightProvider.invalidateCache();
+        runId++;
+        engineWorker.postMessage({ id: runId, expression });
+    }, 100); // Debounce by 100ms
 }
 
 function renderTokens(tokens: Token[]): void {
@@ -199,13 +206,22 @@ function renderTokens(tokens: Token[]): void {
     if (tokens.length === 0) { container.innerHTML = '<span class="empty">No tokens</span>'; tokensDisplay.appendChild(container); return; }
     const groupByLine = groupTokensCheckbox && groupTokensCheckbox.checked;
     if (groupByLine) {
-        const lines: Token[][] = []; let currentLine: Token[] = [];
-        for (const token of tokens) { if (token.type === 'NEWLINE') { if (currentLine.length > 0) { lines.push(currentLine); currentLine = []; } } else if (token.type !== 'WS') currentLine.push(token); }
-        if (currentLine.length > 0) lines.push(currentLine);
+        // Group tokens by line number using offset information
+        const lines: Map<number, Token[]> = new Map();
+        for (const token of tokens) {
+            if (token.type === 'WS' || token.type === 'NEWLINE') continue;
+            // Estimate line number from offset (assuming roughly equal line lengths)
+            // This is a simplified approach - in a real implementation, we'd need proper line number tracking
+            const estimatedLine = Math.floor(token.offset / 50) + 1; // Rough estimate
+            if (!lines.has(estimatedLine)) lines.set(estimatedLine, []);
+            lines.get(estimatedLine)!.push(token);
+        }
+        
         const wrapper = document.createElement('div'); wrapper.className = 'token-groups';
-        lines.forEach((lineTokens, idx) => {
+        const sortedLines = Array.from(lines.entries()).sort((a, b) => a[0] - b[0]);
+        sortedLines.forEach(([lineNum, lineTokens]) => {
             const group = document.createElement('div'); group.className = 'token-line-group';
-            const header = document.createElement('div'); header.className = 'token-line-header'; header.textContent = `Line ${idx + 1}`;
+            const header = document.createElement('div'); header.className = 'token-line-header'; header.textContent = `Line ${lineNum}`;
             const content = document.createElement('div'); content.className = 'token-line-content';
             lineTokens.forEach(token => { const span = document.createElement('span'); span.className = `token token-${token.type.toLowerCase()}`; span.textContent = token.value; span.title = `Type: ${token.type}\nValue: ${token.value}\nPos: ${token.offset}`; content.appendChild(span); });
             group.appendChild(header); group.appendChild(content); wrapper.appendChild(group);

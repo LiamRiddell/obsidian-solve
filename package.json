@@ -30,6 +30,7 @@
 		"typescript": "5.1.6"
 	},
 	"dependencies": {
+		"@tanstack/query-core": "^5.100.10",
 		"animate.css": "^4.1.1",
 		"convert": "^7.0.0",
 		"moment": "^2.29.4",
