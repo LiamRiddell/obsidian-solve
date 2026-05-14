@@ -321,6 +321,40 @@ export class ExpressionEngine {
     return this.memoCache;
   }
 
+  /**
+   * Get the parselet type for a given expression
+   * This is used by the playground to display which parselet handled the expression
+   */
+  getParseletType(expression: string): string {
+    const tokens: any[] = [];
+    this.lexer.reset(expression);
+    for (const t of this.lexer) {
+      if (t.type === TokenTypes.WS) continue;
+      if (t.type.startsWith("MD_")) continue;
+      tokens.push(t);
+    }
+
+    if (tokens.length === 0) return 'Expression';
+
+    // Check for specific token types that indicate the parselet
+    for (const t of tokens) {
+      if (t.type === 'PERCENT') return 'Percentage';
+      if (t.type === 'UNIT') return 'UoM';
+      if (t.type === 'CONVERT' || t.type === 'TO' || t.type === 'BEST') return 'UoM';
+      if (t.type === 'FUNC') return 'Function';
+      if (t.type === 'ROLL') return 'Dice';
+      if (t.type === 'NOW' || t.type === 'TODAY' || t.type === 'TOMORROW' || t.type === 'YESTERDAY') return 'Date/Time';
+      if (t.type === 'VEC2' || t.type === 'VEC3' || t.type === 'VEC4') return 'Vector';
+      if (t.type === 'BIGINT') return 'BigInt';
+      if (t.type === 'COLON' || t.type === 'EQUALS') return 'Variable';
+      if (t.type === 'INCREASE' || t.type === 'DECREASE' || t.type === 'INCREASE_BY' || t.type === 'DECREASE_BY') return 'Percentage';
+    }
+
+    if (tokens.some(t => t.type === 'NUMBER')) return 'Arithmetic';
+    if (tokens.some(t => t.type === 'PI' || t.type === 'E')) return 'Arithmetic';
+    return 'Expression';
+  }
+
   clear(): void {
     this.dag.clear();
     this.lineCache.clear();

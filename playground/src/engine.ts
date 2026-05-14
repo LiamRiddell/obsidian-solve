@@ -53,24 +53,6 @@ function formatType(val: Value): string {
     return val.unit ? `${t} (${val.unit})` : t;
 }
 
-function detectParselet(tokens: Token[]): string {
-    for (const t of tokens) {
-        if (t.type === 'PERCENT') return 'Percentage';
-        if (t.type === 'UNIT') return 'UoM';
-        if (t.type === 'CONVERT' || t.type === 'TO' || t.type === 'BEST') return 'UoM';
-        if (t.type === 'FUNC') return 'Function';
-        if (t.type === 'ROLL') return 'Dice';
-        if (t.type === 'NOW' || t.type === 'TODAY' || t.type === 'TOMORROW' || t.type === 'YESTERDAY' || t.type === 'DURATION_DAY' || t.type === 'DURATION_WEEK' || t.type === 'DURATION_MONTH' || t.type === 'DURATION_YEAR' || t.type === 'DURATION_HOUR' || t.type === 'DURATION_MINUTE' || t.type === 'DURATION_SECOND') return 'Date/Time';
-        if (t.type === 'VEC2' || t.type === 'VEC3' || t.type === 'VEC4') return 'Vector';
-        if (t.type === 'BIGINT') return 'BigInt';
-        if (t.type === 'COLON' || t.type === 'EQUALS') return 'Variable';
-        if (t.type === 'INCREASE' || t.type === 'DECREASE' || t.type === 'INCREASE_BY' || t.type === 'DECREASE_BY') return 'Percentage';
-    }
-    if (tokens.some(t => t.type === 'NUMBER')) return 'Arithmetic';
-    if (tokens.some(t => t.type === 'PI' || t.type === 'E')) return 'Arithmetic';
-    return 'Expression';
-}
-
 function generateMarkdownOutline(text: string): MarkdownNode[] {
     const nodes: MarkdownNode[] = [];
     const lines = text.split('\n');
@@ -121,7 +103,7 @@ export function runEngine(expression: string): DebugResult {
             const lineNum = idx + 1;
 
             const result = engine.evaluateLineWithDebug(lineNum, trimmed);
-            const parselet = result.tokens ? detectParselet(result.tokens) : 'Expression';
+            const parselet = engine.getParseletType(trimmed);
             
             if (result.error) {
                 lineResults.push({ lineNumber: lineNum, expression: trimmed, result: '', type: 'Error', parselet, error: result.error });
