@@ -278,6 +278,11 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
         vm.push(hexValue(v.toNumber()));
         break;
       }
+      case OpCode.TO_PERCENTAGE: {
+        const v = vm.pop();
+        vm.push(new Value(ValueType.Percentage, v.toNumber()));
+        break;
+      }
       case OpCode.CALL_BUILTIN: {
         const fnIdx = opcodes[ip++];
         const argCount = opcodes[ip++];

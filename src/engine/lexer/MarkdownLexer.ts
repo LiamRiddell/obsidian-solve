@@ -61,7 +61,11 @@ export class MarkdownLexer {
       STRING: /"(?:[^"\\]|\\.)*"/,
       COMMENT: { match: /(?:#[^\n]*|\/\/[^\n]*)/, lineBreaks: true },
       BACKTICK_OPEN: { match: "`", push: "inline" },
-      UNICODE_MATH: { match: /[×÷≠]/, type: (text: string) => text === "×" ? "STAR" : text === "÷" ? "SLASH" : "NEQ" },
+      UNICODE_MATH: { match: /[\u00D7\u00F7\u2260]/, type: (text: string) => {
+        if (text === "\u00D7") return "STAR";
+        if (text === "\u00F7") return "SLASH";
+        return "NEQ";
+      } },
       ERROR: moo.error,
     };
 
@@ -145,3 +149,4 @@ export class MarkdownLexer {
     return this.mooLexer[Symbol.iterator]() as Iterator<Token>;
   }
 }
+

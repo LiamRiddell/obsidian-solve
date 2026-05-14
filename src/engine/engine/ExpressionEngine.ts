@@ -1,4 +1,4 @@
-import { Value, numberValue } from "@/engine/vm/Value";
+import { VM } from "@/engine/vm/OpRegistry";
 import { DependencyGraph } from "@/engine/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@/engine/cache/LineCache";
 import { ScopeManager } from "@/engine/vm/ScopeManager";
@@ -9,6 +9,7 @@ import { ParseletRegistry } from "@/engine/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@/engine/parser/BytecodeBuilder";
 import { createVM, executeBytecode } from "@/engine/vm/VM";
 import { sharedOpRegistry } from "@/engine/vm/OpRegistry";
+import { Value, numberValue } from "@/engine/vm/Value";
 import { registerArithmeticParselets } from "@/providers/arithmetic/parselets/index";
 import { registerPercentageParselets } from "@/providers/percentage/parselets/index";
 import { registerFunctionParselets } from "@/providers/function/parselets/index";
@@ -19,6 +20,12 @@ import { registerUomParselets } from "@/providers/uom/parselets/index";
 import { registerVectorParselets } from "@/providers/vector/parselets/index";
 import { registerBigIntParselets } from "@/providers/biginteger/parselets/index";
 import { TokenTypes } from "@/engine/lexer/Token";
+import { 
+    ParsingResult, 
+    ParsedLine, 
+    InlineSolvePosition, 
+    UnifiedParsingOptions 
+} from "@/engine/types/ParsingResult";
 
 export class ExpressionEngine {
   private dag = new DependencyGraph();
@@ -28,8 +35,11 @@ export class ExpressionEngine {
   private lexer: Lexer;
   private registry: ParseletRegistry;
   private parser: Parser;
+  private localeCode: string;
+  private vm: VM; // VM instance for maintaining state across lines
 
   constructor(localeCode = "en") {
+    this.localeCode = localeCode;
     this.lexer = new Lexer(localeCode);
     this.registry = new ParseletRegistry();
     registerArithmeticParselets(this.registry);
@@ -42,6 +52,123 @@ export class ExpressionEngine {
     registerVectorParselets(this.registry);
     registerBigIntParselets(this.registry);
     this.parser = new Parser(this.registry);
+    this.vm = createVM(sharedOpRegistry);
+  }
+
+  /**
+   * Unified parsing method that handles different input types and returns comprehensive results
+   * with precise coordinate mapping for inline solves.
+   */
+  parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
+    const lines = input.split('\n');
+    const result: ParsingResult = {
+      lines: [],
+      totalLines: lines.length,
+      errors: []
+    };
+
+    let currentPosition = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineText = lines[i];
+      const lineNumber = i + 1;
+      const startPosition = currentPosition;
+      const endPosition = startPosition + lineText.length;
+      
+      // Move to next line position (accounting for newline character)
+      currentPosition = endPosition + 1;
+
+      // Check if line is empty (whitespace only or only markdown markers)
+      const isEmpty = this.isEmptyLine(lineText);
+      
+      // Find inline solves in the line
+      const inlineSolves = this.findInlineSolvesInLine(lineText, lineNumber);
+      const hasInlineSolves = inlineSolves.length > 0;
+
+      let parsedLine: ParsedLine = {
+        lineNumber,
+        text: lineText,
+        startPosition,
+        endPosition,
+        isEmpty,
+        hasInlineSolves,
+        inlineSolves,
+        expression: null,
+        result: null,
+        error: null
+      };
+
+      if (!isEmpty) {
+        // Check if this is a variable assignment (starts with colon)
+        const isVariableAssignment = lineText.trim().startsWith(":");
+        
+        if (hasInlineSolves && !isVariableAssignment) {
+          // Process each inline solve
+          for (const solve of inlineSolves) {
+            try {
+              const value = this.evaluateLine(lineNumber, solve.expression);
+              solve.result = value;
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              result.errors.push(`Line ${lineNumber}: ${errorMessage}`);
+              solve.error = errorMessage;
+            }
+          }
+        } else {
+          // Process as a regular expression line
+          const expression = lineText.trim();
+          if (expression) {
+            try {
+              const value = this.evaluateLine(lineNumber, expression);
+              parsedLine.expression = expression;
+              parsedLine.result = value;
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              parsedLine.error = errorMessage;
+              result.errors.push(`Line ${lineNumber}: ${errorMessage}`);
+            }
+          }
+        }
+      }
+
+      result.lines.push(parsedLine);
+    }
+
+    return result;
+  }
+
+  /**
+   * Check if a line is effectively empty (whitespace only or only markdown syntax)
+   */
+  private isEmptyLine(lineText: string): boolean {
+    // Optimized regex: matches empty/whitespace-only lines OR lines containing only a markdown marker
+    return /^\s*$|^\s*([#>-]|\*|\+)\s*$/.test(lineText);
+  }
+
+  /**
+   * Find all inline solves in a line with precise coordinate mapping
+   */
+  private findInlineSolvesInLine(lineText: string, lineNumber: number): InlineSolvePosition[] {
+    const results: InlineSolvePosition[] = [];
+    const regex = /s`([^`]*)`/g;
+    let match: RegExpExecArray | null;
+    
+    while ((match = regex.exec(lineText)) !== null) {
+      const start = match.index;
+      const expression = match[1];
+      const end = start + match[0].length;
+      const columnNumber = start + 1; // 1-based column number
+      
+      results.push({
+        start,
+        end,
+        expression,
+        lineNumber,
+        columnNumber
+      });
+    }
+    
+    return results;
   }
 
   evaluateLine(
@@ -55,12 +182,40 @@ export class ExpressionEngine {
     return result.value;
   }
 
+  /**
+   * Evaluate a line with debug information, supporting both regular expressions and inline solves
+   */
   evaluateLineWithDebug(
     lineNumber: number,
     lineText: string
-  ): { value: Value; tokens: any[]; program: any; error?: string } {
+  ): { value: Value; tokens: any[]; program: any; error?: string; inlineSolve?: InlineSolvePosition } {
+    // Check if this is an inline solve
+    const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
+    if (inlineSolveMatch) {
+      const expression = inlineSolveMatch[1];
+      const result = this.evaluateExpression(expression, lineNumber);
+      return {
+        ...result,
+        inlineSolve: {
+          start: 0,
+          end: lineText.length,
+          expression,
+          lineNumber,
+          columnNumber: 1
+        }
+      };
+    }
+
+    // Regular expression evaluation
+    return this.evaluateExpression(lineText, lineNumber);
+  }
+
+  /**
+   * Core expression evaluation logic
+   */
+  private evaluateExpression(expression: string, lineNumber: number): { value: Value; tokens: any[]; program: any; error?: string } {
     const tokens: any[] = [];
-    this.lexer.reset(lineText);
+    this.lexer.reset(expression);
     for (const t of this.lexer) {
       if (t.type === TokenTypes.WS) continue;
       if (t.type.startsWith("MD_")) continue; // Filter out markdown tokens
@@ -88,26 +243,25 @@ export class ExpressionEngine {
 
       const vmUint8 = new Uint8Array(program.opcodes);
       const vmFloat64 = new Float64Array(program.numbers);
-      const vm = createVM(sharedOpRegistry);
+      
+      // Use the shared VM instance to maintain state across lines
+      const result = executeBytecode(
+        { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
+        this.vm
+      );
 
-      const memoized = this.memoCache.getOrCompute(lineText, lineNumber, () => {
-        const result = executeBytecode(
-          { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
-          vm
-        );
-        return result!;
-      });
+      if (result) {
+        this.dag.registerLine(lineNumber, reads, writes);
+        this.lineCache.set(lineNumber, new LineCacheEntry(
+          result,
+          program,
+          reads,
+          writes.length > 0 ? writes[0] : null,
+          false
+        ));
+      }
 
-      this.dag.registerLine(lineNumber, reads, writes);
-      this.lineCache.set(lineNumber, new LineCacheEntry(
-        memoized,
-        program,
-        reads,
-        writes.length > 0 ? writes[0] : null,
-        false
-      ));
-
-      return { value: memoized, tokens, program };
+      return { value: result!, tokens, program };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return { value: numberValue(0), tokens, program: { opcodes: [], numbers: [], strings: [] }, error: errorMessage };
@@ -153,6 +307,14 @@ export class ExpressionEngine {
 
   getScopeManager(): ScopeManager {
     return this.scopeManager;
+  }
+
+  getLexer(): Lexer {
+    return this.lexer;
+  }
+
+  getParser(): Parser {
+    return this.parser;
   }
 
   getMemoCache(): MemoCache {

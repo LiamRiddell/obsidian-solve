@@ -37,7 +37,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.decorations = this.buildDecorations(view);
 	}
 
-update(update: ViewUpdate) {
+	update(update: ViewUpdate) {
 		if (update.docChanged) {
 			this.highlightProvider.invalidateCache();
 			update.changes.iterChanges((fromA, toA) => {
@@ -92,7 +92,9 @@ update(update: ViewUpdate) {
 					}
 				}
 
-				if (!line.text.trim() || line.text.trim().length === 0) {
+				// Use the engine's unified parsing to check if line is empty
+				const parsingResult = this.expressionEngine.parseDocument(line.text, { inputType: 'markdown' });
+				if (parsingResult.lines.length > 0 && parsingResult.lines[0].isEmpty) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
@@ -123,43 +125,46 @@ update(update: ViewUpdate) {
 		lineNumber: number,
 		decorations: Array<{from: number; to: number; deco: Decoration}>
 	): void {
-		const inlineSolvePositions = this.findInlineSolves(lineText);
-
-		if (inlineSolvePositions.length > 0) {
-			const offset = 0;
-			for (const isp of inlineSolvePositions) {
-				const expr = isp.expression;
-				const lineExpr = expr.trim();
-				if (!lineExpr) continue;
-
-				const result = this.evaluateLine(lineNumber, lineExpr);
-				if (result === undefined) continue;
-
-				const widgetPos = lineFrom + isp.start + 3 + offset;
-				decorations.push({
-					from: widgetPos,
-					to: widgetPos,
-					deco: Decoration.widget({
-						widget: new ExpressionResultWidget(lineNumber, true, lineExpr, result),
-						side: 1,
-					}),
-				});
+		// Use the engine's unified parsing to get inline solve positions
+		const parsingResult = this.expressionEngine.parseDocument(lineText, { inputType: 'markdown' });
+		
+		if (parsingResult.lines.length === 0) return;
+		
+		const parsedLine = parsingResult.lines[0];
+		
+		if (parsedLine.hasInlineSolves && parsedLine.inlineSolves.length > 0) {
+			for (const solve of parsedLine.inlineSolves) {
+				if (solve.expression.trim()) {
+					const result = solve.result;
+					if (result !== null && result !== undefined) {
+						const formattedResult = formatValue(result);
+						// Calculate widget position using the integrated coordinate system
+						const widgetPos = lineFrom + solve.start + solve.expression.length + 3; // "s`" + expression + "`"
+						
+						decorations.push({
+							from: widgetPos,
+							to: widgetPos,
+							deco: Decoration.widget({
+								widget: new ExpressionResultWidget(lineNumber, true, solve.expression, formattedResult),
+								side: 1,
+							}),
+						});
+					}
+				}
 			}
 
 			// Note: We intentionally do NOT call addHighlightDecorations here
 			// because the line may contain markdown syntax (e.g., "# Result: s`1 + 2`")
 			// and we only want to highlight the expression parts, not the surrounding text.
-		} else {
-			const expression = lineText.trim();
-			if (!expression) return;
-
-			const result = this.evaluateLine(lineNumber, expression);
-			if (result !== undefined) {
+		} else if (parsedLine.expression) {
+			const result = parsedLine.result;
+			if (result !== null && result !== undefined) {
+				const formattedResult = formatValue(result);
 				decorations.push({
 					from: lineTo,
 					to: lineTo,
 					deco: Decoration.widget({
-						widget: new ExpressionResultWidget(lineNumber, false, expression, result),
+						widget: new ExpressionResultWidget(lineNumber, false, parsedLine.expression, formattedResult),
 						side: 1,
 					}),
 				});
@@ -167,16 +172,6 @@ update(update: ViewUpdate) {
 
 			this.addHighlightDecorations(lineText, lineFrom, lineNumber, decorations);
 		}
-	}
-
-	private findInlineSolves(lineText: string): Array<{start: number; expression: string}> {
-		const results: Array<{start: number; expression: string}> = [];
-		const regex = /s`([^`]*)`/g;
-		let match: RegExpExecArray | null;
-		while ((match = regex.exec(lineText)) !== null) {
-			results.push({ start: match.index, expression: match[1] });
-		}
-		return results;
 	}
 
 	private evaluateLine(lineNumber: number, expression: string): string | undefined {

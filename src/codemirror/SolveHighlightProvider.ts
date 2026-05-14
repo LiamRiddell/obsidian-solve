@@ -1,37 +1,14 @@
-import { Lexer } from "@/engine/lexer/Lexer";
-import { Parser } from "@/engine/parser/Parser";
-import { ParseletRegistry } from "@/engine/parser/registry/ParseletRegistry";
+import { ExpressionEngine } from "@/engine/engine/ExpressionEngine";
 import { HighlightRange } from "@/engine/cache/LineCache";
-import { registerArithmeticParselets } from "@/providers/arithmetic/parselets/index";
-import { registerPercentageParselets } from "@/providers/percentage/parselets/index";
-import { registerFunctionParselets } from "@/providers/function/parselets/index";
-import { registerDatetimeParselets } from "@/providers/datetime/parselets/index";
-import { registerDiceParselets } from "@/providers/dice/parselets/index";
-import { registerVariableParselets } from "@/providers/variables/parselets/index";
-import { registerUomParselets } from "@/providers/uom/parselets/index";
-import { registerVectorParselets } from "@/providers/vector/parselets/index";
+import UserSettings from "@/settings/UserSettings";
 
 export class SolveHighlightProvider {
-  private lexer: Lexer;
-  private parser: Parser;
+  private expressionEngine: ExpressionEngine;
   private cache: Map<string, HighlightRange[]> = new Map();
 
-  constructor(registry?: ParseletRegistry) {
-    this.lexer = new Lexer();
-    if (registry) {
-      this.parser = new Parser(registry);
-    } else {
-      const reg = new ParseletRegistry();
-      registerArithmeticParselets(reg);
-      registerPercentageParselets(reg);
-      registerFunctionParselets(reg);
-      registerDatetimeParselets(reg);
-      registerDiceParselets(reg);
-      registerVariableParselets(reg);
-      registerUomParselets(reg);
-      registerVectorParselets(reg);
-      this.parser = new Parser(reg);
-    }
+  constructor() {
+    const userSettings = UserSettings.getInstance();
+    this.expressionEngine = new ExpressionEngine(userSettings.settings.engine.locale);
   }
 
   getLineHighlights(lineText: string, lineNumber?: number): HighlightRange[] {
@@ -42,7 +19,8 @@ export class SolveHighlightProvider {
       return cached;
     }
 
-    const tokens = this.lexer.getHighlightTokens(lineText);
+    // Use the ExpressionEngine's integrated lexer to get highlight tokens
+    const tokens = this.expressionEngine.getLexer().getHighlightTokens(lineText);
     if (tokens.length === 0) {
       this.cache.set(cacheKey, []);
       return [];
@@ -55,19 +33,6 @@ export class SolveHighlightProvider {
     }
 
     try {
-      const parseTokens = filteredTokens.map(t => ({
-        type: t.type,
-        value: t.value,
-        text: t.value,
-        offset: t.offset,
-        lineBreaks: 0,
-        line: 0,
-        col: t.col,
-      }));
-
-      this.parser.load(parseTokens);
-      this.parser.parseExpression(0);
-
       const ranges: HighlightRange[] = [];
       for (const token of filteredTokens) {
         const className = token.className;

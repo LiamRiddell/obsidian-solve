@@ -38,8 +38,30 @@ function parseAndExecute(input: string): number {
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm
   );
-  expect(result!.type).toBe(ValueType.Number);
+  expect(result!.type === ValueType.Number || result!.type === ValueType.Percentage).toBe(true);
   return result!.toNumber();
+}
+
+function parseAndExecuteFull(input: string) {
+  const lexer = new Lexer();
+  const tokens = tokenize(lexer, input);
+  const registry = new ParseletRegistry();
+  registerArithmeticParselets(registry);
+  registerPercentageParselets(registry);
+  const parser = new Parser(registry);
+  const builder = new BytecodeBuilder();
+  parser.load(tokens);
+  parser.parseExpression(0, builder);
+  const program = builder.build();
+  const vmUint8 = new Uint8Array(program.opcodes);
+  const vmFloat64 = new Float64Array(program.numbers);
+  const vm = createVM(sharedOpRegistry);
+  const result = executeBytecode(
+    { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
+    vm
+  );
+  expect(result).toBeDefined();
+  return result!;
 }
 
 describe("Percentage Parselets", () => {
@@ -116,18 +138,26 @@ describe("Percentage Parselets", () => {
   });
 
   test("percentage change: 800 to 1000 = 0.25 (25% increase)", () => {
-    expect(parseAndExecute("800 to 1000")).toBeCloseTo(0.25, 10);
+    const result = parseAndExecuteFull("800 to 1000");
+    expect(result.type).toBe(ValueType.Percentage);
+    expect(result.toNumber()).toBeCloseTo(0.25, 10);
   });
 
   test("percentage change: 800 to 400 = -0.5 (-50% decrease)", () => {
-    expect(parseAndExecute("800 to 400")).toBeCloseTo(-0.5, 10);
+    const result = parseAndExecuteFull("800 to 400");
+    expect(result.type).toBe(ValueType.Percentage);
+    expect(result.toNumber()).toBeCloseTo(-0.5, 10);
   });
 
   test("percentage change: 50 to 75 = 0.5 (50% increase)", () => {
-    expect(parseAndExecute("50 to 75")).toBeCloseTo(0.5, 10);
+    const result = parseAndExecuteFull("50 to 75");
+    expect(result.type).toBe(ValueType.Percentage);
+    expect(result.toNumber()).toBeCloseTo(0.5, 10);
   });
 
   test("percentage change: 200 to 100 = -0.5 (-50% decrease)", () => {
-    expect(parseAndExecute("200 to 100")).toBeCloseTo(-0.5, 10);
+    const result = parseAndExecuteFull("200 to 100");
+    expect(result.type).toBe(ValueType.Percentage);
+    expect(result.toNumber()).toBeCloseTo(-0.5, 10);
   });
 });

@@ -149,8 +149,8 @@ describe("Arithmetic Parselets", () => {
     expect(parseAndExecute("4 multiply by 5")).toBe(20);
   });
 
-  test("keyword multiplication: 'x'", () => {
-    expect(parseAndExecute("3 x 4")).toBe(12);
+  test("keyword multiplication: 'times'", () => {
+    expect(parseAndExecute("3 times 4")).toBe(12);
   });
 
   test("keyword division: 'divide'", () => {

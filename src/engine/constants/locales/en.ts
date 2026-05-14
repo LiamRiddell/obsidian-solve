@@ -19,7 +19,7 @@ export const enLocale: ILocale = {
     pi: "PI", e: "E",
     plus: "PLUS", add: "PLUS", and: "PLUS",
     minus: "MINUS", subtract: "MINUS", remove: "MINUS", take: "MINUS",
-    times: "STAR", multiply: "STAR", x: "STAR",
+    times: "STAR", multiply: "STAR",
     divide: "SLASH",
     modulo: "MOD", mod: "MOD",
     exponent: "CARET", prime: "CARET",

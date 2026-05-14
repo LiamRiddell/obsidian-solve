@@ -55,6 +55,7 @@ export enum OpCode {
 	TO_HEX = 71,
 	TO_STRING = 72,
 	TO_BIGINT = 73,
+	TO_PERCENTAGE = 74,
 
 	// UoM
 	UOM_CONVERT = 80,

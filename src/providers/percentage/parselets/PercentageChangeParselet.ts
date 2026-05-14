@@ -34,5 +34,7 @@ export class PercentageChangeParselet implements InfixParselet {
     builder.emitNumber(1);
     // After SUB: [right / left - 1]
     builder.emitOpcode(OpCode.SUB);
+    // Convert to percentage type
+    builder.emitOpcode(OpCode.TO_PERCENTAGE);
   }
 }

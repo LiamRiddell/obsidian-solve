@@ -29,6 +29,13 @@ export class UomLiteralParselet implements InfixParselet {
       }
     }
     
+    // Check if the next token is "best"
+    if (parser.peek()?.type === "BEST") {
+      parser.consume(); // consume BEST
+      builder.emitOpcode(OpCode.UOM_BEST);
+      return;
+    }
+    
     builder.emitOpcode(OpCode.UOM_CONVERT);
   }
 }
