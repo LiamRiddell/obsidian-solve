@@ -92,8 +92,8 @@ export function runEngine(expression: string): DebugResult {
     const totalStart = getNanoTime();
 
     try {
-        // Use the main ExpressionEngine
-        const engine = new ExpressionEngine("en");
+        // Use the main ExpressionEngine with diagnostic mode enabled
+        const engine = new ExpressionEngine("en", true);
         
         markdownOutline = generateMarkdownOutline(expression);
         const allLines = expression.split('\n');

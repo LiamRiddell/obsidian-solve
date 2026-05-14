@@ -39,9 +39,11 @@ export class ExpressionEngine {
   private parser: Parser;
   private localeCode: string;
   private vm: VM; // VM instance for maintaining state across lines
+  private diagnosticMode: boolean; // Whether to collect debug information
 
-  constructor(localeCode = "en") {
+  constructor(localeCode = "en", diagnosticMode = false) {
     this.localeCode = localeCode;
+    this.diagnosticMode = diagnosticMode;
     this.lexer = new Lexer(localeCode);
     this.registry = new ParseletRegistry();
     registerArithmeticParselets(this.registry);
@@ -229,7 +231,8 @@ export class ExpressionEngine {
     if (tokens.length === 0) {
       const v = numberValue(0);
       this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: [], numbers: [], strings: [] }, [], null, false));
-      return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] }, debug: { tokens, parselets, program: { opcodes: [], numbers: [], strings: [] } } };
+      const debug = this.diagnosticMode ? { tokens, parselets, program: { opcodes: [], numbers: [], strings: [] } } : undefined;
+      return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] }, debug };
     }
 
     const builder = new BytecodeBuilder();
@@ -241,8 +244,10 @@ export class ExpressionEngine {
       if (t.value.startsWith(":") && t.type === "COLON") reads.push(t.value.slice(1));
     }
 
-    // Collect parselet information during parsing
-    this.collectParseletInfo(tokens, parselets);
+    // Only collect parselet information if diagnostic mode is enabled
+    if (this.diagnosticMode) {
+      this.collectParseletInfo(tokens, parselets);
+    }
 
     try {
       this.parser.parseExpression(0, builder);
@@ -268,20 +273,22 @@ export class ExpressionEngine {
         ));
       }
 
+      const debug = this.diagnosticMode ? { tokens, parselets, program } : undefined;
       return { 
         value: result!, 
         tokens, 
         program, 
-        debug: { tokens, parselets, program } 
+        debug 
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const debug = this.diagnosticMode ? { tokens, parselets, program: { opcodes: [], numbers: [], strings: [] } } : undefined;
       return { 
         value: numberValue(0), 
         tokens, 
         program: { opcodes: [], numbers: [], strings: [] }, 
         error: errorMessage,
-        debug: { tokens, parselets, program: { opcodes: [], numbers: [], strings: [] } }
+        debug 
       };
     }
   }
@@ -370,6 +377,10 @@ export class ExpressionEngine {
 
   getMemoCache(): MemoCache {
     return this.memoCache;
+  }
+
+  isDiagnosticMode(): boolean {
+    return this.diagnosticMode;
   }
 
   clear(): void {
