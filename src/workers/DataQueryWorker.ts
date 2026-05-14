@@ -141,56 +141,67 @@ export class DataQueryWorker {
       return 1;
     }
 
-    // Fetch from Frankfurter API
-    const response = await fetch("https://api.frankfurter.dev/v2/rates?base=USD");
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    
-    // Parse the rates and calculate the specific rate requested
-    const rates: Record<string, number> = { USD: 1.0 };
-    
-    if (data.rates) {
-      Object.entries(data.rates).forEach(([currency, rate]) => {
-        rates[currency] = rate as number;
-      });
-    }
+    try {
+      // Fetch from Frankfurter API
+      const response = await fetch("https://api.frankfurter.dev/v2/rates?base=USD");
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Parse the rates and calculate the specific rate requested
+      const rates: Record<string, number> = { USD: 1.0 };
+      
+      if (data.rates) {
+        Object.entries(data.rates).forEach(([currency, rate]) => {
+          rates[currency] = rate as number;
+        });
+      }
 
-    const fromUpper = from?.toUpperCase();
-    const toUpper = to?.toUpperCase();
+      const fromUpper = from?.toUpperCase();
+      const toUpper = to?.toUpperCase();
 
-    if (!rates[fromUpper] || !rates[toUpper]) {
-      return 1; // Fallback rate
+      if (!rates[fromUpper] || !rates[toUpper]) {
+        return 1; // Fallback rate
+      }
+
+      // Calculate cross rate
+      return rates[toUpper] / rates[fromUpper];
+    } catch (error) {
+      console.error("[DataQueryWorker] Currency fetch error:", error);
+      // Return fallback rate instead of throwing
+      return 1;
     }
-
-    // Calculate cross rate
-    return rates[toUpper] / rates[fromUpper];
   }
 
   private async defaultQueryFunction(
-    context: QueryFunctionContext,
+    context: any,
     dataSource: DataSourceConfig
   ): Promise<any> {
     if (!dataSource.endpoint) {
       throw new Error(`No endpoint configured for data source: ${dataSource.id}`);
     }
 
-    const url = new URL(dataSource.endpoint);
-    // Add query parameters from context
-    context.queryKey.forEach((key, index) => {
-      if (index > 0) { // Skip data source type
-        url.searchParams.append(`param${index}`, String(key));
+    try {
+      const url = new URL(dataSource.endpoint);
+      // Add query parameters from context
+      context.queryKey.forEach((key: number, index: number) => {
+        if (index > 0) { // Skip data source type
+          url.searchParams.append(`param${index}`, String(key));
+        }
+      });
+
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-    });
 
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      return response.json();
+    } catch (error) {
+      console.error("[DataQueryWorker] Fetch error:", error);
+      throw error;
     }
-
-    return response.json();
   }
 
   // ------------------------------------------------------------------------
