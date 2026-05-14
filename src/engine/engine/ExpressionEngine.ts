@@ -187,7 +187,7 @@ export class ExpressionEngine {
   }
 
   /**
-   * Evaluate a line with debug information, supporting both regular expressions and inline solves
+   * Evaluate a line with diagnostic information, supporting both regular expressions and inline solves
    */
   evaluateLineWithDebug(
     lineNumber: number,
@@ -197,7 +197,7 @@ export class ExpressionEngine {
     const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
     if (inlineSolveMatch) {
       const expression = inlineSolveMatch[1];
-      const result = this.evaluateExpressionWithDebug(expression, lineNumber);
+      const result = this.evaluateExpressionWithDiagnostic(expression, lineNumber);
       return {
         ...result,
         inlineSolve: {
@@ -211,13 +211,13 @@ export class ExpressionEngine {
     }
 
     // Regular expression evaluation
-    return this.evaluateExpressionWithDebug(lineText, lineNumber);
+    return this.evaluateExpressionWithDiagnostic(lineText, lineNumber);
   }
 
   /**
-   * Core expression evaluation logic with debug information
+   * Core expression evaluation logic with diagnostic information
    */
-  private evaluateExpressionWithDebug(expression: string, lineNumber: number): { value: Value; tokens: any[]; program: any; error?: string; debug?: DebugInfo } {
+  private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number): { value: Value; tokens: any[]; program: any; error?: string; debug?: DebugInfo } {
     const tokens: any[] = [];
     const parselets: ParseletInfo[] = [];
     
