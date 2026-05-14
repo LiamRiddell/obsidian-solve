@@ -95,12 +95,13 @@ export class DataQueryWorker {
         data = await this.handleCurrencyQuery(request.queryKey);
       } else {
         // Default fetch implementation for other data sources
-        const context: QueryFunctionContext = {
+        // Create a minimal context - we only need queryKey for this implementation
+        const context = {
           queryKey: request.queryKey,
           meta: undefined,
-          signal: undefined,
+          signal: new AbortController().signal,
           pageParam: undefined,
-        };
+        } as any;
         data = await this.defaultQueryFunction(context, dataSource);
       }
 

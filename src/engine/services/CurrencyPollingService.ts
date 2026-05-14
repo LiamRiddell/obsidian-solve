@@ -3,7 +3,7 @@
  * Integrates with DataQueryService for scalable architecture
  */
 
-import { CurrencyExchangeService } from "@/engine/uom/CurrencyExchange";
+import { CurrencyExchangeService, currencyExchangeService } from "@/engine/uom/CurrencyExchange";
 
 // ============================================================================
 // POLLING SERVICE WITH TWO-WAY BINDING
