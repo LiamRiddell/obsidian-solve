@@ -3,6 +3,7 @@ import { formatValue } from '@/engine/format/FormatEngine';
 import { getOpCodeName } from '@/engine/parser/OpCode';
 import { Value, ValueType } from '@/engine/vm/Value';
 import type { Token } from '@/engine/lexer/Token';
+import type { ParseletInfo } from '@/engine/types/ParsingResult';
 
 export type { Token };
 
@@ -19,6 +20,7 @@ export interface DebugResult {
     stats: PerformanceStats;
     markdownOutline: MarkdownNode[];
     lineResults: LineResult[];
+    parselets: ParseletInfo[];
 }
 
 export interface LineResult {
@@ -84,6 +86,7 @@ export function runEngine(expression: string): DebugResult {
     let variables: string[] = [];
     let markdownOutline: MarkdownNode[] = [];
     let lineResults: LineResult[] = [];
+    let parselets: ParseletInfo[] = [];
 
     const stats: PerformanceStats = { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
     const totalStart = getNanoTime();
@@ -103,7 +106,7 @@ export function runEngine(expression: string): DebugResult {
             const lineNum = idx + 1;
 
             const result = engine.evaluateLineWithDebug(lineNum, trimmed);
-            const parselet = engine.getParseletType(trimmed);
+            const parselet = result.debug?.parselets?.[0]?.parseletType ?? 'Expression';
             
             if (result.error) {
                 lineResults.push({ lineNumber: lineNum, expression: trimmed, result: '', type: 'Error', parselet, error: result.error });
@@ -115,6 +118,9 @@ export function runEngine(expression: string): DebugResult {
             // Always collect debug data in playground environment
             if (result.tokens) {
                 rawTokens.push(...result.tokens);
+            }
+            if (result.debug?.parselets) {
+                parselets.push(...result.debug.parselets);
             }
             if (result.program) {
                 // Collect opcodes
@@ -163,5 +169,5 @@ export function runEngine(expression: string): DebugResult {
     }
 
     stats.totalTime = getNanoTime() - totalStart;
-    return { tokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults };
+    return { tokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets };
 }

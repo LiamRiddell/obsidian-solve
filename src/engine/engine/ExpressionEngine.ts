@@ -24,7 +24,9 @@ import {
     ParsingResult, 
     ParsedLine, 
     InlineSolvePosition, 
-    UnifiedParsingOptions 
+    UnifiedParsingOptions,
+    ParseletInfo,
+    DebugInfo
 } from "@/engine/types/ParsingResult";
 
 export class ExpressionEngine {
@@ -188,12 +190,12 @@ export class ExpressionEngine {
   evaluateLineWithDebug(
     lineNumber: number,
     lineText: string
-  ): { value: Value; tokens: any[]; program: any; error?: string; inlineSolve?: InlineSolvePosition } {
+  ): { value: Value; tokens: any[]; program: any; error?: string; inlineSolve?: InlineSolvePosition; debug?: DebugInfo } {
     // Check if this is an inline solve
     const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
     if (inlineSolveMatch) {
       const expression = inlineSolveMatch[1];
-      const result = this.evaluateExpression(expression, lineNumber);
+      const result = this.evaluateExpressionWithDebug(expression, lineNumber);
       return {
         ...result,
         inlineSolve: {
@@ -207,14 +209,16 @@ export class ExpressionEngine {
     }
 
     // Regular expression evaluation
-    return this.evaluateExpression(lineText, lineNumber);
+    return this.evaluateExpressionWithDebug(lineText, lineNumber);
   }
 
   /**
-   * Core expression evaluation logic
+   * Core expression evaluation logic with debug information
    */
-  private evaluateExpression(expression: string, lineNumber: number): { value: Value; tokens: any[]; program: any; error?: string } {
+  private evaluateExpressionWithDebug(expression: string, lineNumber: number): { value: Value; tokens: any[]; program: any; error?: string; debug?: DebugInfo } {
     const tokens: any[] = [];
+    const parselets: ParseletInfo[] = [];
+    
     this.lexer.reset(expression);
     for (const t of this.lexer) {
       if (t.type === TokenTypes.WS) continue;
@@ -225,7 +229,7 @@ export class ExpressionEngine {
     if (tokens.length === 0) {
       const v = numberValue(0);
       this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: [], numbers: [], strings: [] }, [], null, false));
-      return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] } };
+      return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] }, debug: { tokens, parselets, program: { opcodes: [], numbers: [], strings: [] } } };
     }
 
     const builder = new BytecodeBuilder();
@@ -236,6 +240,9 @@ export class ExpressionEngine {
     for (const t of tokens) {
       if (t.value.startsWith(":") && t.type === "COLON") reads.push(t.value.slice(1));
     }
+
+    // Collect parselet information during parsing
+    this.collectParseletInfo(tokens, parselets);
 
     try {
       this.parser.parseExpression(0, builder);
@@ -261,11 +268,55 @@ export class ExpressionEngine {
         ));
       }
 
-      return { value: result!, tokens, program };
+      return { 
+        value: result!, 
+        tokens, 
+        program, 
+        debug: { tokens, parselets, program } 
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      return { value: numberValue(0), tokens, program: { opcodes: [], numbers: [], strings: [] }, error: errorMessage };
+      return { 
+        value: numberValue(0), 
+        tokens, 
+        program: { opcodes: [], numbers: [], strings: [] }, 
+        error: errorMessage,
+        debug: { tokens, parselets, program: { opcodes: [], numbers: [], strings: [] } }
+      };
     }
+  }
+
+  /**
+   * Collect parselet information for each token
+   */
+  private collectParseletInfo(tokens: any[], parselets: ParseletInfo[]): void {
+    for (const token of tokens) {
+      const parseletType = this.getParseletTypeForToken(token.type);
+      parselets.push({
+        tokenType: token.type,
+        tokenValue: token.value,
+        parseletType: parseletType,
+        tokenOffset: token.offset || 0
+      });
+    }
+  }
+
+  /**
+   * Get the parselet type for a specific token type
+   */
+  private getParseletTypeForToken(tokenType: string): string {
+    if (tokenType === 'PERCENT') return 'Percentage';
+    if (tokenType === 'UNIT') return 'UoM';
+    if (tokenType === 'CONVERT' || tokenType === 'TO' || tokenType === 'BEST') return 'UoM';
+    if (tokenType === 'FUNC') return 'Function';
+    if (tokenType === 'ROLL') return 'Dice';
+    if (tokenType === 'NOW' || tokenType === 'TODAY' || tokenType === 'TOMORROW' || tokenType === 'YESTERDAY') return 'Date/Time';
+    if (tokenType === 'VEC2' || tokenType === 'VEC3' || tokenType === 'VEC4') return 'Vector';
+    if (tokenType === 'BIGINT') return 'BigInt';
+    if (tokenType === 'COLON' || tokenType === 'EQUALS') return 'Variable';
+    if (tokenType === 'INCREASE' || tokenType === 'DECREASE' || tokenType === 'INCREASE_BY' || tokenType === 'DECREASE_BY') return 'Percentage';
+    if (tokenType === 'NUMBER' || tokenType === 'PI' || tokenType === 'E') return 'Arithmetic';
+    return 'Expression';
   }
 
   reEvaluateLine(lineNumber: number): Value | undefined {
@@ -319,40 +370,6 @@ export class ExpressionEngine {
 
   getMemoCache(): MemoCache {
     return this.memoCache;
-  }
-
-  /**
-   * Get the parselet type for a given expression
-   * This is used by the playground to display which parselet handled the expression
-   */
-  getParseletType(expression: string): string {
-    const tokens: any[] = [];
-    this.lexer.reset(expression);
-    for (const t of this.lexer) {
-      if (t.type === TokenTypes.WS) continue;
-      if (t.type.startsWith("MD_")) continue;
-      tokens.push(t);
-    }
-
-    if (tokens.length === 0) return 'Expression';
-
-    // Check for specific token types that indicate the parselet
-    for (const t of tokens) {
-      if (t.type === 'PERCENT') return 'Percentage';
-      if (t.type === 'UNIT') return 'UoM';
-      if (t.type === 'CONVERT' || t.type === 'TO' || t.type === 'BEST') return 'UoM';
-      if (t.type === 'FUNC') return 'Function';
-      if (t.type === 'ROLL') return 'Dice';
-      if (t.type === 'NOW' || t.type === 'TODAY' || t.type === 'TOMORROW' || t.type === 'YESTERDAY') return 'Date/Time';
-      if (t.type === 'VEC2' || t.type === 'VEC3' || t.type === 'VEC4') return 'Vector';
-      if (t.type === 'BIGINT') return 'BigInt';
-      if (t.type === 'COLON' || t.type === 'EQUALS') return 'Variable';
-      if (t.type === 'INCREASE' || t.type === 'DECREASE' || t.type === 'INCREASE_BY' || t.type === 'DECREASE_BY') return 'Percentage';
-    }
-
-    if (tokens.some(t => t.type === 'NUMBER')) return 'Arithmetic';
-    if (tokens.some(t => t.type === 'PI' || t.type === 'E')) return 'Arithmetic';
-    return 'Expression';
   }
 
   clear(): void {

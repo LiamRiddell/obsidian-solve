@@ -36,3 +36,16 @@ export interface UnifiedParsingOptions {
     includeLineInfo?: boolean;
     includeHighlights?: boolean;
 }
+
+export interface ParseletInfo {
+    tokenType: string;
+    tokenValue: string;
+    parseletType: string;
+    tokenOffset: number;
+}
+
+export interface DebugInfo {
+    tokens: any[];
+    parselets: ParseletInfo[];
+    program: any;
+}
