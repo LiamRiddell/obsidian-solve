@@ -114,4 +114,29 @@ describe("Dice Parselets", () => {
     }
     expect(types).toContain("BETWEEN");
   });
+
+  test("roll between 1 and 6 returns a number between 1 and 6", () => {
+    for (let i = 0; i < 20; i++) {
+      const result = parseAndExecute("roll between 1 and 6");
+      expect(result.type).toBe(ValueType.Number);
+      const val = result.toNumber();
+      expect(val).toBeGreaterThanOrEqual(1);
+      expect(val).toBeLessThanOrEqual(6);
+    }
+  });
+
+  test("roll from 2 to 6 returns a number between 2 and 6", () => {
+    for (let i = 0; i < 20; i++) {
+      const result = parseAndExecute("roll from 2 to 6");
+      expect(result.type).toBe(ValueType.Number);
+      const val = result.toNumber();
+      expect(val).toBeGreaterThanOrEqual(2);
+      expect(val).toBeLessThanOrEqual(6);
+    }
+  });
+
+  test("roll between 1 and 1 always returns 1", () => {
+    const result = parseAndExecute("roll between 1 and 1");
+    expect(result.toNumber()).toBe(1);
+  });
 });

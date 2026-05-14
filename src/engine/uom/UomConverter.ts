@@ -10,6 +10,20 @@ export const unitAliases: Record<string, string> = {
   months: "month",
   year: "year",
   years: "year",
+  hour: "h",
+  hours: "h",
+  minute: "min",
+  minutes: "min",
+  second: "s",
+  seconds: "s",
+  inch: "in",
+  inches: "in",
+  foot: "ft",
+  feet: "ft",
+  yard: "yd",
+  yards: "yd",
+  mile: "mi",
+  miles: "mi",
   floz: "fl-oz",
   mph: "m/h",
   c: "C",
@@ -65,18 +79,20 @@ export function getBestUnit(value: number, unit: string): { value: number; unit:
         best = { value: v, unit: candidate, dist: v };
       }
     } catch {
+      // Ignore conversion errors
     }
   }
   if (!isFinite(best.dist)) {
     let largest = { value, unit: u, dist: -Infinity };
     for (const candidate of units) {
-      try {
-        const v = convert(value).from(u as any).to(candidate as any);
-        if (v > 0 && v > largest.dist) {
-          largest = { value: v, unit: candidate, dist: v };
-        }
-      } catch {
+    try {
+      const v = convert(value).from(u as any).to(candidate as any);
+      if (v > 0 && v > largest.dist) {
+        largest = { value: v, unit: candidate, dist: v };
       }
+    } catch {
+      // Ignore conversion errors
+    }
     }
     return { value: largest.value, unit: largest.unit };
   }

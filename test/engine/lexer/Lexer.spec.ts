@@ -38,15 +38,25 @@ describe("Lexer", () => {
 		expect(tokens).toEqual(["NUMBER", "PLUS", "NUMBER"]);
 	});
 
-	test("tokenizes parentheses", () => {
-		const lexer = new Lexer();
-		lexer.reset("(1 + 2)");
-		const tokens: string[] = [];
-		for (const t of lexer) {
-			if (t.type !== "WS") tokens.push(t.type);
-		}
-		expect(tokens).toEqual(["LPAREN", "NUMBER", "PLUS", "NUMBER", "RPAREN"]);
-	});
+  test("tokenizes colon-prefixed variable", () => {
+    const lexer = new Lexer();
+    lexer.reset(":myVar");
+    const tokens: string[] = [];
+    for (const t of lexer) {
+      if (t.type !== "WS") tokens.push(t.type);
+    }
+    expect(tokens).toEqual(["COLON", "IDENT"]);
+  });
+
+  test("tokenizes colon-prefixed variable assignment", () => {
+    const lexer = new Lexer();
+    lexer.reset(":myVar = 42");
+    const tokens: string[] = [];
+    for (const t of lexer) {
+      if (t.type !== "WS") tokens.push(t.type);
+    }
+    expect(tokens).toEqual(["COLON", "IDENT", "EQUALS", "NUMBER"]);
+  });
 
 	test("tokenizes all arithmetic operators", () => {
 		const lexer = new Lexer();

@@ -1,7 +1,7 @@
 import { OpCode } from "@/engine/parser/OpCode";
 import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, vectorValue, uomValue } from "@/engine/vm/Value";
 import { OpRegistry, type VM } from "@/engine/vm/OpRegistry";
-import { convertUnit, canConvert, getMeasure, getBestUnit } from "@/engine/uom/UomConverter";
+import { convertUnit, getMeasure, getBestUnit } from "@/engine/uom/UomConverter";
 import { sharedCurrencyExchange } from "@/engine/uom/CurrencyExchange";
 
 export function createVM(registry: OpRegistry): VM {
@@ -107,6 +107,18 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
     switch (op) {
       case OpCode.NOP: break;
       case OpCode.HALT: return vm.pop();
+      case OpCode.SWAP: {
+        const a = vm.pop();
+        const b = vm.pop();
+        vm.push(a);
+        vm.push(b);
+        break;
+      }
+      case OpCode.DUP: {
+        const a = vm.peek();
+        vm.push(a);
+        break;
+      }
       case OpCode.PUSH_NUMBER: vm.push(numberValue(numbers[opcodes[ip++]])); break;
       case OpCode.PUSH_BIGINT: vm.push(bigIntValue(BigInt(numbers[opcodes[ip++]]))); break;
       case OpCode.PUSH_HEX: vm.push(hexValue(numbers[opcodes[ip++]])); break;
@@ -131,12 +143,44 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
       }
       case OpCode.ADD: {
         const r = vm.pop(), l = vm.pop();
-        vm.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
+        // Handle Datetime + Duration
+        if (l.type === ValueType.Datetime) {
+          let durMs = 0;
+          if (r.type === ValueType.Uom) {
+            const unit = r.unit;
+            if (unit) {
+              try {
+                durMs = convertUnit(r.toNumber(), unit, "ms");
+              } catch {}
+            }
+          } else {
+            durMs = r.toNumber();
+          }
+          vm.push(new Value(ValueType.Datetime, l.toNumber() + durMs));
+        } else {
+          vm.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
+        }
         break;
       }
       case OpCode.SUB: {
         const r = vm.pop(), l = vm.pop();
-        vm.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
+        // Handle Datetime - Duration
+        if (l.type === ValueType.Datetime) {
+          let durMs = 0;
+          if (r.type === ValueType.Uom) {
+            const unit = r.unit;
+            if (unit) {
+              try {
+                durMs = convertUnit(r.toNumber(), unit, "ms");
+              } catch {}
+            }
+          } else {
+            durMs = r.toNumber();
+          }
+          vm.push(new Value(ValueType.Datetime, l.toNumber() - durMs));
+        } else {
+          vm.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
+        }
         break;
       }
       case OpCode.MUL: {
@@ -238,9 +282,9 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
         const fnIdx = opcodes[ip++];
         const argCount = opcodes[ip++];
         const args: Value[] = [];
-        for (let i = 0; i < argCount; i++) args.unshift(vm.pop());
+        for (let i = 0; i < argCount; i++) args.push(vm.pop());
         const fn = builtinFunctions[fnIdx];
-        if (fn) vm.push(fn(args));
+        if (fn) vm.push(fn(args.reverse()));
         break;
       }
       case OpCode.DICE_ROLL: {
@@ -271,10 +315,27 @@ export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
         break;
       case OpCode.DATE_ADD:
       case OpCode.DATE_SUB: {
-        const dur = vm.popNumber();
-        const dt = vm.popNumber();
+        const durValue = vm.pop();
+        const dtValue = vm.pop();
+        const dt = dtValue.toNumber();
+        let durMs = 0;
+        if (durValue.type === ValueType.Uom) {
+          // Convert UoM duration to milliseconds
+          const unit = durValue.unit;
+          if (unit) {
+            try {
+              durMs = convertUnit(durValue.toNumber(), unit, "ms");
+            } catch {
+              // If conversion fails, treat as 0
+              durMs = 0;
+            }
+          }
+        } else {
+          // Assume it's a number (milliseconds)
+          durMs = durValue.toNumber();
+        }
         const sign = op === OpCode.DATE_ADD ? 1 : -1;
-        vm.push(new Value(ValueType.Datetime, dt + sign * dur));
+        vm.push(new Value(ValueType.Datetime, dt + sign * durMs));
         break;
       }
       case OpCode.UOM_CONVERT: {

@@ -1,0 +1,1840 @@
+﻿node.exe : npm warn Unknown cli config "--testPathPattern". This will stop working in the next major version of npm.
+At C:\Program Files\nodejs\npm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/npm/bin/npm-cli.js" ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm warn Unknow...version of npm.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+> solve@1.1.0 test
+> jest
+
+PASS test/providers/dice/parselets/DiceParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=4, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=4, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=4, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=4, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=6, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=6, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/providers/variables/parselets/VariableParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=10, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=10, r.value=60, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=10, r.value=20, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/providers/arithmetic/parselets/ArithmeticParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=6, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=6, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=6, r.value=4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=12, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=48, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=3, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=6, r.value=4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=4, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=4, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=0.1, r.value=0.2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+FAIL test/providers/datetime/parselets/DatetimeParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      UomLiteralParselet: unit=day, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646582, r.value=1, r.unit=day
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=day
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 1 day to 86400000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1778802046582
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=day, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=hours, left.value=2
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646615, r.value=2, r.unit=hours
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=hours
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 2 hours to 7200000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1778722846615
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=minutes, left.value=30
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646617, r.value=30, r.unit=minutes
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=minutes
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 30 minutes to 1800000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1778717446617
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=weeks, left.value=2
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646619, r.value=2, r.unit=weeks
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=weeks
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 2 weeks to 1209600000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1779925246619
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=months, left.value=3
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646621, r.value=3, r.unit=months
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=months
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 3 months to 7889400000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1786605046621
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=year, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646639, r.value=1, r.unit=year
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=year
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 1 year to 31557600000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1810273246639
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=seconds, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646642, r.value=10, r.unit=seconds
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=seconds
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 10 seconds to 10000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1778715656642
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=seconds, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=minutes, left.value=5
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646649, r.value=5, r.unit=minutes
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=minutes
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 5 minutes to 300000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1778715946649
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=hours, left.value=2
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646652, r.value=2, r.unit=hours
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=hours
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 2 hours to 7200000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1778722846652
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=days, left.value=3
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646655, r.value=3, r.unit=days
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=days
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 3 days to 259200000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1778974846655
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=day, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646658, r.value=1, r.unit=day
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=day
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 1 day to 86400000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1778802046658
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=day, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=week, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646668, r.value=1, r.unit=week
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=week
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 1 week to 604800000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1779320446668
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=days, left.value=14
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=days, left.value=14
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=4, r.type=6, l.value=1778715646673, r.value=14, r.unit=days
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: unit=days
+
+      at executeBytecode (src/engine/vm/VM.ts:152:21)
+
+    console.log
+      ADD: converted 14 days to 1209600000 ms
+
+      at executeBytecode (src/engine/vm/VM.ts:156:25)
+
+    console.log
+      ADD: resultValue=1779925246673
+
+      at executeBytecode (src/engine/vm/VM.ts:165:19)
+
+    console.log
+      UomLiteralParselet: unit=years, left.value=5
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+  ÔùÅ Datetime Parselets ÔÇ║ now + 3 months yields timestamp + approx 7776000000
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 7776001000
+    Received:    7889400001
+
+      115 |     // Allow for up to 1 second variance due to system clock precision and month length variations
+      116 |     expect(elapsed).toBeGreaterThanOrEqual(7775999000);
+    > 117 |     expect(elapsed).toBeLessThanOrEqual(7776001000);
+          |                     ^
+      118 |   });
+      119 |
+      120 |   test("now + 1 year yields timestamp + approx 31536000000", () => {
+
+      at Object.<anonymous> (test/providers/datetime/parselets/DatetimeParselets.spec.ts:117:21)
+
+  ÔùÅ Datetime Parselets ÔÇ║ now + 1 year yields timestamp + approx 31536000000
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 31536001000
+    Received:    31557600001
+
+      124 |     // Allow for up to 1 second variance due to system clock precision and leap year considerations
+      125 |     expect(elapsed).toBeGreaterThanOrEqual(31535999000);
+    > 126 |     expect(elapsed).toBeLessThanOrEqual(31536001000);
+          |                     ^
+      127 |   });
+      128 |
+      129 |   test("now + 10 seconds yields timestamp + ~10000", () => {
+
+      at Object.<anonymous> (test/providers/datetime/parselets/DatetimeParselets.spec.ts:126:21)
+
+  ÔùÅ Datetime Parselets ÔÇ║ 5 years in days conversion
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 1825
+    Received: 1826.25
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   1.25
+
+      209 |     expect(result.type).toBe(ValueType.Uom);
+      210 |     // 5 years * 365 days/year = 1825 days
+    > 211 |     expect(result.value).toBeCloseTo(1825, 0); 
+          |                          ^
+      212 |     expect(result.unit).toBe("days");
+      213 |   });
+      214 | });
+
+      at Object.<anonymous> (test/providers/datetime/parselets/DatetimeParselets.spec.ts:211:26)
+
+PASS test/providers/percentage/parselets/PercentageParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=0.5, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=50, r.value=0.2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=40, r.value=60, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=20, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=100, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/engine/lexer/LexerFuzz.spec.ts
+PASS test/engine/FullPipeline.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=12, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=3, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=6, r.value=4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=3, r.value=4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=12, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=10, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=3, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=6, r.value=4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=10, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=12, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=0.1, r.value=0.2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=255, r.value=1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=4, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2.718281828459045, r.value=1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=10, r.value=0.6000000000000001, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=10.6, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/codemirror/MarkdownEditorViewPlugin.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=3, r.value=4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=3, r.value=4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=6, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/engine/format/FormatFuzz.spec.ts
+PASS test/engine/MixedArithmetic.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=7, r.type=0, l.value=10,2, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=7, r.type=7, l.value=3,4, r.value=1,2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=7, r.type=7, l.value=4,5, r.value=2,4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=0, l.value=10, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=5
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=4
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=20
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=20, r.unit=m
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=g, left.value=5
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=g, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=GBP, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=5
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=5, r.unit=USD
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=EUR, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=JPY, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=20
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=30
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=20, r.value=30, r.unit=USD
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=50, r.value=50, r.unit=USD
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=GBP, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=GBP, left.value=30
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=EUR, left.value=200
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=EUR, left.value=4
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=20, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=50, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=0, l.value=10, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=50, r.value=50, r.unit=gbp
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=50, r.unit=gbp
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=200
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=80
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=GBP, left.value=400
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.25, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.25, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=200
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=EUR, left.value=1000
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=20, r.value=50, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=20, r.unit=gbp
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=400, r.value=200, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=200
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=50, r.value=100, r.unit=kg
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=0, l.value=20, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=0, l.value=33, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=200, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=300, r.value=300, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=50, r.value=25, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=50, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=400, r.value=300, r.unit=gbp
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=GBP, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=100, r.unit=GBP
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=EUR, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=50, r.value=50, r.unit=EUR
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=100, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=192, r.value=100, r.unit=gbp
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=2, r.type=0, l.value=100, r.value=50, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=2, l.value=50, r.value=100, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=2, r.type=2, l.value=50, r.value=50, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=60, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=20, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=GBP, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=2
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=10, r.unit=USD
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=10, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=200, r.value=100, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=60, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=70, r.value=5, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=0, r.value=0, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=1, r.value=1, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=0.5, r.value=0.5, r.unit=gbp
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=20
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=30
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=20, r.unit=USD
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=30, r.value=30, r.unit=USD
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=20, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=0.5, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=100, r.value=0.2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=0, l.value=5, r.value=20, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=100, r.unit=mm
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=50, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=5, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=0.1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=9, r.value=16, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=500, r.value=100, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=1, r.unit=m
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=2
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=g, left.value=500
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=1, r.value=500, r.unit=g
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=ft, left.value=3
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=inches, left.value=12
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=3, r.value=12, r.unit=inches
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=l, left.value=2
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=ml, left.value=500
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=2
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=2, r.unit=cm
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=200
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=USD, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=g, left.value=500
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=g, left.value=250
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=50
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=7, r.type=7, l.value=1,2, r.value=3,4, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/providers/uom/parselets/UomParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=5
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=3.5
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=20
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=20, r.unit=m
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=0, l.value=10, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=4
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=20, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=50, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=5, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=1, r.value=1, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=0.5, r.value=0.5, r.unit=usd
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=100, r.value=1, r.unit=m
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=m, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=1, r.value=100, r.unit=cm
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=g, left.value=500
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=1, r.value=500, r.unit=g
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=g, left.value=500
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=kg, left.value=1
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=500, r.value=1, r.unit=kg
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=ft, left.value=3
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=inches, left.value=12
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=3, r.value=12, r.unit=inches
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=mm, left.value=10
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=2
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+    console.log
+      ADD: l.type=6, r.type=6, l.value=10, r.value=2, r.unit=cm
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      UomLiteralParselet: unit=cm, left.value=100
+
+      at UomLiteralParselet.parse (src/providers/uom/parselets/UomLiteralParselet.ts:16:13)
+
+PASS test/engine/engine/BreakageTests.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/providers/function/parselets/FunctionParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=3, r.value=1, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/engine/format/FormatEngine.spec.ts
+PASS test/engine/MarkdownElements.spec.ts
+PASS test/codemirror/SolveHighlightProvider.spec.ts
+PASS test/engine/lexer/Lexer.spec.ts
+PASS test/engine/engine/ExpressionEngine.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=5, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=5, r.value=3, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/providers/vector/parselets/VectorParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=1, r.value=2, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/providers/biginteger/parselets/BigIntParselets.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=2, r.type=2, l.value=50, r.value=30, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/engine/uom/UomConverter.spec.ts
+PASS test/engine/engine/DynamicValueResolver.spec.ts
+PASS test/engine/vm/VM.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=10, r.value=20, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=2, r.value=12, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/engine/vm/ScopeManager.spec.ts
+PASS test/engine/vm/VMResilience.spec.ts
+  ÔùÅ Console
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=42, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+    console.log
+      ADD: l.type=0, r.type=0, l.value=20, r.value=10, r.unit=undefined
+
+      at executeBytecode (src/engine/vm/VM.ts:146:17)
+
+PASS test/engine/api/SolveAPI.spec.ts
+PASS test/engine/parser/Parser.spec.ts
+PASS test/engine/parser/BytecodeBuilder.spec.ts
+PASS test/engine/uom/CurrencyExchange.spec.ts
+PASS test/engine/vm/MemoCache.spec.ts
+PASS test/engine/vm/Value.spec.ts
+PASS test/engine/variables/VariableResolver.spec.ts
+PASS test/engine/vm/DependencyGraph.spec.ts
+PASS test/engine/cache/LineCache.spec.ts
+PASS test/engine/lexer/TokenHighlightMap.spec.ts
+PASS test/engine/lexer/TokenTypes.spec.ts
+PASS test/engine/parser/BindingPower.spec.ts
+PASS test/engine/lexer/LexerState.spec.ts
+
+Summary of all failing tests
+FAIL test/providers/datetime/parselets/DatetimeParselets.spec.ts
+  ÔùÅ Datetime Parselets ÔÇ║ now + 3 months yields timestamp + approx 7776000000
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 7776001000
+    Received:    7889400001
+
+      115 |     // Allow for up to 1 second variance due to system clock precision and month length variations
+      116 |     expect(elapsed).toBeGreaterThanOrEqual(7775999000);
+    > 117 |     expect(elapsed).toBeLessThanOrEqual(7776001000);
+          |                     ^
+      118 |   });
+      119 |
+      120 |   test("now + 1 year yields timestamp + approx 31536000000", () => {
+
+      at Object.<anonymous> (test/providers/datetime/parselets/DatetimeParselets.spec.ts:117:21)
+
+  ÔùÅ Datetime Parselets ÔÇ║ now + 1 year yields timestamp + approx 31536000000
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 31536001000
+    Received:    31557600001
+
+      124 |     // Allow for up to 1 second variance due to system clock precision and leap year considerations
+      125 |     expect(elapsed).toBeGreaterThanOrEqual(31535999000);
+    > 126 |     expect(elapsed).toBeLessThanOrEqual(31536001000);
+          |                     ^
+      127 |   });
+      128 |
+      129 |   test("now + 10 seconds yields timestamp + ~10000", () => {
+
+      at Object.<anonymous> (test/providers/datetime/parselets/DatetimeParselets.spec.ts:126:21)
+
+  ÔùÅ Datetime Parselets ÔÇ║ 5 years in days conversion
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 1825
+    Received: 1826.25
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   1.25
+
+      209 |     expect(result.type).toBe(ValueType.Uom);
+      210 |     // 5 years * 365 days/year = 1825 days
+    > 211 |     expect(result.value).toBeCloseTo(1825, 0); 
+          |                          ^
+      212 |     expect(result.unit).toBe("days");
+      213 |   });
+      214 | });
+
+      at Object.<anonymous> (test/providers/datetime/parselets/DatetimeParselets.spec.ts:211:26)
+
+
+Test Suites: 1 failed, 37 passed, 38 total
+Tests:       3 failed, 1011 passed, 1014 total
+Snapshots:   0 total
+Time:        3.288 s
+Ran all test suites.

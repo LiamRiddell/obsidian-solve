@@ -274,12 +274,12 @@ describe("ConvertParselet (convert <val> <unit> to <target>)", () => {
     expect(parseNum("convert 1 l to ml")).toBeCloseTo(1000, 5);
   });
 
-  test("convert 1 ft to in yields 12", () => {
-    expect(parseNum("convert 1 ft to in")).toBeCloseTo(12, 5);
+  test("convert 1 ft to inches yields 12", () => {
+    expect(parseNum("convert 1 ft to inches")).toBeCloseTo(12, 5);
   });
 
-  test("convert 1 in to ft yields ~0.0833", () => {
-    expect(parseNum("convert 1 in to ft")).toBeCloseTo(0.0833, 2);
+  test("convert 1 inch to ft yields ~0.0833", () => {
+    expect(parseNum("convert 1 inch to ft")).toBeCloseTo(0.0833, 2);
   });
 
   test("convert 1 m to ft yields ~3.281", () => {
@@ -353,8 +353,8 @@ describe("UOM auto-conversion in arithmetic", () => {
     expect(parseNum("500 g + 1 kg")).toBeCloseTo(1500, 5);
   });
 
-  test("3 ft + 12 in = 4 ft (left unit wins)", () => {
-    expect(parseNum("3 ft + 12 in")).toBeCloseTo(4, 5);
+  test("3 ft + 12 inches = 4 ft (left unit wins)", () => {
+    expect(parseNum("3 ft + 12 inches")).toBeCloseTo(4, 5);
   });
 
   test("10 mm + 2 cm = 30 mm (left unit wins)", () => {

@@ -2,6 +2,8 @@ export enum OpCode {
 	// Stack operations
 	NOP = 0,
 	HALT = 1,
+	SWAP = 2,
+	DUP = 3,
 
 	// Push literals
 	PUSH_NUMBER = 10,

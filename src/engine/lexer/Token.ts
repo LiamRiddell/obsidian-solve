@@ -82,6 +82,7 @@ export const TokenTypes = {
   MULTIPLY_BY: "MULTIPLY_BY",
   DIVIDE_BY: "DIVIDE_BY",
   NEQ: "NEQ",
+  IN: "IN",
 } as const;
 
 export type TokenType = (typeof TokenTypes)[keyof typeof TokenTypes];

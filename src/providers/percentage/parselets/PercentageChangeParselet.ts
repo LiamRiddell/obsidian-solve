@@ -11,9 +11,28 @@ export class PercentageChangeParselet implements InfixParselet {
   }
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
+    // Check if the left operand is a UNIT token
+    // If so, this is a UoM conversion, not a percentage change
+    if (left.type === "UNIT") {
+      // This is a UoM conversion, not a percentage change
+      // Don't parse the right operand as a percentage change
+      // Instead, let the UoM parselet handle it
+      return;
+    }
+    
+    // Parse the right operand (target value)
     parser.parseExpression(this.getBindingPower(), builder);
+    
+    // Calculate percentage change: right / left - 1
+    // Stack before: [left, right]
+    // After SWAP: [right, left]
+    builder.emitOpcode(OpCode.SWAP);
+    // After DIV: [right / left]
+    builder.emitOpcode(OpCode.DIV);
+    // After PUSH_NUMBER 1: [right / left, 1]
     builder.emitOpcode(OpCode.PUSH_NUMBER);
-    builder.emitNumber(100);
-    builder.emitOpcode(OpCode.MUL);
+    builder.emitNumber(1);
+    // After SUB: [right / left - 1]
+    builder.emitOpcode(OpCode.SUB);
   }
 }

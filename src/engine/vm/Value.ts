@@ -4,14 +4,13 @@ export const enum ValueType {
 	BigInt = 2,
 	String = 3,
 	Datetime = 4,
-	Duration = 5,
-	Percentage = 6,
-	Uom = 7,
-	Vector2 = 8,
-	Vector3 = 9,
-	Vector4 = 10,
-	Boolean = 11,
-	Unit = 12,
+	Percentage = 5,
+	Uom = 6,
+	Vector2 = 7,
+	Vector3 = 8,
+	Vector4 = 9,
+	Boolean = 10,
+	Unit = 11,
 }
 
 export class Value {

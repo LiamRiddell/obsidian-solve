@@ -58,9 +58,10 @@ describe("FormatEngine", () => {
     expect(result).toContain("25");
   });
 
-  it("formats duration values", () => {
-    const result = formatValue(new Value(ValueType.Duration, 3600));
-    expect(result).toContain("3600");
+  it("formats duration values (as UoM)", () => {
+    const result = formatValue(uomValue(5, "days"));
+    expect(result).toContain("5");
+    expect(result).toContain("days");
   });
 
   it("formats unit values", () => {

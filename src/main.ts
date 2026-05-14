@@ -3,7 +3,7 @@ import { FeatureFlagClass } from "@/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@/constants/EPluginEvent";
 import { EPluginStatus } from "@/constants/EPluginStatus";
 import { pluginEventBus } from "@/eventbus/PluginEventBus";
-import { solveAPI, SolveAPI } from "@/engine/api/SolveAPI";
+import { solveAPI } from "@/engine/api/SolveAPI";
 import { DEFAULT_SETTINGS } from "@/settings/PluginSettings";
 import { SettingTab } from "@/settings/SettingsTab";
 import UserSettings from "@/settings/UserSettings";
@@ -38,9 +38,6 @@ await this.registerSettings();
 		logger.debug(`[Solve] Added: Status Bar Companion`);
 
 		await this.registerCommands();
-
-		pluginEventBus.emit(EPluginEvent.SolveEngineReady, solveAPI);
-		logger.debug(`[Solve] Fired: SolveEngineReady`);
 
 		pluginEventBus.emit(EPluginEvent.SolveEngineReady, solveAPI);
 		logger.debug(`[Solve] Fired: SolveEngineReady`);
@@ -129,10 +126,11 @@ await this.registerSettings();
 			editorCallback(editor, ctx) {
 				const currentLineNumber = editor.getCursor("head").line + 1;
 
-				const { containerEl } = editor as any;
+				// Use type assertion to access containerEl
+				const containerEl = (editor as any).containerEl as HTMLElement;
 
 				const resultElement = (
-					containerEl as HTMLElement
+					containerEl
 				).querySelector<HTMLElement>(`#osr-${currentLineNumber}`);
 
 				if (resultElement) {
@@ -149,10 +147,11 @@ await this.registerSettings();
 			id: "commit-result-all-visible",
 			name: "Commit all visible results",
 			editorCallback(editor, ctx) {
-				const { containerEl } = editor as any;
+				// Use type assertion to access containerEl
+				const containerEl = (editor as any).containerEl as HTMLElement;
 
 				const resultElements = (
-					containerEl as HTMLElement
+					containerEl
 				).querySelectorAll<HTMLElement>(`.os-result`);
 
 				for (let i = 0; i < resultElements.length; i++) {
@@ -180,7 +179,8 @@ await this.registerSettings();
 					return;
 				}
 
-				const { containerEl } = editor as any;
+				// Use type assertion to access containerEl
+				const containerEl = (editor as any).containerEl as HTMLElement;
 
 				if (!containerEl) {
 					return;
@@ -192,7 +192,7 @@ await this.registerSettings();
 					i++
 				) {
 					const resultElement = (
-						containerEl as HTMLElement
+						containerEl
 					).querySelector<HTMLElement>(`#osr-${i + 1}`);
 
 					if (resultElement) {

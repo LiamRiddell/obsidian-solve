@@ -55,10 +55,6 @@ function formatPercentage(value: number, locale: ILocale, settings: UserSettings
   return `= ${formatted}${locale.display.percentageSuffix}`;
 }
 
-function formatDuration(value: number): string {
-  return `= ${value}`;
-}
-
 function formatUnit(value: number, unit: string | undefined): string {
   return `= ${value} ${unit || ""}`.trim();
 }
@@ -89,8 +85,6 @@ export function formatValue(value: Value, settings?: UserSettings): string {
       return formatVector(value.value as number[], locale);
     case ValueType.Percentage:
       return formatPercentage(value.value as number, locale, us);
-    case ValueType.Duration:
-      return formatDuration(value.value as number);
     case ValueType.Unit:
       return formatUnit(value.value as number, value.unit);
     default:

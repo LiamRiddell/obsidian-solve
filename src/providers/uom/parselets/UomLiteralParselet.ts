@@ -15,6 +15,20 @@ export class UomLiteralParselet implements InfixParselet {
     const unit = token.value;
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(unit);
+    
+    // Check if the next token is "to" or "in"
+    if (parser.peek()?.type === "TO" || parser.peek()?.type === "IN") {
+      parser.consume(); // consume TO or IN
+      const targetToken = parser.peek();
+      if (targetToken?.type === "UNIT") {
+        parser.consume();
+        builder.emitOpcode(OpCode.PUSH_STRING);
+        builder.emitString(targetToken.value);
+        builder.emitOpcode(OpCode.UOM_CONVERT_TO);
+        return;
+      }
+    }
+    
     builder.emitOpcode(OpCode.UOM_CONVERT);
   }
 }

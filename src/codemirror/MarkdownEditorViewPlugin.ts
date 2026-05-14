@@ -14,11 +14,9 @@ import {
 	ViewUpdate,
 } from "@codemirror/view";
 
-const DEBUG_MODE_ENABLED = false;
-
 interface CachedLineDecorations {
-  lineText: string;
-  decorations: Array<{from: number; to: number; deco: Decoration}>;
+	lineText: string;
+	decorations: Array<{from: number; to: number; deco: Decoration}>;
 }
 
 export class MarkdownEditorViewPlugin implements PluginValue {
@@ -128,7 +126,7 @@ update(update: ViewUpdate) {
 		const inlineSolvePositions = this.findInlineSolves(lineText);
 
 		if (inlineSolvePositions.length > 0) {
-			let offset = 0;
+			const offset = 0;
 			for (const isp of inlineSolvePositions) {
 				const expr = isp.expression;
 				const lineExpr = expr.trim();
@@ -183,7 +181,7 @@ update(update: ViewUpdate) {
 
 	private evaluateLine(lineNumber: number, expression: string): string | undefined {
 		try {
-			const value = this.expressionEngine.evaluateLine(lineNumber, expression);
+			const value: Value = this.expressionEngine.evaluateLine(lineNumber, expression);
 			return formatValue(value);
 		} catch {
 			return undefined;

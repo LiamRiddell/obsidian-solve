@@ -28,7 +28,7 @@ describe("ExpressionEngine", () => {
 
   test("DAG tracks variable assignments in expression engine", () => {
     const engine = new ExpressionEngine();
-    const v = engine.evaluateLine(10, ":x = 5 + 3");
+    const v = engine.evaluateLine(10, ":myVar = 5 + 3");
     expect(v.toNumber()).toBe(8);
   });
 });

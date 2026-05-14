@@ -114,4 +114,20 @@ describe("Percentage Parselets", () => {
   test("BODMAS with percentage: 50% of 200 + 10% of 100 = 110", () => {
     expect(parseAndExecute("50% of 200 + 10% of 100")).toBe(110);
   });
+
+  test("percentage change: 800 to 1000 = 0.25 (25% increase)", () => {
+    expect(parseAndExecute("800 to 1000")).toBeCloseTo(0.25, 10);
+  });
+
+  test("percentage change: 800 to 400 = -0.5 (-50% decrease)", () => {
+    expect(parseAndExecute("800 to 400")).toBeCloseTo(-0.5, 10);
+  });
+
+  test("percentage change: 50 to 75 = 0.5 (50% increase)", () => {
+    expect(parseAndExecute("50 to 75")).toBeCloseTo(0.5, 10);
+  });
+
+  test("percentage change: 200 to 100 = -0.5 (-50% decrease)", () => {
+    expect(parseAndExecute("200 to 100")).toBeCloseTo(-0.5, 10);
+  });
 });

@@ -5,8 +5,12 @@ import { BytecodeBuilder } from "@/engine/parser/BytecodeBuilder";
 import { OpCode } from "@/engine/parser/OpCode";
 
 export class VariableParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+  parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
+    // Handle :var syntax
     const nameToken = parser.consume();
+    if (nameToken.type !== "IDENT") {
+      throw new Error(`Expected identifier after colon, got ${nameToken.type}`);
+    }
     const varName = nameToken.value;
 
     if (parser.peek()?.type === "EQUALS") {

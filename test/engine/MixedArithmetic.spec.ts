@@ -496,12 +496,12 @@ describe("UOM conversion between compatible units", () => {
     expect(evalNum("convert 1 h to s")).toBeCloseTo(3600, 5);
   });
 
-  test("convert 1 ft to in: 1 ft = 12 in", () => {
-    expect(evalNum("convert 1 ft to in")).toBeCloseTo(12, 5);
+  test("convert 1 ft to inches: 1 ft = 12 inches", () => {
+    expect(evalNum("convert 1 ft to inches")).toBeCloseTo(12, 5);
   });
 
-  test("convert 1 in to ft: 1 in = 0.0833 ft", () => {
-    expect(evalNum("convert 1 in to ft")).toBeCloseTo(0.0833, 2);
+  test("convert 1 inch to ft: 1 inch = 0.0833 ft", () => {
+    expect(evalNum("convert 1 inch to ft")).toBeCloseTo(0.0833, 2);
   });
 
   test("convert 1 m to ft (inter-system)", () => {
@@ -528,8 +528,8 @@ describe("UOM arithmetic with automatic conversion", () => {
     expect(result.toNumber()).toBeCloseTo(1.5, 5);
   });
 
-  test("3 ft + 12 in = 4 ft (auto-converts to ft, left unit wins)", () => {
-    const result = evalFull("3 ft + 12 in");
+  test("3 ft + 12 inches = 4 ft (auto-converts to ft, left unit wins)", () => {
+    const result = evalFull("3 ft + 12 inches");
     expect(result.toNumber()).toBeCloseTo(4, 5);
   });
 

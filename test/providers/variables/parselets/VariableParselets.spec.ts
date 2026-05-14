@@ -43,20 +43,20 @@ function parseAndExecute(input: string): Value {
 
 describe("Variable Parselets", () => {
   test("variable assignment stores and returns value", () => {
-    const result = parseAndExecute(":x = 42");
+    const result = parseAndExecute(":myVar = 42");
     expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(42);
   });
 
   test("variable read returns stored value", () => {
-    const result = parseAndExecute(":x = 5 + 3");
+    const result = parseAndExecute(":myVar = 5 + 3");
     expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(8);
   });
 
   test("variable in expression", () => {
     const lexer = new Lexer();
-    const tokens = tokenize(lexer, ":x = 10");
+    const tokens = tokenize(lexer, ":myVar = 10");
     const registry = new ParseletRegistry();
     registerArithmeticParselets(registry);
     registerVariableParselets(registry);
@@ -73,7 +73,7 @@ describe("Variable Parselets", () => {
       vm
     );
 
-    const tokens2 = tokenize(lexer, ":x + 5");
+    const tokens2 = tokenize(lexer, ":myVar + 5");
     const builder2 = new BytecodeBuilder();
     parser.load(tokens2);
     parser.parseExpression(0, builder2);
@@ -81,7 +81,7 @@ describe("Variable Parselets", () => {
     const vm2Uint8 = new Uint8Array(program2.opcodes);
     const vm2Float64 = new Float64Array(program2.numbers);
     const vm2 = createVM(sharedOpRegistry);
-    vm2.setVar("x", vm.getVar("x")!);
+    vm2.setVar("myVar", vm.getVar("myVar")!);
     const result2 = executeBytecode(
       { opcodes: vm2Uint8, numbers: vm2Float64, strings: program2.strings },
       vm2
@@ -100,5 +100,59 @@ describe("Variable Parselets", () => {
     const result = parseAndExecute(":undefinedVar");
     expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(0);
+  });
+
+  test("multi-line variable assignments", () => {
+    const lexer = new Lexer();
+    // First line: :var1 = 10
+    const tokens1 = tokenize(lexer, ":var1 = 10");
+    const registry = new ParseletRegistry();
+    registerArithmeticParselets(registry);
+    registerVariableParselets(registry);
+    const parser = new Parser(registry);
+    const builder1 = new BytecodeBuilder();
+    parser.load(tokens1);
+    parser.parseExpression(0, builder1);
+    const program1 = builder1.build();
+    const vm1Uint8 = new Uint8Array(program1.opcodes);
+    const vm1Float64 = new Float64Array(program1.numbers);
+    const vm1 = createVM(sharedOpRegistry);
+    executeBytecode(
+      { opcodes: vm1Uint8, numbers: vm1Float64, strings: program1.strings },
+      vm1
+    );
+
+    // Second line: :var2 = 20
+    const tokens2 = tokenize(lexer, ":var2 = 20");
+    const builder2 = new BytecodeBuilder();
+    parser.load(tokens2);
+    parser.parseExpression(0, builder2);
+    const program2 = builder2.build();
+    const vm2Uint8 = new Uint8Array(program2.opcodes);
+    const vm2Float64 = new Float64Array(program2.numbers);
+    const vm2 = createVM(sharedOpRegistry);
+    vm2.setVar("var1", vm1.getVar("var1")!);
+    executeBytecode(
+      { opcodes: vm2Uint8, numbers: vm2Float64, strings: program2.strings },
+      vm2
+    );
+
+    // Third line: :var1 + :var2
+    const tokens3 = tokenize(lexer, ":var1 + :var2");
+    const builder3 = new BytecodeBuilder();
+    parser.load(tokens3);
+    parser.parseExpression(0, builder3);
+    const program3 = builder3.build();
+    const vm3Uint8 = new Uint8Array(program3.opcodes);
+    const vm3Float64 = new Float64Array(program3.numbers);
+    const vm3 = createVM(sharedOpRegistry);
+    vm3.setVar("var1", vm2.getVar("var1")!);
+    vm3.setVar("var2", vm2.getVar("var2")!);
+    const result = executeBytecode(
+      { opcodes: vm3Uint8, numbers: vm3Float64, strings: program3.strings },
+      vm3
+    );
+    expect(result!.type).toBe(ValueType.Number);
+    expect(result!.toNumber()).toBe(30);
   });
 });

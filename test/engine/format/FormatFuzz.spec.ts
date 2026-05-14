@@ -26,8 +26,8 @@ describe("FormatEngine Fuzz", () => {
     { name: "datetime_future", value: new Value(ValueType.Datetime, 4102444800000) },
     { name: "percentage_zero", value: new Value(ValueType.Percentage, 0) },
     { name: "percentage_large", value: new Value(ValueType.Percentage, 999.99) },
-    { name: "duration_zero", value: new Value(ValueType.Duration, 0) },
-    { name: "duration_large", value: new Value(ValueType.Duration, 86400 * 365) },
+    { name: "uom_time_days", value: uomValue(14, "days") },
+    { name: "uom_time_weeks", value: uomValue(6, "weeks") },
     { name: "unit_empty", value: new Value(ValueType.Unit, 0, "") },
     { name: "unit_with_unit", value: new Value(ValueType.Unit, 1, "m") },
   ];

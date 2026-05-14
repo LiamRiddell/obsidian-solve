@@ -1,6 +1,6 @@
-import { ParseletRegistry, sharedParseletRegistry } from "@/engine/parser/registry/ParseletRegistry";
+import { sharedParseletRegistry } from "@/engine/parser/registry/ParseletRegistry";
 import { PrefixParselet, InfixParselet } from "@/engine/parser/Parselet";
-import { OpRegistry, sharedOpRegistry, IOpcodeHandlerRegistration } from "@/engine/vm/OpRegistry";
+import { sharedOpRegistry, IOpcodeHandlerRegistration } from "@/engine/vm/OpRegistry";
 import { OpCode } from "@/engine/parser/OpCode";
 import { Value } from "@/engine/vm/Value";
 import { IVariableSource } from "@/engine/variables/IVariableSource";

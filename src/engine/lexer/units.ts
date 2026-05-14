@@ -1,8 +1,8 @@
 export const knownUnits = new Set([
-  "mm", "cm", "m", "km", "in", "ft", "yd", "mi",
+  "mm", "cm", "m", "km", "ft", "yd", "mi",
   "g", "kg", "lb", "oz", "mcg", "mg", "t", "mt",
   "ml", "l", "cl", "dl", "gal", "cup", "pnt", "qt",
-  "s", "min", "h", "d", "day", "week", "month", "year",
+  "s", "min", "h", "d", "day", "days", "week", "weeks", "month", "months", "year", "years",
   "c", "f", "k",
   "hz", "khz", "mhz", "ghz", "thz",
   "w", "kw", "mw", "gw", "wh", "kwh", "mwh", "gwh",
@@ -28,6 +28,8 @@ export const knownUnits = new Set([
   "svc", "syp", "szl", "tjs", "tmt", "tnd", "top", "ttd",
   "tzs", "ugx", "uyu", "veb", "vuv", "wst", "xcd", "xdr",
   "xpf", "yer", "zmw", "zwl",
+  "inch", "inches", "foot", "feet", "yard", "yards", "mile", "miles",
+  "hour", "hours", "minute", "minutes", "second", "seconds",
 ]);
 
 export function isKnownUnit(text: string): boolean {
