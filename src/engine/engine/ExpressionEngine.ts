@@ -48,6 +48,17 @@ export class ExpressionEngine {
     lineNumber: number,
     lineText: string
   ): Value {
+    const result = this.evaluateLineWithDebug(lineNumber, lineText);
+    if (result.error) {
+      throw new Error(result.error);
+    }
+    return result.value;
+  }
+
+  evaluateLineWithDebug(
+    lineNumber: number,
+    lineText: string
+  ): { value: Value; tokens: any[]; program: any; error?: string } {
     const tokens: any[] = [];
     this.lexer.reset(lineText);
     for (const t of this.lexer) {
@@ -59,7 +70,7 @@ export class ExpressionEngine {
     if (tokens.length === 0) {
       const v = numberValue(0);
       this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: [], numbers: [], strings: [] }, [], null, false));
-      return v;
+      return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] } };
     }
 
     const builder = new BytecodeBuilder();
@@ -71,31 +82,36 @@ export class ExpressionEngine {
       if (t.value.startsWith(":") && t.type === "COLON") reads.push(t.value.slice(1));
     }
 
-    this.parser.parseExpression(0, builder);
-    const program = builder.build();
+    try {
+      this.parser.parseExpression(0, builder);
+      const program = builder.build();
 
-    const vmUint8 = new Uint8Array(program.opcodes);
-    const vmFloat64 = new Float64Array(program.numbers);
-    const vm = createVM(sharedOpRegistry);
+      const vmUint8 = new Uint8Array(program.opcodes);
+      const vmFloat64 = new Float64Array(program.numbers);
+      const vm = createVM(sharedOpRegistry);
 
-    const memoized = this.memoCache.getOrCompute(lineText, lineNumber, () => {
-      const result = executeBytecode(
-        { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
-        vm
-      );
-      return result!;
-    });
+      const memoized = this.memoCache.getOrCompute(lineText, lineNumber, () => {
+        const result = executeBytecode(
+          { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
+          vm
+        );
+        return result!;
+      });
 
-    this.dag.registerLine(lineNumber, reads, writes);
-    this.lineCache.set(lineNumber, new LineCacheEntry(
-      memoized,
-      program,
-      reads,
-      writes.length > 0 ? writes[0] : null,
-      false
-    ));
+      this.dag.registerLine(lineNumber, reads, writes);
+      this.lineCache.set(lineNumber, new LineCacheEntry(
+        memoized,
+        program,
+        reads,
+        writes.length > 0 ? writes[0] : null,
+        false
+      ));
 
-    return memoized;
+      return { value: memoized, tokens, program };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { value: numberValue(0), tokens, program: { opcodes: [], numbers: [], strings: [] }, error: errorMessage };
+    }
   }
 
   reEvaluateLine(lineNumber: number): Value | undefined {

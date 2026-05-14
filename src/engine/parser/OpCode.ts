@@ -82,3 +82,15 @@ export enum OpCode {
 	// Plugin extensibility
 	PLUGIN_CUSTOM = 200,
 }
+
+/**
+ * Gets the name of an OpCode as a string.
+ * @param op The OpCode value
+ * @returns The enum name as a string, or "UNKNOWN_<value>" if not found
+ */
+export function getOpCodeName(op: number): string {
+	for (const [key, value] of Object.entries(OpCode)) {
+		if (value === op) return key;
+	}
+	return `UNKNOWN_${op}`;
+}

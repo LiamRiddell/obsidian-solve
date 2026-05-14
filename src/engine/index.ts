@@ -6,7 +6,7 @@ export { TokenRegistry, sharedTokenRegistry } from "./lexer/registry/TokenRegist
 export { Parser } from "./parser";
 export { BytecodeBuilder } from "./parser/BytecodeBuilder";
 export type { BytecodeProgram } from "./parser/BytecodeBuilder";
-export { OpCode } from "./parser/OpCode";
+export { OpCode, getOpCodeName } from "./parser/OpCode";
 export { BindingPower } from "./parser/BindingPower";
 export { ParseletRegistry, sharedParseletRegistry } from "./parser/registry/ParseletRegistry";
 export type { PrefixParselet, InfixParselet } from "./parser/Parselet";

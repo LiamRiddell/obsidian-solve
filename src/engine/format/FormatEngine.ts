@@ -40,7 +40,20 @@ function formatDatetime(value: number, locale: ILocale): string {
 function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: UserSettings): string {
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
   const useUnitNames = settings.unitOfMeasurementResult.unitNames;
-  const formatted = value.toFixed(dp);
+  
+  // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
+  const timeSpanUnits = ["days", "weeks", "hours", "minutes", "seconds", "day", "week", "hour", "minute", "second"];
+  const isTimeSpan = unit && timeSpanUnits.includes(unit);
+  
+  let formatted: string;
+  if (isTimeSpan && value === Math.floor(value)) {
+    // For whole number TimeSpan values, format as integer
+    formatted = value.toString();
+  } else {
+    // For other values, use the configured decimal places
+    formatted = value.toFixed(dp);
+  }
+  
   const unitLabel = useUnitNames ? (unit || "") : (unit || "");
   return `= ${formatted} ${unitLabel}`.trim();
 }

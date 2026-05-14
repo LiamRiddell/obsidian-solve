@@ -23,7 +23,11 @@ const markdownOutlineDisplay = document.getElementById('markdown-outline-display
 const groupTokensCheckbox = document.getElementById('group-tokens') as HTMLInputElement;
 
 const isDev = typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.DEV;
-if (!isDev && debugPanels) debugPanels.classList.add('hidden');
+
+// Debug panels are always visible in the playground environment
+if (debugPanels) {
+    debugPanels.classList.remove('hidden');
+}
 
 const highlightProvider = new SolveHighlightProvider();
 
@@ -118,14 +122,13 @@ function renderAll(result: DebugResult): void {
     renderLineResults(result.lineResults);
     renderErrors(result.errors);
     renderStats(result.stats);
-    if (isDev) {
-        renderTokens(result.rawTokens);
-        renderAST(result.ast);
-        renderOpcodes(result.opcodes);
-        renderConstants(result.constants);
-        renderVariables(result.variables);
-        renderMarkdownOutline(result.markdownOutline);
-    }
+    // Always render debug data in playground
+    renderTokens(result.rawTokens);
+    renderAST(result.ast);
+    renderOpcodes(result.opcodes);
+    renderConstants(result.constants);
+    renderVariables(result.variables);
+    renderMarkdownOutline(result.markdownOutline);
     const effects: {from: number; to: number; deco: Decoration}[] = [];
     for (const lr of result.lineResults) {
         if (!lr.result || lr.error) continue;
@@ -333,3 +336,4 @@ function renderErrors(errors: string[]): void {
 renderExamplesSidebar();
 populateFullDocExamples();
 editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: '10 + 5 * 2' } });
+
