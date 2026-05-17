@@ -1,31 +1,52 @@
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 export class Parser {
   private tokens: Token[] = [];
   private current = 0;
+  private depth = 0;
+  private maxDepth: number;
   private parseletRegistry: ParseletRegistry;
 
-  constructor(parseletRegistry: ParseletRegistry) {
+  constructor(parseletRegistry: ParseletRegistry, maxDepth = 50) {
     this.parseletRegistry = parseletRegistry;
+    this.maxDepth = maxDepth;
   }
 
   load(tokens: Token[]): void {
     this.tokens = tokens;
     this.current = 0;
+    this.depth = 0;
   }
 
   parseExpression(bindingPower = 0, builder?: BytecodeBuilder): void {
+    this.depth++;
+    if (this.depth > this.maxDepth) {
+      this.depth--;
+      throw ErrorFactory.parsing(
+        "NESTING_DEPTH_EXCEEDED",
+        `Parse nesting depth ${this.depth} exceeds maximum of ${this.maxDepth}`,
+        { maxDepth: this.maxDepth, currentDepth: this.depth }
+      );
+    }
+
     const token = this.consume();
 
     if (!token) {
-      throw new Error("Unexpected end of expression");
+      this.depth--;
+      throw ErrorFactory.parsing("UNEXPECTED_END", "Unexpected end of expression");
     }
 
     const prefixParselet = this.parseletRegistry.getPrefix(token.type);
     if (!prefixParselet) {
-      throw new Error(`No prefix parselet found for token: ${token.type} ("${token.value}")`);
+      this.depth--;
+      throw ErrorFactory.parsing(
+        "NO_PREFIX_PARSELET",
+        `No prefix parselet found for token: ${token.type} ("${token.value}")`,
+        { tokenType: token.type, tokenValue: token.value }
+      );
     }
 
     if (builder) {
@@ -45,6 +66,8 @@ export class Parser {
         infixParselet.parse(this, token, nextToken, builder);
       }
     }
+
+    this.depth--;
   }
 
   consume(expectedType?: string): Token {

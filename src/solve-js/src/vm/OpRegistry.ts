@@ -35,6 +35,10 @@ export interface VM {
 	registry: OpRegistry;
 	getVar(key: string): Value | undefined;
 	setVar(key: string, value: Value): void;
+	reset(): void;
+	getMaxInstructions(): number;
+	getInstructionCount(): number;
+	incrementInstructions(n: number): void;
 }
 
 export const sharedOpRegistry = new OpRegistry();

@@ -1,9 +1,12 @@
 import { Value } from "@solve-js/vm/Value";
 
 export interface BytecodeSnapshot {
-  opcodes: number[];
-  numbers: number[];
-  strings: string[];
+	opcodes: number[];
+	numbers: number[];
+	strings: string[];
+	// Cached TypedArray views — set by ExpressionEngine on first use
+	cachedUint8?: Uint8Array;
+	cachedFloat64?: Float64Array;
 }
 
 export interface HighlightRange {

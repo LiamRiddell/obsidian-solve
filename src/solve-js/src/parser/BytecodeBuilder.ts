@@ -5,6 +5,9 @@ export interface BytecodeProgram {
 	numbers: number[];
 	strings: string[];
 	constants: Map<number, number>;
+	// Cached TypedArray views — set by ExpressionEngine on first use
+	cachedUint8?: Uint8Array;
+	cachedFloat64?: Float64Array;
 }
 
 export class BytecodeBuilder {

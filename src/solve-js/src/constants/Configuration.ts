@@ -75,50 +75,65 @@ export interface WorkerConfig {
 }
 
 /**
- * Complete engine configuration
- */
-export interface EngineConfig {
-  readonly date: DateConfig;
-  readonly dice: DiceConfig;
-  readonly performance: PerformanceConfig;
-  readonly validation: ValidationConfig;
-  readonly worker: WorkerConfig;
-}
+  * VM-related configuration
+  */
+ export interface VMConfig {
+   /** Maximum stack depth for VM execution */
+   readonly maxStackDepth: number;
+   /** Maximum instructions per expression execution */
+   readonly maxInstructions: number;
+ }
+
+ /**
+  * Complete engine configuration
+  */
+ export interface EngineConfig {
+   readonly date: DateConfig;
+   readonly dice: DiceConfig;
+   readonly performance: PerformanceConfig;
+   readonly validation: ValidationConfig;
+   readonly vm: VMConfig;
+   readonly worker: WorkerConfig;
+ }
 
 /**
  * Default configuration values
  */
 export const DEFAULT_CONFIG: EngineConfig = {
-  date: {
-    defaultOffsetDays: 0,
-    maxOffsetYears: 100,
-    minOffsetYears: -100,
-    defaultFormat: 'YYYY-MM-DD'
-  },
-  dice: {
-    defaultSides: 6,
-    maxSides: 1000,
-    maxDice: 100,
-    defaultDice: 1
-  },
-  performance: {
-    defaultCacheSize: 1000,
-    maxDocumentLines: 10000,
-    parseTimeoutMs: 5000,
-    executionTimeoutMs: 10000
-  },
-  validation: {
-    maxExpressionLength: 1000,
-    maxComplexity: 100,
-    maxNestingDepth: 10
-  },
-  worker: {
-    maxConcurrentWorkers: 4,
-    idleTimeoutMs: 30000,
-    maxRetries: 3,
-    baseBackoffMs: 1000
-  }
-};
+   date: {
+     defaultOffsetDays: 0,
+     maxOffsetYears: 100,
+     minOffsetYears: -100,
+     defaultFormat: 'YYYY-MM-DD'
+   },
+   dice: {
+     defaultSides: 6,
+     maxSides: 1000,
+     maxDice: 100,
+     defaultDice: 1
+   },
+   performance: {
+     defaultCacheSize: 1000,
+     maxDocumentLines: 10000,
+     parseTimeoutMs: 5000,
+     executionTimeoutMs: 10000
+   },
+   validation: {
+     maxExpressionLength: 2000,
+     maxComplexity: 500,
+     maxNestingDepth: 50
+   },
+   vm: {
+     maxStackDepth: 200,
+     maxInstructions: 50000
+   },
+   worker: {
+     maxConcurrentWorkers: 4,
+     idleTimeoutMs: 30000,
+     maxRetries: 3,
+     baseBackoffMs: 1000
+   }
+ };
 
 /**
  * Configuration manager for engine settings
@@ -238,13 +253,14 @@ export class ConfigManager {
     base: EngineConfig,
     override: Partial<EngineConfig>
   ): EngineConfig {
-    return {
-      date: { ...base.date, ...override.date },
-      dice: { ...base.dice, ...override.dice },
-      performance: { ...base.performance, ...override.performance },
-      validation: { ...base.validation, ...override.validation },
-      worker: { ...base.worker, ...override.worker }
-    };
+return {
+       date: { ...base.date, ...override.date },
+       dice: { ...base.dice, ...override.dice },
+       performance: { ...base.performance, ...override.performance },
+       validation: { ...base.validation, ...override.validation },
+       vm: { ...base.vm, ...override.vm },
+       worker: { ...base.worker, ...override.worker }
+     };
   }
 }
 

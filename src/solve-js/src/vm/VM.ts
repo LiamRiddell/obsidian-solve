@@ -3,14 +3,25 @@ import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, vect
 import { OpRegistry, type VM } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
-export function createVM(registry: OpRegistry): VM {
-  const stack: Value[] = [];
-  const variables = new Map<string, Value>();
+export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructions = 50000): VM {
+   const stack: Value[] = [];
+   const variables = new Map<string, Value>();
+   let instructionCount = 0;
 
-  return {
-    push(v: Value) { stack.push(v); },
-    pop() { return stack.pop()!; },
+   return {
+     push(v: Value) {
+       if (stack.length < maxStackDepth) {
+         stack.push(v);
+       }
+     },
+     pop() {
+       if (stack.length === 0) {
+         return numberValue(0);
+       }
+       return stack.pop()!;
+     },
     popNumber() { return stack.pop()!.toNumber(); },
     popString() { return (stack.pop()!.value as string); },
     peek() { return stack[stack.length - 1]; },
@@ -18,6 +29,19 @@ export function createVM(registry: OpRegistry): VM {
     registry,
     getVar(key: string) { return variables.get(key); },
     setVar(key: string, val: Value) { variables.set(key, val); },
+    reset() {
+      stack.length = 0;
+      variables.clear();
+      instructionCount = 0;
+    },
+    getMaxInstructions() { return maxInstructions; },
+    getInstructionCount() { return instructionCount; },
+    incrementInstructions(n: number) {
+      instructionCount += n;
+      if (instructionCount > maxInstructions) {
+        throw ErrorFactory.execution("INSTRUCTION_LIMIT_EXCEEDED", `Execution exceeded maximum of ${maxInstructions} instructions`);
+      }
+    },
   };
 }
 
@@ -71,6 +95,8 @@ function binaryOp(
 
   if (l.type === ValueType.Uom || r.type === ValueType.Uom) {
     const { lv, rv, unit } = unifyUom(l, r);
+    // Guard against NaN from failed unit conversions
+    if (isNaN(lv) || isNaN(rv)) return numberValue(0);
     return uomValue(op(lv, rv), unit!);
   }
 
@@ -96,19 +122,34 @@ function binaryOp(
     return vectorValue(result);
   }
 
-  return numberValue(op(l.toNumber(), r.toNumber()));
+  const lNum = l.toNumber();
+  const rNum = r.toNumber();
+  // Guard against NaN propagation
+  if (isNaN(lNum) || isNaN(rNum)) return numberValue(0);
+  return numberValue(op(lNum, rNum));
 }
 
 export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
-  const { opcodes, numbers, strings } = bytecode;
-  const reg = vm.registry;
-  let ip = 0;
+   const { opcodes, numbers, strings } = bytecode;
+   const reg = vm.registry;
+   let ip = 0;
+   let localInstructionCount = 0;
+   const maxInstructions = vm.getMaxInstructions();
 
-  while (ip < opcodes.length) {
-    const op = opcodes[ip++] as OpCode;
-    switch (op) {
-      case OpCode.NOP: break;
-      case OpCode.HALT: return vm.pop();
+   if (opcodes.length === 0) return undefined;
+
+   while (ip < opcodes.length) {
+     localInstructionCount++;
+     if (localInstructionCount > maxInstructions) {
+       throw ErrorFactory.execution("INSTRUCTION_LIMIT_EXCEEDED", `Execution exceeded maximum of ${maxInstructions} instructions`);
+     }
+     const op = opcodes[ip++] as OpCode;
+     switch (op) {
+       case OpCode.NOP: break;
+       case OpCode.HALT: {
+         const result = vm.pop();
+         return result;
+       }
       case OpCode.SWAP: {
         const a = vm.pop();
         const b = vm.pop();
