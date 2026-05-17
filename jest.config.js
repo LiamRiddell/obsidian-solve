@@ -88,9 +88,11 @@ const config = {
 	// A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
 	moduleNameMapper: {
 		"@/(.*)": "<rootDir>/src/$1",
-		"test/(.*)": "<rootDir>/test/$1",
-		"^@codemirror/language$": "<rootDir>/test/__mocks__/codemirror-language.ts",
-		"^@lezer/common$": "<rootDir>/test/__mocks__/lezer-common.ts",
+		"@app/(.*)": "<rootDir>/src/app/$1",
+		"@solve-js/(.*)": "<rootDir>/src/solve-js/src/$1",
+		"test/(.*)": "<rootDir>/src/solve-js/__tests__/$1",
+		"^@codemirror/language$": "<rootDir>/src/solve-js/__tests__/__mocks__/codemirror-language.ts",
+		"^@lezer/common$": "<rootDir>/src/solve-js/__tests__/__mocks__/lezer-common.ts",
 	},
 
 	// An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
@@ -127,7 +129,7 @@ const config = {
 	rootDir: ".",
 
 	// A list of paths to directories that Jest should use to search for files in
-	roots: ["<rootDir>", "src"],
+	roots: ["<rootDir>", "src/solve-js/__tests__"],
 
 	// Allows you to use a custom runner instead of Jest's default test runner
 	// runner: "jest-runner",
@@ -161,9 +163,10 @@ const config = {
 	// ],
 
 	// An array of regexp pattern strings that are matched against all test paths, matched tests are skipped
-	// testPathIgnorePatterns: [
-	//   "\\\\node_modules\\\\"
-	// ],
+	testPathIgnorePatterns: [
+		"\\\\node_modules\\\\",
+		"__mocks__"
+	],
 
 	// The regexp pattern or array of patterns that Jest uses to detect test files
 	// testRegex: [],
@@ -179,7 +182,8 @@ const config = {
 		"^.+\\.tsx?$": [
 			"ts-jest",
 			{
-				tsconfig: "./test/tsconfig.test.json",
+				tsconfig: "./src/solve-js/__tests__/tsconfig.test.json",
+				skipLibCheck: true
 			},
 		],
 	},

@@ -13,7 +13,7 @@ const cssCommentPlugin = {
 			for (const file of result.outputFiles) {
 				if (file.path.endsWith(".css")) {
 					const styleSettingsFile = await fs.readFile(
-						"./src/styles/style-settings-config.css"
+						"./src/app/styles/style-settings-config.css"
 					);
 
 					const newContents = Buffer.concat([
@@ -31,7 +31,7 @@ const cssCommentPlugin = {
 };
 
 const context = await esbuild.context({
-	entryPoints: ["src/main.ts", "src/styles.css"],
+	entryPoints: ["src/app/main.ts", "src/app/styles.css"],
 	bundle: true,
 	define: {
 		global: "globalThis",

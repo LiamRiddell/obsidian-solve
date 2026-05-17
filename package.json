@@ -16,6 +16,7 @@
 	"devDependencies": {
 		"@jest/globals": "^29.6.2",
 		"@lezer/common": "^1.0.3",
+		"@types/moo": "^0.5.10",
 		"@types/node": "16.18.39",
 		"@typescript-eslint/eslint-plugin": "6.2.0",
 		"@typescript-eslint/parser": "6.2.0",

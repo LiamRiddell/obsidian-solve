@@ -3,8 +3,6 @@
  * Handles currency data fetching in the playground environment
  */
 
-import { QueryFunctionContext } from "@tanstack/query-core";
-
 // ============================================================================
 // WORKER IMPLEMENTATION
 // ============================================================================
