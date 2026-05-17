@@ -497,4 +497,88 @@ export class ExpressionEngine {
         this.scopeManager.clear();
         this.bytecodeCache.clear();
     }
+
+    /**
+     * Evaluate independent expressions using a worker pool (Web Workers).
+     * Falls back to sequential for Node.js or single-threaded envs.
+     */
+    async evaluateParallel(expressions: string[]): Promise<(number | undefined)[]> {
+        const results: (number | undefined)[] = new Array(expressions.length);
+
+        if (typeof Worker === "undefined") {
+            for (let i = 0; i < expressions.length; i++) {
+                try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
+            }
+            return results;
+        }
+
+        const workerFn = () => {
+            self.onmessage = (e: any) => {
+                const { id, expression } = e.data;
+                try {
+                    const result = Function('"use strict"; return (' + expression + ')')();
+                    (self as any).postMessage({ id, result, error: null });
+                } catch (err: any) {
+                    (self as any).postMessage({ id, result: null, error: err.message });
+                }
+            };
+        };
+        const blob = new Blob(["(" + workerFn.toString() + ")()"], { type: "application/javascript" });
+        const workerUrl = URL.createObjectURL(blob);
+        const maxWorkers = Math.min(expressions.length, 4);
+        const chunkSize = Math.ceil(expressions.length / maxWorkers);
+        const workers: Worker[] = [];
+        const promises: Promise<void>[] = [];
+
+        for (let w = 0; w < maxWorkers; w++) {
+            const worker = new Worker(workerUrl);
+            workers.push(worker);
+            const start = w * chunkSize;
+            const end = Math.min(start + chunkSize, expressions.length);
+
+            const promise = new Promise<void>((resolve) => {
+                worker.onmessage = (e: any) => {
+                    const { id, result, error } = e.data;
+                    results[id] = error ? undefined : result;
+                };
+                worker.onerror = () => resolve();
+                for (let i = start; i < end; i++) {
+                    worker.postMessage({ id: i, expression: expressions[i] });
+                }
+                setTimeout(resolve, 50);
+            });
+            promises.push(promise);
+        }
+
+        await Promise.all(promises);
+        workers.forEach((w) => w.terminate());
+        URL.revokeObjectURL(workerUrl);
+        return results;
+    }
+
+    /**
+     * Incremental re-evaluation: only re-evaluates lines affected by a variable change.
+     * Uses the DAG dependency graph to minimize re-computation.
+     */
+    evaluateIncremental(variable: string, newValue: number): Map<number, Value> {
+        this.vm.setVar(variable, numberValue(newValue));
+        this.markDirtyFromVariable(variable);
+        const dirtyLines = this.lineCache.getDirtyLines();
+        const updated = new Map<number, Value>();
+
+        for (const lineNumber of dirtyLines) {
+            const entry = this.lineCache.get(lineNumber);
+            if (!entry) continue;
+            try {
+                this.vm.reset();
+                const result = this.evaluateLineWithDebug(lineNumber, "");
+                if (!result.error && result.value) {
+                    updated.set(lineNumber, result.value);
+                    entry.result = result.value;
+                    this.lineCache.markClean(lineNumber);
+                }
+            } catch { }
+        }
+        return updated;
+    }
 }
