@@ -8,19 +8,21 @@ export interface HighlightRange {
 }
 
 export class LineCacheEntry {
-   constructor(
-     public result: Value,
-     public bytecode: BytecodeProgram,
-     public readVariables: string[],
-     public writeVariable: string | null,
-     public dirty: boolean,
-     public highlights: HighlightRange[] = []
-   ) {}
- }
+  constructor(
+    public result: Value,
+    public bytecode: BytecodeProgram,
+    public readVariables: string[],
+    public writeVariable: string | null,
+    public dirty: boolean,
+    public highlights: HighlightRange[] = [],
+    public epoch: number = 0
+  ) {}
+}
 
 export class LineCache {
   private entries: Map<string, LineCacheEntry> = new Map();
   private dirtyLines: Set<string> = new Set();
+  private currentEpoch = 0;
 
   private getKey(line: number, expression?: string): string {
     return expression ? `${line}:${expression}` : `${line}`;
@@ -59,7 +61,6 @@ export class LineCache {
   }
 
   getDirtyLines(): Set<number> {
-    // Return line numbers for any dirty entries
     const dirtyLineNumbers = new Set<number>();
     for (const key of this.dirtyLines) {
       const line = parseInt(key.split(':')[0]);
@@ -95,5 +96,32 @@ export class LineCache {
   clear(): void {
     this.entries.clear();
     this.dirtyLines.clear();
+    this.currentEpoch = 0;
+  }
+
+  // === MemoCache integration: epoch-based global invalidation ===
+  invalidateEpoch(): void {
+    this.currentEpoch++;
+  }
+
+  getEpoch(): number {
+    return this.currentEpoch;
+  }
+
+  /**
+   * Get or compute a cached result, respecting the current epoch.
+   * If the entry's epoch doesn't match the current epoch, recompute.
+   */
+  getOrCompute(line: number, expression: string, compute: () => LineCacheEntry): LineCacheEntry {
+    const key = this.getKey(line, expression);
+    const existing = this.entries.get(key);
+    if (existing && existing.epoch === this.currentEpoch && !existing.dirty) {
+      return existing;
+    }
+    const result = compute();
+    result.epoch = this.currentEpoch;
+    this.entries.set(key, result);
+    this.dirtyLines.delete(key);
+    return result;
   }
 }

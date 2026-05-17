@@ -2,7 +2,6 @@ import { VM } from "@solve-js/vm/OpRegistry";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { ScopeManager } from "@solve-js/vm/ScopeManager";
-import { MemoCache } from "@solve-js/vm/MemoCache";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
@@ -35,7 +34,6 @@ export class ExpressionEngine {
     private dag = new DependencyGraph();
     private lineCache = new LineCache();
     private scopeManager = new ScopeManager();
-    private memoCache = new MemoCache();
     private lexer: Lexer;
     private registry: ParseletRegistry;
     private parser: Parser;
@@ -434,8 +432,8 @@ export class ExpressionEngine {
         return this.parser;
     }
 
-    getMemoCache(): MemoCache {
-        return this.memoCache;
+    getMemoCache(): never {
+        throw new Error("MemoCache has been consolidated into LineCache");
     }
 
     isDiagnosticMode(): boolean {
@@ -446,7 +444,6 @@ export class ExpressionEngine {
         this.dag.clear();
         this.lineCache.clear();
         this.scopeManager.clear();
-        this.memoCache.clear();
         this.bytecodeCache.clear();
     }
 }

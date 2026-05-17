@@ -1,20 +1,20 @@
 {
-  "timestamp": "2026-05-17T23:30:44.785Z",
+  "timestamp": "2026-05-17T23:33:17.766Z",
   "results": {
-    "simple_arithmetic": 0.0025819319999989786,
-    "unicode_math": 0.00283157599999995,
-    "keywords": 0.0029217899999989185,
-    "mixed_expression": 0.0039437960000004565,
-    "long_expression": 0.06668190000000104,
-    "inline_solve_in_text": 0.004790205000000878,
-    "full_markdown_line": 0.004801089999999612,
-    "empty_string": 0.000558735999998944,
-    "number_only": 0.0007563279999995302,
-    "variable_ref": 0.000814008000000731,
-    "function_call": 0.001395045999998565,
-    "complex_unit": 0.0035831759999990025,
-    "datetime": 0.003080019999996621,
-    "dice_roll": 0.0016531639999990148,
-    "vector": 0.0020049319999996076
+    "simple_arithmetic": 0.0017855560000004426,
+    "unicode_math": 0.0017864700000008089,
+    "keywords": 0.0018554700000006324,
+    "mixed_expression": 0.0031124280000003274,
+    "long_expression": 0.043470599999998555,
+    "inline_solve_in_text": 0.002567790000000014,
+    "full_markdown_line": 0.002608550000001287,
+    "empty_string": 0.00037885399999913717,
+    "number_only": 0.0005509819999988212,
+    "variable_ref": 0.0007590879999990284,
+    "function_call": 0.0011546839999972871,
+    "complex_unit": 0.002377943999998897,
+    "datetime": 0.0016676319999986663,
+    "dice_roll": 0.0015367800000011993,
+    "vector": 0.0020092399999974077
   }
 }
