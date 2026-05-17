@@ -90,6 +90,7 @@ const config = {
 		"@/(.*)": "<rootDir>/src/$1",
 		"@app/(.*)": "<rootDir>/src/app/$1",
 		"@solve-js/(.*)": "<rootDir>/src/solve-js/src/$1",
+		"@tools/(.*)": "<rootDir>/src/solve-js/tools/$1",
 		"test/(.*)": "<rootDir>/src/solve-js/__tests__/$1",
 		"^@codemirror/language$": "<rootDir>/src/solve-js/__tests__/__mocks__/codemirror-language.ts",
 		"^@lezer/common$": "<rootDir>/src/solve-js/__tests__/__mocks__/lezer-common.ts",

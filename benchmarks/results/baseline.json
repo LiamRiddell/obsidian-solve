@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-05-18T00:00:00.000Z",
+  "version": "1.1.0",
+  "commit": "baseline",
+  "tests": { "total": 1093, "passed": 1093, "failed": 0 },
+  "benchmarks": {
+    "lexer": {
+      "simple_arithmetic_ms": 0.001683,
+      "unicode_math_ms": 0.001752,
+      "keywords_ms": 0.001998,
+      "mixed_expression_ms": 0.003717,
+      "long_expression_ms": 0.047607,
+      "function_call_ms": 0.001123
+    },
+    "vm": {
+      "simple_add_us": 0.46,
+      "variable_access_us": 0.32,
+      "vector_creation_us": 0.38,
+      "unit_conversion_us": 3.89,
+      "dice_roll_us": 0.54,
+      "percentage_us": 0.34
+    },
+    "pipeline": {
+      "single_eval_cold_ms": 0.5936,
+      "single_eval_warm_ms": 0.0029,
+      "50_line_doc_ms": 0.7401,
+      "200_line_doc_ms": 1.2136,
+      "variable_chain_ms": 0.5779,
+      "20_inline_solves_ms": 0.6233,
+      "re_eval_dirty_ms": 0.5724,
+      "mixed_complex_ms": 0.6065,
+      "function_plus_literal_ms": 0.5604
+    }
+  }
+}

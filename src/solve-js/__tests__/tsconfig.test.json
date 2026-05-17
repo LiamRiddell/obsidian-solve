@@ -3,12 +3,13 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "baseUrl": "../../..",
-    "paths": {
-      "@/*": ["src/*"],
-      "@app/*": ["src/app/*"],
-      "@solve-js/*": ["src/solve-js/src/*"],
-      "test/*": ["src/solve-js/__tests__/*"]
-    },
+"paths": {
+       "@/*": ["src/*"],
+       "@app/*": ["src/app/*"],
+       "@solve-js/*": ["src/solve-js/src/*"],
+       "@tools/*": ["src/solve-js/tools/*"],
+       "test/*": ["src/solve-js/__tests__/*"]
+     },
     "target": "ES6",
     "module": "ESNext",
     "moduleResolution": "node",
