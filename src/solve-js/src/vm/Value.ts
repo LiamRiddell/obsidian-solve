@@ -43,7 +43,15 @@ export class Value {
 	toNumber(): number {
 		if (typeof this.value === 'number') return this.value;
 		if (typeof this.value === 'bigint') return Number(this.value);
-		return parseFloat(this.value as string);
+		// Prevent silent NaN propagation from non-numeric strings
+		const result = parseFloat(this.value as string);
+		return isNaN(result) ? 0 : result;
+	}
+
+	isNaN(): boolean {
+		if (typeof this.value === 'number') return isNaN(this.value);
+		if (typeof this.value === 'bigint') return false;
+		return isNaN(parseFloat(this.value as string));
 	}
 }
 

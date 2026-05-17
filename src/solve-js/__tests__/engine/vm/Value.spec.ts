@@ -10,13 +10,13 @@ describe("Value", () => {
     expect(v.toNumber()).toBe(42);
   });
 
-  test("stringValue creates string type", () => {
-    const v = stringValue("hello");
-    expect(v.type).toBe(ValueType.String);
-    expect(v.value).toBe("hello");
-    expect(v.isString()).toBe(true);
-    expect(v.toNumber()).toBeNaN();
-  });
+test("stringValue creates string type", () => {
+     const v = stringValue("hello");
+     expect(v.type).toBe(ValueType.String);
+     expect(v.value).toBe("hello");
+     expect(v.isString()).toBe(true);
+     expect(v.toNumber()).toBe(0);
+   });
 
   test("hexValue creates hex type", () => {
     const v = hexValue(255);
@@ -61,8 +61,8 @@ describe("Value", () => {
     expect(v.toNumber()).toBe(42.5);
   });
 
-  test("toNumber returns NaN for non-numeric string", () => {
-    const v = stringValue("hello");
-    expect(v.toNumber()).toBeNaN();
-  });
+test("toNumber returns 0 for non-numeric string", () => {
+     const v = stringValue("hello");
+     expect(v.toNumber()).toBe(0);
+   });
 });
