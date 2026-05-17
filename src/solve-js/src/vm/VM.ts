@@ -46,9 +46,9 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
 }
 
 export interface Bytecode {
-  opcodes: Uint8Array;
-  numbers: Float64Array;
-  strings: string[];
+	opcodes: Uint8Array | number[];
+	numbers: Float64Array | number[];
+	strings: string[];
 }
 
 function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: string | undefined; sameMeasure: boolean } {
@@ -130,11 +130,15 @@ function binaryOp(
 }
 
 export function executeBytecode(bytecode: Bytecode, vm: VM): Value | undefined {
-   const { opcodes, numbers, strings } = bytecode;
+   const { opcodes: rawOpcodes, numbers: rawNumbers, strings } = bytecode;
    const reg = vm.registry;
    let ip = 0;
    let localInstructionCount = 0;
    const maxInstructions = vm.getMaxInstructions();
+
+   // Normalize opcodes/numbers to typed arrays for consistent VM access
+   const opcodes = rawOpcodes instanceof Uint8Array ? rawOpcodes : new Uint8Array(rawOpcodes);
+   const numbers = rawNumbers instanceof Float64Array ? rawNumbers : new Float64Array(rawNumbers);
 
    if (opcodes.length === 0) return undefined;
 

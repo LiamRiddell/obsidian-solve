@@ -1,13 +1,10 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export interface BytecodeProgram {
-	opcodes: number[];
-	numbers: number[];
+	opcodes: Uint8Array | number[];
+	numbers: Float64Array | number[];
 	strings: string[];
-	constants: Map<number, number>;
-	// Cached TypedArray views — set by ExpressionEngine on first use
-	cachedUint8?: Uint8Array;
-	cachedFloat64?: Float64Array;
+	constants?: Map<number, number>;
 }
 
 export class BytecodeBuilder {
@@ -56,7 +53,32 @@ export class BytecodeBuilder {
 		return {
 			opcodes: [...this.opcodes],
 			numbers: [...this.numbers],
-			strings: [...this.strings],
+			strings: this.strings,
+			constants: new Map(),
+		};
+	}
+
+	/**
+	 * Build directly into typed arrays for zero-copy VM consumption.
+	 * Reuses the provided buffers if they are large enough, otherwise allocates.
+	 */
+	buildInto(buf?: { opcodes: Uint8Array; numbers: Float64Array }): BytecodeProgram {
+		const opLen = this.opcodes.length;
+		const numLen = this.numbers.length;
+		const opcodes = buf && buf.opcodes.length >= opLen
+			? buf.opcodes.subarray(0, opLen)
+			: new Uint8Array(opLen);
+		const numbers = buf && buf.numbers.length >= numLen
+			? buf.numbers.subarray(0, numLen)
+			: new Float64Array(numLen);
+
+		for (let i = 0; i < opLen; i++) opcodes[i] = this.opcodes[i];
+		for (let i = 0; i < numLen; i++) numbers[i] = this.numbers[i];
+
+		return {
+			opcodes,
+			numbers,
+			strings: this.strings,
 			constants: new Map(),
 		};
 	}

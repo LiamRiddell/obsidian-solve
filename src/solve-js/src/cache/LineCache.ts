@@ -1,13 +1,5 @@
 import { Value } from "@solve-js/vm/Value";
-
-export interface BytecodeSnapshot {
-	opcodes: number[];
-	numbers: number[];
-	strings: string[];
-	// Cached TypedArray views — set by ExpressionEngine on first use
-	cachedUint8?: Uint8Array;
-	cachedFloat64?: Float64Array;
-}
+import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 
 export interface HighlightRange {
   from: number;
@@ -16,15 +8,15 @@ export interface HighlightRange {
 }
 
 export class LineCacheEntry {
-  constructor(
-    public result: Value,
-    public bytecode: BytecodeSnapshot,
-    public readVariables: string[],
-    public writeVariable: string | null,
-    public dirty: boolean,
-    public highlights: HighlightRange[] = []
-  ) {}
-}
+   constructor(
+     public result: Value,
+     public bytecode: BytecodeProgram,
+     public readVariables: string[],
+     public writeVariable: string | null,
+     public dirty: boolean,
+     public highlights: HighlightRange[] = []
+   ) {}
+ }
 
 export class LineCache {
   private entries: Map<string, LineCacheEntry> = new Map();
