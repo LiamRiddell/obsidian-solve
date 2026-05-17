@@ -48,6 +48,8 @@ export class ExpressionEngine {
         opcodes: new Uint8Array(256),
         numbers: new Float64Array(64),
     };
+    // O(1) lookup for markdown token types to skip during lexing
+    private markdownTokenTypes = new Set(["MD_H1", "MD_H2", "MD_H3", "MD_H4", "MD_H5", "MD_H6", "MD_BOLD", "MD_ITALIC", "MD_CODE", "MD_LINK", "MD_IMAGE", "MD_LIST_ITEM", "MD_BLOCKQUOTE", "MD_HR", "MD_TABLE", "MD_NEWLINE", "WS"]);
 
     constructor(localeCode = "en", diagnosticMode = false, config?: Partial<typeof DEFAULT_CONFIG>) {
         this.localeCode = localeCode;
@@ -248,8 +250,7 @@ export class ExpressionEngine {
 
         this.lexer.reset(expression);
         for (const t of this.lexer) {
-            if (t.type === TokenTypes.WS) continue;
-            if (t.type.startsWith("MD_")) continue; // Filter out markdown tokens
+            if (this.markdownTokenTypes.has(t.type)) continue;
             tokens.push(t);
         }
 
@@ -438,6 +439,56 @@ export class ExpressionEngine {
 
     isDiagnosticMode(): boolean {
         return this.diagnosticMode;
+    }
+
+    /**
+     * Fast path: evaluate an expression and return a number directly.
+     * Skips Value object allocation when only a numeric result is needed.
+     * Returns NaN on error.
+     */
+    evaluateNumber(expression: string): number {
+        try {
+            return this.evaluateLine(-1, expression).toNumber();
+        } catch {
+            return NaN;
+        }
+    }
+
+    /**
+     * Lean document parsing — skips diagnostic info collection for maximum speed.
+     * Use this for production evaluation where debug info is not needed.
+     */
+    parseDocumentLean(input: string): { results: (number | undefined)[]; errors: string[] } {
+        const lines = input.split('\n');
+        const results: (number | undefined)[] = [];
+        const errors: string[] = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const lineText = lines[i].trim();
+            if (!lineText || lineText.startsWith(':')) {
+                results.push(undefined);
+                continue;
+            }
+
+            const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
+            const expression = inlineSolveMatch ? inlineSolveMatch[1] : lineText;
+
+            if (expression.length > this.config.validation.maxExpressionLength) {
+                errors.push(`Line ${i + 1}: expression too long`);
+                results.push(undefined);
+                continue;
+            }
+
+            try {
+                results.push(this.evaluateLine(i + 1, expression).toNumber());
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                errors.push(`Line ${i + 1}: ${errorMessage}`);
+                results.push(undefined);
+            }
+        }
+
+        return { results, errors };
     }
 
     clear(): void {
