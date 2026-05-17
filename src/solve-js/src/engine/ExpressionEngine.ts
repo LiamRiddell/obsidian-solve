@@ -9,6 +9,7 @@ import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/Bytecode
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, numberValue } from "@solve-js/vm/Value";
+import { PluginManager } from "@solve-js/plugins/PluginSystem";
 import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
 import { registerPercentageParselets } from "@solve-js/providers/percentage/parselets/index";
 import { registerFunctionParselets } from "@solve-js/providers/function/parselets/index";
@@ -41,6 +42,7 @@ export class ExpressionEngine {
     private vm: VM;
     private diagnosticMode: boolean;
     private config: typeof DEFAULT_CONFIG;
+    private pluginManager: PluginManager;
     // Bytecode cache — avoids re-parsing identical expressions
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
     // Pre-allocated typed array buffers for zero-copy VM consumption
@@ -57,6 +59,8 @@ export class ExpressionEngine {
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.lexer = new Lexer(localeCode);
         this.registry = new ParseletRegistry();
+        this.pluginManager = new PluginManager(this.registry);
+        // Register built-in providers (can be extended via registerPlugin/unregisterPlugin)
         registerArithmeticParselets(this.registry);
         registerPercentageParselets(this.registry);
         registerFunctionParselets(this.registry);
@@ -68,6 +72,22 @@ export class ExpressionEngine {
         registerBigIntParselets(this.registry);
         this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth);
         this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
+    }
+
+    /**
+     * Register an external plugin with the engine.
+     */
+    registerPlugin(plugin: import("@solve-js/plugins/PluginSystem").SolvePlugin): void {
+        this.pluginManager.register(plugin);
+    }
+
+    /**
+     * Unregister an external plugin.
+     */
+    unregisterPlugin(pluginName: string): void {
+        this.pluginManager.unregister(pluginName);
+        // Clear bytecode cache since parselets may have changed
+        this.bytecodeCache.clear();
     }
 
     /**
