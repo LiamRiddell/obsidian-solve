@@ -1,7 +1,9 @@
 import { enLocale, type ILocale } from "./en";
+import { deLocale } from "./de";
 
 const locales: Record<string, ILocale> = {
   en: enLocale,
+  de: deLocale,
 };
 
 export function getLocale(code: string): ILocale {
@@ -12,5 +14,4 @@ export function registerLocale(code: string, locale: ILocale): void {
   locales[code] = locale;
 }
 
-export type { ILocale } from "./en";
-export { enLocale } from "./en";
+export { enLocale, deLocale, type ILocale };

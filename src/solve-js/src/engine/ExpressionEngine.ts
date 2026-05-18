@@ -102,7 +102,7 @@ export class ExpressionEngine {
         registerUomParselets(this.registry);
         registerVectorParselets(this.registry);
         registerBigIntParselets(this.registry);
-        this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth);
+        this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth, localeCode);
         this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
     }
 
@@ -380,11 +380,19 @@ export class ExpressionEngine {
             };
         }
 
-        const reads: string[] = [];
-        const writes: string[] = [];
-        for (const t of tokens) {
-            if (t.value.startsWith(":") && t.type === "COLON") reads.push(t.value.slice(1));
-        }
+const reads: string[] = [];
+          const writes: string[] = [];
+          for (let i = 0; i < tokens.length; i++) {
+              const t = tokens[i];
+              if (t.value.startsWith(":") && t.type === "COLON") reads.push(t.value.slice(1));
+              if (t.type === "IDENT") {
+                  reads.push(t.value);
+                  // Check if next token is EQUALS -> this is a write
+                  if (i + 1 < tokens.length && tokens[i + 1].type === "EQUALS") {
+                      writes.push(t.value);
+                  }
+              }
+          }
 
         let program: BytecodeProgram;
 
@@ -602,13 +610,21 @@ if (hasCollectors) {
      * Skips Value object allocation when only a numeric result is needed.
      * Returns NaN on error.
      */
-    evaluateNumber(expression: string): number {
-        try {
-            return this.evaluateLine(-1, expression).toNumber();
-        } catch {
-            return NaN;
-        }
-    }
+evaluateNumber(expression: string): number {
+         try {
+             const result = this.evaluateLine(-1, expression);
+             // Detect bare undefined variable references (e.g. "hello")
+             const trimmed = expression.trim();
+             if (result.toNumber() === 0 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
+                 if (this.vm.getVar(trimmed) === undefined) {
+                     return NaN;
+                 }
+             }
+             return result.toNumber();
+         } catch {
+             return NaN;
+         }
+     }
 
     /**
      * @deprecated Use parseDocument instead. Diagnostic info is now
@@ -649,12 +665,13 @@ if (hasCollectors) {
         return { results, errors };
     }
 
-    clear(): void {
-        this.dag.clear();
-        this.lineCache.clear();
-        this.scopeManager.clear();
-        this.bytecodeCache.clear();
-    }
+clear(): void {
+         this.dag.clear();
+         this.lineCache.clear();
+         this.scopeManager.clear();
+         this.bytecodeCache.clear();
+         this.vm.reset();
+     }
 
     /**
      * Evaluate independent expressions using a worker pool (Web Workers).
@@ -727,7 +744,7 @@ if (hasCollectors) {
         const updated = new Map<number, Value>();
 
         for (const lineNumber of dirtyLines) {
-            const entry = this.lineCache.get(lineNumber);
+            const entry = this.lineCache.getEntryForLine(lineNumber);
             if (!entry) continue;
             try {
                 this.vm.reset();

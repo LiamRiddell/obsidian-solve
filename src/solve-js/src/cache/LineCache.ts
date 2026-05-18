@@ -28,22 +28,49 @@ export class LineCache {
     return expression ? `${line}:${expression}` : `${line}`;
   }
 
-  get(line: number, expression?: string): LineCacheEntry | undefined {
-    return this.entries.get(this.getKey(line, expression));
-  }
+get(line: number, expression?: string): LineCacheEntry | undefined {
+     return this.entries.get(this.getKey(line, expression));
+   }
+
+   /** Find any cache entry for the given line number, regardless of expression suffix */
+   getEntryForLine(line: number): LineCacheEntry | undefined {
+     const linePrefix = `${line}:`;
+     for (const [key, entry] of this.entries) {
+       if (key === `${line}` || key.startsWith(linePrefix)) {
+         return entry;
+       }
+     }
+     return undefined;
+   }
 
   set(line: number, entry: LineCacheEntry, expression?: string): void {
     this.entries.set(this.getKey(line, expression), entry);
   }
 
-  markDirty(line: number, expression?: string): void {
-    const key = this.getKey(line, expression);
-    const entry = this.entries.get(key);
-    if (entry) {
-      entry.dirty = true;
-    }
-    this.dirtyLines.add(key);
-  }
+markDirty(line: number, expression?: string): void {
+     if (expression !== undefined) {
+       const key = this.getKey(line, expression);
+       const entry = this.entries.get(key);
+       if (entry) entry.dirty = true;
+       this.dirtyLines.add(key);
+     } else {
+       // Mark all entries for this line number as dirty
+       const linePrefix = `${line}:`;
+       let found = false;
+       for (const key of this.entries.keys()) {
+         if (key === `${line}` || key.startsWith(linePrefix)) {
+           const entry = this.entries.get(key);
+           if (entry) entry.dirty = true;
+           this.dirtyLines.add(key);
+           found = true;
+         }
+       }
+       // If no entry exists yet, still track the dirty line
+       if (!found) {
+         this.dirtyLines.add(`${line}`);
+       }
+     }
+   }
 
   markClean(line: number, expression?: string): void {
     const key = this.getKey(line, expression);

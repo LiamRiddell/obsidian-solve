@@ -5,18 +5,27 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@solve-js/diagnostics";
 
 export class Parser {
-    private tokens: Token[] = [];
-    private current = 0;
-    private depth = 0;
-    private maxDepth: number;
-    private parseletRegistry: ParseletRegistry;
-    private diagnosticPipeline: DiagnosticPipeline | undefined;
-    private currentExpression: string = "";
+     private tokens: Token[] = [];
+     private current = 0;
+     private depth = 0;
+     private maxDepth: number;
+     private parseletRegistry: ParseletRegistry;
+     private diagnosticPipeline: DiagnosticPipeline | undefined;
+     private currentExpression: string = "";
+     private localeCode: string;
 
-    constructor(parseletRegistry: ParseletRegistry, maxDepth = 50) {
-        this.parseletRegistry = parseletRegistry;
-        this.maxDepth = maxDepth;
-    }
+     constructor(parseletRegistry: ParseletRegistry, maxDepth = 50, localeCode = "en") {
+         this.parseletRegistry = parseletRegistry;
+         this.maxDepth = maxDepth;
+         this.localeCode = localeCode;
+     }
+
+     /**
+      * Get locale code for NumberParselet to normalize separators
+      */
+     getLocaleCode(): string {
+         return this.localeCode;
+     }
 
     /**
      * Set the diagnostic pipeline for parselet matching events.

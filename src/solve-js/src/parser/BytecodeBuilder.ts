@@ -66,10 +66,10 @@ export class BytecodeBuilder {
 		const opLen = this.opcodes.length;
 		const numLen = this.numbers.length;
 		const opcodes = buf && buf.opcodes.length >= opLen
-			? buf.opcodes.subarray(0, opLen)
+			? buf.opcodes.slice(0, opLen)
 			: new Uint8Array(opLen);
 		const numbers = buf && buf.numbers.length >= numLen
-			? buf.numbers.subarray(0, numLen)
+			? buf.numbers.slice(0, numLen)
 			: new Float64Array(numLen);
 
 		for (let i = 0; i < opLen; i++) opcodes[i] = this.opcodes[i];
