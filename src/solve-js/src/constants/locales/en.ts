@@ -41,6 +41,7 @@ export const enLocale: ILocale = {
     between: "BETWEEN", from: "FROM",
     increase: "INCREASE", decrease: "DECREASE",
     vec2: "VEC2", vec3: "VEC3", vec4: "VEC4",
+     float: "FLOAT",
   },
   display: {
     resultPrefix: "= ",

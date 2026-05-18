@@ -112,9 +112,9 @@ export class DataQueryService {
       }
     }
     
-    // Default worker path for the plugin
-    console.log("[DataQueryService] Plugin worker URL: /workers/DataQueryWorker.ts");
-    return "/workers/DataQueryWorker.ts";
+// Default worker path for the plugin
+     console.log("[DataQueryService] Plugin worker URL: /workers/DataQueryWorker.js");
+     return "/workers/DataQueryWorker.js";
   }
 
   // ------------------------------------------------------------------------

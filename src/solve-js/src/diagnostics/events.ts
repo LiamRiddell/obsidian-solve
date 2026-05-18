@@ -132,22 +132,65 @@ export interface CategorizedParselet {
   readonly tokenOffset: number;
 }
 
+/** JSON-serializable representation of a DiagnosticReport */
+export interface DiagnosticReportJSON {
+   readonly events: readonly DiagnosticEvent[];
+   readonly parselets: readonly CategorizedParselet[];
+   readonly summary: {
+     readonly totalTokens: number;
+     readonly totalParselets: number;
+     readonly totalOpcodes: number;
+     readonly cacheHit: boolean;
+     readonly elapsedNs: number;
+     readonly parseCategories: Record<string, number>;
+   };
+   readonly metadata: {
+     readonly expression: string;
+     readonly inputType: string;
+     readonly timestamp: number;
+     readonly vmTraceEnabled: boolean;
+   };
+}
+
 /** Structured diagnostic report */
 export interface DiagnosticReport {
-  readonly events: readonly DiagnosticEvent[];
-  readonly parselets: readonly CategorizedParselet[];
-  readonly summary: {
-    readonly totalTokens: number;
-    readonly totalParselets: number;
-    readonly totalOpcodes: number;
-    readonly cacheHit: boolean;
-    readonly elapsedNs: number;
-    readonly parseCategories: ReadonlyMap<string, number>;
-  };
-  readonly metadata: {
-    readonly expression: string;
-    readonly inputType: string;
-    readonly timestamp: number;
-    readonly vmTraceEnabled: boolean;
-  };
+   readonly events: readonly DiagnosticEvent[];
+   readonly parselets: readonly CategorizedParselet[];
+   readonly summary: {
+     readonly totalTokens: number;
+     readonly totalParselets: number;
+     readonly totalOpcodes: number;
+     readonly cacheHit: boolean;
+     readonly elapsedNs: number;
+     readonly parseCategories: ReadonlyMap<string, number>;
+   };
+   readonly metadata: {
+     readonly expression: string;
+     readonly inputType: string;
+     readonly timestamp: number;
+     readonly vmTraceEnabled: boolean;
+   };
+
+   /** Serialize to a JSON-safe plain object */
+   toJSON(): DiagnosticReportJSON;
+}
+
+/** JSON-serializable representation of a DiagnosticReport */
+export interface DiagnosticReportJSON {
+   readonly events: readonly DiagnosticEvent[];
+   readonly parselets: readonly CategorizedParselet[];
+   readonly summary: {
+     readonly totalTokens: number;
+     readonly totalParselets: number;
+     readonly totalOpcodes: number;
+     readonly cacheHit: boolean;
+     readonly elapsedNs: number;
+     readonly parseCategories: Record<string, number>;
+   };
+   readonly metadata: {
+     readonly expression: string;
+     readonly inputType: string;
+     readonly timestamp: number;
+     readonly vmTraceEnabled: boolean;
+   };
 }

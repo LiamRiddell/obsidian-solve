@@ -25,12 +25,12 @@ import {
     ParsingResult,
     ParsedLine,
     InlineSolvePosition,
-    UnifiedParsingOptions
+    UnifiedParsingOptions,
 } from "@solve-js/types/ParsingResult";
+import { DiagnosticReportJSON } from "@solve-js/diagnostics";
 import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
 import {
     DiagnosticPipeline,
-    DiagnosticCollector,
     NullDiagnosticCollector,
     TimelineDiagnosticCollector,
     DiagnosticEventType,
@@ -134,11 +134,13 @@ export class ExpressionEngine {
      */
     parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
         const lines = input.split('\n');
-        const result: ParsingResult = {
-            lines: [],
-            totalLines: lines.length,
-            errors: []
-        };
+const result: ParsingResult = {
+             lines: [],
+             totalLines: lines.length,
+             errors: []
+         };
+
+         const includeDiagnostics = options.includeDiagnostics ?? false;
 
         let currentPosition = 0;
 
@@ -196,11 +198,19 @@ export class ExpressionEngine {
                 }
             }
 
-            result.lines.push(parsedLine);
-        }
+result.lines.push(parsedLine);
+         }
 
-        return result;
-    }
+         // Attach diagnostic report if requested
+         if (includeDiagnostics) {
+             const reports = this.diagnosticPipeline.collectReports();
+             if (reports.length > 0) {
+                 result.diagnostics = reports[0].toJSON();
+             }
+         }
+
+         return result;
+     }
 
     /**
      * Check if a line is effectively empty (whitespace only or only markdown syntax)
@@ -245,12 +255,13 @@ export class ExpressionEngine {
      */
     evaluateLineWithDebug(
         lineNumber: number,
-        lineText: string
+        lineText: string,
+        inputType: string = "expression"
     ): { value: Value; tokens: any[]; program: any; error?: string; inlineSolve?: InlineSolvePosition; debug?: any } {
         const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
         if (inlineSolveMatch) {
             const expression = inlineSolveMatch[1];
-            const result = this.evaluateExpressionWithDiagnostic(expression, lineNumber);
+            const result = this.evaluateExpressionWithDiagnostic(expression, lineNumber, inputType);
             return {
                 ...result,
                 inlineSolve: {
@@ -262,14 +273,14 @@ export class ExpressionEngine {
                 }
             };
         }
-        return this.evaluateExpressionWithDiagnostic(lineText, lineNumber);
+        return this.evaluateExpressionWithDiagnostic(lineText, lineNumber, inputType);
     }
 
     /**
      * Core expression evaluation logic with diagnostic pipeline integration.
      * Every pipeline stage fires events to registered collectors.
      */
-    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number): { value: Value; tokens: any[]; program: any; error?: string; debug?: any } {
+    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: any[]; program: any; error?: string; debug?: any } {
         const pipeline = this.diagnosticPipeline;
         const hasCollectors = pipeline.hasCollectors;
 
@@ -297,8 +308,8 @@ export class ExpressionEngine {
                 type: DiagnosticEventType.PipelineStart,
                 elapsedNs: 0,
                 expression,
-                inputType: "expression",
-            });
+                inputType,
+             });
         }
 
         // Lexing with token emission events

@@ -1,5 +1,5 @@
 import { DiagnosticCollector } from "./collector";
-import { DiagnosticReport, DiagnosticEvent } from "./events";
+import { DiagnosticReport, DiagnosticReportJSON, DiagnosticEvent } from "./events";
 import { DiagnosticEventType } from "./events";
 
 /**
@@ -64,56 +64,73 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
     this.events.push(event);
   }
 
-  getReport(): DiagnosticReport | undefined {
-    if (this.events.length === 0) return undefined;
+getReport(): DiagnosticReport | undefined {
+     if (this.events.length === 0) return undefined;
 
-    const elapsedNs = performance.now() * 1e6 - this.startNs;
+     const elapsedNs = performance.now() * 1e6 - this.startNs;
 
-    const parseCategories = new Map<string, number>();
-    for (const [, entry] of this.parseletEntries) {
-      parseCategories.set(entry.category, entry.count);
-    }
+     const parseCategories = new Map<string, number>();
+     for (const [, entry] of this.parseletEntries) {
+       parseCategories.set(entry.category, entry.count);
+     }
 
-    let totalOpcodes = 0;
-    for (const event of this.events) {
-      if (event.type === "bytecode_built") {
-        totalOpcodes = event.opcodesLength;
-        break;
-      }
-    }
+     let totalOpcodes = 0;
+     for (const event of this.events) {
+       if (event.type === "bytecode_built") {
+         totalOpcodes = event.opcodesLength;
+         break;
+       }
+     }
 
-    const cacheHit = this.events.some((e) => e.type === "cache_hit");
-    const totalTokens = this.events.filter((e) => e.type === "token_emitted").length;
+     const cacheHit = this.events.some((e) => e.type === "cache_hit");
+     const totalTokens = this.events.filter((e) => e.type === "token_emitted").length;
 
-    return {
-      events: this.events,
-      parselets: this.events
-        .filter((e): e is DiagnosticEvent & { type: "parselet_matched" } => e.type === "parselet_matched")
-        .map((e) => ({
-          tokenType: e.tokenType,
-          tokenValue: e.tokenValue,
-          parseletCategory: e.parseletCategory,
-          parseletType: e.parseletType,
-          isPrefix: e.isPrefix,
-          bindingPower: e.bindingPower,
-          tokenOffset: e.tokenOffset,
-        })),
-      summary: {
-        totalTokens,
-        totalParselets: parseCategories.size,
-        totalOpcodes,
-        cacheHit,
-        elapsedNs,
-        parseCategories,
-      },
-      metadata: {
-        expression:
-          this.events[0]?.type === "pipeline_start" ? this.events[0].expression : "",
-        inputType:
-          this.events[0]?.type === "pipeline_start" ? this.events[0].inputType : "",
-        timestamp: Date.now(),
-        vmTraceEnabled: this.events.some((e) => e.type === "vm_step"),
-      },
-    };
-  }
+     const report: DiagnosticReport = {
+       events: this.events,
+       parselets: this.events
+         .filter((e): e is DiagnosticEvent & { type: "parselet_matched" } => e.type === "parselet_matched")
+         .map((e) => ({
+           tokenType: e.tokenType,
+           tokenValue: e.tokenValue,
+           parseletCategory: e.parseletCategory,
+           parseletType: e.parseletType,
+           isPrefix: e.isPrefix,
+           bindingPower: e.bindingPower,
+           tokenOffset: e.tokenOffset,
+         })),
+       summary: {
+         totalTokens,
+         totalParselets: parseCategories.size,
+         totalOpcodes,
+         cacheHit,
+         elapsedNs,
+         parseCategories,
+       },
+       metadata: {
+         expression:
+           this.events[0]?.type === "pipeline_start" ? this.events[0].expression : "",
+         inputType:
+           this.events[0]?.type === "pipeline_start" ? this.events[0].inputType : "",
+         timestamp: Date.now(),
+         vmTraceEnabled: this.events.some((e) => e.type === "vm_step"),
+       },
+       toJSON(): DiagnosticReportJSON {
+         return {
+           events: report.events,
+           parselets: report.parselets,
+           summary: {
+             totalTokens: report.summary.totalTokens,
+             totalParselets: report.summary.totalParselets,
+             totalOpcodes: report.summary.totalOpcodes,
+             cacheHit: report.summary.cacheHit,
+             elapsedNs: report.summary.elapsedNs,
+             parseCategories: Object.fromEntries(report.summary.parseCategories),
+           },
+           metadata: { ...report.metadata },
+         };
+       },
+     };
+
+     return report;
+   }
 }

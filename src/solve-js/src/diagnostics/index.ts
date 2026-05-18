@@ -5,6 +5,7 @@ export { TimelineDiagnosticCollector } from "./timeline-collector";
 export type {
   DiagnosticEvent,
   DiagnosticReport,
+  DiagnosticReportJSON,
   CategorizedParselet,
   TokenEmittedEvent,
   ParseletMatchedEvent,

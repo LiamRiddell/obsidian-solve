@@ -36,11 +36,55 @@ export class Parser {
         this.currentExpression = expression ?? "";
     }
 
-    load(tokens: Token[]): void {
-        this.tokens = tokens;
-        this.current = 0;
-        this.depth = 0;
-    }
+load(tokens: Token[]): void {
+         this.tokens = this.balanceParens(tokens);
+         this.current = 0;
+         this.depth = 0;
+     }
+
+     /**
+      * Auto-balance unmatched parentheses: append missing closing parens
+      * or prepend missing opening parens to make expressions parseable.
+      */
+     private balanceParens(tokens: Token[]): Token[] {
+         let openCount = 0;
+         for (const t of tokens) {
+             if (t.type === "LPAREN") openCount++;
+             else if (t.type === "RPAREN") openCount--;
+         }
+
+         const result = [...tokens];
+         if (openCount > 0) {
+             // More opens than closes — append missing closing parens
+             for (let i = 0; i < openCount; i++) {
+                 const lastToken = tokens[tokens.length - 1];
+                 result.push({
+                     type: "RPAREN",
+                     value: ")",
+                     text: ")",
+                     offset: lastToken ? lastToken.offset + lastToken.text.length : 0,
+                     lineBreaks: 0,
+                     line: lastToken ? lastToken.line : 1,
+                     col: lastToken ? lastToken.col + lastToken.text.length : 1,
+                 } as Token);
+             }
+         } else if (openCount < 0) {
+             // More closes than opens — prepend missing opening parens
+             for (let i = 0; i < -openCount; i++) {
+                 result.unshift({
+                     type: "LPAREN",
+                     value: "(",
+                     text: "(",
+                     offset: 0,
+                     lineBreaks: 0,
+                     line: 1,
+                     col: 1,
+                 } as Token);
+             }
+         }
+
+         return result;
+     }
 
     parseExpression(bindingPower = 0, builder?: BytecodeBuilder): void {
         this.depth++;

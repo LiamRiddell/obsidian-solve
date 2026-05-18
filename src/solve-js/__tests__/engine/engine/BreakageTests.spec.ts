@@ -280,11 +280,12 @@ Expression: 3 * 4
       expect(tokens.length).toBeGreaterThanOrEqual(0);
     });
 
-    test("handles unmatched brackets", () => {
-      const engine = new ExpressionEngine();
-      // Should throw an error for unmatched brackets
-      expect(() => engine.evaluateLine(1, "(1 + 2")).toThrow();
-    });
+test("handles unmatched brackets", () => {
+       const engine = new ExpressionEngine();
+       // Unmatched brackets are now auto-balanced by inferred parentheses
+       const result = engine.evaluateLine(1, "(1 + 2");
+       expect(result.toNumber()).toBe(3);
+     });
 
     test("handles division by zero", () => {
       const engine = new ExpressionEngine();
