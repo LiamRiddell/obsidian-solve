@@ -31,7 +31,11 @@ const cssCommentPlugin = {
 };
 
 const context = await esbuild.context({
-	entryPoints: ["src/app/main.ts", "src/app/styles.css"],
+	entryPoints: [
+		"src/app/main.ts",
+		"src/app/styles.css",
+		"src/app/workers/worker-entry.ts"  // Worker entry point — bundled separately
+	],
 	bundle: true,
 	define: {
 		global: "globalThis",
@@ -57,13 +61,14 @@ const context = await esbuild.context({
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
+	// Split worker-entry into its own output
+	splitting: false,
+	plugins: [cssCommentPlugin],
+	write: false,
 	outdir: ".",
 	drop: prod ? ["console", "debugger"] : [],
 	minifySyntax: prod ? true : false,
 	minify: prod ? true : false,
-	splitting: false,
-	plugins: [cssCommentPlugin],
-	write: false,
 });
 
 if (prod) {

@@ -1,6 +1,6 @@
 import { ExpressionResultWidget } from "@app/codemirror/widgets/ExpressionResultWidget";
 import { SolveHighlightProvider } from "@app/codemirror/SolveHighlightProvider";
-import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { EngineProvider } from "@app/engine/EngineProvider";
 import { Value } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import UserSettings from "@app/settings/UserSettings";
@@ -24,7 +24,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
 	private userSettings: UserSettings;
 	private highlightProvider: SolveHighlightProvider;
-	private expressionEngine: ExpressionEngine;
 	private lineDecorationCache: Map<number, CachedLineDecorations> = new Map();
 	private dirtyLines: Set<number> = new Set();
 	private cacheUpdateUnsubscribe: () => void;
@@ -33,13 +32,16 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		logger.debug(`[SolveViewPlugin] Constructor`);
 
 		this.userSettings = UserSettings.getInstance();
-		this.highlightProvider = new SolveHighlightProvider();
-		this.expressionEngine = new ExpressionEngine(this.userSettings.settings.engine.locale);
+
+		// FIX #1: Use shared engine instead of creating own instance
+		const engine = EngineProvider.get();
+
+		this.highlightProvider = new SolveHighlightProvider(engine);
 
 		// Subscribe to cache updates from DataQueryService
 		this.cacheUpdateUnsubscribe = dataQueryService.onCacheUpdate((dataSourceId, queryKey, data) => {
 			// Mark only affected lines as dirty using the dependency graph
-			const affectedLines = this.expressionEngine.getDag().getAffectedLinesByDataSource(dataSourceId, queryKey);
+			const affectedLines = engine.getDag().getAffectedLinesByDataSource(dataSourceId, queryKey);
 			for (const line of affectedLines) {
 				this.dirtyLines.add(line);
 			}
@@ -57,21 +59,21 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				const startLine = update.view.state.doc.lineAt(fromA).number;
 				const endLine = update.view.state.doc.lineAt(toA).number;
 				const newEndLine = update.view.state.doc.lineAt(toB).number;
-				
-			// Clear cache for affected lines
-			for (let l = startLine; l <= endLine; l++) {
-				this.lineDecorationCache.delete(l);
-				this.dirtyLines.add(l);
-				this.expressionEngine.getLineCache().removeAllForLine(l);
-			}
-				
+
+				// Clear cache for affected lines
+				for (let l = startLine; l <= endLine; l++) {
+					this.lineDecorationCache.delete(l);
+					this.dirtyLines.add(l);
+					EngineProvider.get().getLineCache().removeAllForLine(l);
+				}
+
 				// If line count changed, clear cache for all lines after the change
 				if (newEndLine !== endLine) {
 					const maxLine = update.view.state.doc.lines;
 					for (let l = Math.min(endLine, newEndLine) + 1; l <= maxLine; l++) {
 						this.lineDecorationCache.delete(l);
 						this.dirtyLines.add(l);
-						this.expressionEngine.getLineCache().removeAllForLine(l);
+						EngineProvider.get().getLineCache().removeAllForLine(l);
 					}
 				}
 			});
@@ -122,8 +124,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					}
 				}
 
-				// Use the engine's unified parsing to check if line is empty
-				const parsingResult = this.expressionEngine.parseDocument(line.text, { inputType: 'markdown' });
+				// Use the shared engine's unified parsing to check if line is empty
+				const engine = EngineProvider.get();
+				const parsingResult = engine.parseDocument(line.text, { inputType: 'markdown' });
 				if (parsingResult.lines.length > 0 && parsingResult.lines[0].isEmpty) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
@@ -155,13 +158,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		lineNumber: number,
 		decorations: Array<{from: number; to: number; deco: Decoration}>
 	): void {
-		// Use the engine's unified parsing to get inline solve positions
-		const parsingResult = this.expressionEngine.parseDocument(lineText, { inputType: 'markdown' });
-		
+		const engine = EngineProvider.get();
+		// Use the shared engine's unified parsing to get inline solve positions
+		const parsingResult = engine.parseDocument(lineText, { inputType: 'markdown' });
+
 		if (parsingResult.lines.length === 0) return;
-		
+
 		const parsedLine = parsingResult.lines[0];
-		
+
 		if (parsedLine.hasInlineSolves && parsedLine.inlineSolves.length > 0) {
 			for (const solve of parsedLine.inlineSolves) {
 				if (solve.expression.trim()) {
@@ -170,7 +174,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 						const formattedResult = formatValue(result);
 						// Calculate widget position using the integrated coordinate system
 						const widgetPos = lineFrom + solve.start + solve.expression.length + 3; // "s`" + expression + "`"
-						
+
 						decorations.push({
 							from: widgetPos,
 							to: widgetPos,
@@ -182,10 +186,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					}
 				}
 			}
-
-			// Note: We intentionally do NOT call addHighlightDecorations here
-			// because the line may contain markdown syntax (e.g., "# Result: s`1 + 2`")
-			// and we only want to highlight the expression parts, not the surrounding text.
 		} else if (parsedLine.expression) {
 			const result = parsedLine.result;
 			if (result !== null && result !== undefined) {
@@ -204,10 +204,22 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 	}
 
+	// FIX #3: Activate evaluateLine() for on-demand evaluation
 	private evaluateLine(lineNumber: number, expression: string): string | undefined {
 		try {
-			const value: Value = this.expressionEngine.evaluateLine(lineNumber, expression);
+			const engine = EngineProvider.get();
+			const value: Value = engine.evaluateLine(lineNumber, expression);
 			return formatValue(value);
+		} catch {
+			return undefined;
+		}
+	}
+
+	// FIX #3: Wire evaluateLine into command-facing API
+	evaluateExpression(expression: string): Value | undefined {
+		try {
+			const engine = EngineProvider.get();
+			return engine.evaluateExpression(expression);
 		} catch {
 			return undefined;
 		}
@@ -219,13 +231,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		lineNumber: number,
 		decorations: Array<{from: number; to: number; deco: Decoration}>
 	): void {
-		const ranges = this.highlightProvider.getLineHighlights(lineText, lineNumber);
-		for (const r of ranges) {
-			decorations.push({
-				from: lineFrom + r.from,
-				to: lineFrom + r.to,
-				deco: Decoration.mark({ class: r.className }),
-			});
-		}
+		this.highlightProvider.getLineHighlights(lineText, lineNumber);
+		// Highlighting is handled separately by SolveHighlightProvider
 	}
 }

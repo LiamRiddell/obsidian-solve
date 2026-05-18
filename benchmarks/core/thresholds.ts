@@ -1,9 +1,11 @@
 /**
- * Benchmark Threshold Configuration
- * 
- * Defines acceptable performance thresholds.
- * When a benchmark exceeds its threshold in CI mode, the build fails.
- */
+  * Benchmark Threshold Configuration
+  *
+  * Defines acceptable performance thresholds.
+  * When a benchmark exceeds its threshold in CI mode, the build fails.
+  */
+
+import type { BenchmarkResult } from "./StatRunner";
 
 export interface ThresholdConfig {
   /** Benchmark name pattern to match */
@@ -45,7 +47,7 @@ export const THRESHOLDS: ThresholdConfig[] = [
   { name: "pipeline:variable_chain", maxMeanMs: 1.0 },
 
   // Max multipliers — anything exceeding these is a regression
-  { name: "*", maxMultiplier: 3.0 },
+  { name: "*", maxMeanMs: 1000, maxMultiplier: 3.0 },
 ];
 
 /**

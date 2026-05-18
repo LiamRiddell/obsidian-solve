@@ -4,6 +4,7 @@ import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { EPluginStatus } from "@app/constants/EPluginStatus";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
 import { solve } from "@solve-js/api/SolveAPI";
+import { EngineProvider } from "@app/engine/EngineProvider";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import { SettingTab } from "@app/settings/SettingsTab";
 import UserSettings from "@app/settings/UserSettings";
@@ -21,11 +22,10 @@ export default class SolvePlugin extends Plugin {
 		logger.debug("[Solve] onload()");
 
 		await this.registerEvents();
-
 		await this.restoreUserSettings();
 		logger.debug("[Solve] User Settings Restored");
 
-await this.registerSettings();
+		await this.registerSettings();
 		logger.debug("[Solve] Registered: Settings");
 
 		this.app.workspace.trigger("parse-style-settings");
@@ -120,6 +120,28 @@ await this.registerSettings();
 	}
 
 	private async registerCommands() {
+		// FIX #3: Evaluate expression command — uses shared engine
+		this.addCommand({
+			id: "evaluate-expression",
+			name: "Evaluate expression",
+			editorCallback(editor, ctx) {
+				const engine = EngineProvider.get();
+				const selectedText = editor.getSelection();
+
+				if (!selectedText) {
+					new Notice("Solve: Select an expression to evaluate.");
+					return;
+				}
+
+				try {
+					const val = engine.evaluateExpression(selectedText);
+					new Notice(`Solve: ${selectedText.trim()} = ${val.toNumber()}`);
+				} catch (err) {
+					new Notice(`Solve: Error — ${(err as Error).message}`);
+				}
+			},
+		});
+
 		this.addCommand({
 			id: "commit-result-current-line",
 			name: "Commit result on current line",

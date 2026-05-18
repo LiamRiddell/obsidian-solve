@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
 
 import { MarkdownLexer } from "@solve-js/lexer/MarkdownLexer";
+import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { SolveHighlightProvider } from "@app/codemirror/SolveHighlightProvider";
 
 describe("Markdown Elements and Multi-line Documents", () => {
@@ -321,10 +322,12 @@ $$`;
   });
 
   describe("SolveHighlightProvider with Markdown", () => {
+    let engine: ExpressionEngine;
     let provider: SolveHighlightProvider;
 
     beforeEach(() => {
-      provider = new SolveHighlightProvider();
+      engine = new ExpressionEngine("en", false);
+      provider = new SolveHighlightProvider(engine);
     });
 
     test("highlights expression in list item", () => {

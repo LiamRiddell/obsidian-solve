@@ -451,7 +451,7 @@ export class ExpressionEngine {
 
     getParser(): Parser {
         return this.parser;
-    }
+}
 
     getMemoCache(): never {
         throw new Error("MemoCache has been consolidated into LineCache");
@@ -459,6 +459,14 @@ export class ExpressionEngine {
 
     isDiagnosticMode(): boolean {
         return this.diagnosticMode;
+    }
+
+    /**
+     * Evaluate a raw expression string without line-number context.
+     * Returns the Value result. Throws on error.
+     */
+    evaluateExpression(expression: string): Value {
+        return this.evaluateLine(-1, expression);
     }
 
     /**
@@ -518,62 +526,77 @@ export class ExpressionEngine {
         this.bytecodeCache.clear();
     }
 
+/**
+      * Evaluate independent expressions using a worker pool (Web Workers).
+      * Falls back to sequential for single-threaded envs (Node.js, SSR).
+      */
+     async evaluateParallel(expressions: string[]): Promise<(number | undefined)[]> {
+         const results: (number | undefined)[] = new Array(expressions.length);
+         const workers: Worker[] = [];
+
+         if (typeof Worker === "undefined") {
+             for (let i = 0; i < expressions.length; i++) {
+                 try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
+             }
+             return results;
+         }
+
+         const maxWorkers = Math.min(expressions.length, 4);
+         const chunkSize = Math.ceil(expressions.length / maxWorkers);
+         const promises: Promise<void>[] = [];
+
+         for (let w = 0; w < maxWorkers; w++) {
+             const workerUrl = this.getWorkerUrl();
+             if (!workerUrl) {
+                 // Fallback: evaluate on main thread
+                 const start = w * chunkSize;
+                 const end = Math.min(start + chunkSize, expressions.length);
+                 for (let i = start; i < end; i++) {
+                     try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
+                 }
+                 continue;
+             }
+
+             const worker = new Worker(workerUrl, { type: "module", name: `solve-eval-${w}` });
+             workers.push(worker);
+             const start = w * chunkSize;
+             const end = Math.min(start + chunkSize, expressions.length);
+
+             const promise = new Promise<void>((resolve) => {
+                 worker.onmessage = (e: MessageEvent) => {
+                     const msg = e.data;
+                     if (msg.type === "RESULT" && typeof msg.id === "number" && msg.id >= start && msg.id < end) {
+                         results[msg.id] = msg.value?.value ?? undefined;
+                     }
+                 };
+                 worker.onerror = () => resolve();
+
+                 for (let i = start; i < end; i++) {
+                     worker.postMessage({ type: "EVAL", id: i, expression: expressions[i], locale: this.localeCode });
+                 }
+
+                 // Give worker time to process
+                 setTimeout(resolve, 100);
+             });
+             promises.push(promise);
+         }
+
+         await Promise.all(promises);
+         workers.forEach((w) => w.terminate());
+return results;
+    }
+
     /**
-     * Evaluate independent expressions using a worker pool (Web Workers).
-     * Falls back to sequential for Node.js or single-threaded envs.
+     * Get the worker entry script URL.
+     * In production, this is the bundled worker-entry.js file.
      */
-    async evaluateParallel(expressions: string[]): Promise<(number | undefined)[]> {
-        const results: (number | undefined)[] = new Array(expressions.length);
-
-        if (typeof Worker === "undefined") {
-            for (let i = 0; i < expressions.length; i++) {
-                try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
-            }
-            return results;
-        }
-
-        const workerFn = () => {
-            self.onmessage = (e: any) => {
-                const { id, expression } = e.data;
-                try {
-                    const result = Function('"use strict"; return (' + expression + ')')();
-                    (self as any).postMessage({ id, result, error: null });
-                } catch (err: any) {
-                    (self as any).postMessage({ id, result: null, error: err.message });
-                }
-            };
-        };
-        const blob = new Blob(["(" + workerFn.toString() + ")()"], { type: "application/javascript" });
-        const workerUrl = URL.createObjectURL(blob);
-        const maxWorkers = Math.min(expressions.length, 4);
-        const chunkSize = Math.ceil(expressions.length / maxWorkers);
-        const workers: Worker[] = [];
-        const promises: Promise<void>[] = [];
-
-        for (let w = 0; w < maxWorkers; w++) {
-            const worker = new Worker(workerUrl);
-            workers.push(worker);
-            const start = w * chunkSize;
-            const end = Math.min(start + chunkSize, expressions.length);
-
-            const promise = new Promise<void>((resolve) => {
-                worker.onmessage = (e: any) => {
-                    const { id, result, error } = e.data;
-                    results[id] = error ? undefined : result;
-                };
-                worker.onerror = () => resolve();
-                for (let i = start; i < end; i++) {
-                    worker.postMessage({ id: i, expression: expressions[i] });
-                }
-                setTimeout(resolve, 50);
-            });
-            promises.push(promise);
-        }
-
-        await Promise.all(promises);
-        workers.forEach((w) => w.terminate());
-        URL.revokeObjectURL(workerUrl);
-        return results;
+    private getWorkerUrl(): string | null {
+        // Resolve at build time via esbuild define
+        // @ts-ignore — replaced during build
+        if (typeof __WORKER_URL__ !== "undefined") return __WORKER_URL__;
+        // Development: load from known path
+        const base = typeof window !== "undefined" ? window.location.origin : "";
+        return `${base}/workers/worker-entry.js`;
     }
 
     /**

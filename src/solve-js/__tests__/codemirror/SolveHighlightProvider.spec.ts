@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, test } from "@jest/globals";
+import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { SolveHighlightProvider } from "@app/codemirror/SolveHighlightProvider";
 
 describe("SolveHighlightProvider", () => {
+  let engine: ExpressionEngine;
   let provider: SolveHighlightProvider;
 
   beforeEach(() => {
-    provider = new SolveHighlightProvider();
+    engine = new ExpressionEngine("en", false);
+    provider = new SolveHighlightProvider(engine);
   });
 
   test("simple expression 1 + 2 produces 3 highlights: NUMBER, PLUS, NUMBER", () => {

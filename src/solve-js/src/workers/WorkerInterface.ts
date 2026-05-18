@@ -4,14 +4,18 @@
  */
 
 export interface WorkerMessage {
-  type: string;
-  payload?: any;
+   /** Optional correlation ID for matching requests to responses */
+   id?: number;
+   type: string;
+   payload?: any;
 }
 
 export interface WorkerResponse {
-  type: string;
-  payload?: any;
-  error?: string;
+   /** Correlation ID matching the request */
+   id?: number;
+   type: string;
+   payload?: any;
+   error?: string;
 }
 
 export interface IWorker {

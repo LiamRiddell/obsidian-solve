@@ -1,17 +1,22 @@
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { HighlightRange } from "@solve-js/cache/LineCache";
-import UserSettings from "@app/settings/UserSettings";
 
+/**
+ * SolveHighlightProvider — syntax highlighting for CodeMirror decorations.
+ *
+ * FIX #1: Accepts a shared ExpressionEngine instance instead of creating its own.
+ * This ensures the same lexer, registry, and locale are used across components.
+ */
 export class SolveHighlightProvider {
-  private expressionEngine: ExpressionEngine;
+  private engine: ExpressionEngine;
   private cache: Map<string, HighlightRange[]> = new Map();
 
-  constructor() {
-    const userSettings = UserSettings.getInstance();
-    this.expressionEngine = new ExpressionEngine(userSettings.settings.engine.locale);
+  constructor(engine: ExpressionEngine) {
+    this.engine = engine;
   }
 
   getLineHighlights(lineText: string, lineNumber?: number): HighlightRange[] {
+    const engine = this.engine;
     const cacheKey = lineNumber !== undefined ? `${lineNumber}:${lineText}` : lineText;
 
     const cached = this.cache.get(cacheKey);
@@ -19,8 +24,8 @@ export class SolveHighlightProvider {
       return cached;
     }
 
-    // Use the ExpressionEngine's integrated lexer to get highlight tokens
-    const tokens = this.expressionEngine.getLexer().getHighlightTokens(lineText);
+    // Use the shared engine's integrated lexer to get highlight tokens
+    const tokens = engine.getLexer().getHighlightTokens(lineText);
     if (tokens.length === 0) {
       this.cache.set(cacheKey, []);
       return [];

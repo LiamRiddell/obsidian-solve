@@ -26,7 +26,7 @@ export { GrammarDSL, createGrammarDSL } from "./compiler/GrammarDSL";
 export { LineCache, LineCacheEntry } from "./cache/LineCache";
 export { DependencyGraph } from "./vm/DependencyGraph";
 export { ScopeManager } from "./vm/ScopeManager";
-export { MemoCache } from "./vm/MemoCache";
+// MemoCache consolidated into LineCache — removed from exports
 export type { ExpressionRecord } from "./vm/ScopeManager";
 
 export { VariableResolver, sharedVariableResolver } from "./variables/VariableResolver";
