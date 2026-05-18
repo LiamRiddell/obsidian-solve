@@ -1,0 +1,158 @@
+# ARCHITECTURE PRINCIPLES — solve-js
+
+> How the system is structured and why. Every module's role and boundaries.
+
+---
+
+## 1. Data Flow
+
+The user writes natural markdown text — `10 + 2`, `£100 in GBP`, `Now + 20 days`, or inline solves like `s\`1+2\``. The engine evaluates all of it; the frontend controls how results are presented in the document.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Obsidian Editor (CodeMirror 6)                                 │
+│  ┌──────────────┐  ┌──────────────────────┐                     │
+│  │ MarkdownView │──│ MarkdownEditorPlugin │  (renders results)  │
+│  └──────┬───────┘  └──────────────────────┘                     │
+│         │                                                        │
+│         ▼                                                        │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                 ExpressionEngine                        │    │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  │    │
+│  │  │  Lexer   │→ │  Parser  │→ │ Bytecode │→ │   VM   │  │    │
+│  │  └──────────┘  └──────────┘  └──────────┘  └────────┘  │    │
+│  │       │                               │                  │    │
+│  │  ┌────▼─────┐                ┌─────────▼──────┐           │    │
+│  │  │  Cache   │◄──────────────►│  Dependency    │           │    │
+│  │  │  Layer   │   Bytecode +   │  Graph         │           │    │
+│  │  └──────────┘   Results      └────────────────┘           │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                              │                                   │
+│         ┌────────────────────┼────────────────────┐              │
+│         ▼                    ▼                    ▼              │
+│  ┌──────────────┐  ┌──────────────────┐  ┌───────────────┐      │
+│  │  Providers   │  │    PluginSystem  │  │  SolveAPI     │      │
+│  │  (Arithmetic,│  │  (extensions)    │  │  (exposes API) │      │
+│  │  UoM, etc.)  │  └──────────────────┘  └───────────────┘      │
+│  └──────────────┘                                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**The pipeline**: Raw markdown text → Lexer → Parser → BytecodeCompiler → VM → Value result → returned to frontend for rendering.
+
+---
+
+## 2. Module Responsibilities
+
+| Directory | Module | Responsibility | Dependencies |
+|-----------|--------|---------------|-------------|
+| `lexer/` | `Lexer`, `MarkdownLexer` | Tokenise markdown + expressions | None (self-contained) |
+| `lexer/registry/` | `TokenRegistry` | Token type definitions | None |
+| `parser/` | `Parser` | Pratt parsing → AST | `ParseletRegistry` |
+| `parser/` | `BytecodeBuilder` | AST → bytecode | `OpCode` |
+| `parser/registry/` | `ParseletRegistry` | Register prefix/infix parselets | `BindingPower` |
+| `parser/` | `BindingPower` | Operator precedence table | None |
+| `parser/` | `OpCode` (enum) | Opcode definitions | None |
+| `vm/` | `VM` | Execute bytecode → Value | `OpRegistry`, `Value`, `DependencyGraph` |
+| `vm/` | `ScopeManager` | Variable scope and resolution | `VariableResolver`, `DependencyGraph` |
+| `vm/` | `MemoCache` | Result caching (epoch-based) | None |
+| `vm/` | `DependencyGraph` | Track line→variable dependencies | None |
+| `vm/` | `Value` | Typed value representation | None |
+| `cache/` | `LineCache` | Per-line result + bytecode cache | None |
+| `cache/` | `UnifiedCache`, `LFUCache` | Generic cache (legacy — deprecated) | None |
+| `engine/` | `ExpressionEngine` | Orchestrates full pipeline | Everything above |
+| `engine/` | `DynamicValueResolver` | Resolves dynamic values at eval time | `ExpressionEngine` |
+| `providers/` | 9 provider modules | Domain-specific parselets and ops | `ParseletRegistry`, `OpRegistry` |
+| `plugins/` | `PluginSystem` | External plugin management | `ParseletRegistry`, `OpRegistry` |
+| `workers/` | `DataQueryWorker` | Web Worker message handling | `ExpressionEngine` |
+| `workers/` | `DataSourceStrategy` | HTTP/data source abstraction | None |
+| `workers/` | `CurrencyExchange` | Currency rate management | Data sources |
+| `diagnostics/` | `Event`, `Collector`, `Pipeline` | Diagnostic event system | None |
+| `errors/` | `UnifiedErrorFramework` | `SolveError`, `Result<T,E>`, `ErrorFactory` | None |
+| `api/` | `SolveAPI` | Public API exposure | `ExpressionEngine`, `PluginSystem` |
+| `types/` | `ParsingResult`, `core` | Shared type definitions | None |
+| `format/` | `FormatEngine`, `FormattingSettings` | Output formatting | `Value` |
+| `uom/` | `UnitConverter`, `CurrencyExchange` | Units and currency | Workers, DataSources |
+
+---
+
+## 3. Architectural Rules
+
+### 3.1 Dependency Direction (strict top-down)
+```
+lexer ← parser ← bytecode ← VM ← cache ← engine ← providers/plugins/workers/API
+```
+- Nothing imports upward
+- `vm/` does NOT import `parser/` or `lexer/`
+- `engine/` may import everything
+- `providers/` may import `parser/` and `vm/` types but NOT `engine/`
+- `cache/` is dependency-free
+
+### 3.2 Caching Strategy
+
+| Layer | What it stores | Invalidation | Lifetime |
+|-------|---------------|-------------|----------|
+| **Bytecode cache** | Expression string → `BytecodeProgram` | On grammar/provider change | Long-lived (static) |
+| **Result cache (LineCache)** | Line number + hash → `Value` | On variable change via DAG | Per-document |
+| **DAG dirty tracking** | Variable → dependent lines | On variable write | Per-document |
+
+### 3.3 VM Execution Model
+- Stack-based bytecode VM
+- `Value` is immutable — operations create new Values
+- All numeric types: `Number`, `Hex`, `BigInt`, `Percentage`, `Uom`, plus vectors
+- VM has hard instruction limit and stack depth limit
+- Errors during execution throw `SolveError` with category `EXECUTION`
+
+### 3.4 Provider System
+- Each domain (arithmetic, units, datetime, etc.) is a **provider**
+- Providers register parselets (prefix + infix) and opcodes
+- Providers are registered in the engine constructor or via `PluginSystem`
+- No provider may directly access the VM — only through opcodes
+
+---
+
+## 4. Key Design Decisions
+
+### Why a bytecode VM instead of direct evaluation?
+- Bytecode can be cached (expression → bytecode is expensive, bytecode → result is cheap)
+- Enables instruction limits for safety
+- Provides a stable compilation target for plugins
+
+### Why Pratt parsing?
+- Clean separation of prefix and infix operators
+- Easy to extend with new parselets
+- Natural precedence handling via binding powers
+
+### Why epoch-based cache invalidation?
+- On variable change, increment the epoch
+- All cache entries from the old epoch are considered stale
+- Cheaper than tracing individual dependencies for simple cases
+- DAG handles fine-grained dirty-line propagation
+
+### Why both `LineCache` and `MemoCache`?
+- `LineCache`: stores bytecode + result keyed by line number (fast path for unchanged lines)
+- `MemoCache`: stores result keyed by expression hash + line (survives line renumbering)
+- **Note**: These overlap and should be consolidated (Phase 3 plan)
+
+---
+
+## 5. Plugin Architecture (Future)
+
+```
+External plugin registers via PluginSystem
+    │
+    ▼
+PluginSystem adds parselets to ParseletRegistry
+PluginSystem adds opcodes to OpRegistry
+PluginSystem registers variable sources
+    │
+    ▼
+Next ExpressionEngine creation picks up new registrations
+    │
+    ▼
+Bytecode cache is invalidated (new grammar = new bytecode)
+```
+
+- Plugins must NOT modify existing parselets or opcodes
+- Plugin bytecode is isolated from core bytecode
+- Plugin unload clears all contributions and invalidates cache
