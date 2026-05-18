@@ -7,22 +7,24 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 class NumberParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-    builder.emitOpcode(OpCode.PUSH_NUMBER);
-    builder.emitNumber(parseFloat(token.value));
-  }
+	readonly category = "Test";
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+		builder.emitOpcode(OpCode.PUSH_NUMBER);
+		builder.emitNumber(parseFloat(token.value));
+	}
 }
 
 class PlusParselet implements InfixParselet {
-  getBindingPower(): number {
-    return 30;
-  }
-  parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    const rightToken = parser.consume();
-    builder.emitOpcode(OpCode.PUSH_NUMBER);
-    builder.emitNumber(parseFloat(rightToken.value));
-    builder.emitOpcode(OpCode.ADD);
-  }
+	readonly category = "Test";
+	getBindingPower(): number {
+		return 30;
+	}
+	parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
+		const rightToken = parser.consume();
+		builder.emitOpcode(OpCode.PUSH_NUMBER);
+		builder.emitNumber(parseFloat(rightToken.value));
+		builder.emitOpcode(OpCode.ADD);
+	}
 }
 
 describe("ParseletRegistry", () => {

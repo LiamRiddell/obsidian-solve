@@ -5,7 +5,8 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class VectorParselet implements PrefixParselet {
-  private dimension: number;
+	readonly category = "Vector";
+	private dimension: number;
 
   constructor(dimension = 0) {
     this.dimension = dimension;

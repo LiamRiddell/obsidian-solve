@@ -19,22 +19,24 @@ describe("Solve ISolvePackage", () => {
     expect(api.registerPackage).toBeDefined();
   });
 
-  it("supports registerPackage with prefix parselets", () => {
-    const testParselet: PrefixParselet = {
-      parse(_parser: Parser, _token: Token, _builder: BytecodeBuilder): void {}
-    };
-    const pkg: ISolvePackage = {
-      name: "test-package",
-      prefixParselets: [{ tokenType: "TEST_PREFIX", parselet: testParselet }],
-    };
-    expect(() => solve.registerPackage(pkg)).not.toThrow();
-  });
+it("supports registerPackage with prefix parselets", () => {
+     const testParselet: PrefixParselet = {
+       category: "Test",
+       parse(_parser: Parser, _token: Token, _builder: BytecodeBuilder): void {}
+     };
+     const pkg: ISolvePackage = {
+       name: "test-package",
+       prefixParselets: [{ tokenType: "TEST_PREFIX", parselet: testParselet }],
+     };
+     expect(() => solve.registerPackage(pkg)).not.toThrow();
+   });
 
-  it("supports registerPackage with infix parselets", () => {
-    const testParselet: InfixParselet = {
-      parse(_parser: Parser, _left: Token, _token: Token, _builder: BytecodeBuilder): void {},
-      getBindingPower(): number { return 10; },
-    };
+   it("supports registerPackage with infix parselets", () => {
+     const testParselet: InfixParselet = {
+       category: "Test",
+       parse(_parser: Parser, _left: Token, _token: Token, _builder: BytecodeBuilder): void {},
+       getBindingPower(): number { return 10; },
+     };
     const pkg: ISolvePackage = {
       name: "test-package",
       infixParselets: [{ tokenType: "TEST_INFIX", parselet: testParselet }],

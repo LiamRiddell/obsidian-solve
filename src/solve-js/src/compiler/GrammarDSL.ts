@@ -31,34 +31,37 @@ defineInfix(tokenType: string, bindingPower: number, opCode?: OpCode): void {
     const op = opCode || this.tokenToOp[tokenType];
     if (op === undefined) return;
 
-    this.registry.registerInfix(tokenType, {
-      parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-        builder.emitOpcode(OpCode.PUSH_NUMBER);
-        builder.emitNumber(0);
-        builder.emitOpcode(OpCode.NOP);
+this.registry.registerInfix(tokenType, {
+       category: "GrammarDSL",
+       parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
+         builder.emitOpcode(OpCode.PUSH_NUMBER);
+         builder.emitNumber(0);
+         builder.emitOpcode(OpCode.NOP);
 
-        parser.parseExpression(bindingPower);
-        builder.emitOpcode(op);
-      },
-      getBindingPower(): number { return bindingPower; },
-    });
+         parser.parseExpression(bindingPower);
+         builder.emitOpcode(op);
+       },
+       getBindingPower(): number { return bindingPower; },
+     });
   }
 
   definePrefixFromRule(ruleString: string, handler: (builder: BytecodeBuilder, tokens: Token[], parser: Parser) => void, tokenType: string): void {
-    this.registry.registerPrefix(tokenType, {
-      parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-        handler(builder, [token], parser);
-      },
-    });
+this.registry.registerPrefix(tokenType, {
+       category: "GrammarDSL",
+       parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+         handler(builder, [token], parser);
+       },
+     });
   }
 
   defineInfixFromRule(ruleString: string, bindingPower: number, handler: (builder: BytecodeBuilder, left: Token, right: Token, parser: Parser) => void, tokenType: string): void {
-    this.registry.registerInfix(tokenType, {
-      parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-        handler(builder, left, token, parser);
-      },
-      getBindingPower(): number { return bindingPower; },
-    });
+this.registry.registerInfix(tokenType, {
+       category: "GrammarDSL",
+       parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
+         handler(builder, left, token, parser);
+       },
+       getBindingPower(): number { return bindingPower; },
+     });
   }
 }
 

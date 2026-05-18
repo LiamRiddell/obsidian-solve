@@ -5,7 +5,8 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class NextLastParselet implements PrefixParselet {
-  constructor(private readonly multiplier: number) {}
+	readonly category = "Date/Time";
+	constructor(private readonly multiplier: number) {}
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.DATE_NOW);

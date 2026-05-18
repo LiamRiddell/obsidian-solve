@@ -25,11 +25,22 @@ import {
     ParsingResult,
     ParsedLine,
     InlineSolvePosition,
-    UnifiedParsingOptions,
-    ParseletInfo,
-    DebugInfo
+    UnifiedParsingOptions
 } from "@solve-js/types/ParsingResult";
 import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
+import {
+    DiagnosticPipeline,
+    DiagnosticCollector,
+    NullDiagnosticCollector,
+    TimelineDiagnosticCollector,
+    DiagnosticEventType,
+    type DiagnosticEvent,
+    type CategorizedParselet
+} from "@solve-js/diagnostics";
+import { OpCode } from "@solve-js/parser/OpCode";
+
+// Pre-existing: __WORKER_URL__ is substituted by esbuild define at build time
+declare var __WORKER_URL__: string | undefined;
 
 export class ExpressionEngine {
     private dag = new DependencyGraph();
@@ -40,9 +51,9 @@ export class ExpressionEngine {
     private parser: Parser;
     private localeCode: string;
     private vm: VM;
-    private diagnosticMode: boolean;
     private config: typeof DEFAULT_CONFIG;
     private pluginManager: PluginManager;
+    private diagnosticPipeline: DiagnosticPipeline;
     // Bytecode cache — avoids re-parsing identical expressions
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
     // Pre-allocated typed array buffers for zero-copy VM consumption
@@ -51,15 +62,36 @@ export class ExpressionEngine {
         numbers: new Float64Array(64),
     };
     // O(1) lookup for markdown token types to skip during lexing
-    private markdownTokenTypes = new Set(["MD_H1", "MD_H2", "MD_H3", "MD_H4", "MD_H5", "MD_H6", "MD_BOLD", "MD_ITALIC", "MD_CODE", "MD_LINK", "MD_IMAGE", "MD_LIST_ITEM", "MD_BLOCKQUOTE", "MD_HR", "MD_TABLE", "MD_NEWLINE", "WS"]);
+    private markdownTokenTypes = new Set([
+        "MD_H1", "MD_H2", "MD_H3", "MD_H4", "MD_H5", "MD_H6",
+        "MD_BOLD", "MD_ITALIC", "MD_CODE", "MD_LINK", "MD_IMAGE",
+        "MD_LIST_ITEM", "MD_BLOCKQUOTE", "MD_HR", "MD_TABLE",
+        "MD_NEWLINE", "WS"
+    ]);
 
-    constructor(localeCode = "en", diagnosticMode = false, config?: Partial<typeof DEFAULT_CONFIG>) {
+    constructor(
+        localeCode = "en",
+        diagnosticMode = false,
+        config?: Partial<typeof DEFAULT_CONFIG>,
+        diagnosticPipeline?: DiagnosticPipeline
+    ) {
         this.localeCode = localeCode;
-        this.diagnosticMode = diagnosticMode;
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.lexer = new Lexer(localeCode);
         this.registry = new ParseletRegistry();
         this.pluginManager = new PluginManager(this.registry);
+
+// Wire diagnostic pipeline: use provided, create timeline if enabled, or leave empty for production
+         if (diagnosticPipeline) {
+             this.diagnosticPipeline = diagnosticPipeline;
+         } else if (diagnosticMode) {
+             this.diagnosticPipeline = new DiagnosticPipeline();
+             this.diagnosticPipeline.register(new TimelineDiagnosticCollector());
+         } else {
+             this.diagnosticPipeline = new DiagnosticPipeline();
+             // Production: no collectors — pipeline length-check exits immediately with zero overhead
+         }
+
         // Register built-in providers (can be extended via registerPlugin/unregisterPlugin)
         registerArithmeticParselets(this.registry);
         registerPercentageParselets(this.registry);
@@ -75,6 +107,13 @@ export class ExpressionEngine {
     }
 
     /**
+     * Get the underlying diagnostic pipeline for advanced usage.
+     */
+    getDiagnosticPipeline(): DiagnosticPipeline {
+        return this.diagnosticPipeline;
+    }
+
+    /**
      * Register an external plugin with the engine.
      */
     registerPlugin(plugin: import("@solve-js/plugins/PluginSystem").SolvePlugin): void {
@@ -86,7 +125,6 @@ export class ExpressionEngine {
      */
     unregisterPlugin(pluginName: string): void {
         this.pluginManager.unregister(pluginName);
-        // Clear bytecode cache since parselets may have changed
         this.bytecodeCache.clear();
     }
 
@@ -109,14 +147,9 @@ export class ExpressionEngine {
             const lineNumber = i + 1;
             const startPosition = currentPosition;
             const endPosition = startPosition + lineText.length;
-
-            // Move to next line position (accounting for newline character)
             currentPosition = endPosition + 1;
 
-            // Check if line is empty (whitespace only or only markdown markers)
             const isEmpty = this.isEmptyLine(lineText);
-
-            // Find inline solves in the line
             const inlineSolves = this.findInlineSolvesInLine(lineText, lineNumber);
             const hasInlineSolves = inlineSolves.length > 0;
 
@@ -134,11 +167,9 @@ export class ExpressionEngine {
             };
 
             if (!isEmpty) {
-                // Check if this is a variable assignment (starts with colon)
                 const isVariableAssignment = lineText.trim().startsWith(":");
 
                 if (hasInlineSolves && !isVariableAssignment) {
-                    // Process each inline solve
                     for (const solve of inlineSolves) {
                         try {
                             const value = this.evaluateLine(lineNumber, solve.expression);
@@ -150,7 +181,6 @@ export class ExpressionEngine {
                         }
                     }
                 } else {
-                    // Process as a regular expression line
                     const expression = lineText.trim();
                     if (expression) {
                         try {
@@ -176,7 +206,6 @@ export class ExpressionEngine {
      * Check if a line is effectively empty (whitespace only or only markdown syntax)
      */
     private isEmptyLine(lineText: string): boolean {
-        // Optimized regex: matches empty/whitespace-only lines OR lines containing only a markdown marker
         return /^\s*$|^\s*([#>-]|\*|\+)\s*$/.test(lineText);
     }
 
@@ -189,20 +218,14 @@ export class ExpressionEngine {
         let match: RegExpExecArray | null;
 
         while ((match = regex.exec(lineText)) !== null) {
-            const start = match.index;
-            const expression = match[1];
-            const end = start + match[0].length;
-            const columnNumber = start + 1; // 1-based column number
-
             results.push({
-                start,
-                end,
-                expression,
+                start: match.index,
+                end: match.index + match[0].length,
+                expression: match[1],
                 lineNumber,
-                columnNumber
+                columnNumber: match.index + 1
             });
         }
-
         return results;
     }
 
@@ -223,8 +246,7 @@ export class ExpressionEngine {
     evaluateLineWithDebug(
         lineNumber: number,
         lineText: string
-    ): { value: Value; tokens: any[]; program: any; error?: string; inlineSolve?: InlineSolvePosition; debug?: DebugInfo } {
-        // Check if this is an inline solve
+    ): { value: Value; tokens: any[]; program: any; error?: string; inlineSolve?: InlineSolvePosition; debug?: any } {
         const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
         if (inlineSolveMatch) {
             const expression = inlineSolveMatch[1];
@@ -240,15 +262,17 @@ export class ExpressionEngine {
                 }
             };
         }
-
-        // Regular expression evaluation
         return this.evaluateExpressionWithDiagnostic(lineText, lineNumber);
     }
 
     /**
-     * Core expression evaluation logic with diagnostic information
+     * Core expression evaluation logic with diagnostic pipeline integration.
+     * Every pipeline stage fires events to registered collectors.
      */
-    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number): { value: Value; tokens: any[]; program: any; error?: string; debug?: DebugInfo } {
+    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number): { value: Value; tokens: any[]; program: any; error?: string; debug?: any } {
+        const pipeline = this.diagnosticPipeline;
+        const hasCollectors = pipeline.hasCollectors;
+
         // === SAFETY CHECK 1: Expression length limit ===
         if (expression.length > this.config.validation.maxExpressionLength) {
             const err = ErrorFactory.validation(
@@ -266,19 +290,57 @@ export class ExpressionEngine {
         }
 
         const tokens: any[] = [];
-        const parselets: ParseletInfo[] = [];
 
+        // Pipeline event: start
+        if (hasCollectors) {
+            pipeline.firePipelineStart({
+                type: DiagnosticEventType.PipelineStart,
+                elapsedNs: 0,
+                expression,
+                inputType: "expression",
+            });
+        }
+
+        // Lexing with token emission events
         this.lexer.reset(expression);
+        let tokenIndex = 0;
         for (const t of this.lexer) {
             if (this.markdownTokenTypes.has(t.type)) continue;
             tokens.push(t);
+
+            if (hasCollectors) {
+                pipeline.fireTokenEmitted({
+                    type: DiagnosticEventType.TokenEmitted,
+                    elapsedNs: 0, // zero-cost placeholder (timeline collector overrides)
+                    expression,
+                    token: {
+                        type: t.type,
+                        value: t.value,
+                        offset: t.offset || 0,
+                        line: t.line || lineNumber,
+                        col: t.col || 0,
+                    },
+                });
+            }
+            tokenIndex++;
         }
 
         if (tokens.length === 0) {
             const v = numberValue(0);
             this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, [], null, false), expression);
-            const debug = this.diagnosticMode ? { tokens, parselets, program: { opcodes: [], numbers: [], strings: [] } } : undefined;
-            return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] }, debug };
+
+            if (hasCollectors) {
+                pipeline.firePipelineEnd({
+                    type: DiagnosticEventType.PipelineEnd,
+                    elapsedNs: 0,
+                    expression,
+                    success: true,
+                    totalTokens: 0,
+                    totalOpcodes: 0,
+                });
+            }
+
+            return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] }, debug: undefined };
         }
 
         // === SAFETY CHECK 2: Complexity scoring ===
@@ -297,6 +359,18 @@ export class ExpressionEngine {
                 `Expression complexity score ${complexityScore} exceeds maximum of ${this.config.validation.maxComplexity}`,
                 { complexity: complexityScore, maxComplexity: this.config.validation.maxComplexity }
             );
+
+            if (hasCollectors) {
+                pipeline.firePipelineEnd({
+                    type: DiagnosticEventType.PipelineEnd,
+                    elapsedNs: 0,
+                    expression,
+                    success: false,
+                    totalTokens: tokens.length,
+                    totalOpcodes: 0,
+                });
+            }
+
             return {
                 value: numberValue(0),
                 tokens: [],
@@ -314,14 +388,44 @@ export class ExpressionEngine {
 
         let program: BytecodeProgram;
 
-        // Check bytecode cache before parsing — avoids re-parsing identical expressions
+        // Check bytecode cache
         const cachedProgram = this.bytecodeCache.get(expression);
         if (cachedProgram) {
             program = cachedProgram;
+
+            if (hasCollectors) {
+                pipeline.fireCacheHit({
+                    type: DiagnosticEventType.CacheHit,
+                    elapsedNs: 0,
+                    expression,
+                    cache: "bytecode",
+                    key: expression,
+                });
+
+                pipeline.fireBytecodeBuilt({
+                    type: DiagnosticEventType.BytecodeBuilt,
+                    elapsedNs: 0,
+                    expression,
+                    opcodesLength: program.opcodes.length,
+                    numbersLength: program.numbers.length,
+                    stringsLength: program.strings.length,
+                    isCached: true,
+                });
+            }
         } else {
-            // Only collect parselet information if diagnostic mode is enabled
-            if (this.diagnosticMode) {
-                this.collectParseletInfo(tokens, parselets);
+            if (hasCollectors) {
+                pipeline.fireCacheMiss({
+                    type: DiagnosticEventType.CacheMiss,
+                    elapsedNs: 0,
+                    expression,
+                    cache: "bytecode",
+                    key: expression,
+                });
+            }
+
+            // Parselet matching event: inject into parser via pipeline
+            if (hasCollectors) {
+                this.parser.setDiagnosticPipeline(pipeline, expression);
             }
 
             const builder = new BytecodeBuilder();
@@ -330,6 +434,18 @@ export class ExpressionEngine {
                 this.parser.parseExpression(0, builder);
             } catch (e) {
                 const errorMessage = e instanceof Error ? e.message : String(e);
+
+                if (hasCollectors) {
+                    pipeline.firePipelineEnd({
+                        type: DiagnosticEventType.PipelineEnd,
+                        elapsedNs: 0,
+                        expression,
+                        success: false,
+                        totalTokens: tokens.length,
+                        totalOpcodes: 0,
+                    });
+                }
+
                 return {
                     value: numberValue(0),
                     tokens,
@@ -338,18 +454,35 @@ export class ExpressionEngine {
                     debug: undefined
                 };
             }
+
             // Build directly into pooled typed arrays for zero-copy VM consumption
             program = builder.buildInto(this.bufferPool);
             this.bytecodeCache.set(expression, program);
+
+            if (hasCollectors) {
+                pipeline.fireBytecodeBuilt({
+                    type: DiagnosticEventType.BytecodeBuilt,
+                    elapsedNs: 0,
+                    expression,
+                    opcodesLength: program.opcodes.length,
+                    numbersLength: program.numbers.length,
+                    stringsLength: program.strings.length,
+                    isCached: false,
+                });
+            }
+
+            // Clear parser pipeline reference to avoid holding refs
+            this.parser.setDiagnosticPipeline(undefined, "");
         }
 
-        // Use the shared VM instance — variables persist across lines,
-        // while the stack is cleaned up between expressions
+        // Use the shared VM instance
+        // Only emit VM step events when vmTrace is explicitly enabled (very verbose)
+        const emitVmTrace = hasCollectors && this.config.diagnostic.vmTraceEnabled === true;
         const stackBefore = this.vm.getStack().length;
-        const result = executeBytecode(program, this.vm);
+        const result = executeBytecode(program, this.vm, emitVmTrace ? pipeline : undefined, expression);
         // Pop any leftover stack items from this expression
         while (this.vm.getStack().length > stackBefore) {
-          this.vm.pop();
+            this.vm.pop();
         }
 
         if (result) {
@@ -363,59 +496,54 @@ export class ExpressionEngine {
             ), expression);
         }
 
-        const debug = this.diagnosticMode ? { tokens, parselets, program } : undefined;
+if (hasCollectors) {
+             pipeline.fireVmHalt({
+                 type: DiagnosticEventType.VmHalt,
+                 elapsedNs: 0,
+                 expression,
+                 result: result ? {
+                     type: result.type,
+                     value: result.value,
+                     unit: result.unit,
+                 } : undefined,
+             });
+
+            pipeline.firePipelineEnd({
+                type: DiagnosticEventType.PipelineEnd,
+                elapsedNs: 0,
+                expression,
+                success: true,
+                totalTokens: tokens.length,
+                totalOpcodes: program.opcodes.length,
+            });
+        }
+
+// Build debug info — structured diagnostic report
+         if (hasCollectors) {
+             const reports = pipeline.collectReports();
+             return {
+                 value: result!,
+                 tokens,
+                 program,
+                 debug: reports[0] || undefined,
+             };
+         }
+
         return {
             value: result!,
             tokens,
             program,
-            debug
         };
-    }
-
-    /**
-     * Collect parselet information for each token
-     */
-    private collectParseletInfo(tokens: any[], parselets: ParseletInfo[]): void {
-        for (const token of tokens) {
-            const parseletType = this.getParseletTypeForToken(token.type);
-            parselets.push({
-                tokenType: token.type,
-                tokenValue: token.value,
-                parseletType: parseletType,
-                tokenOffset: token.offset || 0
-            });
-        }
-    }
-
-    /**
-     * Get the parselet type for a specific token type
-     */
-    private getParseletTypeForToken(tokenType: string): string {
-        if (tokenType === 'PERCENT') return 'Percentage';
-        if (tokenType === 'UNIT') return 'UoM';
-        if (tokenType === 'CONVERT' || tokenType === 'TO' || tokenType === 'BEST') return 'UoM';
-        if (tokenType === 'FUNC') return 'Function';
-        if (tokenType === 'ROLL') return 'Dice';
-        if (tokenType === 'NOW' || tokenType === 'TODAY' || tokenType === 'TOMORROW' || tokenType === 'YESTERDAY') return 'Date/Time';
-        if (tokenType === 'VEC2' || tokenType === 'VEC3' || tokenType === 'VEC4') return 'Vector';
-        if (tokenType === 'BIGINT') return 'BigInt';
-        if (tokenType === 'COLON' || tokenType === 'EQUALS') return 'Variable';
-        if (tokenType === 'INCREASE' || tokenType === 'DECREASE' || tokenType === 'INCREASE_BY' || tokenType === 'DECREASE_BY') return 'Percentage';
-        if (tokenType === 'NUMBER' || tokenType === 'PI' || tokenType === 'E') return 'Arithmetic';
-        return 'Expression';
     }
 
     reEvaluateLine(lineNumber: number, expression: string): Value | undefined {
         const entry = this.lineCache.get(lineNumber, expression);
         if (!entry) return undefined;
 
-        // Use cached bytecode directly (already typed arrays from buildInto)
         const program = this.bytecodeCache.get(expression);
         if (!program) return undefined;
 
-        // Reuse existing VM — reset instead of creating new instance
         this.vm.reset();
-
         const result = executeBytecode(program, this.vm);
 
         if (result) {
@@ -451,14 +579,14 @@ export class ExpressionEngine {
 
     getParser(): Parser {
         return this.parser;
-}
+    }
 
     getMemoCache(): never {
         throw new Error("MemoCache has been consolidated into LineCache");
     }
 
     isDiagnosticMode(): boolean {
-        return this.diagnosticMode;
+        return this.diagnosticPipeline.hasCollectors;
     }
 
     /**
@@ -483,10 +611,12 @@ export class ExpressionEngine {
     }
 
     /**
-     * Lean document parsing — skips diagnostic info collection for maximum speed.
-     * Use this for production evaluation where debug info is not needed.
+     * @deprecated Use parseDocument instead. Diagnostic info is now
+     * gathered during normal pipeline execution with zero overhead.
      */
     parseDocumentLean(input: string): { results: (number | undefined)[]; errors: string[] } {
+        console.warn("parseDocumentLean is deprecated. Use parseDocument — it has no diagnostic overhead in production mode.");
+
         const lines = input.split('\n');
         const results: (number | undefined)[] = [];
         const errors: string[] = [];
@@ -526,83 +656,70 @@ export class ExpressionEngine {
         this.bytecodeCache.clear();
     }
 
-/**
-      * Evaluate independent expressions using a worker pool (Web Workers).
-      * Falls back to sequential for single-threaded envs (Node.js, SSR).
-      */
-     async evaluateParallel(expressions: string[]): Promise<(number | undefined)[]> {
-         const results: (number | undefined)[] = new Array(expressions.length);
-         const workers: Worker[] = [];
+    /**
+     * Evaluate independent expressions using a worker pool (Web Workers).
+     * Falls back to sequential for single-threaded envs (Node.js, SSR).
+     */
+    async evaluateParallel(expressions: string[]): Promise<(number | undefined)[]> {
+        const results: (number | undefined)[] = new Array(expressions.length);
+        const workers: Worker[] = [];
 
-         if (typeof Worker === "undefined") {
-             for (let i = 0; i < expressions.length; i++) {
-                 try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
-             }
-             return results;
-         }
+        if (typeof Worker === "undefined") {
+            for (let i = 0; i < expressions.length; i++) {
+                try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
+            }
+            return results;
+        }
 
-         const maxWorkers = Math.min(expressions.length, 4);
-         const chunkSize = Math.ceil(expressions.length / maxWorkers);
-         const promises: Promise<void>[] = [];
+        const maxWorkers = Math.min(expressions.length, 4);
+        const chunkSize = Math.ceil(expressions.length / maxWorkers);
+        const promises: Promise<void>[] = [];
 
-         for (let w = 0; w < maxWorkers; w++) {
-             const workerUrl = this.getWorkerUrl();
-             if (!workerUrl) {
-                 // Fallback: evaluate on main thread
-                 const start = w * chunkSize;
-                 const end = Math.min(start + chunkSize, expressions.length);
-                 for (let i = start; i < end; i++) {
-                     try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
-                 }
-                 continue;
-             }
+        for (let w = 0; w < maxWorkers; w++) {
+            const workerUrl = this.getWorkerUrl();
+            if (!workerUrl) {
+                const start = w * chunkSize;
+                const end = Math.min(start + chunkSize, expressions.length);
+                for (let i = start; i < end; i++) {
+                    try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
+                }
+                continue;
+            }
 
-             const worker = new Worker(workerUrl, { type: "module", name: `solve-eval-${w}` });
-             workers.push(worker);
-             const start = w * chunkSize;
-             const end = Math.min(start + chunkSize, expressions.length);
+            const worker = new Worker(workerUrl, { type: "module", name: `solve-eval-${w}` });
+            workers.push(worker);
+            const start = w * chunkSize;
+            const end = Math.min(start + chunkSize, expressions.length);
 
-             const promise = new Promise<void>((resolve) => {
-                 worker.onmessage = (e: MessageEvent) => {
-                     const msg = e.data;
-                     if (msg.type === "RESULT" && typeof msg.id === "number" && msg.id >= start && msg.id < end) {
-                         results[msg.id] = msg.value?.value ?? undefined;
-                     }
-                 };
-                 worker.onerror = () => resolve();
+            const promise = new Promise<void>((resolve) => {
+                worker.onmessage = (e: MessageEvent) => {
+                    const msg = e.data;
+                    if (msg.type === "RESULT" && typeof msg.id === "number" && msg.id >= start && msg.id < end) {
+                        results[msg.id] = msg.value?.value ?? undefined;
+                    }
+                };
+                worker.onerror = () => resolve();
 
-                 for (let i = start; i < end; i++) {
-                     worker.postMessage({ type: "EVAL", id: i, expression: expressions[i], locale: this.localeCode });
-                 }
+                for (let i = start; i < end; i++) {
+                    worker.postMessage({ type: "EVAL", id: i, expression: expressions[i], locale: this.localeCode });
+                }
 
-                 // Give worker time to process
-                 setTimeout(resolve, 100);
-             });
-             promises.push(promise);
-         }
+                setTimeout(resolve, 100);
+            });
+            promises.push(promise);
+        }
 
-         await Promise.all(promises);
-         workers.forEach((w) => w.terminate());
-return results;
+        await Promise.all(promises);
+        workers.forEach((w) => w.terminate());
+        return results;
     }
 
-    /**
-     * Get the worker entry script URL.
-     * In production, this is the bundled worker-entry.js file.
-     */
     private getWorkerUrl(): string | null {
-        // Resolve at build time via esbuild define
-        // @ts-ignore — replaced during build
-        if (typeof __WORKER_URL__ !== "undefined") return __WORKER_URL__;
-        // Development: load from known path
+		if (typeof __WORKER_URL__ !== "undefined") return __WORKER_URL__;
         const base = typeof window !== "undefined" ? window.location.origin : "";
         return `${base}/workers/worker-entry.js`;
     }
 
-    /**
-     * Incremental re-evaluation: only re-evaluates lines affected by a variable change.
-     * Uses the DAG dependency graph to minimize re-computation.
-     */
     evaluateIncremental(variable: string, newValue: number): Map<number, Value> {
         this.vm.setVar(variable, numberValue(newValue));
         this.markDirtyFromVariable(variable);

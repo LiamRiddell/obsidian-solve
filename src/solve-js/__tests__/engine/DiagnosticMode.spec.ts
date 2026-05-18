@@ -12,15 +12,23 @@ describe("ExpressionEngine Diagnostic Mode Tests", () => {
     expect(engine.isDiagnosticMode()).toBe(true);
   });
 
-  test("evaluateLineWithDebug returns debug info when diagnostic mode is enabled", () => {
-    const engine = new ExpressionEngine("en", true);
-    const result = engine.evaluateLineWithDebug(1, "1 + 2");
-    
-    expect(result.debug).toBeDefined();
-    expect(result.debug!.tokens).toBeDefined();
-    expect(result.debug!.parselets).toBeDefined();
-    expect(result.debug!.program).toBeDefined();
-  });
+test("evaluateLineWithDebug returns debug info when diagnostic mode is enabled", () => {
+     const engine = new ExpressionEngine("en", true);
+     const result = engine.evaluateLineWithDebug(1, "1 + 2");
+
+     expect(result.debug).toBeDefined();
+     expect(result.debug!.events).toBeDefined();
+     expect(result.debug!.summary).toBeDefined();
+     expect(result.debug!.metadata).toBeDefined();
+
+     // Structured report
+     expect(result.debug.summary.totalTokens).toBeGreaterThan(0);
+     expect(result.debug.summary.totalOpcodes).toBeGreaterThan(0);
+     expect(result.debug.summary.cacheHit).toBe(false);
+
+     // Metadata
+     expect(result.debug.metadata.expression).toBe("1 + 2");
+   });
 
   test("evaluateLineWithDebug returns no debug info when diagnostic mode is disabled", () => {
     const engine = new ExpressionEngine("en", false);

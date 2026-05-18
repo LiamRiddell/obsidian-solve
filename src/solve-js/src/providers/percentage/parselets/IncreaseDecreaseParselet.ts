@@ -5,7 +5,8 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class IncreaseDecreaseParselet implements PrefixParselet {
-  constructor(private readonly multiplier: number) {}
+	readonly category = "Percentage";
+	constructor(private readonly multiplier: number) {}
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(0, builder);

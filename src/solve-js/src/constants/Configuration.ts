@@ -75,26 +75,37 @@ export interface WorkerConfig {
 }
 
 /**
-  * VM-related configuration
-  */
- export interface VMConfig {
-   /** Maximum stack depth for VM execution */
-   readonly maxStackDepth: number;
-   /** Maximum instructions per expression execution */
-   readonly maxInstructions: number;
- }
+   * Diagnostic-related configuration
+   */
+  export interface DiagnosticConfig {
+    /** Enable diagnostic pipeline — collectors events for all pipeline stages */
+    readonly enabled: boolean;
+    /** Enable VM trace mode — emits per-opcode events (very verbose, disables some optimizations) */
+    readonly vmTraceEnabled: boolean;
+  }
 
- /**
-  * Complete engine configuration
-  */
- export interface EngineConfig {
-   readonly date: DateConfig;
-   readonly dice: DiceConfig;
-   readonly performance: PerformanceConfig;
-   readonly validation: ValidationConfig;
-   readonly vm: VMConfig;
-   readonly worker: WorkerConfig;
- }
+  /**
+   * VM-related configuration
+   */
+  export interface VMConfig {
+    /** Maximum stack depth for VM execution */
+    readonly maxStackDepth: number;
+    /** Maximum instructions per expression execution */
+    readonly maxInstructions: number;
+  }
+
+/**
+   * Complete engine configuration
+   */
+  export interface EngineConfig {
+    readonly date: DateConfig;
+    readonly dice: DiceConfig;
+    readonly performance: PerformanceConfig;
+    readonly validation: ValidationConfig;
+    readonly vm: VMConfig;
+    readonly worker: WorkerConfig;
+    readonly diagnostic: DiagnosticConfig;
+  }
 
 /**
  * Default configuration values
@@ -119,21 +130,25 @@ export const DEFAULT_CONFIG: EngineConfig = {
      executionTimeoutMs: 10000
    },
    validation: {
-     maxExpressionLength: 2000,
-     maxComplexity: 500,
-     maxNestingDepth: 50
-   },
-   vm: {
-     maxStackDepth: 200,
-     maxInstructions: 50000
-   },
-   worker: {
-     maxConcurrentWorkers: 4,
-     idleTimeoutMs: 30000,
-     maxRetries: 3,
-     baseBackoffMs: 1000
-   }
- };
+maxExpressionLength: 2000,
+      maxComplexity: 500,
+      maxNestingDepth: 50
+    },
+    vm: {
+      maxStackDepth: 200,
+      maxInstructions: 50000,
+    },
+    worker: {
+      maxConcurrentWorkers: 4,
+      idleTimeoutMs: 30000,
+      maxRetries: 3,
+      baseBackoffMs: 1000,
+    },
+    diagnostic: {
+      enabled: false,
+      vmTraceEnabled: false,
+    },
+  };
 
 /**
  * Configuration manager for engine settings
@@ -254,13 +269,14 @@ export class ConfigManager {
     override: Partial<EngineConfig>
   ): EngineConfig {
 return {
-       date: { ...base.date, ...override.date },
-       dice: { ...base.dice, ...override.dice },
-       performance: { ...base.performance, ...override.performance },
-       validation: { ...base.validation, ...override.validation },
-       vm: { ...base.vm, ...override.vm },
-       worker: { ...base.worker, ...override.worker }
-     };
+        date: { ...base.date, ...override.date },
+        dice: { ...base.dice, ...override.dice },
+        performance: { ...base.performance, ...override.performance },
+        validation: { ...base.validation, ...override.validation },
+        vm: { ...base.vm, ...override.vm },
+        worker: { ...base.worker, ...override.worker },
+        diagnostic: { ...base.diagnostic, ...override.diagnostic }
+      };
   }
 }
 

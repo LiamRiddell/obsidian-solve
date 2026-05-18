@@ -6,7 +6,8 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
 export class PercentageChangeParselet implements InfixParselet {
-  getBindingPower(): number {
+	readonly category = "Percentage";
+	getBindingPower(): number {
     return BindingPower.Conditional;
   }
 

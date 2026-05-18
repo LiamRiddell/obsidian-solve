@@ -5,7 +5,8 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class PrefixOpParselet implements PrefixParselet {
-  constructor(private readonly opcode: OpCode) {}
+	readonly category = "Arithmetic";
+	constructor(private readonly opcode: OpCode) {}
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(60, builder);

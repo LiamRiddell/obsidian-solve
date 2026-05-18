@@ -4,7 +4,9 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 
 export class GroupParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+	readonly category = "Arithmetic";
+
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(0, builder);
     parser.consume("RPAREN");
   }

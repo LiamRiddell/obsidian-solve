@@ -5,7 +5,8 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class DiceRangeParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+	readonly category = "Dice";
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     // roll between X and Y / roll from X to Y
     parser.consume(); // BETWEEN or FROM
     parser.parseExpression(0, builder);

@@ -29,5 +29,14 @@ export { ScopeManager } from "./vm/ScopeManager";
 // MemoCache consolidated into LineCache — removed from exports
 export type { ExpressionRecord } from "./vm/ScopeManager";
 
+export { DiagnosticPipeline } from "./diagnostics/pipeline";
+export { NullDiagnosticCollector } from "./diagnostics/null-collector";
+export { TimelineDiagnosticCollector } from "./diagnostics/timeline-collector";
+export type {
+  DiagnosticEvent,
+  DiagnosticReport,
+  CategorizedParselet,
+} from "./diagnostics/events";
+
 export { VariableResolver, sharedVariableResolver } from "./variables/VariableResolver";
 export type { IVariableSource } from "./variables/IVariableSource";

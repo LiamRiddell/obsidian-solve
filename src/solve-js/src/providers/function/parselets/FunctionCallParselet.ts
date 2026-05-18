@@ -19,7 +19,8 @@ const builtinNameToIndex: Record<string, number> = {
 };
 
 export class FunctionCallParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+	readonly category = "Function";
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     const fnName = token.value.toLowerCase();
     const fnIdx = builtinNameToIndex[fnName];
     if (fnIdx === undefined) {

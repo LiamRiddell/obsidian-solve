@@ -6,7 +6,8 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
 export class ConvertParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+	readonly category = "UoM";
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(BindingPower.Postfix, builder);
     const unitToken = parser.peek();
     if (unitToken && unitToken.type === "UNIT") {

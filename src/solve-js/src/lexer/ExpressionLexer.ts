@@ -1,5 +1,5 @@
 import { MarkdownLexer } from "./MarkdownLexer";
-import { Token } from "./Token";
+import { Token } from "@solve-js/lexer/Token";
 
 export class ExpressionLexer {
   private inner: MarkdownLexer;

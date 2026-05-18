@@ -5,7 +5,8 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class BinaryOpParselet implements InfixParselet {
-  constructor(
+	readonly category = "Arithmetic";
+	constructor(
     private readonly bp: number,
     private readonly opcode: OpCode
   ) {}

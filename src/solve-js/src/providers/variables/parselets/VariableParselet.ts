@@ -5,7 +5,8 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class VariableParselet implements PrefixParselet {
-  parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
+	readonly category = "Variable";
+	parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
     // Handle :var syntax
     const nameToken = parser.consume();
     if (nameToken.type !== "IDENT") {

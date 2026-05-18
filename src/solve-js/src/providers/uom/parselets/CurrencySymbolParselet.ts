@@ -12,7 +12,8 @@ const symbolToCurrency: Record<string, string> = {
 };
 
 export class CurrencySymbolParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+	readonly category = "UoM";
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     const currency = symbolToCurrency[token.value] ?? token.value.toLowerCase();
     parser.parseExpression(BindingPower.Prefix, builder);
     if (parser.peek()?.type === "UNIT") {

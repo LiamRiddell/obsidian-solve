@@ -5,7 +5,9 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class ConstantParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+	readonly category = "Arithmetic";
+
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     const val = token.type === "PI" ? Math.PI : Math.E;
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(val);

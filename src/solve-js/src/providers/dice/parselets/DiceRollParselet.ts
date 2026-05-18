@@ -6,7 +6,8 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
 export class DiceRollParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+	readonly category = "Dice";
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     const next = parser.peek();
     if (next && (next.type === "BETWEEN" || next.type === "FROM")) {
       // Handle "roll between X and Y" or "roll from X to Y"

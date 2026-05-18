@@ -5,7 +5,9 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export class NumberParselet implements PrefixParselet {
-  parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+	readonly category = "Arithmetic";
+
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     let v: number;
     const raw = token.value;
     if (raw.startsWith("0x") || raw.startsWith("0X")) {

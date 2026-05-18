@@ -6,7 +6,8 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
 export class VectorAddParselet implements InfixParselet {
-  getBindingPower(): number {
+	readonly category = "Vector";
+	getBindingPower(): number {
     return BindingPower.Sum;
   }
 
@@ -17,7 +18,8 @@ export class VectorAddParselet implements InfixParselet {
 }
 
 export class VectorSubParselet implements InfixParselet {
-  getBindingPower(): number {
+	readonly category = "Vector";
+	getBindingPower(): number {
     return BindingPower.Sum;
   }
 
@@ -28,7 +30,8 @@ export class VectorSubParselet implements InfixParselet {
 }
 
 export class VectorDotParselet implements InfixParselet {
-  getBindingPower(): number {
+	readonly category = "Vector";
+	getBindingPower(): number {
     return BindingPower.Product;
   }
 
