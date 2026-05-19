@@ -28,6 +28,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private dirtyLines: Set<number> = new Set();
 	private cacheUpdateUnsubscribe: () => void;
 
+	private currentDoc: object | null = null;
+
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructor`);
 
@@ -49,10 +51,21 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			view.dispatch({});
 		});
 
+		this.currentDoc = view.state.doc;
 		this.decorations = this.buildDecorations(view);
 	}
 
 	update(update: ViewUpdate) {
+		// Detect document switch — reset shared engine to prevent variable leaking between documents
+		const newDoc = update.state?.doc;
+		if (newDoc && newDoc !== this.currentDoc) {
+			this.currentDoc = newDoc;
+			EngineProvider.reset();
+			this.highlightProvider = new SolveHighlightProvider(EngineProvider.get());
+			this.lineDecorationCache.clear();
+			this.dirtyLines.clear();
+		}
+
 		if (update.docChanged) {
 			this.highlightProvider.invalidateCache();
 			update.changes.iterChanges((fromA, toA, fromB, toB) => {
@@ -67,14 +80,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					EngineProvider.get().getLineCache().removeAllForLine(l);
 				}
 
-				// If line count changed, clear cache for all lines after the change
-				if (newEndLine !== endLine) {
-					const maxLine = update.view.state.doc.lines;
-					for (let l = Math.min(endLine, newEndLine) + 1; l <= maxLine; l++) {
-						this.lineDecorationCache.delete(l);
-						this.dirtyLines.add(l);
-						EngineProvider.get().getLineCache().removeAllForLine(l);
-					}
+				// Always clear cache for all lines after the change —
+				// even if line count didn't change, text length changes
+				// shift absolute positions of every subsequent line.
+				const maxLine = update.view.state.doc.lines;
+				for (let l = Math.min(endLine, newEndLine) + 1; l <= maxLine; l++) {
+					this.lineDecorationCache.delete(l);
+					this.dirtyLines.add(l);
+					EngineProvider.get().getLineCache().removeAllForLine(l);
 				}
 			});
 		}

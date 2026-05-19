@@ -35,9 +35,10 @@ class EngineProvider {
 		return this._instance;
 	}
 
-	/**
-	 * Force recreation of the engine (e.g., after plugin registration changes).
-	 */
+/**
+ 	 * Force recreation of the engine (e.g., after plugin registration changes
+ 	 * or document switch to prevent variable leaking).
+ 	 */
 	static reset(): void {
 		if (this._instance) {
 			this._instance.clear();
