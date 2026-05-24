@@ -176,11 +176,16 @@ load(tokens: Token[]): void {
     consume(expectedType?: string): Token {
         const token = this.tokens[this.current];
         if (!token) {
-            throw new Error("Unexpected end of input");
+            throw ErrorFactory.parsing(
+                "UNEXPECTED_END_OF_INPUT",
+                "Unexpected end of input"
+            );
         }
         if (expectedType !== undefined && token.type !== expectedType) {
-            throw new Error(
-                `Expected token type "${expectedType}" but got "${token.type}" ("${token.value}")`
+            throw ErrorFactory.parsing(
+                "UNEXPECTED_TOKEN_TYPE",
+                `Expected token type "${expectedType}" but got "${token.type}" ("${token.value}")`,
+                { expectedType, actualType: token.type, actualValue: token.value }
             );
         }
         this.current++;

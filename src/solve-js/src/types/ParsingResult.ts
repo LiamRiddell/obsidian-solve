@@ -39,54 +39,6 @@ export interface UnifiedParsingOptions {
     includeDiagnostics?: boolean;
 }
 
-export interface ParsedLine {
-    lineNumber: number;
-    text: string;
-    startPosition: number;
-    endPosition: number;
-    isEmpty: boolean;
-    hasInlineSolves: boolean;
-    inlineSolves: InlineSolvePosition[];
-    expression: string | null;
-    result: Value | null;
-    error: string | null;
-}
-
-export interface ParsingResult {
-    lines: ParsedLine[];
-    totalLines: number;
-    errors: string[];
-    diagnostics?: DiagnosticReportJSON;
-}
-
-export interface ParsedLine {
-    lineNumber: number;
-    text: string;
-    startPosition: number;
-    endPosition: number;
-    isEmpty: boolean;
-    hasInlineSolves: boolean;
-    inlineSolves: InlineSolvePosition[];
-    expression: string | null;
-    result: Value | null;
-    error: string | null;
-}
-
-export interface ParsingResult {
-    lines: ParsedLine[];
-    totalLines: number;
-    errors: string[];
-    diagnostics?: DiagnosticReport;
-}
-
-export interface UnifiedParsingOptions {
-    inputType: 'markdown' | 'raw' | 'code';
-    localeCode?: string;
-    includeLineInfo?: boolean;
-    includeHighlights?: boolean;
-    includeDiagnostics?: boolean;
-}
-
 export interface ParseletInfo {
     tokenType: string;
     tokenValue: string;

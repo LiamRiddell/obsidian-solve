@@ -600,10 +600,6 @@ if (hasCollectors) {
         return this.parser;
     }
 
-    getMemoCache(): never {
-        throw new Error("MemoCache has been consolidated into LineCache");
-    }
-
     isDiagnosticMode(): boolean {
         return this.diagnosticPipeline.hasCollectors;
     }
@@ -637,46 +633,7 @@ evaluateNumber(expression: string): number {
          }
      }
 
-    /**
-     * @deprecated Use parseDocument instead. Diagnostic info is now
-     * gathered during normal pipeline execution with zero overhead.
-     */
-    parseDocumentLean(input: string): { results: (number | undefined)[]; errors: string[] } {
-        console.warn("parseDocumentLean is deprecated. Use parseDocument — it has no diagnostic overhead in production mode.");
-
-        const lines = input.split('\n');
-        const results: (number | undefined)[] = [];
-        const errors: string[] = [];
-
-        for (let i = 0; i < lines.length; i++) {
-            const lineText = lines[i].trim();
-            if (!lineText || lineText.startsWith(':')) {
-                results.push(undefined);
-                continue;
-            }
-
-            const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
-            const expression = inlineSolveMatch ? inlineSolveMatch[1] : lineText;
-
-            if (expression.length > this.config.validation.maxExpressionLength) {
-                errors.push(`Line ${i + 1}: expression too long`);
-                results.push(undefined);
-                continue;
-            }
-
-            try {
-                results.push(this.evaluateLine(i + 1, expression).toNumber());
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                errors.push(`Line ${i + 1}: ${errorMessage}`);
-                results.push(undefined);
-            }
-        }
-
-        return { results, errors };
-    }
-
-clear(): void {
+    clear(): void {
          this.dag.clear();
          this.lineCache.clear();
          this.scopeManager.clear();

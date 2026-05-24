@@ -40,6 +40,7 @@
 		"@tanstack/query-core": "^5.100.10",
 		"animate.css": "^4.1.1",
 		"convert": "^7.0.0",
+		"debug": "^4.3.4",
 		"moment": "^2.29.4",
 		"moo": "^0.5.3"
 	}

@@ -16,7 +16,7 @@ export class Lexer {
   reset(input: string, state?: LexerState): void {
     const newState = state ?? LexerState.Main;
     this.currentState = newState;
-    this.markdownLexer.reset(input, newState);
+    this.markdownLexer.reset(input);
     this.hasPeeked = false;
     this.peekedToken = undefined;
   }

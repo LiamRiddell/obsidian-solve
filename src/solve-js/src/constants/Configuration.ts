@@ -6,6 +6,8 @@
  * @module Configuration
  */
 
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+
 /**
  * Date-related configuration
  */
@@ -181,7 +183,11 @@ export class ConfigManager {
       if (current && typeof current === 'object' && key in current) {
         current = (current as Record<string, unknown>)[key];
       } else {
-        throw new Error(`Configuration path not found: ${path}`);
+        throw ErrorFactory.config(
+          "CONFIG_PATH_NOT_FOUND",
+          `Configuration path not found: ${path}`,
+          { path }
+        );
       }
     }
 
@@ -197,21 +203,33 @@ export class ConfigManager {
   set<T>(path: string, value: T): void {
     const keys = path.split('.');
     if (keys.length < 2) {
-      throw new Error(`Invalid path: ${path}. Must be in format 'section.property'`);
+      throw ErrorFactory.config(
+        "INVALID_CONFIG_PATH",
+        `Invalid path: ${path}. Must be in format 'section.property'`,
+        { path }
+      );
     }
     
     const section = keys[0];
     const property = keys[1];
     
     if (!(section in this.config)) {
-      throw new Error(`Configuration section not found: ${section}`);
+      throw ErrorFactory.config(
+        "CONFIG_SECTION_NOT_FOUND",
+        `Configuration section not found: ${section}`,
+        { section, path }
+      );
     }
     
     const sectionConfig = this.config[section as keyof EngineConfig];
     if (sectionConfig && typeof sectionConfig === 'object') {
       (sectionConfig as any)[property] = value;
     } else {
-      throw new Error(`Configuration property not found: ${path}`);
+      throw ErrorFactory.config(
+        "CONFIG_PROPERTY_NOT_FOUND",
+        `Configuration property not found: ${path}`,
+        { path }
+      );
     }
   }
 

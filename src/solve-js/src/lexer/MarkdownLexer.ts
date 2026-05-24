@@ -2,7 +2,6 @@ import moo from "moo";
 import { knownUnits } from "@solve-js/lexer/units";
 import { Token } from "@solve-js/lexer/Token";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
-import { LexerState } from "@solve-js/lexer/LexerState";
 
 function ciKeywords(map: Record<string, string>): (text: string) => string {
   const lowered: Record<string, string> = {};
@@ -138,8 +137,7 @@ export class MarkdownLexer {
     }, initialState);
   }
 
-  reset(input: string, state?: LexerState): void {
-    // For now, just reset without specifying state
+  reset(input: string): void {
     this.mooLexer.reset(input);
   }
 
