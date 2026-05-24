@@ -19,7 +19,6 @@ import { registerVariableParselets } from "@solve-js/providers/variables/parsele
 import { registerUomParselets } from "@solve-js/providers/uom/parselets/index";
 import { registerVectorParselets } from "@solve-js/providers/vector/parselets/index";
 import { registerBigIntParselets } from "@solve-js/providers/biginteger/parselets/index";
-import { TokenTypes } from "@solve-js/lexer/Token";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import {
     ParsingResult,
@@ -38,7 +37,13 @@ import {
     type DiagnosticEvent,
     type CategorizedParselet
 } from "@solve-js/diagnostics";
-import { OpCode } from "@solve-js/parser/OpCode";
+import {
+    checkExpressionLength,
+    checkExpressionComplexity,
+    extractReadsAndWrites,
+    isEmptyLine,
+    findInlineSolvesInLine,
+} from "@solve-js/engine/ExpressionEngineSafety";
 
 // Pre-existing: __WORKER_URL__ is substituted by esbuild define at build time
 declare var __WORKER_URL__: string | undefined;
@@ -235,30 +240,17 @@ export class ExpressionEngine {
     }
 
     /**
-     * Check if a line is effectively empty (whitespace only or only markdown syntax)
+     * Check if a line is effectively empty (whitespace only or only markdown syntax).
      */
     private isEmptyLine(lineText: string): boolean {
-        return /^\s*$|^\s*([#>-]|\*|\+)\s*$/.test(lineText);
+        return isEmptyLine(lineText);
     }
 
     /**
-     * Find all inline solves in a line with precise coordinate mapping
+     * Find all inline solves in a line with precise coordinate mapping.
      */
     private findInlineSolvesInLine(lineText: string, lineNumber: number): InlineSolvePosition[] {
-        const results: InlineSolvePosition[] = [];
-        const regex = /s`([^`]*)`/g;
-        let match: RegExpExecArray | null;
-
-        while ((match = regex.exec(lineText)) !== null) {
-            results.push({
-                start: match.index,
-                end: match.index + match[0].length,
-                expression: match[1],
-                lineNumber,
-                columnNumber: match.index + 1
-            });
-        }
-        return results;
+        return findInlineSolvesInLine(lineText, lineNumber);
     }
 
     evaluateLine(
@@ -311,19 +303,9 @@ export class ExpressionEngine {
         const hasCollectors = pipeline.hasCollectors;
 
         // === SAFETY CHECK 1: Expression length limit ===
-        if (expression.length > this.config.validation.maxExpressionLength) {
-            const err = ErrorFactory.validation(
-                "EXPRESSION_TOO_LONG",
-                `Expression exceeds max length of ${this.config.validation.maxExpressionLength} characters (got ${expression.length})`,
-                { expressionLength: expression.length, maxLength: this.config.validation.maxExpressionLength }
-            );
-            return {
-                value: numberValue(0),
-                tokens: [],
-                program: { opcodes: [], numbers: [], strings: [] },
-                error: err.message,
-                debug: undefined
-            };
+        const lengthCheck = checkExpressionLength(expression, this.config.validation);
+        if (!lengthCheck.passed) {
+            return { ...lengthCheck.error!, debug: undefined };
         }
 
         const tokens: Token[] = [];
@@ -381,22 +363,8 @@ export class ExpressionEngine {
         }
 
         // === SAFETY CHECK 2: Complexity scoring ===
-        let functionCallCount = 0;
-        let nestingDepth = 0;
-        let maxParens = 0;
-        for (const t of tokens) {
-            if (t.type === "FUNC") functionCallCount++;
-            if (t.value === "(" || t.type === "LPAREN") { nestingDepth++; maxParens = Math.max(maxParens, nestingDepth); }
-            if (t.value === ")" || t.type === "RPAREN") nestingDepth--;
-        }
-        const complexityScore = tokens.length + functionCallCount * 5 + maxParens * 10;
-        if (complexityScore > this.config.validation.maxComplexity) {
-            const err = ErrorFactory.validation(
-                "EXPRESSION_TOO_COMPLEX",
-                `Expression complexity score ${complexityScore} exceeds maximum of ${this.config.validation.maxComplexity}`,
-                { complexity: complexityScore, maxComplexity: this.config.validation.maxComplexity }
-            );
-
+        const complexityCheck = checkExpressionComplexity(tokens, this.config.validation);
+        if (!complexityCheck.passed) {
             if (hasCollectors) {
                 pipeline.firePipelineEnd({
                     type: DiagnosticEventType.PipelineEnd,
@@ -407,29 +375,16 @@ export class ExpressionEngine {
                     totalOpcodes: 0,
                 });
             }
-
             return {
                 value: numberValue(0),
                 tokens: [],
                 program: { opcodes: [], numbers: [], strings: [] },
-                error: err.message,
+                error: complexityCheck.errorMessage!,
                 debug: undefined
             };
         }
 
-const reads: string[] = [];
-          const writes: string[] = [];
-          for (let i = 0; i < tokens.length; i++) {
-              const t = tokens[i];
-              if (t.value.startsWith(":") && t.type === "COLON") reads.push(t.value.slice(1));
-              if (t.type === "IDENT") {
-                  reads.push(t.value);
-                  // Check if next token is EQUALS -> this is a write
-                  if (i + 1 < tokens.length && tokens[i + 1].type === "EQUALS") {
-                      writes.push(t.value);
-                  }
-              }
-          }
+        const { reads, writes } = extractReadsAndWrites(tokens);
 
         let program: BytecodeProgram;
 
@@ -500,8 +455,16 @@ const reads: string[] = [];
                 };
             }
 
-            // Build directly into pooled typed arrays for zero-copy VM consumption
-            program = builder.buildInto(this.bufferPool);
+            // Build directly into pooled typed arrays for zero-copy VM consumption.
+            // buildInto() returns subarray views that share the pool's ArrayBuffer —
+            // copy before caching since the pool will be reused for the next expression.
+            const poolProgram = builder.buildInto(this.bufferPool);
+            program = {
+                opcodes: new Uint8Array(poolProgram.opcodes),
+                numbers: new Float64Array(poolProgram.numbers),
+                strings: poolProgram.strings,
+                constants: poolProgram.constants,
+            };
             this.bytecodeCache.set(expression, program);
 
             if (hasCollectors) {
@@ -641,18 +604,22 @@ if (hasCollectors) {
     /**
      * Fast path: evaluate an expression and return a number directly.
      * Skips Value object allocation when only a numeric result is needed.
-     * Returns NaN on error.
+     * Returns NaN on error or for bare undefined variable references.
      */
 evaluateNumber(expression: string): number {
+         const trimmed = expression.trim();
+
+         // Pre-check: bare identifiers that aren't known variables → NaN.
+         // Doing this before evaluation avoids the ambiguity of "result === 0"
+         // when a variable might legitimately store the value 0.
+         if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
+             if (this.vm.getVar(trimmed) === undefined) {
+                 return NaN;
+             }
+         }
+
          try {
              const result = this.evaluateLine(-1, expression);
-             // Detect bare undefined variable references (e.g. "hello")
-             const trimmed = expression.trim();
-             if (result.toNumber() === 0 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
-                 if (this.vm.getVar(trimmed) === undefined) {
-                     return NaN;
-                 }
-             }
              return result.toNumber();
          } catch {
              return NaN;
@@ -728,24 +695,38 @@ evaluateNumber(expression: string): number {
     private getWorkerUrl(): string | null {
 		if (typeof __WORKER_URL__ !== "undefined") return __WORKER_URL__;
         const base = typeof window !== "undefined" ? window.location.origin : "";
-        return `${base}/workers/worker-entry.js`;
+        return `${base}/workers/eval-worker.js`;
     }
 
+    /**
+     * Incrementally re-evaluate lines affected by a variable change.
+     * Uses cached bytecode to skip lexing/parsing/compiling — only re-executes.
+     */
     evaluateIncremental(variable: string, newValue: number): Map<number, Value> {
+        // Preserve existing VM state (all variables from parseDocument) while
+        // overriding the changed variable. This lets chained dependencies flow:
+        // line 2's STORE_VAR feeds into line 3's LOAD_VAR without requiring a
+        // full re-parse of the document.
         this.vm.setVar(variable, numberValue(newValue));
         this.markDirtyFromVariable(variable);
-        const dirtyLines = this.lineCache.getDirtyLines();
+        // Sort dirty lines ascending so chained dependencies always execute
+        // in correct order: producer line (lower number) before consumer line.
+        const dirtyLines = Array.from(this.lineCache.getDirtyLines()).sort((a, b) => a - b);
         const updated = new Map<number, Value>();
 
         for (const lineNumber of dirtyLines) {
             const entry = this.lineCache.getEntryForLine(lineNumber);
-            if (!entry) continue;
+            if (!entry || entry.bytecode.opcodes.length === 0) continue;
             try {
-                this.vm.reset();
-                const result = this.evaluateLineWithDebug(lineNumber, "");
-                if (!result.error && result.value) {
-                    updated.set(lineNumber, result.value);
-                    entry.result = result.value;
+                const stackBefore = this.vm.getStack().length;
+                const result = executeBytecode(entry.bytecode, this.vm);
+                // Pop any leftover stack items from this expression
+                while (this.vm.getStack().length > stackBefore) {
+                    this.vm.pop();
+                }
+                if (result) {
+                    updated.set(lineNumber, result);
+                    entry.result = result;
                     this.lineCache.markClean(lineNumber);
                 }
             } catch { }

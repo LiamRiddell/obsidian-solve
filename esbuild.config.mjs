@@ -87,7 +87,7 @@ const mainBuild = await esbuild.context({
 
 const workerEntryBuild = await esbuild.context({
 	...baseConfig,
-	entryPoints: ["src/app/workers/worker-entry.ts"],
+	entryPoints: ["src/solve-js/src/workers/eval-worker.ts"],
 	plugins: [ensureDirPlugin("ensure-workers-dir")],
 	outdir: "workers",
 });

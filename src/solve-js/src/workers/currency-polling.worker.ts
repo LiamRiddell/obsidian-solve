@@ -11,9 +11,10 @@ interface CurrencyRateData {
 }
 
 /**
- * Interface for worker messages
+ * Interface for currency polling worker messages (Worker → Main thread).
+ * Renamed from WorkerMessage to avoid collision with WorkerInterface.WorkerMessage.
  */
-interface WorkerMessage {
+interface CurrencyPollingMessage {
 	type: "update" | "error" | "loading";
 	data?: Record<string, number>;
 	error?: string;
@@ -89,7 +90,7 @@ class CurrencyPollingWorker {
 	/**
 	 * Post a message to the main thread
 	 */
-	private postMessage(message: WorkerMessage): void {
+	private postMessage(message: CurrencyPollingMessage): void {
 		// In a worker context, we use self.postMessage
 		// This will be mocked in tests
 		if (typeof self !== "undefined" && self.postMessage) {

@@ -1,52 +1,52 @@
 /**
- * Solve Expression Worker
+ * Canonical solve-js eval worker entry point.
+ *
  * Runs a full ExpressionEngine instance inside a Web Worker so that
  * heavy document parsing and evaluation can be parallelised off the main thread.
  *
+ * This is the single canonical worker — consolidates the previous three
+ * near-duplicate files (worker-entry.ts, worker-entry.worker.ts, SolveEvalWorker.ts).
+ *
  * Communication protocol:
- *   Main → Worker: { type: "EVAL", id, expression, lineNumber }
- *   Main → Worker: { type: "EVAL_DOC", id, document, options }
- *   Main → Worker: { type: "REGISTER_PLUGIN", plugin }
- *   Main → Worker: { type: "UNREGISTER_PLUGIN", name }
- *   Main → Worker: { type: "SET_LOCALE", locale }
- *   Main → Worker: { type: "TERMINATE" }
+ *   Main → Worker: { type: "EVAL", id, expression, lineNumber, locale? }
+ *   Main → Worker: { type: "EVAL_DOC", id, document, options?, locale? }
+ *   Main → Worker: { type: "REGISTER_PLUGIN", id, plugin }
+ *   Main → Worker: { type: "UNREGISTER_PLUGIN", id, name }
+ *   Main → Worker: { type: "SET_LOCALE", id, locale }
+ *   Main → Worker: { type: "TERMINATE", id }
  *
  *   Worker → Main: { id, type: "RESULT", value }
  *   Worker → Main: { id, type: "ERROR", error }
- *   Worker → Main: { type: "DONE", results } (for EVAL_DOC)
+ *   Worker → Main: { id, type: "DONE", lines, errors } (for EVAL_DOC)
  *
  * All messages are structured-cloneable — no functions or class instances cross the boundary.
  */
 
-import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { Value } from "@solve-js/vm/Value";
-import type { ParsedLine } from "@solve-js/types/ParsingResult";
-import type { SolvePlugin } from "@solve-js/plugins/PluginSystem";
+import { ExpressionEngine } from "../engine/ExpressionEngine";
+import { Value } from "../vm/Value";
+import type { ParsedLine } from "../types/ParsingResult";
+import type { SolvePlugin } from "../plugins/PluginSystem";
 
 type WorkerPostMessage = { postMessage(msg: unknown): void };
 const workerSelf = self as unknown as WorkerPostMessage;
 let engine: ExpressionEngine | null = null;
-let nextId = 0;
-const pending = new Map<number, (result: unknown, error?: string) => void>();
 
 function getEngine(locale?: string): ExpressionEngine {
-  // Lazy init — engine is created once and reused across messages.
-  // Options (locale, diagnostic) can only change via a reset.
   if (!engine) {
     engine = new ExpressionEngine(locale || "en", false);
   }
   return engine;
 }
 
-function postError(id: number, error: string) {
+function postError(id: number, error: string): void {
   workerSelf.postMessage({ id, type: "ERROR", error });
 }
 
-function postResult(id: number, value: unknown) {
+function postResult(id: number, value: unknown): void {
   workerSelf.postMessage({ id, type: "RESULT", value });
 }
 
-// --- Message handler interfaces ---
+// ── Message handler interfaces ─────────────────────────────────────────────
 
 interface EvalMsg { id: number; type: "EVAL"; expression: string; lineNumber: number; locale?: string }
 interface EvalDocMsg { id: number; type: "EVAL_DOC"; document: string; options?: { inputType: "raw" | "code" | "markdown" }; locale?: string }
@@ -55,16 +55,15 @@ interface UnregisterPluginMsg { id: number; type: "UNREGISTER_PLUGIN"; name: str
 interface SetLocaleMsg { id: number; type: "SET_LOCALE"; locale: string }
 interface TerminateMsg { id: number; type: "TERMINATE" }
 
-type WorkerMessage = EvalMsg | EvalDocMsg | RegisterPluginMsg | UnregisterPluginMsg | SetLocaleMsg | TerminateMsg;
+/** Discriminated union of all eval-worker message types (main → worker). */
+export type EvalWorkerMessage = EvalMsg | EvalDocMsg | RegisterPluginMsg | UnregisterPluginMsg | SetLocaleMsg | TerminateMsg;
 
-export type { WorkerMessage };
+// ── Message handlers ───────────────────────────────────────────────────────
 
-// --- Message handlers -------------------------------------------------------
-
-function handleEval(msg: EvalMsg) {
+function handleEval(msg: EvalMsg): void {
   try {
-    const engine = getEngine(msg.locale);
-    const val: Value = engine.evaluateLine(msg.lineNumber, msg.expression);
+    const eng = getEngine(msg.locale);
+    const val: Value = eng.evaluateLine(msg.lineNumber, msg.expression);
     postResult(msg.id, {
       value: val?.toNumber() ?? null,
       type: val?.type ?? null,
@@ -75,11 +74,10 @@ function handleEval(msg: EvalMsg) {
   }
 }
 
-function handleEvalDoc(msg: EvalDocMsg) {
+function handleEvalDoc(msg: EvalDocMsg): void {
   try {
-    const engine = getEngine(msg.locale);
-    const result = engine.parseDocument(msg.document, msg.options || ({ inputType: "markdown" } as const));
-    // Serialize results — class instances don't cross the boundary
+    const eng = getEngine(msg.locale);
+    const result = eng.parseDocument(msg.document, msg.options || ({ inputType: "markdown" } as const));
     const lines = result.lines.map((line: ParsedLine) => ({
       lineNumber: line.lineNumber,
       text: line.text,
@@ -112,39 +110,41 @@ function handleEvalDoc(msg: EvalDocMsg) {
   }
 }
 
-function handleRegisterPlugin(msg: RegisterPluginMsg) {
+function handleRegisterPlugin(msg: RegisterPluginMsg): void {
   try {
-    const engine = getEngine();
-    engine.registerPlugin(msg.plugin);
+    const eng = getEngine();
+    eng.registerPlugin(msg.plugin);
     postResult(msg.id, { ok: true });
   } catch (err) {
     postError(msg.id, (err as Error).message);
   }
 }
 
-function handleUnregisterPlugin(msg: UnregisterPluginMsg) {
+function handleUnregisterPlugin(msg: UnregisterPluginMsg): void {
   try {
-    const engine = getEngine();
-    engine.unregisterPlugin(msg.name);
+    const eng = getEngine();
+    eng.unregisterPlugin(msg.name);
     postResult(msg.id, { ok: true });
   } catch (err) {
     postError(msg.id, (err as Error).message);
   }
 }
 
-function handleSetLocale(msg: SetLocaleMsg) {
+function handleSetLocale(msg: SetLocaleMsg): void {
   if (engine) {
-    // Force re-creation on next access with new locale
     engine.clear();
     engine = null;
   }
   postResult(msg.id, { ok: true });
 }
 
-// --- Boot --------------------------------------------------------------------
+// ── Boot ───────────────────────────────────────────────────────────────────
 
+// Worker message boundaries are inherently untyped — data arrives as unknown.
+// We cast to the discriminated union for internal dispatch safety.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 self.onmessage = (event: MessageEvent) => {
-  const msg = event.data;
+  const msg = event.data as EvalWorkerMessage;
   switch (msg.type) {
     case "EVAL":
       handleEval(msg);
@@ -164,9 +164,11 @@ self.onmessage = (event: MessageEvent) => {
     case "TERMINATE":
       engine?.clear();
       engine = null;
-      pending.clear();
       break;
-    default:
-      postError(msg.id ?? -1, `Unknown message type: ${msg.type}`);
+    default: {
+      // After exhaustive switch, msg is narrowed to never — cast back for the fallback handler.
+      const unknownMsg = event.data as { id?: number; type?: string };
+      postError(unknownMsg.id ?? -1, `Unknown message type: ${unknownMsg.type}`);
+    }
   }
 };

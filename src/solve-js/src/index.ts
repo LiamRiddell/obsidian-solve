@@ -14,10 +14,14 @@ export type { PrefixParselet, InfixParselet } from "./parser/Parselet";
 export { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, vectorValue } from "./vm/Value";
 export { createVM, executeBytecode } from "./vm/VM";
 export type { Bytecode } from "./vm/VM";
+export { builtinFunctions } from "./vm/VMBuiltins";
+export { unifyUom, binaryOp } from "./vm/VMConversion";
 export { OpRegistry, sharedOpRegistry } from "./vm/OpRegistry";
 export type { OpcodeHandler, IOpcodeHandlerRegistration, VM } from "./vm/OpRegistry";
 
 export { ExpressionEngine } from "./engine/ExpressionEngine";
+export { checkExpressionLength, checkExpressionComplexity, extractReadsAndWrites, isEmptyLine, findInlineSolvesInLine } from "./engine/ExpressionEngineSafety";
+export type { ValidationConfig, SafetyCheckResult } from "./engine/ExpressionEngineSafety";
 export { Solve, solve } from "./api/SolveAPI";
 export type { ISolve, ISolvePackage } from "./api/SolveAPI";
 

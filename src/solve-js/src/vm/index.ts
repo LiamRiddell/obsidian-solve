@@ -3,6 +3,8 @@ export { ScopeManager } from "./ScopeManager";
 export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, vectorValue } from "./Value";
 export { createVM, executeBytecode } from "./VM";
 export type { Bytecode } from "./VM";
+export { builtinFunctions } from "./VMBuiltins";
+export { unifyUom, binaryOp } from "./VMConversion";
 export { OpRegistry, sharedOpRegistry } from "./OpRegistry";
 export type { OpcodeHandler, IOpcodeHandlerRegistration, VM } from "./OpRegistry";
 export type { ExpressionRecord } from "./ScopeManager";

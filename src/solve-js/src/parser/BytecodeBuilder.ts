@@ -59,19 +59,34 @@ export class BytecodeBuilder {
 	}
 
 	/**
-	 * Build directly into typed arrays for zero-copy VM consumption.
-	 * Reuses the provided buffers if they are large enough, otherwise allocates.
+	 * Build directly into a pre-allocated buffer for zero-copy VM consumption.
+	 *
+	 * When `buf` is provided and large enough, writes into it and returns
+	 * subarray **views** (not copies) — the returned TypedArrays share the
+	 * buffer's underlying ArrayBuffer. The caller MUST NOT mutate the buffer
+	 * until the returned BytecodeProgram is no longer needed.
+	 *
+	 * If the caller intends to cache the result, they must copy the TypedArrays
+	 * (e.g. `new Uint8Array(program.opcodes)`) before reusing the buffer pool.
+	 *
+	 * When `buf` is omitted or too small, allocates fresh TypedArrays.
 	 */
 	buildInto(buf?: { opcodes: Uint8Array; numbers: Float64Array }): BytecodeProgram {
 		const opLen = this.opcodes.length;
 		const numLen = this.numbers.length;
-		const opcodes = buf && buf.opcodes.length >= opLen
-			? buf.opcodes.slice(0, opLen)
+
+		const reuseOpcodes = buf && buf.opcodes.length >= opLen;
+		const reuseNumbers = buf && buf.numbers.length >= numLen;
+
+		// Subarray views that share the buffer's ArrayBuffer (zero-copy)
+		const opcodes = reuseOpcodes
+			? new Uint8Array(buf!.opcodes.buffer, buf!.opcodes.byteOffset, opLen)
 			: new Uint8Array(opLen);
-		const numbers = buf && buf.numbers.length >= numLen
-			? buf.numbers.slice(0, numLen)
+		const numbers = reuseNumbers
+			? new Float64Array(buf!.numbers.buffer, buf!.numbers.byteOffset, numLen)
 			: new Float64Array(numLen);
 
+		// Write data into the views
 		for (let i = 0; i < opLen; i++) opcodes[i] = this.opcodes[i];
 		for (let i = 0; i < numLen; i++) numbers[i] = this.numbers[i];
 

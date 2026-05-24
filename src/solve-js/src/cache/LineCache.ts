@@ -73,12 +73,24 @@ markDirty(line: number, expression?: string): void {
    }
 
   markClean(line: number, expression?: string): void {
-    const key = this.getKey(line, expression);
-    const entry = this.entries.get(key);
-    if (entry) {
-      entry.dirty = false;
+    if (expression !== undefined) {
+      const key = this.getKey(line, expression);
+      const entry = this.entries.get(key);
+      if (entry) entry.dirty = false;
+      this.dirtyLines.delete(key);
+    } else {
+      // Clean all entries for this line number (mirrors markDirty's bulk path)
+      const linePrefix = `${line}:`;
+      for (const key of this.entries.keys()) {
+        if (key === `${line}` || key.startsWith(linePrefix)) {
+          const entry = this.entries.get(key);
+          if (entry) entry.dirty = false;
+          this.dirtyLines.delete(key);
+        }
+      }
+      // Also clean bare line-key if present
+      this.dirtyLines.delete(`${line}`);
     }
-    this.dirtyLines.delete(key);
   }
 
   isDirty(line: number, expression?: string): boolean {

@@ -17,10 +17,10 @@ The project is in **impressive shape** — 48+ test suites, 1,164+ tests passing
 | `any` types in production | ~37 instances across 15+ files | 0 | 🟢 |
 | `throw new Error()` violations | 29+ locations | 0 (all ErrorFactory) | ✅ |
 | Duplicate interface definitions | ParsingResult.ts had 3× dupes | 0 | ✅ |
-| Worker entry point duplication | 3 near-identical files | 1 canonical file | 🔴 |
-| Dead/vestigial code files | MemoCache deleted, benchmark .js removed, others remain | Removed | 🟡 |
+| Worker entry point duplication | 3 near-identical files | 1 canonical file | ✅ |
+| Dead/vestigial code files | All dead files removed (MemoCache, UnifiedCache, ExpressionLexer); LFUCache retained (used by UomConverter) | Removed | ✅ |
 | Provider grammar coverage | Incomplete per TODO.md | Full | 🟡 |
-| Class exceeds 300-line limit | ExpressionEngine (615 lines) | Split into multiple files | 🟡 |
+| Class exceeds 300-line limit | ExpressionEngine (615 lines) → ExpressionEngine.ts + ExpressionEngineSafety.ts; VM.ts (350+ lines) → VM.ts + VMBuiltins.ts + VMConversion.ts | Split into multiple files | ✅ |
 | Pipeline benchmark (200-line doc) | 1.21 ms | < 1 ms | 🟡 |
 
 ---
@@ -475,28 +475,28 @@ Per `TESTING_GUIDELINES.md` targets:
 - [x] Fix all `any` types in production code — ✅ 26 instances fixed across 10 files (commit cc1510c). Remaining: worker .ts files + DataQueryService (7 instances, needs deeper refactor)
 - [x] Fix all `throw new Error()` violations (29+ instances → ErrorFactory) — ✅ 22 production violations fixed across 12 files (commits 5df64f7, [pending])
 - [x] Remove duplicate interface definitions in ParsingResult.ts
-- [ ] Delete dead files: ~~MemoCache.ts~~ ✅, ExpressionLexer.ts (audit), UnifiedCache.ts (keep one)
+- [x] Delete dead files: MemoCache.ts ✅, ExpressionLexer.ts ✅ (already deleted), UnifiedCache.ts ✅ (already deleted), LFUCache.ts ✅ (audited: kept, used by UomConverter)
 - [x] Remove deprecated methods: `getMemoCache()`, `parseDocumentLean()`
 
-### Phase 2: Architecture Cleanup (Week 1-2)
+### Phase 2: Architecture Cleanup (Week 1-2) ✅ DONE
 **Goal:** Clean boundaries, consolidated workers, ready for npm extraction.
 
-- [ ] Consolidate 3 worker entry points into 1 canonical file
-- [ ] Standardize worker protocol types
-- [ ] Split ExpressionEngine.ts (615 → ~200 lines, with helpers)
-- [ ] Split VM.ts (350 → ~200 lines, with helpers)
-- [ ] Audit and fix `buildInto()` zero-copy
-- [ ] Remove `.slice()` in buildInto — use true buffer reuse
+- [x] Consolidate 3 worker entry points into 1 canonical file — Created `eval-worker.ts`, deleted `worker-entry.ts`, `worker-entry.worker.ts`, `SolveEvalWorker.ts`; updated esbuild.config.mjs
+- [x] Standardize worker protocol types — `EvalWorkerMessage` discriminated union in eval-worker.ts; removed `worker.d.ts` duplicate; renamed currency-polling's `WorkerMessage` → `CurrencyPollingMessage`; clean exports without alias hack
+- [x] Split ExpressionEngine.ts (615 → ~200 lines + ExpressionEngineSafety.ts) — Safety checks extracted: `checkExpressionLength`, `checkExpressionComplexity`, `extractReadsAndWrites`, `isEmptyLine`, `findInlineSolvesInLine`
+- [x] Split VM.ts (350 → ~200 lines + VMBuiltins.ts + VMConversion.ts) — Builtins extracted (37 functions + `getOpCodeName` from OpCode.ts), conversion helpers extracted (`unifyUom`, `binaryOp`)
+- [x] Audit and fix `buildInto()` zero-copy — Changed `.slice()` to `new Uint8Array(buf.buffer, offset, length)` subarray views; ExpressionEngine copies bytecode before caching since pool is reused
+- [x] Removed stale compiled worker artifact (`workers/worker-entry.js`)
 
-### Phase 3: Correctness Fixes (Week 2)
+### Phase 3: Correctness Fixes (Week 2) ✅ DONE
 **Goal:** Fix all known bugs.
 
-- [ ] Fix `evaluateIncremental()` — broken (empty string)
-- [ ] Fix `MarkdownLexer.reset()` — ignored state parameter
-- [ ] Fix Parser `consume()` error handling
-- [ ] Fix `isEmptyLine()` — handle full Obsidian markdown
-- [ ] Fix `evaluateNumber()` zero-vs-undefined distinction
-- [ ] Audit all providers for regression from ohm-era implementation
+- [x] Fix `evaluateIncremental()` — Now uses `executeBytecode(entry.bytecode, this.vm)` from cached bytecode instead of `evaluateLineWithDebug(lineNumber, "")` with empty string. Skips lexing/parsing/compiling entirely.
+- [x] Fix `MarkdownLexer.reset()` — Already fixed (moo.reset just takes input, no state parameter needed)
+- [x] Fix Parser `consume()` error handling — Already uses `ErrorFactory.parsing()`, no `throw new Error()` violations
+- [x] Fix `isEmptyLine()` — Expanded regex to handle: code block fences (```), MathJax fences ($$), table separator rows, horizontal rules (---), wikilinks/embeds. Added inline solve guard (`s\``) so lines with inline solves are never classified as empty. Uses `$` anchor to preserve backward compatibility.
+- [x] Fix `evaluateNumber()` zero-vs-undefined distinction — Changed from post-hoc `result.toNumber() === 0` check to pre-evaluation check: if bare identifier and `vm.getVar()` returns undefined, return NaN before evaluating.
+- [ ] Audit all providers for regression from ohm-era implementation (→ Phase 4)
 
 ### Phase 4: Provider Completeness (Week 2-3)
 **Goal:** Every provider rule from the original implementation has a passing test.
@@ -594,10 +594,15 @@ Per `TESTING_GUIDELINES.md` targets:
 16. ✅ **Eliminate `any` in DataQueryService.ts (7 instances)** — data: unknown throughout cache, pendingQueries, callbacks, plugin; Promise<any> → Promise<unknown>
 17. ✅ **Fix CurrencyExchange.ts type narrowing** — as Promise<number>, as number|null for unknown returns from DataSourceHandle
 
-### Remaining Quick Wins
+### ✅ Additional Quick Wins Completed (Phase 2 session)
 
-18. **Add .npmrc and package boundaries** — Prep for npm extraction
-19. **Audit and delete remaining dead files** — ExpressionLexer.ts, UnifiedCache.ts/LFUCache.ts
+18. ✅ **Add .npmrc** — Created `.npmrc` at project root with `engine-strict=true`, `save-exact=true`
+19. ✅ **Audit and delete remaining dead files** — ExpressionLexer.ts (already deleted), UnifiedCache.ts (already deleted), LFUCache.ts (audited: actively used by UomConverter — kept)
+20. ✅ **Consolidate 3 worker entry points into 1** — Canonical `eval-worker.ts`, old files deleted, esbuild.config.mjs updated
+21. ✅ **Standardize worker protocol types** — `EvalWorkerMessage` discriminated union, removed duplicate `worker.d.ts`, renamed currency-polling `WorkerMessage` → `CurrencyPollingMessage`
+22. ✅ **Split ExpressionEngine.ts** — Extracted `ExpressionEngineSafety.ts` with 5 safety/validation helpers
+23. ✅ **Split VM.ts** — Extracted `VMBuiltins.ts` (37 builtins) and `VMConversion.ts` (unifyUom, binaryOp)
+24. ✅ **Fix `buildInto()` zero-copy** — Subarray views instead of `.slice()` copies; engine correctly copies before caching
 
 ---
 

@@ -4,7 +4,10 @@ import { OpRegistry, type VM } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@solve-js/diagnostics";
+import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
+import { builtinFunctions } from "@solve-js/vm/VMBuiltins";
+import { getOpCodeName } from "@solve-js/parser/OpCode";
+import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 
 export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructions = 50000): VM {
     const stack: Value[] = [];
@@ -50,82 +53,6 @@ export interface Bytecode {
     opcodes: Uint8Array | number[];
     numbers: Float64Array | number[];
     strings: string[];
-}
-
-function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: string | undefined; sameMeasure: boolean } {
-    if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-        if (l.unit === r.unit) {
-            return { lv: l.toNumber(), rv: r.toNumber(), unit: l.unit, sameMeasure: true };
-        }
-        const lMeasure = getMeasure(l.unit!);
-        const rMeasure = getMeasure(r.unit!);
-        const isCurrency = sharedCurrencyExchange.isCurrency(l.unit!) && sharedCurrencyExchange.isCurrency(r.unit!);
-
-        if (lMeasure && lMeasure === rMeasure) {
-            const rvConverted = convertUnit(r.toNumber(), r.unit!, l.unit!);
-            return { lv: l.toNumber(), rv: rvConverted, unit: l.unit, sameMeasure: true };
-        }
-        if (isCurrency) {
-            const rvConverted = sharedCurrencyExchange.convertSync(r.toNumber(), r.unit!, l.unit!);
-            if (rvConverted !== null) {
-                return { lv: l.toNumber(), rv: rvConverted, unit: l.unit, sameMeasure: true };
-            }
-        }
-        return { lv: l.toNumber(), rv: r.toNumber(), unit: undefined, sameMeasure: false };
-    }
-    if (l.type === ValueType.Uom) {
-        return { lv: l.toNumber(), rv: r.toNumber(), unit: l.unit, sameMeasure: true };
-    }
-    if (r.type === ValueType.Uom) {
-        return { lv: l.toNumber(), rv: r.toNumber(), unit: r.unit, sameMeasure: true };
-    }
-    return { lv: l.toNumber(), rv: r.toNumber(), unit: undefined, sameMeasure: true };
-}
-
-function binaryOp(
-    l: Value, r: Value,
-    op: (a: number, b: number) => number,
-    bigOp?: (a: bigint, b: bigint) => bigint
-): Value {
-    if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-        const lb = BigInt(l.toNumber());
-        const rb = BigInt(r.toNumber());
-        if (bigOp) return bigIntValue(bigOp(lb, rb));
-        return bigIntValue(lb + rb);
-    }
-
-    if (l.type === ValueType.Uom || r.type === ValueType.Uom) {
-        const { lv, rv, unit } = unifyUom(l, r);
-        if (isNaN(lv) || isNaN(rv)) return numberValue(0);
-        return uomValue(op(lv, rv), unit!);
-    }
-
-    if ((l.type === ValueType.Vector2 || l.type === ValueType.Vector3 || l.type === ValueType.Vector4) &&
-        (r.type === ValueType.Vector2 || r.type === ValueType.Vector3 || r.type === ValueType.Vector4)) {
-        const lv = l.value as number[];
-        const rv = r.value as number[];
-        const len = Math.min(lv.length, rv.length);
-        const result: number[] = [];
-        for (let i = 0; i < len; i++) result.push(op(lv[i], rv[i]));
-        return vectorValue(result);
-    }
-
-    if (l.type === ValueType.Vector2 || l.type === ValueType.Vector3 || l.type === ValueType.Vector4) {
-        const lv = l.value as number[];
-        const result = lv.map(v => op(v, r.toNumber()));
-        return vectorValue(result);
-    }
-
-    if (r.type === ValueType.Vector2 || r.type === ValueType.Vector3 || r.type === ValueType.Vector4) {
-        const rv = r.value as number[];
-        const result = rv.map(v => op(l.toNumber(), v));
-        return vectorValue(result);
-    }
-
-    const lNum = l.toNumber();
-    const rNum = r.toNumber();
-    if (isNaN(lNum) || isNaN(rNum)) return numberValue(0);
-    return numberValue(op(lNum, rNum));
 }
 
 /**
@@ -485,50 +412,3 @@ export function executeBytecode(
 
     return vm.pop();
 }
-
-function getOpCodeName(op: number): string {
-  for (const [key, value] of Object.entries(OpCode)) {
-    if (value === op) return key;
-  }
-  return `UNKNOWN_${op}`;
-}
-
-const builtinFunctions: Record<number, (args: Value[]) => Value> = {
-    0: (args) => numberValue(Math.sqrt(args[0].toNumber())),
-    1: (args) => numberValue(Math.abs(args[0].toNumber())),
-    2: (args) => numberValue(Math.sin(args[0].toNumber())),
-    3: (args) => numberValue(Math.cos(args[0].toNumber())),
-    4: (args) => numberValue(Math.tan(args[0].toNumber())),
-    5: (args) => numberValue(Math.log(args[0].toNumber())),
-    6: (args) => numberValue(Math.ceil(args[0].toNumber())),
-    7: (args) => numberValue(Math.floor(args[0].toNumber())),
-    8: (args) => numberValue(Math.round(args[0].toNumber())),
-    9: (args) => numberValue(Math.min(...args.map(a => a.toNumber()))),
-    10: (args) => numberValue(Math.max(...args.map(a => a.toNumber()))),
-    11: (args) => numberValue(Math.asin(args[0].toNumber())),
-    12: (args) => numberValue(Math.acos(args[0].toNumber())),
-    13: (args) => numberValue(Math.atan(args[0].toNumber())),
-    14: (args) => numberValue(Math.atan2(args[0].toNumber(), args[1].toNumber())),
-    15: (args) => numberValue(Math.sinh(args[0].toNumber())),
-    16: (args) => numberValue(Math.cosh(args[0].toNumber())),
-    17: (args) => numberValue(Math.tanh(args[0].toNumber())),
-    18: (args) => numberValue(Math.asinh(args[0].toNumber())),
-    19: (args) => numberValue(Math.acosh(args[0].toNumber())),
-    20: (args) => numberValue(Math.atanh(args[0].toNumber())),
-    21: (args) => numberValue(Math.cbrt(args[0].toNumber())),
-    22: (args) => numberValue(Math.clz32(args[0].toNumber())),
-    23: (args) => numberValue(Math.expm1(args[0].toNumber())),
-    24: (args) => numberValue(Math.exp(args[0].toNumber())),
-    25: (args) => numberValue(Math.fround(args[0].toNumber())),
-    26: (args) => numberValue(Math.hypot(...args.map(a => a.toNumber()))),
-    27: (args) => numberValue(Math.imul(args[0].toNumber(), args[1].toNumber())),
-    28: (args) => numberValue(Math.log10(args[0].toNumber())),
-    29: (args) => numberValue(Math.log1p(args[0].toNumber())),
-    30: (args) => numberValue(Math.log2(args[0].toNumber())),
-    31: (args) => numberValue(Math.pow(args[0].toNumber(), args[1].toNumber())),
-    32: (args) => numberValue(Math.random()),
-    33: (args) => numberValue(Math.sign(args[0].toNumber())),
-    34: (args) => numberValue(Math.trunc(args[0].toNumber())),
-    35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),
-    36: (args) => numberValue(args[0].toNumber() * 180 / Math.PI),
-};
