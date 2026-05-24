@@ -15,10 +15,10 @@ The project is in **impressive shape** — 48+ test suites, 1,164+ tests passing
 |--------|---------|--------|--------|
 | Warm eval throughput | ~454,000 ops/sec | >2,000,000 ops/sec | 🔴 |
 | `any` types in production | ~37 instances across 15+ files | 0 | 🔴 |
-| `throw new Error()` violations | 29+ locations | 0 (all ErrorFactory) | 🔴 |
-| Duplicate interface definitions | ParsingResult.ts has 3× dupes | 0 | 🔴 |
+| `throw new Error()` violations | 29+ locations | 0 (all ErrorFactory) | 🟡 |
+| Duplicate interface definitions | ParsingResult.ts had 3× dupes | 0 | ✅ |
 | Worker entry point duplication | 3 near-identical files | 1 canonical file | 🔴 |
-| Dead/vestigial code files | MemoCache, UnifiedCache, LFUCache, ExpressionLexer | Removed | 🟡 |
+| Dead/vestigial code files | MemoCache deleted, others remain | Removed | 🟡 |
 | Provider grammar coverage | Incomplete per TODO.md | Full | 🟡 |
 | Class exceeds 300-line limit | ExpressionEngine (615 lines) | Split into multiple files | 🟡 |
 | Pipeline benchmark (200-line doc) | 1.21 ms | < 1 ms | 🟡 |
@@ -45,20 +45,166 @@ The project is in **impressive shape** — 48+ test suites, 1,164+ tests passing
 5. **Expand buffer pool** — 256 opcodes / 64 numbers is too small for complex expressions. Profile to find the 95th percentile expression complexity and size the pool accordingly. Fall back to allocation only for outliers.
 6. **Consider computed dispatch** — Replace `switch` with a `const dispatch = [fn0, fn1, ...]` lookup table indexed by opcode. Some JS engines optimize this better than switch.
 
-### 1.2 Frontend Rendering Optimization
+### 1.2 Document Engine Architecture (Enterprise-Grade Redesign)
 
-**Current State:** `MarkdownEditorViewPlugin.buildDecorations()` calls `engine.parseDocument(line.text, ...)` for **every visible line independently**. This means the engine lexes, parses, compiles, and executes one line at a time through the full pipeline — even though `parseDocument()` is designed to handle bulk documents.
+> **Key Insight:** Move the optimization into the engine library, not the frontend. The engine should receive the **full document + viewport range** and handle everything internally — caching, incremental updates, and zero-allocation scrolling.
 
-**Problems:**
-- For a 200-line visible viewport, this is 200 separate `ExpressionEngine` calls
-- Each call creates new `ParsingResult`, new arrays, new maps
-- The line-level caching in `lineDecorationCache` helps on re-render but not on first render
-- `parseDocument()` was designed to handle full documents efficiently but is being used one-line-at-a-time
+**Current State (post-batch-eval):** `MarkdownEditorViewPlugin.buildDecorations()` collects visible line texts, sends them as `string[]` to `engine.evaluateLines()`. Better than per-line calls but still treats each render as a fresh batch with no persistent document model.
 
-**Plan:**
-1. **Batch evaluate visible lines** — Collect all visible lines, pass them as a single document block to `engine.parseDocument()`, then extract per-line results.
-2. **Or:** Add a `evaluateLines()` batch API to ExpressionEngine that shares lexer state and bytecode cache across lines.
-3. **Profile `getHighlightTokens()`** — This creates a new lexer reset per line. Consider batching highlight token generation too.
+**Core Architectural Shift:** The engine should maintain a persistent `DocumentModel` that represents the user's document. The frontend sends two types of updates:
+1. **Document changes** (edits) → incremental model updates
+2. **Viewport changes** (scrolls) → zero-allocation execution of cached bytecode
+
+This moves all optimization intelligence into `solve-js` where it belongs as a library.
+
+#### 1.2.1 DocumentModel — Persistent Document Representation
+
+**Data Structure:** Segment Tree (or B-Tree) of lines, not a flat array.
+- **Why not array:** CodeMirror insert/delete operations cause O(N) line number shifts in flat arrays, breaking caches. A tree supports O(log N) structural splices.
+- **Internal nodes:** Track aggregate line counts and variable definition summaries for fast scope lookup.
+- **Leaf nodes (`LineState`):**
+  ```typescript
+  interface LineState {
+    textHash: number;          // FastHash for change detection
+    expression: string | null; // Extracted expression (null = markdown-only line)
+    bytecode: Uint8Array;      // Compiled bytecode (postMessage-transferable)
+    numbers: Float64Array;     // Number constants pool
+    strings: string[];         // String constants pool
+    reads: string[];           // Variables this line reads
+    writes: string[];          // Variables this line writes
+    result: Value | null;      // Last evaluation result
+    dirty: boolean;            // Needs re-evaluation
+    isVariableDef: boolean;    // Does this line define a variable? (never evict)
+  }
+  ```
+
+#### 1.2.2 Viewport Model — Contiguous Range, Not Bitset
+
+**Use a viewport range `[startLine, endLine]` with overscan buffer (±20 lines).**
+- Users scroll contiguously — a range is O(1) to transmit and check.
+- No need for sparse bitsets. Standard editor UX never has holes in the viewport.
+- Overscan pre-compiles lines just outside the viewport so they're cache-hot when scrolled into view.
+
+#### 1.2.3 Three-Tier Evaluation Strategy
+
+| Tier | Condition | Action | Thread |
+|------|-----------|--------|--------|
+| **Tier 1** | Visible + Dirty (new/changed) | Full pipeline: Lex → Parse → Compile → Execute | Worker |
+| **Tier 2** | Visible + Cached (scroll into view) | **Execute-only** from cached bytecode against VM checkpoint | Main |
+| **Tier 3** | Invisible (outside viewport) | **Dependency-track only**: Lex → Parse → Compile to discover reads/writes. Execute only variable assignments (to build VM state). Skip display-only execution. | Worker (background) |
+
+**Tier 3 optimization:** For invisible lines that are pure expressions (no variable writes), we can skip compilation entirely and only do a lightweight parse to extract variable reads. This saves 60-80% of CPU for large documents.
+
+#### 1.2.4 Incremental Document Updates
+
+Map CodeMirror's `ChangeSpec` directly to Segment Tree splices:
+- **Change: "replaced lines 10-15 with 3 new lines"**
+  - Tree splices out old leaf nodes, inserts new ones
+  - No line number shifting — tree maintains relative positions
+  - Mark changed lines + all DAG downstream lines as `Dirty`
+  - Trigger topological re-evaluation: only re-execute, don't re-parse
+- **Change: single character edit on line 42**
+  - Hash the line text, compare with stored `textHash`
+  - If expression changed → re-parse, re-compile, re-execute (Tier 1)
+  - If only whitespace/comment changed → mark as Dirty but preserve bytecode
+
+#### 1.2.5 Zero-Allocation Scrolling (The Holy Grail)
+
+When `setViewport(newRange)` is called and user just scrolled:
+1. Engine iterates over newly visible lines
+2. Bytecode is read from pre-allocated `Uint8Array` pools (no allocation)
+3. VM executes against the nearest prior **VM State Checkpoint** (see 1.2.6)
+4. Results are posted back to the frontend for rendering
+5. **Net result:** O(visible instructions) time, zero allocations, instant 60fps scroll
+
+**To achieve true zero-allocation:**
+- `Value` objects must be reused from a pool during scroll execution
+- `binaryOp()` must write into pre-allocated number slots, not create new `Value` objects
+- `executeBytecode()` must use a recyclable output buffer for results
+
+#### 1.2.6 VM State Checkpoints (Structural Sharing)
+
+**Problem:** Variables ripple down the document. Re-running from line 1 on every scroll is too slow.
+
+**Solution:** Checkpoint the VM scope after every line that contains a variable assignment.
+- Use prototypal inheritance: `checkpointScope = Object.create(previousCheckpointScope)`
+- Only changed variables create new entries; unchanged variables are inherited from parent
+- To evaluate line 100, the VM points its scope pointer to the line 99 checkpoint and executes
+- **Memory:** O(variables × versions) — typically < 1KB per checkpoint for average documents
+- **Time:** O(1) to snapshot, O(1) to restore
+
+```typescript
+interface VMCheckpoint {
+  lineNumber: number;
+  scope: Record<string, Value>;     // prototypal chain to parent
+  parent: VMCheckpoint | null;
+}
+```
+
+#### 1.2.7 New Engine API
+
+```typescript
+interface DocumentEngine {
+  // Initialize with full document text
+  setDocument(text: string): void;
+
+  // Apply CodeMirror changes incrementally. Returns decorations for visible lines only.
+  applyTransaction(changes: ChangeSpec, viewport: ViewportRange): RenderUpdate[];
+
+  // Scroll-only: no parsing, no compiling, just execute cached bytecode.
+  // Must complete in < 1ms for all visible lines. Returns decorations.
+  setViewport(range: ViewportRange): RenderUpdate[];
+
+  // Get the current viewport range
+  getViewport(): ViewportRange;
+
+  // Force full re-evaluation (e.g., after plugin register/unregister)
+  invalidateAll(): void;
+}
+
+type ViewportRange = { startLine: number; endLine: number };
+
+interface RenderUpdate {
+  lineNumber: number;
+  from: number;          // document offset
+  to: number;            // document offset
+  result: string | null; // formatted result for widget display
+  error: string | null;
+  inlineSolves: InlineSolveUpdate[];
+}
+```
+
+#### 1.2.8 Memory Management — Page-Based LRU Eviction
+
+- Group lines into **Pages** of 128 lines each
+- Implement Page-level LRU cache:
+  - **Hot pages** (viewport ± 3 pages): Keep bytecode + results in memory
+  - **Warm pages** (recently visible): Keep bytecode, evict results
+  - **Cold pages** (distant): Only keep `LineState` metadata (textHash, reads, writes). Evict bytecode.
+- **Never evict:** Variable definition bytecode — these form the backbone of the DAG and VM checkpoints
+- **Preload:** When user scrolls directionally, preload the next 1-2 pages in a background worker
+
+#### 1.2.9 Concurrency Model
+
+| Thread | Responsibilities | Constraint |
+|--------|-----------------|------------|
+| **Main Thread** | `LineCache` (bytecode + results), VM checkpointer, `setViewport` Tier 2 execution, widget rendering | Must never block > 1ms |
+| **Web Worker** | `applyTransaction` heavy work: lexing, parsing, compiling, DAG computation | Ships `Uint8Array` bytecode via `postMessage` with Transferable objects (zero-copy) |
+
+**Transferable objects:** When the worker compiles bytecode, it transfers the `ArrayBuffer` ownership to the main thread. This means zero-copy between threads — the bytes appear in the main thread without any serialization or duplication.
+
+#### 1.2.10 Implementation Phases for This Section
+
+| Phase | Description | Target |
+|-------|-------------|--------|
+| **1.2a** | ✅ `evaluateLines()` batch API (DONE) | 1 engine call per viewport |
+| **1.2b** | DocumentModel with Segment Tree + LineState | O(log N) document updates |
+| **1.2c** | Three-tier evaluation (Dirty/Cached/Track) | Background compilation, instant scroll |
+| **1.2d** | VM State Checkpoints | O(1) scope restore for any line |
+| **1.2e** | `setViewport()` zero-allocation execution | < 1ms viewport update |
+| **1.2f** | Incremental `applyTransaction()` API | Handle CodeMirror changes natively |
+| **1.2g** | Page-based LRU eviction + preloading | Bounded memory for 100K+ line docs |
+| **1.2h** | Worker compilation + Transferable bytecode | Non-blocking main thread |
 
 ### 1.3 Lexer Performance
 
@@ -361,16 +507,27 @@ Per `TESTING_GUIDELINES.md` targets:
 - [ ] Add big integer tests
 - [ ] Complete UoM grammar rules
 
-### Phase 5: Performance Optimization (Week 3)
-**Goal:** Hit nanosecond targets.
+### Phase 5: Performance Optimization (Week 3-4)
+**Goal:** Hit nanosecond targets, instant scrolling at 60fps.
 
+**VM Hot Loop (5.1):**
 - [ ] Cache `toNumber()` on Value
 - [ ] Add numeric fast path in binaryOp
 - [ ] Move trace check out of VM hot loop
 - [ ] Fix buffer pool reuse (true zero-copy)
-- [ ] Batch frontend evaluation (single parseDocument call for visible lines)
 - [ ] Add integer-only fast path in lexer
 - [ ] Consider computed dispatch table for VM
+
+**Document Engine (5.2):**
+- [ ] 5.2a: `evaluateLines()` batch API ✅
+- [ ] 5.2b: DocumentModel with Segment Tree + LineState
+- [ ] 5.2c: Three-tier evaluation (Dirty/Cached/Track)
+- [ ] 5.2d: VM State Checkpoints with structural sharing
+- [ ] 5.2e: `setViewport()` zero-allocation execution
+- [ ] 5.2f: `applyTransaction()` incremental update API
+- [ ] 5.2g: Page-based LRU eviction + preloading
+- [ ] 5.2h: Worker compilation + Transferable bytecode
+
 - [ ] Re-benchmark after each optimization
 
 ### Phase 6: Testing & Validation (Week 3-4)
@@ -395,15 +552,26 @@ Per `TESTING_GUIDELINES.md` targets:
 
 ## Quick Wins (Do First)
 
-These are low-risk, high-impact changes that can be done immediately:
+### ✅ Completed (commit `5df64f7`)
 
-1. **Fix duplicate interfaces in ParsingResult.ts** — 5-minute fix, prevents confusion
-2. **Delete `MemoCache.ts`** — Already documented as consolidated
-3. **Remove deprecated `getMemoCache()` and `parseDocumentLean()`** — Dead API surface
-4. **Fix `throw new Error()` in Parser.ts** — 2 lines, prevents wrong error category
-5. **Fix `MarkdownLexer.reset()` state parameter** — 1-line fix
-6. **Standardize `throw new Error()` in Configuration.ts** — 5 lines, consistent error handling
-7. **Add `.npmrc` and package boundaries** — Prep for npm extraction
+1. ✅ **Fix duplicate interfaces in ParsingResult.ts** — 3× ParsedLine, 3× ParsingResult, 2× UnifiedParsingOptions → 1 each
+2. ✅ **Delete MemoCache.ts** — File deleted, export removed from vm/index.ts, test deleted
+3. ✅ **Remove deprecated getMemoCache() and parseDocumentLean()** — Dead API surface cleaned
+4. ✅ **Fix throw new Error() in Parser.ts** — Replaced with ErrorFactory.parsing()
+5. ✅ **Fix MarkdownLexer.reset() state parameter** — Removed incompatible LexerState enum parameter (moo uses save-point, not state-machine)
+6. ✅ **Standardize throw new Error() in Configuration.ts** — 5 replacements with ErrorFactory.config() + test
+7. ✅ **Added Configuration.spec.ts** — Verifies error types are SolveError with ErrorCategory.CONFIG
+
+### ✅ Completed (commit `b332038`)
+
+8. ✅ **evaluateLines() batch API** — Single engine call processes all visible lines, sharing VM state and bytecode cache
+9. ✅ **Refactored buildDecorations()** — Three-phase: collect uncached → batch-evaluate → render
+10. ✅ **Added buildLineDecorationsFromParsed()** — Eliminates duplicate parseDocument() per line
+11. ✅ **Added EvaluateLines.spec.ts** — Test cases for batch evaluation
+
+### Remaining Quick Wins
+
+12. **Add .npmrc and package boundaries** — Prep for npm extraction
 
 ---
 
