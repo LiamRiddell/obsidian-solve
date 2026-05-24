@@ -134,14 +134,45 @@ export class ExpressionEngine {
      */
     parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
         const lines = input.split('\n');
-const result: ParsingResult = {
-             lines: [],
-             totalLines: lines.length,
-             errors: []
-         };
+        const processedLines = this.evaluateLines(lines);
 
-         const includeDiagnostics = options.includeDiagnostics ?? false;
+        const result: ParsingResult = {
+            lines: processedLines,
+            totalLines: lines.length,
+            errors: [],
+        };
 
+        // Collect errors from processed lines
+        for (const line of processedLines) {
+            if (line.error) {
+                result.errors.push(`Line ${line.lineNumber}: ${line.error}`);
+            }
+            for (const solve of line.inlineSolves) {
+                if (solve.error) {
+                    result.errors.push(`Line ${line.lineNumber}: ${solve.error}`);
+                }
+            }
+        }
+
+        const includeDiagnostics = options.includeDiagnostics ?? false;
+        if (includeDiagnostics) {
+            const reports = this.diagnosticPipeline.collectReports();
+            if (reports.length > 0) {
+                result.diagnostics = reports[0].toJSON();
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Batch-evaluate an array of lines in a single pass.
+     * Shares lexer state, bytecode cache, and VM across all lines for maximum efficiency.
+     * This avoids the per-line overhead of parseDocument() when processing visible lines
+     * in the frontend — one call instead of N.
+     */
+    evaluateLines(lines: string[]): ParsedLine[] {
+        const result: ParsedLine[] = [];
         let currentPosition = 0;
 
         for (let i = 0; i < lines.length; i++) {
@@ -165,7 +196,7 @@ const result: ParsingResult = {
                 inlineSolves,
                 expression: null,
                 result: null,
-                error: null
+                error: null,
             };
 
             if (!isEmpty) {
@@ -178,7 +209,6 @@ const result: ParsingResult = {
                             solve.result = value;
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
-                            result.errors.push(`Line ${lineNumber}: ${errorMessage}`);
                             solve.error = errorMessage;
                         }
                     }
@@ -192,25 +222,16 @@ const result: ParsingResult = {
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             parsedLine.error = errorMessage;
-                            result.errors.push(`Line ${lineNumber}: ${errorMessage}`);
                         }
                     }
                 }
             }
 
-result.lines.push(parsedLine);
-         }
+            result.push(parsedLine);
+        }
 
-         // Attach diagnostic report if requested
-         if (includeDiagnostics) {
-             const reports = this.diagnosticPipeline.collectReports();
-             if (reports.length > 0) {
-                 result.diagnostics = reports[0].toJSON();
-             }
-         }
-
-         return result;
-     }
+        return result;
+    }
 
     /**
      * Check if a line is effectively empty (whitespace only or only markdown syntax)

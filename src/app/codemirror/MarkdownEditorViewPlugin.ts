@@ -3,6 +3,7 @@ import { SolveHighlightProvider } from "@app/codemirror/SolveHighlightProvider";
 import { EngineProvider } from "@app/engine/EngineProvider";
 import { Value } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import type { ParsedLine } from "@solve-js/types/ParsingResult";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
 import { RangeSetBuilder } from "@codemirror/state";
@@ -110,7 +111,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		const builder = new RangeSetBuilder<Decoration>();
 
 		const visibleRanges = view.visibleRanges;
-		const seenLines = new Set();
+		const seenLines = new Set<number>();
+
+		// Phase 1: Collect all visible uncached lines for batch evaluation
+		const linesToEvaluate: Array<{ text: string; line: ReturnType<typeof view.state.doc.lineAt> }> = [];
 
 		for (const { from, to } of visibleRanges) {
 			const range = view.state.doc.iterRange(from, to);
@@ -126,6 +130,49 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				}
 				seenLines.add(line.number);
 
+				// Skip lines that are clean and cached
+				if (!this.dirtyLines.has(line.number)) {
+					const cached = this.lineDecorationCache.get(line.number);
+					if (cached && cached.lineText === line.text) {
+						nextLineTextOffset += lineTextRaw.length;
+						continue;
+					}
+				}
+
+				linesToEvaluate.push({ text: line.text, line });
+				nextLineTextOffset += lineTextRaw.length;
+			}
+		}
+
+		// Phase 2: Batch-evaluate all uncached lines in a single engine call
+		// Build a lineNumber → ParsedLine map for O(1) lookup in Phase 3
+		const lineResultMap = new Map<number, ParsedLine>();
+		if (linesToEvaluate.length > 0) {
+			const engine = EngineProvider.get();
+			const lineTexts = linesToEvaluate.map(l => l.text);
+			const evaluatedLines = engine.evaluateLines(lineTexts);
+			for (let i = 0; i < evaluatedLines.length; i++) {
+				lineResultMap.set(linesToEvaluate[i].line.number, evaluatedLines[i]);
+			}
+		}
+
+		// Phase 3: Build decorations from cached + freshly evaluated lines
+		seenLines.clear();
+		for (const { from, to } of visibleRanges) {
+			const range = view.state.doc.iterRange(from, to);
+			let nextLineTextOffset = 0;
+
+			for (const lineTextRaw of range) {
+				const linePosition = from + nextLineTextOffset;
+				const line = view.state.doc.lineAt(linePosition);
+
+				if (seenLines.has(line.number)) {
+					nextLineTextOffset += lineTextRaw.length;
+					continue;
+				}
+				seenLines.add(line.number);
+
+				// Render cached lines
 				if (!this.dirtyLines.has(line.number)) {
 					const cached = this.lineDecorationCache.get(line.number);
 					if (cached && cached.lineText === line.text) {
@@ -137,17 +184,17 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					}
 				}
 
-				// Use the shared engine's unified parsing to check if line is empty
-				const engine = EngineProvider.get();
-				const parsingResult = engine.parseDocument(line.text, { inputType: 'markdown' });
-				if (parsingResult.lines.length > 0 && parsingResult.lines[0].isEmpty) {
+				// Look up the batch-evaluated result for this line
+				const parsedLine = lineResultMap.get(line.number);
+
+				if (!parsedLine || parsedLine.isEmpty) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
 
 				const decorations: Array<{from: number; to: number; deco: Decoration}> = [];
 
-				this.buildLineDecorations(line.text, line.from, line.to, line.number, decorations);
+				this.buildLineDecorationsFromParsed(parsedLine, line.from, line.to, line.number, decorations);
 
 				decorations.sort((a, b) => a.from - b.from || (a.deco.spec.side ?? 0) - (b.deco.spec.side ?? 0));
 				for (const d of decorations) {
@@ -164,29 +211,25 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		return builder.finish();
 	}
 
-	private buildLineDecorations(
-		lineText: string,
+	/**
+	 * Build line decorations from an already-evaluated ParsedLine.
+	 * This avoids the duplicate parseDocument() call — the line was already
+	 * evaluated in the batch pass above.
+	 */
+	private buildLineDecorationsFromParsed(
+		parsedLine: ParsedLine,
 		lineFrom: number,
 		lineTo: number,
 		lineNumber: number,
 		decorations: Array<{from: number; to: number; deco: Decoration}>
 	): void {
-		const engine = EngineProvider.get();
-		// Use the shared engine's unified parsing to get inline solve positions
-		const parsingResult = engine.parseDocument(lineText, { inputType: 'markdown' });
-
-		if (parsingResult.lines.length === 0) return;
-
-		const parsedLine = parsingResult.lines[0];
-
 		if (parsedLine.hasInlineSolves && parsedLine.inlineSolves.length > 0) {
 			for (const solve of parsedLine.inlineSolves) {
 				if (solve.expression.trim()) {
 					const result = solve.result;
 					if (result !== null && result !== undefined) {
 						const formattedResult = formatValue(result);
-						// Calculate widget position using the integrated coordinate system
-						const widgetPos = lineFrom + solve.start + solve.expression.length + 3; // "s`" + expression + "`"
+						const widgetPos = lineFrom + solve.start + solve.expression.length + 3;
 
 						decorations.push({
 							from: widgetPos,
@@ -213,7 +256,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				});
 			}
 
-			this.addHighlightDecorations(lineText, lineFrom, lineNumber, decorations);
+			this.addHighlightDecorations(parsedLine.text, lineFrom, lineNumber, decorations);
 		}
 	}
 
