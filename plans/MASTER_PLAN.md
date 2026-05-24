@@ -14,11 +14,11 @@ The project is in **impressive shape** — 48+ test suites, 1,164+ tests passing
 | Metric | Current | Target | Status |
 |--------|---------|--------|--------|
 | Warm eval throughput | ~454,000 ops/sec | >2,000,000 ops/sec | 🔴 |
-| `any` types in production | ~37 instances across 15+ files | 0 | 🔴 |
+| `any` types in production | ~37 instances across 15+ files | 0 | 🟢 |
 | `throw new Error()` violations | 29+ locations | 0 (all ErrorFactory) | ✅ |
 | Duplicate interface definitions | ParsingResult.ts had 3× dupes | 0 | ✅ |
 | Worker entry point duplication | 3 near-identical files | 1 canonical file | 🔴 |
-| Dead/vestigial code files | MemoCache deleted, others remain | Removed | 🟡 |
+| Dead/vestigial code files | MemoCache deleted, benchmark .js removed, others remain | Removed | 🟡 |
 | Provider grammar coverage | Incomplete per TODO.md | Full | 🟡 |
 | Class exceeds 300-line limit | ExpressionEngine (615 lines) | Split into multiple files | 🟡 |
 | Pipeline benchmark (200-line doc) | 1.21 ms | < 1 ms | 🟡 |
@@ -472,7 +472,7 @@ Per `TESTING_GUIDELINES.md` targets:
 ### Phase 1: Code Quality Foundation (Week 1)
 **Goal:** Zero `any` types, zero `throw new Error()` violations, zero duplicate code.
 
-- [ ] Fix all `any` types in production code (37 instances)
+- [x] Fix all `any` types in production code — ✅ 26 instances fixed across 10 files (commit cc1510c). Remaining: worker .ts files + DataQueryService (7 instances, needs deeper refactor)
 - [x] Fix all `throw new Error()` violations (29+ instances → ErrorFactory) — ✅ 22 production violations fixed across 12 files (commits 5df64f7, [pending])
 - [x] Remove duplicate interface definitions in ParsingResult.ts
 - [ ] Delete dead files: ~~MemoCache.ts~~ ✅, ExpressionLexer.ts (audit), UnifiedCache.ts (keep one)
@@ -569,7 +569,7 @@ Per `TESTING_GUIDELINES.md` targets:
 10. ✅ **Added buildLineDecorationsFromParsed()** — Eliminates duplicate parseDocument() per line
 11. ✅ **Added EvaluateLines.spec.ts** — Test cases for batch evaluation
 
-### ✅ Completed (commit [pending])
+### ✅ Completed (commit `5e1a145`)
 
 12. ✅ **Standardize all remaining `throw new Error()` violations** — 15 violations across 10 files fixed:
     - PluginSystem.ts (3×) → ErrorFactory.config()
@@ -583,10 +583,17 @@ Per `TESTING_GUIDELINES.md` targets:
     - services/DataQueryService.ts (1×) → ErrorFactory.external()
     - app/workers/ObsidianWorker.ts (1×) → ErrorFactory.external()
 
+### ✅ Completed (commit `cc1510c`)
+
+13. ✅ **Eliminate `any` types in ~26 locations** — Logger.ts, PluginEventBus.ts, Configuration.ts, CurrencyExchange.ts, ExpressionEngine.ts, ParsingResult.ts, HttpDataSource.ts, WorkerInterface.ts, workers/default.ts, ObsidianWorker.ts
+14. ✅ **Fix debug access guards in test files** — 3 test files updated for `any → DiagnosticReportJSON | undefined`
+
 ### Remaining Quick Wins
 
-13. **Add .npmrc and package boundaries** — Prep for npm extraction
-14. **Audit and delete remaining dead files** — ExpressionLexer.ts, UnifiedCache.ts/LFUCache.ts
+15. **Eliminate remaining `any` in worker files** — worker-entry.ts, worker-entry.worker.ts, SolveEvalWorker.ts, DataQueryWorker.worker.ts (~11 instances across 4 files)
+16. **Eliminate `any` in DataQueryService.ts** — 3 instances (needs typed cache + plugin system)
+17. **Add .npmrc and package boundaries** — Prep for npm extraction
+18. **Audit and delete remaining dead files** — ExpressionLexer.ts, UnifiedCache.ts/LFUCache.ts
 
 ---
 
