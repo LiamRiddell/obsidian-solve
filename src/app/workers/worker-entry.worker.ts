@@ -12,10 +12,12 @@
  *   Worker → Main: { id, type: "DONE", lines, errors } (for EVAL_DOC)
  */
 // @ts-ignore — Worker global is available at runtime
-const self = this;
+type WorkerPostMessage = { postMessage(msg: unknown): void; onmessage: ((ev: MessageEvent) => void) | null };
+const workerSelf = this as unknown as WorkerPostMessage;
 
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { Value } from "@solve-js/vm/Value";
+import type { ParsedLine } from "@solve-js/types/ParsingResult";
 
 let engine: ExpressionEngine | null = null;
 
@@ -27,14 +29,32 @@ function getEngine(locale = "en"): ExpressionEngine {
 }
 
 function postError(id: number, error: string) {
-  self.postMessage({ id, type: "ERROR", error });
+  workerSelf.postMessage({ id, type: "ERROR", error });
 }
 
-function postResult(id: number, value: any) {
-  self.postMessage({ id, type: "RESULT", value });
+function postResult(id: number, value: unknown) {
+  workerSelf.postMessage({ id, type: "RESULT", value });
 }
 
-function handleEval(msg: any) {
+interface EvalMessage {
+  id: number;
+  type: string;
+  expression: string;
+  lineNumber: number;
+  locale?: string;
+}
+
+interface EvalDocMessage {
+  id: number;
+  type: string;
+  document: string;
+  options?: { inputType: "raw" | "code" | "markdown" };
+  locale?: string;
+}
+
+type WorkerMessage = EvalMessage | EvalDocMessage | { id: number; type: "TERMINATE" };
+
+function handleEval(msg: EvalMessage) {
   try {
     const eng = getEngine(msg.locale);
     const val: Value = eng.evaluateLine(msg.lineNumber, msg.expression);
@@ -47,11 +67,11 @@ function handleEval(msg: any) {
   }
 }
 
-function handleEvalDoc(msg: any) {
+function handleEvalDoc(msg: EvalDocMessage) {
   try {
     const eng = getEngine(msg.locale);
     const result = eng.parseDocument(msg.document, msg.options || { inputType: "markdown" });
-    const lines = result.lines.map((line: any) => ({
+    const lines = result.lines.map((line: ParsedLine) => ({
       lineNumber: line.lineNumber,
       text: line.text,
       isEmpty: line.isEmpty,
@@ -62,13 +82,13 @@ function handleEvalDoc(msg: any) {
         : null,
       error: line.error || null,
     }));
-    self.postMessage({ id: msg.id, type: "DONE", lines, errors: result.errors });
+    workerSelf.postMessage({ id: msg.id, type: "DONE", lines, errors: result.errors });
   } catch (err) {
     postError(msg.id, (err as Error).message);
   }
 }
 
-self.onmessage = (event: MessageEvent) => {
+workerSelf.onmessage = (event: MessageEvent) => {
   const msg = event.data;
   switch (msg.type) {
     case "EVAL":

@@ -50,7 +50,7 @@ export class CurrencyExchangeService {
 
   async getRate(from: string, to: string): Promise<number> {
     const queryKey = ["currency", from, to];
-    return this.dataSourceHandle.get(queryKey);
+    return this.dataSourceHandle.get(queryKey) as Promise<number>;
   }
 
   getRateSync(from: string, to: string): number | null {
@@ -60,7 +60,7 @@ export class CurrencyExchangeService {
     }
     
     const queryKey = ["currency", from, to];
-    const rate = this.dataSourceHandle.getSync(queryKey);
+    const rate = this.dataSourceHandle.getSync(queryKey) as number | null;
     
     // If rate is not in cache, try to calculate it from fallback rates
     if (rate === null) {

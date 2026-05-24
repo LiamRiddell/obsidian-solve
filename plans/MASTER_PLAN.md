@@ -588,12 +588,16 @@ Per `TESTING_GUIDELINES.md` targets:
 13. ✅ **Eliminate `any` types in ~26 locations** — Logger.ts, PluginEventBus.ts, Configuration.ts, CurrencyExchange.ts, ExpressionEngine.ts, ParsingResult.ts, HttpDataSource.ts, WorkerInterface.ts, workers/default.ts, ObsidianWorker.ts
 14. ✅ **Fix debug access guards in test files** — 3 test files updated for `any → DiagnosticReportJSON | undefined`
 
+### ✅ Completed (commit [pending])
+
+15. ✅ **Eliminate remaining `any` in worker files (~11 instances)** — worker-entry.ts, worker-entry.worker.ts, SolveEvalWorker.ts, DataQueryWorker.worker.ts; typed WorkerPostMessage + WorkerMessage interfaces
+16. ✅ **Eliminate `any` in DataQueryService.ts (7 instances)** — data: unknown throughout cache, pendingQueries, callbacks, plugin; Promise<any> → Promise<unknown>
+17. ✅ **Fix CurrencyExchange.ts type narrowing** — as Promise<number>, as number|null for unknown returns from DataSourceHandle
+
 ### Remaining Quick Wins
 
-15. **Eliminate remaining `any` in worker files** — worker-entry.ts, worker-entry.worker.ts, SolveEvalWorker.ts, DataQueryWorker.worker.ts (~11 instances across 4 files)
-16. **Eliminate `any` in DataQueryService.ts** — 3 instances (needs typed cache + plugin system)
-17. **Add .npmrc and package boundaries** — Prep for npm extraction
-18. **Audit and delete remaining dead files** — ExpressionLexer.ts, UnifiedCache.ts/LFUCache.ts
+18. **Add .npmrc and package boundaries** — Prep for npm extraction
+19. **Audit and delete remaining dead files** — ExpressionLexer.ts, UnifiedCache.ts/LFUCache.ts
 
 ---
 

@@ -20,7 +20,11 @@
 
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { Value } from "@solve-js/vm/Value";
+import type { ParsedLine } from "@solve-js/types/ParsingResult";
+import type { SolvePlugin } from "@solve-js/plugins/PluginSystem";
 
+type WorkerPostMessage = { postMessage(msg: unknown): void };
+const workerSelf = self as unknown as WorkerPostMessage;
 let engine: ExpressionEngine | null = null;
 let nextId = 0;
 const pending = new Map<number, (result: unknown, error?: string) => void>();
@@ -35,16 +39,29 @@ function getEngine(locale?: string): ExpressionEngine {
 }
 
 function postError(id: number, error: string) {
-  (self as any).postMessage({ id, type: "ERROR", error });
+  workerSelf.postMessage({ id, type: "ERROR", error });
 }
 
-function postResult(id: number, value: any) {
-  (self as any).postMessage({ id, type: "RESULT", value });
+function postResult(id: number, value: unknown) {
+  workerSelf.postMessage({ id, type: "RESULT", value });
 }
+
+// --- Message handler interfaces ---
+
+interface EvalMsg { id: number; type: "EVAL"; expression: string; lineNumber: number; locale?: string }
+interface EvalDocMsg { id: number; type: "EVAL_DOC"; document: string; options?: { inputType: "raw" | "code" | "markdown" }; locale?: string }
+interface RegisterPluginMsg { id: number; type: "REGISTER_PLUGIN"; plugin: SolvePlugin }
+interface UnregisterPluginMsg { id: number; type: "UNREGISTER_PLUGIN"; name: string }
+interface SetLocaleMsg { id: number; type: "SET_LOCALE"; locale: string }
+interface TerminateMsg { id: number; type: "TERMINATE" }
+
+type WorkerMessage = EvalMsg | EvalDocMsg | RegisterPluginMsg | UnregisterPluginMsg | SetLocaleMsg | TerminateMsg;
+
+export type { WorkerMessage };
 
 // --- Message handlers -------------------------------------------------------
 
-function handleEval(msg: any) {
+function handleEval(msg: EvalMsg) {
   try {
     const engine = getEngine(msg.locale);
     const val: Value = engine.evaluateLine(msg.lineNumber, msg.expression);
@@ -58,12 +75,12 @@ function handleEval(msg: any) {
   }
 }
 
-function handleEvalDoc(msg: any) {
+function handleEvalDoc(msg: EvalDocMsg) {
   try {
     const engine = getEngine(msg.locale);
-    const result = engine.parseDocument(msg.document, msg.options || { inputType: "markdown" });
+    const result = engine.parseDocument(msg.document, msg.options || ({ inputType: "markdown" } as const));
     // Serialize results — class instances don't cross the boundary
-    const lines = result.lines.map((line: any) => ({
+    const lines = result.lines.map((line: ParsedLine) => ({
       lineNumber: line.lineNumber,
       text: line.text,
       isEmpty: line.isEmpty,
@@ -76,7 +93,7 @@ function handleEvalDoc(msg: any) {
           }
         : null,
       error: line.error || null,
-      inlineSolves: line.inlineSolves?.map((s: any) => ({
+      inlineSolves: line.inlineSolves?.map((s) => ({
         start: s.start,
         end: s.end,
         expression: s.expression,
@@ -89,13 +106,13 @@ function handleEvalDoc(msg: any) {
         error: s.error || null,
       })),
     }));
-    (self as any).postMessage({ id: msg.id, type: "DONE", lines, errors: result.errors });
+    workerSelf.postMessage({ id: msg.id, type: "DONE", lines, errors: result.errors });
   } catch (err) {
     postError(msg.id, (err as Error).message);
   }
 }
 
-function handleRegisterPlugin(msg: any) {
+function handleRegisterPlugin(msg: RegisterPluginMsg) {
   try {
     const engine = getEngine();
     engine.registerPlugin(msg.plugin);
@@ -105,7 +122,7 @@ function handleRegisterPlugin(msg: any) {
   }
 }
 
-function handleUnregisterPlugin(msg: any) {
+function handleUnregisterPlugin(msg: UnregisterPluginMsg) {
   try {
     const engine = getEngine();
     engine.unregisterPlugin(msg.name);
@@ -115,7 +132,7 @@ function handleUnregisterPlugin(msg: any) {
   }
 }
 
-function handleSetLocale(msg: any) {
+function handleSetLocale(msg: SetLocaleMsg) {
   if (engine) {
     // Force re-creation on next access with new locale
     engine.clear();

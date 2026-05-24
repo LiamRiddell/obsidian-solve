@@ -15,7 +15,8 @@
  *   Worker → Main: { type: "STATUS_RESPONSE", payload: StatusPayload }
  */
 // @ts-ignore — Worker global is available at runtime
-const self = this;
+type WorkerPostMessage = { postMessage(msg: unknown): void };
+const workerSelf = this as unknown as WorkerPostMessage;
 
 import type { DataSourceStrategy } from "./DataSourceStrategy";
 import type { DataSourceConfig, FetchRequest, FetchResponse } from "./DataSourceStrategy";
@@ -24,12 +25,12 @@ class DataQueryWorkerInternal {
 	private strategies: Map<string, DataSourceStrategy> = new Map();
 	private activeRequests: Set<string> = new Set();
 
-	postMessage(message: any): void {
-		self.postMessage(message);
+	postMessage(message: unknown): void {
+		workerSelf.postMessage(message);
 	}
 
-	handleRegisterDataSource(payload: any): void {
-		const config = payload as import("./DataSourceStrategy").DataSourceConfig;
+	handleRegisterDataSource(payload: unknown): void {
+		const config = payload as DataSourceConfig;
 		let strategy: DataSourceStrategy;
 
 		switch (config.type) {
@@ -54,8 +55,8 @@ class DataQueryWorkerInternal {
 		});
 	}
 
-	async handleFetchRequest(payload: any): Promise<void> {
-		const request = payload as import("./DataSourceStrategy").FetchRequest;
+	async handleFetchRequest(payload: unknown): Promise<void> {
+		const request = payload as FetchRequest;
 		this.activeRequests.add(request.id);
 
 		const strategy = this.strategies.get(request.dataSourceId);
@@ -89,7 +90,7 @@ class DataQueryWorkerInternal {
 		this.activeRequests.delete(request.id);
 	}
 
-	handleUnregisterDataSource(payload: any): void {
+	handleUnregisterDataSource(payload: { dataSourceId: string }): void {
 		const { dataSourceId } = payload;
 		this.strategies.delete(dataSourceId);
 	}
@@ -127,10 +128,10 @@ self.onmessage = (event: MessageEvent) => {
 			worker.strategies.clear();
 			worker.activeRequests.clear();
 			if (id != null) {
-				self.postMessage({ id, type: "RESULT", payload: { ok: true } });
+				workerSelf.postMessage({ id, type: "RESULT", payload: { ok: true } });
 			}
 			break;
 		default:
-			self.postMessage({ id: id ?? -1, type: "ERROR", error: `Unknown message type: ${type}` });
+			workerSelf.postMessage({ id: id ?? -1, type: "ERROR", error: `Unknown message type: ${type}` });
 	}
 };

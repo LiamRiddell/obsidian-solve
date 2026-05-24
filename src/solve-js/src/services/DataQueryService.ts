@@ -24,8 +24,8 @@ export interface ServiceConfig {
 export interface DataSourceHandle {
   id: string;
   config: DataSourceConfig;
-  get: (queryKey: string[]) => Promise<any>;
-  getSync: (queryKey: string[]) => any | null;
+  get: (queryKey: string[]) => Promise<unknown>;
+  getSync: (queryKey: string[]) => unknown | null;
   refresh: () => void;
   destroy: () => void;
 }
@@ -39,13 +39,13 @@ export class DataQueryService {
   private config: ServiceConfig;
   private queryClient: QueryClient;
   private dataSources: Map<string, DataSourceHandle> = new Map();
-  private localCache: Map<string, { data: any; timestamp: number }> = new Map();
-  private pendingQueries: Map<string, { resolve: (value: any) => void; reject: (reason?: any) => void; dataSourceId: string; queryKey: string[] }> =
+  private localCache: Map<string, { data: unknown; timestamp: number }> = new Map();
+  private pendingQueries: Map<string, { resolve: (value: unknown) => void; reject: (reason?: unknown) => void; dataSourceId: string; queryKey: string[] }> =
     new Map();
   private queryCount = 0;
   
   // Event listeners for cache updates
-  private cacheUpdateListeners: Set<(dataSourceId: string, queryKey: string[], data: any) => void> = new Set();
+  private cacheUpdateListeners: Set<(dataSourceId: string, queryKey: string[], data: unknown) => void> = new Set();
   // Event listeners for errors
   private errorListeners: Set<(dataSourceId: string, queryKey: string[], error: string) => void> = new Set();
 
@@ -222,7 +222,7 @@ export class DataQueryService {
   // PLUGIN MANAGEMENT
   // ------------------------------------------------------------------------
 
-  registerPlugin(plugin: any): void {
+  registerPlugin(plugin: unknown): void {
     // Plugins are now handled natively in the worker
     console.log("[DataQueryService] Plugin registration deprecated - using native worker handlers");
   }
@@ -235,7 +235,7 @@ export class DataQueryService {
   // QUERY EXECUTION
   // ------------------------------------------------------------------------
 
-  async get(dataSourceId: string, queryKey: string[]): Promise<any> {
+  async get(dataSourceId: string, queryKey: string[]): Promise<unknown> {
     // Check local cache first
     const cacheKey = this.getCacheKey(dataSourceId, queryKey);
     const cached = this.localCache.get(cacheKey);
@@ -267,13 +267,13 @@ export class DataQueryService {
     });
   }
 
-  getSync(dataSourceId: string, queryKey: string[]): any | null {
+  getSync(dataSourceId: string, queryKey: string[]): unknown | null {
     const cacheKey = this.getCacheKey(dataSourceId, queryKey);
     const cached = this.localCache.get(cacheKey);
     return cached?.data ?? null;
   }
 
-  private async executeInMainThread(request: FetchRequest): Promise<any> {
+  private async executeInMainThread(request: FetchRequest): Promise<unknown> {
     const dataSource = this.dataSources.get(request.dataSourceId);
     if (!dataSource) {
       throw ErrorFactory.external(
@@ -424,7 +424,7 @@ export class DataQueryService {
   // EVENT LISTENERS
   // ------------------------------------------------------------------------
 
-  onCacheUpdate(listener: (dataSourceId: string, queryKey: string[], data: any) => void): () => void {
+  onCacheUpdate(listener: (dataSourceId: string, queryKey: string[], data: unknown) => void): () => void {
     this.cacheUpdateListeners.add(listener);
     return () => this.cacheUpdateListeners.delete(listener);
   }
@@ -434,7 +434,7 @@ export class DataQueryService {
     return () => this.errorListeners.delete(listener);
   }
 
-  private emitCacheUpdate(dataSourceId: string, queryKey: string[], data: any): void {
+  private emitCacheUpdate(dataSourceId: string, queryKey: string[], data: unknown): void {
     this.cacheUpdateListeners.forEach(listener => {
       try {
         listener(dataSourceId, queryKey, data);

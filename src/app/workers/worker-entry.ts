@@ -6,7 +6,10 @@
 
 import { ExpressionEngine } from "../../solve-js/src/engine/ExpressionEngine";
 import { Value } from "../../solve-js/src/vm/Value";
+import type { ParsedLine } from "../../solve-js/src/types/ParsingResult";
 
+type WorkerPostMessage = { postMessage(msg: unknown): void };
+const workerSelf = self as unknown as WorkerPostMessage;
 let engine: ExpressionEngine | null = null;
 
 function getEngine(locale = "en"): ExpressionEngine {
@@ -17,11 +20,11 @@ function getEngine(locale = "en"): ExpressionEngine {
 }
 
 function postError(id: number, error: string) {
-  (self as any).postMessage({ id, type: "ERROR", error });
+  workerSelf.postMessage({ id, type: "ERROR", error });
 }
 
-function postResult(id: number, value: any) {
-  (self as any).postMessage({ id, type: "RESULT", value });
+function postResult(id: number, value: unknown) {
+  workerSelf.postMessage({ id, type: "RESULT", value });
 }
 
 self.onmessage = (event: MessageEvent) => {
@@ -42,7 +45,7 @@ self.onmessage = (event: MessageEvent) => {
       case "EVAL_DOC": {
         const eng = getEngine(msg.locale);
         const result = eng.parseDocument(msg.document, msg.options || { inputType: "markdown" });
-        const lines = result.lines.map((line: any) => ({
+        const lines = result.lines.map((line: ParsedLine) => ({
           lineNumber: line.lineNumber,
           text: line.text,
           isEmpty: line.isEmpty,
@@ -53,7 +56,7 @@ self.onmessage = (event: MessageEvent) => {
             : null,
           error: line.error || null,
         }));
-        (self as any).postMessage({ id: msg.id, type: "DONE", lines, errors: result.errors });
+        workerSelf.postMessage({ id: msg.id, type: "DONE", lines, errors: result.errors });
         break;
       }
 
