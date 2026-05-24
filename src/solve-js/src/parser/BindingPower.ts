@@ -3,6 +3,7 @@ export const BindingPower = {
   Assignment: 10,
   Conditional: 20,
   Sum: 30,
+  BitwiseXor: 35,
   Product: 40,
   Exponent: 50,
   Prefix: 60,

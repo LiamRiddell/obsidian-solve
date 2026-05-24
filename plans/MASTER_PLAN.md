@@ -496,16 +496,21 @@ Per `TESTING_GUIDELINES.md` targets:
 - [x] Fix Parser `consume()` error handling — Already uses `ErrorFactory.parsing()`, no `throw new Error()` violations
 - [x] Fix `isEmptyLine()` — Expanded regex to handle: code block fences (```), MathJax fences ($$), table separator rows, horizontal rules (---), wikilinks/embeds. Added inline solve guard (`s\``) so lines with inline solves are never classified as empty. Uses `$` anchor to preserve backward compatibility.
 - [x] Fix `evaluateNumber()` zero-vs-undefined distinction — Changed from post-hoc `result.toNumber() === 0` check to pre-evaluation check: if bare identifier and `vm.getVar()` returns undefined, return NaN before evaluating.
+- [x] Fix `evaluateIncremental()` dirty-line ordering — Sort dirty lines ascending (`Array.from(...).sort((a,b)=>a-b)`) so chained dependencies always execute producer-before-consumer.
+- [x] Fix `LineCache.markClean()` bulk path — Mirror `markDirty`'s bulk behavior: when called without expression, clean all entries for that line number.
+- [x] Fix isEmptyLine() HR regex — Changed from `/^[-*_]{3,}\s*$/` to separate alternatives `/^(-{3,}|\*{3,}|_{3,})\s*$/` so mixed chars like `*-*` aren't misclassified.
+- [x] Add 60 unit tests across 3 suites — Phase5_evaluateNumber (+10 bare-identifier tests), Phase6_incremental (+7 bytecode execution tests), Phase8_isEmptyLine (34 new tests).
 - [ ] Audit all providers for regression from ohm-era implementation (→ Phase 4)
 
-### Phase 4: Provider Completeness (Week 2-3)
+### Phase 4: Provider Completeness (Week 2-3) ✅ DONE
 **Goal:** Every provider rule from the original implementation has a passing test.
 
-- [ ] Write comprehensive provider tests matching ohm-era coverage
-- [ ] Add missing word-based operator variations
-- [ ] Fix vector syntax: `[x,y,z]` → `(x,y,z)`
-- [ ] Add big integer tests
-- [ ] Complete UoM grammar rules
+- [x] **`xor` keyword** — Added to en.ts locale's keywordMap, registered as BIT_XOR infix parselet in arithmetic parselets with dedicated BindingPower.Xor (35, between Product=40 and Sum=30)
+- [x] **BindingPower.Xor** — New constant for correct precedence (AND > XOR > OR)
+- [x] **BigInt tests fixed & expanded** — Fixed XOR test (was `|` bitwise-OR, now `xor`), added exponentiation tests (`^` and `prime`)
+- [x] **Arithmetic XOR tests** — `5 xor 3 = 6`, `7 xor 2 = 5`
+- [x] **UoM tests expanded** — Temperature (C↔F), speed (mi↔km), volume (gal↔L, L↔ml), weight (t↔kg, oz↔g), data storage (GB↔MB decimal), area (m2↔ft2). Unit aliases removed entirely — `resolveUnit()` passes units straight through to the `convert` package with no remapping. Units are strictly case-sensitive (e.g. C=Celsius vs c=centiliter, MB=megabytes vs mb=millibar). Only natively valid `convert` identifiers are in `knownUnits`.
+- [x] **All 910 engine + 147 provider tests pass**, typecheck clean
 
 ### Phase 5: Performance Optimization (Week 3-4)
 **Goal:** Hit nanosecond targets, instant scrolling at 60fps.

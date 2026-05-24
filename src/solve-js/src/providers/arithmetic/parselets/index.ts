@@ -35,4 +35,5 @@ export function registerArithmeticParselets(registry: ParseletRegistry): void {
   registry.registerInfix("RSHIFT", new BinaryOpParselet(BindingPower.Sum, OpCode.RSHIFT));
   registry.registerInfix("BIT_AND", new BinaryOpParselet(BindingPower.Product, OpCode.BIT_AND));
   registry.registerInfix("BIT_OR", new BinaryOpParselet(BindingPower.Sum, OpCode.BIT_OR));
+  registry.registerInfix("BIT_XOR", new BinaryOpParselet(BindingPower.BitwiseXor, OpCode.BIT_XOR));
 }

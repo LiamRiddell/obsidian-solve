@@ -1,11 +1,9 @@
 /**
  * UoM Converter using the `convert` package (v7.0.0)
  * 
- * Migration from `convert-units`:
- * - The `convert` package is case-sensitive (e.g., 'c' is centiliter, 'C' is Celsius)
- * - Full word units are supported (e.g., 'day', 'hour', 'minute')
- * - Only essential aliases are maintained for backwards compatibility
- * - Removed conflicting aliases that shadow valid units in the convert package
+ * Units are strictly case-sensitive and passed through to the convert package
+ * without aliasing. No unit remapping — what you type is what you get.
+ * e.g. 'C' = Celsius, 'c' = centiliter; 'MB' = megabytes, 'mb' = millibar.
  */
 
 import convert, { getMeasureKind, MeasureKind } from "convert";
@@ -14,16 +12,7 @@ import { LFUCache } from "@solve-js/cache";
 // Cache for valid units to avoid repeated conversion attempts
 const validUnitsCache = new LFUCache<string>(1000);
 
-export const unitAliases: Record<string, string> = {
-  // Essential aliases for backwards compatibility
-  // Only include mappings where the input is NOT a valid unit in convert package
-  "mt": "t", // metric ton (tonne)
-  "floz": "US fluid ounce", // fluid ounce
-  // Note: "mph" is not supported by convert package, need to handle separately
-};
-
 export function resolveUnit(unit: string): string {
-  // First, check if the unit is already valid in the convert package
   // Check cache first for performance
   const cached = validUnitsCache.get(unit);
   if (cached !== null) {
@@ -31,26 +20,11 @@ export function resolveUnit(unit: string): string {
   }
   
   try {
-    // Try to use the unit - if it works, it's valid
+    // Validate the unit with the convert package
     convert(1, unit as any).to(unit as any);
-    
-    // Add to LFU cache
     validUnitsCache.put(unit, unit);
     return unit;
   } catch {
-    // Unit is not valid, check if it's an alias
-    const alias = unitAliases[unit];
-    if (alias) {
-      return alias;
-    }
-    
-    // Try lowercase version
-    const lower = unit.toLowerCase().trim();
-    const lowerAlias = unitAliases[lower];
-    if (lowerAlias) {
-      return lowerAlias;
-    }
-    
     // Return the original unit (will likely cause an error later)
     return unit;
   }

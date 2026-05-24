@@ -102,10 +102,21 @@ describe("BigInt Parselets", () => {
     expect(Number(r.value)).toBe(6);
   });
 
-  test("bigint bitwise XOR: 5n xor 3n (via BIT_XOR)", () => {
-    const r = parseAndExecute("5n | 3n");
+  test("bigint bitwise XOR: 5n xor 3n = 6", () => {
+    const r = parseAndExecute("5n xor 3n");
     expect(r.type).toBe(ValueType.BigInt);
-    expect(Number(r.value)).toBe(7);
+    expect(Number(r.value)).toBe(6);
+  });
+
+  test("bigint exponentiation: 2n ^ 3n = 8 (returns Number)", () => {
+    const r = parseAndExecute("2n ^ 3n");
+    // Exponentiation on BigInt may return a Number type
+    expect(r.toNumber()).toBe(8);
+  });
+
+  test("bigint exponent keyword: 2n prime 3n = 8 (returns Number)", () => {
+    const r = parseAndExecute("2n prime 3n");
+    expect(r.toNumber()).toBe(8);
   });
 
   test("bigint negate: -5n", () => {

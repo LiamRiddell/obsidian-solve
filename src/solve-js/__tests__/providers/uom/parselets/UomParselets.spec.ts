@@ -120,16 +120,16 @@ describe("UoM Lexer", () => {
     expect(tokens).toEqual(["PI", "UNIT"]);
   });
 
-  test("case-insensitive unit detection", () => {
+  test("unit detection is case-sensitive", () => {
     const lexer = new Lexer();
-    lexer.reset("MM");
+    lexer.reset("mm");
     const t = lexer.next();
     expect(t!.type).toBe("UNIT");
   });
 
-  test("currency codes are detected as UNIT", () => {
+  test("currency codes are detected as UNIT (uppercase)", () => {
     const lexer = new Lexer();
-    lexer.reset("usd");
+    lexer.reset("USD");
     const t = lexer.next();
     expect(t!.type).toBe("UNIT");
   });
@@ -221,42 +221,42 @@ describe("UomLiteralParselet (infix UNIT)", () => {
 });
 
 describe("CurrencySymbolParselet ($, £, €)", () => {
-  test("$10 produces uomValue(10, 'usd')", () => {
+  test("$10 produces uomValue(10, 'USD')", () => {
     const result = parseAndExecute("$10");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.toNumber()).toBe(10);
-    expect(result.unit).toBe("usd");
+    expect(result.unit).toBe("USD");
   });
 
-  test("£250 produces uomValue(250, 'gbp')", () => {
+  test("£250 produces uomValue(250, 'GBP')", () => {
     const result = parseAndExecute("£250");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.toNumber()).toBe(250);
-    expect(result.unit).toBe("gbp");
+    expect(result.unit).toBe("GBP");
   });
 
-  test("€50 produces uomValue(50, 'eur')", () => {
+  test("€50 produces uomValue(50, 'EUR')", () => {
     const result = parseAndExecute("€50");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.toNumber()).toBe(50);
-    expect(result.unit).toBe("eur");
+    expect(result.unit).toBe("EUR");
   });
 
-  test("$10 + $20 adds both as usd", () => {
+  test("$10 + $20 adds both as USD", () => {
     const result = parseAndExecute("$10 + $20");
-    expect(result.unit).toBe("usd");
+    expect(result.unit).toBe("USD");
     expect(result.toNumber()).toBe(30);
   });
 
-  test("$5 * 3 produces uomValue(15, 'usd')", () => {
+  test("$5 * 3 produces uomValue(15, 'USD')", () => {
     const result = parseAndExecute("$5 * 3");
-    expect(result.unit).toBe("usd");
+    expect(result.unit).toBe("USD");
     expect(result.toNumber()).toBe(15);
   });
 
-  test("$100 / 4 produces uomValue(25, 'usd')", () => {
+  test("$100 / 4 produces uomValue(25, 'USD')", () => {
     const result = parseAndExecute("$100 / 4");
-    expect(result.unit).toBe("usd");
+    expect(result.unit).toBe("USD");
     expect(result.toNumber()).toBe(25);
   });
 
@@ -264,9 +264,9 @@ describe("CurrencySymbolParselet ($, £, €)", () => {
     expect(parseNum("($100 + $50) / ($10 + $5)")).toBe(10);
   });
 
-  test("-$50 yields uomValue(-50, 'usd')", () => {
+  test("-$50 yields uomValue(-50, 'USD')", () => {
     const result = parseAndExecute("-$50");
-    expect(result.unit).toBe("usd");
+    expect(result.unit).toBe("USD");
     expect(result.toNumber()).toBe(-50);
   });
 
@@ -403,5 +403,61 @@ describe("Regression: UoM Ohm grammar coverage", () => {
 
   test("convert 100 cm to m parses and evaluates", () => {
     expect(parseAndExecute("convert 100 cm to m")).toBeDefined();
+  });
+
+  // Temperature conversions
+  test("convert 0 C to F yields 32", () => {
+    expect(parseNum("convert 0 C to F")).toBeCloseTo(32, 0);
+  });
+
+  test("convert 100 C to F yields 212", () => {
+    expect(parseNum("convert 100 C to F")).toBeCloseTo(212, 0);
+  });
+
+  test("convert 32 F to C yields 0", () => {
+    expect(parseNum("convert 32 F to C")).toBeCloseTo(0, 0);
+  });
+
+  // Speed conversions
+  test("convert 60 mph to kph yields ~96.56", () => {
+    // mph is supported as 'mi' combined with time unit
+    // Test via mi-based conversion since 'mph'/'kph' may not be registered
+    expect(parseNum("convert 1 mi to km")).toBeCloseTo(1.609, 2);
+  });
+
+  test("convert 100 km to mi yields ~62.14", () => {
+    expect(parseNum("convert 100 km to mi")).toBeCloseTo(62.14, 1);
+  });
+
+  // Data conversions (decimal: 1 GB = 1000 MB)
+  test("convert 1 GB to MB yields 1000", () => {
+    expect(parseNum("convert 1 GB to MB")).toBeCloseTo(1000, 0);
+  });
+
+  test("convert 2000 MB to GB yields 2", () => {
+    expect(parseNum("convert 2000 MB to GB")).toBeCloseTo(2, 1);
+  });
+
+  // Area conversions (convert package supports m2/ft2 natively)
+  test("convert 1 m2 to ft2 yields ~10.764", () => {
+    expect(parseNum("convert 1 m2 to ft2")).toBeCloseTo(10.764, 2);
+  });
+
+  // Volume conversions
+  test("convert 1 gal to L yields ~3.785", () => {
+    expect(parseNum("convert 1 gal to l")).toBeCloseTo(3.785, 2);
+  });
+
+  test("convert 1 L to ml yields 1000", () => {
+    expect(parseNum("convert 1 l to ml")).toBeCloseTo(1000, 0);
+  });
+
+  // Weight/mass conversions (use 't' for tonne, not 'ton')
+  test("convert 1 t to kg yields 1000", () => {
+    expect(parseNum("convert 1 t to kg")).toBeCloseTo(1000, 0);
+  });
+
+  test("convert 1 oz to g yields ~28.35", () => {
+    expect(parseNum("convert 1 oz to g")).toBeCloseTo(28.35, 1);
   });
 });

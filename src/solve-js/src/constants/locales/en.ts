@@ -23,6 +23,7 @@ export const enLocale: ILocale = {
     divide: "SLASH",
     modulo: "MOD", mod: "MOD",
     exponent: "CARET", prime: "CARET",
+    xor: "BIT_XOR",
     of: "OF",
     now: "NOW", today: "TODAY", tomorrow: "TOMORROW", yesterday: "YESTERDAY",
     roll: "ROLL",

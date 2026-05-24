@@ -109,6 +109,12 @@ lexer ← parser ← bytecode ← VM ← cache ← engine ← providers/plugins/
 - Providers are registered in the engine constructor or via `PluginSystem`
 - No provider may directly access the VM — only through opcodes
 
+### 3.5 Unit Handling Rules
+- **Strict case-sensitivity**: `C` ≠ `c`, `MB` ≠ `mb`. No case-insensitive fallback in the lexer.
+- **No aliases**: `resolveUnit()` passes the unit identifier directly to the `convert` package — no remapping, no normalization.
+- **knownUnits gate**: Only units natively recognized by the `convert` package are registered in `knownUnits`. If `convert` rejects an identifier, it won't lex as UNIT.
+- **Currency codes**: ISO 4217 uppercase (`USD`, `EUR`, `GBP`), emitted by symbol parselets (`$`, `£`, `€`).
+
 ---
 
 ## 4. Key Design Decisions
@@ -133,6 +139,21 @@ lexer ← parser ← bytecode ← VM ← cache ← engine ← providers/plugins/
 - `LineCache`: stores bytecode + result keyed by line number (fast path for unchanged lines)
 - `MemoCache`: stores result keyed by expression hash + line (survives line renumbering)
 - **Note**: These overlap and should be consolidated (Phase 3 plan)
+
+### Why strict case-sensitivity for units?
+- The `convert` package is case-sensitive: `C` = Celsius, `c` = centiliter; `MB` = megabytes, `mb` = millibar (pressure). The `convert` package's interpretation is always authoritative — `knownUnits` is a lexer gate, not a semantic override.
+- Case-insensitive matching creates ambiguity — a user who types `c` could mean centiliter (volume) or Celsius (temperature), and the engine can't guess.
+- The lexer's `ciKeywords` function checks only the exact casing in `knownUnits`. No case-insensitive fallback for UNIT detection.
+- Currency codes use ISO 4217 uppercase (`USD`, `EUR`, `GBP`) — `$`, `£`, `€` symbol parselets emit uppercase codes.
+- **Rule**: what you type is what you get. No case normalization for units.
+
+### Why no unit aliases?
+- `resolveUnit()` passes units straight through to the `convert` package without remapping.
+- Aliases (e.g. `mt→t`, `floz→US fluid ounce`, `sqm→m2`, `gb→GB`) were removed because:
+  - They create ambiguity — a user who types `mt` might mean "metric ton" or some other unit.
+  - They override the `convert` package's native behavior — `mb` is valid in `convert` as millibar, but an alias might silently reinterpret it as megabyte.
+  - They make the system unpredictable — the unit a user types may not be the unit that gets used.
+- **Rule**: only natively valid `convert` identifiers are registered in `knownUnits`. If `convert` doesn't recognize a unit, it won't lex as UNIT.
 
 ---
 

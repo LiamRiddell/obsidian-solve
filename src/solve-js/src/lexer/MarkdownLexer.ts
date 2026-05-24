@@ -9,7 +9,9 @@ function ciKeywords(map: Record<string, string>): (text: string) => string {
   return (text: string) => {
     const lower = text.toLowerCase();
     if (lowered[lower]) return lowered[lower];
-    if (knownUnits.has(lower)) return "UNIT";
+    // Units are strictly case-sensitive to eliminate ambiguity.
+    // e.g. C = Celsius ≠ c = centiliter, MB = megabytes ≠ mb = megabits.
+    if (knownUnits.has(text)) return "UNIT";
     return "IDENT";
   };
 }

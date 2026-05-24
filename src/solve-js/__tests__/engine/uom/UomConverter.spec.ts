@@ -133,10 +133,6 @@ describe("resolveUnit", () => {
     expect(resolveUnit("m")).toBe("m");
   });
 
-  test("maps essential aliases", () => {
-    expect(resolveUnit("mt")).toBe("t");
-  });
-
   test("handles case sensitivity (convert package is case-sensitive)", () => {
     // C is Celsius (temperature), c is centiliter (volume)
     expect(resolveUnit("C")).toBe("C");

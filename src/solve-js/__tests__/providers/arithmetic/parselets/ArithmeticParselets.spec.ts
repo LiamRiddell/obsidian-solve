@@ -237,6 +237,14 @@ test("hex literal: 0xFF = 255", () => {
     expect(parseAndExecute("4 | 2")).toBe(6);
   });
 
+  test("bitwise XOR: 5 xor 3 = 6", () => {
+    expect(parseAndExecute("5 xor 3")).toBe(6);
+  });
+
+  test("bitwise XOR: 7 xor 2 = 5", () => {
+    expect(parseAndExecute("7 xor 2")).toBe(5);
+  });
+
   test("BODMAS: 1 + 2 * 3 = 7", () => {
     expect(parseAndExecute("1 + 2 * 3")).toBe(7);
   });

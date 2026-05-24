@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-05-24T21:14:59.051Z",
+  "timestamp": "2026-05-24T21:54:53.887Z",
   "results": {
-    "simple_add": 2.7105520000006074,
-    "variable_access": 4.816819999999716,
-    "vector_creation": 2.701371999999683,
-    "unit_conversion": 12.429555999999575,
-    "dice_roll": 2.1637519999998043,
-    "percentage": 3.3192920000001322
+    "simple_add": 0.898416000000143,
+    "variable_access": 0.8706119999999646,
+    "vector_creation": 0.6643040000001201,
+    "unit_conversion": 4.328899999999848,
+    "dice_roll": 0.8348999999999068,
+    "percentage": 0.8977679999999236
   }
 }
