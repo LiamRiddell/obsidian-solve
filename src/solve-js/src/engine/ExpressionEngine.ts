@@ -28,6 +28,7 @@ import {
     UnifiedParsingOptions,
 } from "@solve-js/types/ParsingResult";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
+import type { Token } from "@solve-js/lexer/Token";
 import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
 import {
     DiagnosticPipeline,
@@ -282,7 +283,7 @@ export class ExpressionEngine {
         lineNumber: number,
         lineText: string,
         inputType: string = "expression"
-    ): { value: Value; tokens: any[]; program: any; error?: string; inlineSolve?: InlineSolvePosition; debug?: any } {
+    ): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; inlineSolve?: InlineSolvePosition; debug?: DiagnosticReportJSON } {
         const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
         if (inlineSolveMatch) {
             const expression = inlineSolveMatch[1];
@@ -305,7 +306,7 @@ export class ExpressionEngine {
      * Core expression evaluation logic with diagnostic pipeline integration.
      * Every pipeline stage fires events to registered collectors.
      */
-    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: any[]; program: any; error?: string; debug?: any } {
+    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; debug?: DiagnosticReportJSON } {
         const pipeline = this.diagnosticPipeline;
         const hasCollectors = pipeline.hasCollectors;
 
@@ -325,7 +326,7 @@ export class ExpressionEngine {
             };
         }
 
-        const tokens: any[] = [];
+        const tokens: Token[] = [];
 
         // Pipeline event: start
         if (hasCollectors) {
@@ -564,13 +565,13 @@ if (hasCollectors) {
 
 // Build debug info — structured diagnostic report
          if (hasCollectors) {
-             const reports = pipeline.collectReports();
-             return {
-                 value: result!,
-                 tokens,
-                 program,
-                 debug: reports[0] || undefined,
-             };
+            const reports = pipeline.collectReports();
+            return {
+                value: result!,
+                tokens,
+                program,
+                debug: reports[0]?.toJSON() || undefined,
+            };
          }
 
         return {

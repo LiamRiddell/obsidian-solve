@@ -148,28 +148,29 @@ test("diagnostic report has correct structure", () => {
      const result = engine.evaluateLineWithDebug(1, "1 + 2 * 3");
 
      expect(result.debug).toBeDefined();
-     expect(result.debug.events).toBeDefined();
-     expect(result.debug.summary).toBeDefined();
-     expect(result.debug.metadata).toBeDefined();
+     const debug = result.debug!;
+     expect(debug.events).toBeDefined();
+     expect(debug.summary).toBeDefined();
+     expect(debug.metadata).toBeDefined();
 
      // Check summary fields
-     expect(result.debug.summary.totalTokens).toBeGreaterThan(0);
-     expect(result.debug.summary.totalOpcodes).toBeGreaterThan(0);
-     expect(result.debug.summary.cacheHit).toBe(false); // first eval = cache miss
-     expect(result.debug.summary.parseCategories).toBeDefined();
+     expect(debug.summary.totalTokens).toBeGreaterThan(0);
+     expect(debug.summary.totalOpcodes).toBeGreaterThan(0);
+     expect(debug.summary.cacheHit).toBe(false); // first eval = cache miss
+     expect(debug.summary.parseCategories).toBeDefined();
 
      // Check metadata
-     expect(result.debug.metadata.expression).toBe("1 + 2 * 3");
-     expect(result.debug.metadata.vmTraceEnabled).toBe(false);
+     expect(debug.metadata.expression).toBe("1 + 2 * 3");
+     expect(debug.metadata.vmTraceEnabled).toBe(false);
 
      // Verify parselet categories populated
-     const cats = Array.from(result.debug.summary.parseCategories.keys());
+     const cats = Object.keys(debug.summary.parseCategories);
      expect(cats.length).toBeGreaterThan(0);
      expect(cats).toContain("Arithmetic");
 
      // Check events include parselet_matched with categories
-     const parseletEvents = result.debug.events.filter(
-       (e: import("@solve-js/diagnostics").DiagnosticEvent): e is import("@solve-js/diagnostics").ParseletMatchedEvent => e.type === "parselet_matched"
+     const parseletEvents = debug.events.filter(
+       (e): e is import("@solve-js/diagnostics").ParseletMatchedEvent => (e as import("@solve-js/diagnostics").DiagnosticEvent).type === "parselet_matched"
      );
      expect(parseletEvents.length).toBeGreaterThan(0);
      expect(parseletEvents[0].parseletCategory).toBeDefined();
@@ -182,11 +183,11 @@ test("diagnostic report has correct structure", () => {
 
     // First eval — cache miss
     const result1 = engine.evaluateLineWithDebug(1, "100 + 200");
-    expect(result1.debug.summary.cacheHit).toBe(false);
+    expect(result1.debug!.summary.cacheHit).toBe(false);
 
     // Second eval — cache hit
     const result2 = engine.evaluateLineWithDebug(1, "100 + 200");
-    expect(result2.debug.summary.cacheHit).toBe(true);
+    expect(result2.debug!.summary.cacheHit).toBe(true);
   });
 
 test("vm trace mode emits per-opcode events", () => {

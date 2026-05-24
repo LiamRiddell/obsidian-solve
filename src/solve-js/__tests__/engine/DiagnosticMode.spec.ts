@@ -17,17 +17,18 @@ test("evaluateLineWithDebug returns debug info when diagnostic mode is enabled",
      const result = engine.evaluateLineWithDebug(1, "1 + 2");
 
      expect(result.debug).toBeDefined();
-     expect(result.debug!.events).toBeDefined();
-     expect(result.debug!.summary).toBeDefined();
-     expect(result.debug!.metadata).toBeDefined();
+     const debug = result.debug!;
+     expect(debug.events).toBeDefined();
+     expect(debug.summary).toBeDefined();
+     expect(debug.metadata).toBeDefined();
 
      // Structured report
-     expect(result.debug.summary.totalTokens).toBeGreaterThan(0);
-     expect(result.debug.summary.totalOpcodes).toBeGreaterThan(0);
-     expect(result.debug.summary.cacheHit).toBe(false);
+     expect(debug.summary.totalTokens).toBeGreaterThan(0);
+     expect(debug.summary.totalOpcodes).toBeGreaterThan(0);
+     expect(debug.summary.cacheHit).toBe(false);
 
      // Metadata
-     expect(result.debug.metadata.expression).toBe("1 + 2");
+     expect(debug.metadata.expression).toBe("1 + 2");
    });
 
   test("evaluateLineWithDebug returns no debug info when diagnostic mode is disabled", () => {

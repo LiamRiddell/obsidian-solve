@@ -3,7 +3,7 @@
  * Integrates with DataQueryService for worker-based execution
  */
 
-import { dataQueryService, DataSourceConfig } from "@solve-js/services/DataQueryService";
+import { dataQueryService, DataSourceConfig, DataSourceHandle } from "@solve-js/services/DataQueryService";
 
 // ============================================================================
 // CURRENCY DATA SOURCE CONFIGURATION
@@ -29,8 +29,8 @@ const currencyDataSourceConfig: DataSourceConfig = {
 // ============================================================================
 
 export class CurrencyExchangeService {
-  private dataSourceHandle: any;
-  private subscriptions: Map<string, any> = new Map();
+  private dataSourceHandle: DataSourceHandle;
+  private subscriptions: Map<string, Set<(rate: number, error?: string) => void>> = new Map();
   private cacheUpdateUnsubscribe: () => void;
   private errorUnsubscribe: () => void;
 

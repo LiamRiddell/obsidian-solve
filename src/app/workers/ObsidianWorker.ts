@@ -12,7 +12,7 @@ export class ObsidianWorker implements IWorker {
 	private messageHandler: ((response: WorkerResponse) => void) | null = null;
 	private errorHandler: ((error: Error) => void) | null = null;
 	private fallback = false;
-	private pendingCallbacks: Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }> = new Map();
+	private pendingCallbacks: Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }> = new Map();
 
 	constructor(workerUrl?: string) {
 		if (typeof Worker === "undefined") {

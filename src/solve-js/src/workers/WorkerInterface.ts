@@ -7,14 +7,14 @@ export interface WorkerMessage {
    /** Optional correlation ID for matching requests to responses */
    id?: number;
    type: string;
-   payload?: any;
+   payload?: unknown;
 }
 
 export interface WorkerResponse {
    /** Correlation ID matching the request */
    id?: number;
    type: string;
-   payload?: any;
+   payload?: unknown;
    error?: string;
 }
 

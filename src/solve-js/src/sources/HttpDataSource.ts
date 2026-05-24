@@ -7,14 +7,14 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  */
 export class HttpDataSource<T> implements DataSource<T> {
 	private url: string;
-	private parser: (response: any) => T;
+	private parser: (response: unknown) => T;
 
 	/**
 	 * Creates a new HTTP data source.
 	 * @param url - The URL to fetch data from
 	 * @param parser - Function to parse the API response
 	 */
-	constructor(url: string, parser: (response: any) => T) {
+	constructor(url: string, parser: (response: unknown) => T) {
 		this.url = url;
 		this.parser = parser;
 	}

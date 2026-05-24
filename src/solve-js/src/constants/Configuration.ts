@@ -223,7 +223,7 @@ export class ConfigManager {
     
     const sectionConfig = this.config[section as keyof EngineConfig];
     if (sectionConfig && typeof sectionConfig === 'object') {
-      (sectionConfig as any)[property] = value;
+      (sectionConfig as unknown as Record<string, unknown>)[property] = value;
     } else {
       throw ErrorFactory.config(
         "CONFIG_PROPERTY_NOT_FOUND",

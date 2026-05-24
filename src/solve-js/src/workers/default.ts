@@ -87,7 +87,7 @@ export class DefaultWorkerFactory implements WorkerFactory {
  * Helper function to create a worker from a module
  * This is useful for bundling worker code with the main application
  */
-export function createWorkerFromModule(module: any): IWorker {
+export function createWorkerFromModule(module: Record<string, unknown> | undefined): IWorker {
   // In a browser environment, this would typically create a worker from a blob
   // For now, we'll create a simple inline worker
   if (typeof Worker === "undefined") {

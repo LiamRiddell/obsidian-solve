@@ -1,5 +1,7 @@
 import { Value } from "@solve-js/vm/Value";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
+import type { Token } from "@solve-js/lexer/Token";
+import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 
 export interface InlineSolvePosition {
     start: number;
@@ -47,9 +49,9 @@ export interface ParseletInfo {
 }
 
 export interface DebugInfo {
-    tokens: any[];
+    tokens: Token[];
     parselets: ParseletInfo[];
-    program: any;
+    program: BytecodeProgram;
     lineNumber?: number;
     timestamp?: number;
     cacheHit?: boolean;
