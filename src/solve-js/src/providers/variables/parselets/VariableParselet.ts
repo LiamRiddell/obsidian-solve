@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 export class VariableParselet implements PrefixParselet {
 	readonly category = "Variable";
@@ -10,7 +11,11 @@ export class VariableParselet implements PrefixParselet {
     // Handle :var syntax
     const nameToken = parser.consume();
     if (nameToken.type !== "IDENT") {
-      throw new Error(`Expected identifier after colon, got ${nameToken.type}`);
+      throw ErrorFactory.parsing(
+        'EXPECTED_IDENTIFIER',
+        `Expected identifier after colon, got ${nameToken.type}`,
+        { tokenType: nameToken.type }
+      );
     }
     const varName = nameToken.value;
 

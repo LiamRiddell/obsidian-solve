@@ -5,6 +5,7 @@
 
 import { QueryClient } from "@tanstack/query-core";
 import { DataSourceConfig, FetchRequest, FetchResponse } from "@solve-js/workers/DataQueryWorker";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 // Re-export types from DataQueryWorker
 export type { DataSourceConfig };
@@ -275,7 +276,11 @@ export class DataQueryService {
   private async executeInMainThread(request: FetchRequest): Promise<any> {
     const dataSource = this.dataSources.get(request.dataSourceId);
     if (!dataSource) {
-      throw new Error(`Data source not found: ${request.dataSourceId}`);
+      throw ErrorFactory.external(
+        'DATA_SOURCE_NOT_FOUND',
+        `Data source not found: ${request.dataSourceId}`,
+        { dataSourceId: request.dataSourceId }
+      );
     }
 
     // For currency data source, use the Frankfurter API

@@ -7,6 +7,7 @@
  */
 
 import { WorkerMessage, WorkerResponse, IWorker } from '@solve-js/workers/WorkerInterface';
+import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
 
 /**
  * Data source types
@@ -96,7 +97,11 @@ export class CurrencyDataSource implements DataSourceStrategy {
 
       const response = await fetch(`${this.endpoint}?base=${from}`);
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw ErrorFactory.external(
+          'HTTP_ERROR',
+          `HTTP ${response.status}: ${response.statusText}`,
+          { status: response.status, statusText: response.statusText }
+        );
       }
 
       const data = await response.json();
@@ -171,7 +176,11 @@ export class HttpDataSource implements DataSourceStrategy {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw ErrorFactory.external(
+          'HTTP_ERROR',
+          `HTTP ${response.status}: ${response.statusText}`,
+          { status: response.status, statusText: response.statusText }
+        );
       }
 
       const data = await response.json();

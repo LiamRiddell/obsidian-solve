@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 const builtinNameToIndex: Record<string, number> = {
   sqrt: 0, abs: 1, sin: 2, cos: 3, tan: 4, log: 5,
@@ -24,7 +25,11 @@ export class FunctionCallParselet implements PrefixParselet {
     const fnName = token.value.toLowerCase();
     const fnIdx = builtinNameToIndex[fnName];
     if (fnIdx === undefined) {
-      throw new Error(`Unknown function: ${fnName}`);
+      throw ErrorFactory.execution(
+        'UNKNOWN_FUNCTION',
+        `Unknown function: ${fnName}`,
+        { functionName: fnName }
+      );
     }
 
     parser.consume("LPAREN");

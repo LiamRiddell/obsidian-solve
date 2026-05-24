@@ -266,7 +266,11 @@ export class ExpressionEngine {
     ): Value {
         const result = this.evaluateLineWithDebug(lineNumber, lineText);
         if (result.error) {
-            throw new Error(result.error);
+            throw ErrorFactory.execution(
+                'EVALUATION_ERROR',
+                result.error,
+                { lineNumber }
+            );
         }
         return result.value;
     }

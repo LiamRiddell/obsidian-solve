@@ -1,4 +1,5 @@
 import { IWorker, WorkerMessage, WorkerResponse, WorkerFactory } from "./WorkerInterface";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
  * Default Web Worker implementation using standard browser APIs
@@ -10,14 +11,21 @@ export class DefaultWorker implements IWorker {
 
   constructor(workerScript: string) {
     if (typeof Worker === "undefined") {
-      throw new Error("Web Workers are not supported in this environment");
+      throw ErrorFactory.external(
+        'WORKERS_NOT_SUPPORTED',
+        'Web Workers are not supported in this environment'
+      );
     }
 
     try {
       this.worker = new Worker(workerScript);
       this.setupEventListeners();
     } catch (error) {
-      throw new Error(`Failed to create worker: ${error instanceof Error ? error.message : String(error)}`);
+      throw ErrorFactory.external(
+        'WORKER_CREATION_FAILED',
+        `Failed to create worker: ${error instanceof Error ? error.message : String(error)}`,
+        { error: String(error) }
+      );
     }
   }
 
@@ -39,7 +47,10 @@ export class DefaultWorker implements IWorker {
 
   postMessage(message: WorkerMessage): void {
     if (!this.worker) {
-      throw new Error("Worker is not initialized");
+      throw ErrorFactory.external(
+        'WORKER_NOT_INITIALIZED',
+        'Worker is not initialized'
+      );
     }
 
     this.worker.postMessage(message);
@@ -80,7 +91,10 @@ export function createWorkerFromModule(module: any): IWorker {
   // In a browser environment, this would typically create a worker from a blob
   // For now, we'll create a simple inline worker
   if (typeof Worker === "undefined") {
-    throw new Error("Web Workers are not supported in this environment");
+    throw ErrorFactory.external(
+      'WORKERS_NOT_SUPPORTED',
+      'Web Workers are not supported in this environment'
+    );
   }
 
   const workerCode = `

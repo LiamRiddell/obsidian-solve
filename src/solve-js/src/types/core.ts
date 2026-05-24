@@ -6,6 +6,8 @@
  * @module Types
  */
 
+import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
+
 /**
  * Branded type for currency codes (ISO 4217)
  * 
@@ -55,7 +57,11 @@ export interface ValidationResult {
  */
 export function createCurrencyCode(code: string): CurrencyCode {
   if (!/^[A-Z]{3}$/.test(code)) {
-    throw new Error(`Invalid currency code: ${code}. Must be 3 uppercase letters.`);
+    throw ErrorFactory.validation(
+      'INVALID_CURRENCY_CODE',
+      `Invalid currency code: ${code}. Must be 3 uppercase letters.`,
+      { code }
+    );
   }
   return code as CurrencyCode;
 }
@@ -69,7 +75,11 @@ export function createCurrencyCode(code: string): CurrencyCode {
  */
 export function createVariableName(name: string): VariableName {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
-    throw new Error(`Invalid variable name: ${name}. Must start with letter or underscore.`);
+    throw ErrorFactory.validation(
+      'INVALID_VARIABLE_NAME',
+      `Invalid variable name: ${name}. Must start with letter or underscore.`,
+      { name }
+    );
   }
   return name as VariableName;
 }
@@ -93,7 +103,11 @@ export function createExpressionHash(hash: string): ExpressionHash {
  */
 export function createLineNumber(num: number): LineNumber {
   if (num < 1 || !Number.isInteger(num)) {
-    throw new Error(`Invalid line number: ${num}. Must be a positive integer.`);
+    throw ErrorFactory.validation(
+      'INVALID_LINE_NUMBER',
+      `Invalid line number: ${num}. Must be a positive integer.`,
+      { lineNumber: num }
+    );
   }
   return num as LineNumber;
 }

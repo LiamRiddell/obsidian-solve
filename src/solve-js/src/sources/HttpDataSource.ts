@@ -1,4 +1,5 @@
 import { DataSource } from "../core/PollingEngine";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
  * HTTP data source for fetching data from a REST API.
@@ -24,8 +25,11 @@ export class HttpDataSource<T> implements DataSource<T> {
 	 */
 	async fetch(): Promise<T> {
 		const response = await fetch(this.url);
-		if (!response.ok) {
-			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+		if (!response.ok) {      throw ErrorFactory.external(
+        'HTTP_ERROR',
+        `HTTP ${response.status}: ${response.statusText}`,
+        { status: response.status, statusText: response.statusText }
+      );
 		}
 		const data = await response.json();
 		return this.parser(data);

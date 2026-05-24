@@ -7,6 +7,7 @@
  */
 
 import { ParseletRegistry } from '@solve-js/parser/registry/ParseletRegistry';
+import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
 
 /**
  * Interface for solve-js plugins
@@ -82,14 +83,22 @@ export class PluginManager {
    */
   register(plugin: SolvePlugin): void {
     if (this.plugins.has(plugin.name)) {
-      throw new Error(`Plugin ${plugin.name} is already registered`);
+      throw ErrorFactory.config(
+        'PLUGIN_ALREADY_REGISTERED',
+        `Plugin ${plugin.name} is already registered`,
+        { pluginName: plugin.name }
+      );
     }
 
     try {
       plugin.register(this.registry);
       this.plugins.set(plugin.name, plugin);
     } catch (error) {
-      throw new Error(`Failed to register plugin ${plugin.name}: ${error}`);
+      throw ErrorFactory.config(
+        'PLUGIN_REGISTRATION_FAILED',
+        `Failed to register plugin ${plugin.name}: ${error}`,
+        { pluginName: plugin.name, error: String(error) }
+      );
     }
   }
 
@@ -101,7 +110,11 @@ export class PluginManager {
   unregister(pluginName: string): void {
     const plugin = this.plugins.get(pluginName);
     if (!plugin) {
-      throw new Error(`Plugin ${pluginName} is not registered`);
+      throw ErrorFactory.config(
+        'PLUGIN_NOT_REGISTERED',
+        `Plugin ${pluginName} is not registered`,
+        { pluginName }
+      );
     }
 
     if (plugin.unregister) {

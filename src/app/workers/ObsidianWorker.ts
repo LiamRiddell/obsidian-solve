@@ -5,6 +5,7 @@
  */
 
 import { IWorker, WorkerMessage, WorkerResponse, WorkerFactory } from "@solve-js/workers/WorkerInterface";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 export class ObsidianWorker implements IWorker {
 	private worker: Worker | null = null;
@@ -136,8 +137,10 @@ export class ObsidianWorkerFactory implements WorkerFactory {
  * Useful for test environments or when a separate file isn't practical.
  */
 export function createWorkerFromFn(fn: () => void): IWorker {
-	if (typeof Worker === "undefined") {
-		throw new Error("Web Workers not supported");
+	if (typeof Worker === "undefined") {    throw ErrorFactory.external(
+      'WORKERS_NOT_SUPPORTED',
+      'Web Workers are not supported in this environment'
+    );
 	}
 	const code = `(${fn.toString()})();`;
 	const blob = new Blob([code], { type: "application/javascript" });
