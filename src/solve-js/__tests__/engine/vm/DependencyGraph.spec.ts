@@ -90,3 +90,86 @@ describe("DependencyGraph", () => {
     expect(affected.size).toBe(0);
   });
 });
+
+describe("DependencyGraph.getAffectedLinesInOrder — Phase 1.4 topological sort", () => {
+  test("chain: x→y→z returns consumers in topological order", () => {
+    const dag = new DependencyGraph();
+    dag.registerLine(10, [], ["x"]);     // defines x
+    dag.registerLine(20, ["x"], ["y"]);  // y = f(x)
+    dag.registerLine(30, ["y"], ["z"]);  // z = f(y)
+    const ordered = dag.getAffectedLinesInOrder("x");
+    // y (20) must come before z (30) — z reads y which 20 writes
+    expect(ordered.indexOf(20)).toBeLessThan(ordered.indexOf(30));
+    expect(ordered).toHaveLength(2);
+  });
+
+  test("non-ascending document order: consumers defined after producers regardless of line numbers", () => {
+    // Line 1 reads y (defined on line 2), then reads x (changed variable)
+    const dag = new DependencyGraph();
+    dag.registerLine(1, ["y"], ["z"]);   // z = f(y) — consumer, after y
+    dag.registerLine(2, ["x"], ["y"]);   // y = f(x) — producer, before z
+    const ordered = dag.getAffectedLinesInOrder("x");
+    // y (line 2) must come before z (line 1)
+    expect(ordered.indexOf(2)).toBeLessThan(ordered.indexOf(1));
+    expect(ordered).toHaveLength(2);
+  });
+
+  test("diamond DAG: x→a, x→b, a+b→c", () => {
+    const dag = new DependencyGraph();
+    dag.registerLine(10, [], ["x"]);       // x = ...
+    dag.registerLine(20, ["x"], ["a"]);    // a = f(x)
+    dag.registerLine(30, ["x"], ["b"]);    // b = f(x)
+    dag.registerLine(40, ["a", "b"], ["c"]); // c = f(a, b)
+    const ordered = dag.getAffectedLinesInOrder("x");
+    // c must come after both a and b (the producers it depends on)
+    expect(ordered).toHaveLength(3);
+    expect(ordered).toContain(20);
+    expect(ordered).toContain(30);
+    expect(ordered).toContain(40);
+    // c is last since it depends on both a and b
+    expect(ordered.indexOf(40)).toBeGreaterThan(ordered.indexOf(20));
+    expect(ordered.indexOf(40)).toBeGreaterThan(ordered.indexOf(30));
+  });
+
+  test("unknown variable returns empty array", () => {
+    const dag = new DependencyGraph();
+    dag.registerLine(10, ["x"], []);
+    const ordered = dag.getAffectedLinesInOrder("nonexistent");
+    expect(ordered).toEqual([]);
+  });
+
+  test("single affected line", () => {
+    const dag = new DependencyGraph();
+    dag.registerLine(10, [], ["x"]);
+    dag.registerLine(20, ["x"], []);
+    const ordered = dag.getAffectedLinesInOrder("x");
+    expect(ordered).toEqual([20]);
+  });
+
+  test("multiple independent consumers: both depend on x but not each other", () => {
+    const dag = new DependencyGraph();
+    dag.registerLine(10, [], ["x"]);
+    dag.registerLine(20, ["x"], []);  // reads x, no writes
+    dag.registerLine(30, ["x"], []);  // reads x, no writes
+    const ordered = dag.getAffectedLinesInOrder("x");
+    expect(ordered).toContain(20);
+    expect(ordered).toContain(30);
+    expect(ordered).toHaveLength(2);
+  });
+
+  test("self-referencing writes are excluded from affected set by design", () => {
+    // Line redefines itself: :x = :x + 1
+    // registerLine removes consumer references when a line writes the
+    // same variable it reads (prevents self-loops in the DAG). This
+    // means the line won't appear in affected lines for "x" — it's
+    // treated as a pure producer, not a consumer of x.
+    const dag = new DependencyGraph();
+    dag.registerLine(10, ["x"], ["x"]);
+    // Line 10 is a consumer of x via reads, but the write to x removes
+    // that consumer edge. So getAffectedLines("x") won't include 10.
+    const affected = dag.getAffectedLines("x");
+    expect(affected.has(10)).toBe(false);
+    const ordered = dag.getAffectedLinesInOrder("x");
+    expect(ordered).toEqual([]);
+  });
+});

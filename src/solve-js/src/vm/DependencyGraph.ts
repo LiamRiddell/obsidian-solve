@@ -73,6 +73,95 @@ export class DependencyGraph {
     return visited;
   }
 
+  /**
+   * Phase 1.4 DAG-walk optimization: return affected lines in dependency-safe
+   * topological order. Uses Kahn's algorithm (BFS-based) to ensure every line
+   * is evaluated AFTER all lines it depends on have been processed.
+   *
+   * This is more correct than ascending line-number sort, which fails when
+   * variable definitions and their consumers are not in document order.
+   *
+   * @returns Line numbers in topological order (producers before consumers).
+   */
+  getAffectedLinesInOrder(startVariable: string): number[] {
+    const affected = this.getAffectedLines(startVariable);
+    if (affected.size === 0) return [];
+
+    // Build a local subgraph: for each affected line, compute in-degree
+    // (how many other affected lines produce variables it reads).
+    const inDegree = new Map<number, number>();
+    const adjacency = new Map<number, number[]>(); // line → downstream lines
+
+    for (const line of affected) {
+      if (!inDegree.has(line)) inDegree.set(line, 0);
+      if (!adjacency.has(line)) adjacency.set(line, []);
+    }
+
+    // Build a variable→producer map in one pass, then do O(1) lookups
+    // per read variable instead of O(n) scanning otherAffected lines.
+    const producerOf = new Map<string, number>();
+    for (const line of affected) {
+      const lineWrites = this.writes.get(line);
+      if (lineWrites) {
+        for (const w of lineWrites) producerOf.set(w, line);
+      }
+    }
+
+    // For each affected line, check if any reads are produced by another
+    // affected line. If so, add an edge from producer → consumer.
+    for (const line of affected) {
+      const reads = this.lineReads.get(line);
+      if (!reads) continue;
+
+      for (const readVar of reads) {
+        const producer = producerOf.get(readVar);
+        if (producer !== undefined && producer !== line) {
+          // producer writes readVar, which this line reads
+          // Edge: producer → line (producer → consumer)
+          adjacency.get(producer)!.push(line);
+          inDegree.set(line, (inDegree.get(line) ?? 0) + 1);
+        }
+      }
+    }
+
+    // Kahn's algorithm: start with zero-indegree lines (no dependencies within
+    // the affected set), then iteratively remove them, adding newly-freed lines.
+    const queue: number[] = [];
+    for (const [line, degree] of inDegree) {
+      if (degree === 0) queue.push(line);
+    }
+
+    // If every affected line has at least one dependency (cycle or external),
+    // start with the lowest line number as a fallback.
+    if (queue.length === 0 && affected.size > 0) {
+      const sorted = Array.from(affected).sort((a, b) => a - b);
+      queue.push(sorted[0]);
+    }
+
+    const ordered: number[] = [];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      ordered.push(current);
+
+      for (const downstream of adjacency.get(current) ?? []) {
+        const newDegree = (inDegree.get(downstream) ?? 1) - 1;
+        inDegree.set(downstream, newDegree);
+        if (newDegree === 0) queue.push(downstream);
+      }
+    }
+
+    // Append any remaining lines that couldn't be topologically sorted
+    // (cycles or external-only dependencies) in ascending order.
+    if (ordered.length < affected.size) {
+      const remaining = Array.from(affected)
+        .filter((l) => !ordered.includes(l))
+        .sort((a, b) => a - b);
+      ordered.push(...remaining);
+    }
+
+    return ordered;
+  }
+
   getAffectedLinesByDataSource(dataSourceId: string, queryKey: string[]): Set<number> {
     const queryKeyStr = JSON.stringify(queryKey);
     const key = `${dataSourceId}:${queryKeyStr}`;

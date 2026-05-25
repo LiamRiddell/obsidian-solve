@@ -823,21 +823,25 @@ if (hasCollectors) {
 
     /**
      * Incrementally re-evaluate lines affected by a variable change.
-     * Uses cached bytecode to skip lexing/parsing/compiling — only re-executes.
+     * Walks the DAG from the changed variable to find exactly which lines
+     * need re-execution — no dirty-set indirection, no sorting guesswork.
+     * Uses Kahn's algorithm for topological ordering: producers always
+     * execute before consumers, regardless of document line order.
      */
     evaluateIncremental(variable: string, newValue: number): Map<number, Value> {
-        // Preserve existing VM state (all variables from parseDocument) while
-        // overriding the changed variable. This lets chained dependencies flow:
-        // line 2's STORE_VAR feeds into line 3's LOAD_VAR without requiring a
-        // full re-parse of the document.
+        // Phase 1.4 DAG-walk: get affected lines in topological order.
+        // This replaces the old approach of markDirtyFromVariable() →
+        // getDirtyLines() → ascending sort, which (a) double-iterated,
+        // (b) picked up unrelated dirty lines, and (c) failed for
+        // non-ascending dependency chains.
+        const affectedLines = this.dag.getAffectedLinesInOrder(variable);
+
+        // Preserve existing VM state while overriding the changed variable.
         this.vm.setVar(variable, numberValue(newValue));
-        this.markDirtyFromVariable(variable);
-        // Sort dirty lines ascending so chained dependencies always execute
-        // in correct order: producer line (lower number) before consumer line.
-        const dirtyLines = Array.from(this.lineCache.getDirtyLines()).sort((a, b) => a - b);
+
         const updated = new Map<number, Value>();
 
-        for (const lineNumber of dirtyLines) {
+        for (const lineNumber of affectedLines) {
             const entry = this.lineCache.getEntryForLine(lineNumber);
             if (!entry || entry.bytecode.opcodes.length === 0) continue;
             try {
