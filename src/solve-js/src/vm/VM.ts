@@ -61,10 +61,16 @@ export interface Bytecode {
  * Performance notes:
  * - Stack access is inlined (`stack.push/pop` directly) — skips VM bounds
  *   checks. The compiler guarantees stack balance on valid bytecode.
+ * - Switch cases are ordered by expected frequency. PUSH_NUMBER, HALT, ADD,
+ *   DUP, LOAD_VAR, STORE_VAR, PUSH_BOOLEAN first — these account for >80%
+ *   of all bytecode instructions. For sparse OpCode values (0-200 with
+ *   gaps), V8 can't use a dense jump table — early-case ordering helps the
+ *   baseline compiler and keeps hot paths in the L1I cache.
+ * - ADD/SUB/MUL have an inlined numeric fast path that skips the `binaryOp()`
+ *   function call + closure allocation when both operands are plain numbers
+ *   (>90% of arithmetic ops).
  * - Tracing uses a boolean guard (`shouldTrace`) that the JIT eliminates
  *   entirely when diagnostics are disabled. No function call overhead.
- * - `binaryOp()` has its own numeric fast-path that skips type dispatch
- *   when both operands are plain numbers (~90%+ of all binary ops).
  * - `Value.toNumber()` caches its result — computed once, read thereafter.
  */
 export function executeBytecode(
@@ -126,7 +132,12 @@ export function executeBytecode(
       }
 
       switch (op) {
-        case OpCode.NOP: break;
+        // ── Hot path: push numeric literal ───────────────────────────
+        case OpCode.PUSH_NUMBER:
+          stack.push(numberValue(numbers[opcodes[ip++]]));
+          break;
+
+        // ── Hot path: halt (return top of stack) ─────────────────────
         case OpCode.HALT: {
           const result = stack.pop()!;
           // Phase 5.3: If arena is active, clone the result before returning.
@@ -134,42 +145,16 @@ export function executeBytecode(
           // it must survive arena.reset() on the next scroll frame.
           return hasArena ? persistentValue(result) : result;
         }
-        case OpCode.SWAP: {
-          const a = stack.pop()!;
-          const b = stack.pop()!;
-          stack.push(a);
-          stack.push(b);
-          break;
-        }
-        case OpCode.DUP: {
-          stack.push(stack[stack.length - 1]);
-          break;
-        }
-        case OpCode.PUSH_NUMBER: stack.push(numberValue(numbers[opcodes[ip++]])); break;
-        case OpCode.PUSH_BIGINT: stack.push(bigIntValue(BigInt(numbers[opcodes[ip++]]))); break;
-        case OpCode.PUSH_HEX: stack.push(hexValue(numbers[opcodes[ip++]])); break;
-        case OpCode.PUSH_STRING: {
-          const strIdx = opcodes[ip++];
-          stack.push(stringValue(strings[strIdx]));
-          break;
-        }
-        case OpCode.PUSH_BOOLEAN: stack.push(boolValue(opcodes[ip++] === 1)); break;
-        case OpCode.NEG: {
-          const v = stack.pop()!;
-          if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
-          else if (v.type === ValueType.Uom) stack.push(uomValue(-v.toNumber(), v.unit!));
-          else stack.push(numberValue(-v.toNumber()));
-          break;
-        }
-        case OpCode.POS: {
-          const v = stack.pop()!;
-          if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
-          else stack.push(numberValue(v.toNumber()));
-          break;
-        }
+
+        // ── Hot path: add (with inlined numeric fast path) ───────────
         case OpCode.ADD: {
           const r = stack.pop()!, l = stack.pop()!;
-          if (l.type === ValueType.Datetime) {
+          // Inlined numeric fast path: avoids binaryOp() function call +
+          // closure allocation for the >90% case where both operands are
+          // numbers. Fallback handles Datetime, UoM, BigInt, Vector, etc.
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(numberValue((l.value as number) + (r.value as number)));
+          } else if (l.type === ValueType.Datetime) {
             let durMs = 0;
             if (r.type === ValueType.Uom) {
               const unit = r.unit;
@@ -189,9 +174,46 @@ export function executeBytecode(
           }
           break;
         }
+
+        // ── Hot path: dup ────────────────────────────────────────────────
+        case OpCode.DUP: {
+          stack.push(stack[stack.length - 1]);
+          break;
+        }
+
+        // ── Hot path: load variable ──────────────────────────────────
+        case OpCode.LOAD_VAR: {
+          const varIdx = opcodes[ip++];
+          const varName = strings[varIdx];
+          const val = vm.getVar(varName);
+          if (val !== undefined) stack.push(val);
+          else stack.push(numberValue(0));
+          break;
+        }
+
+        // ── Hot path: store variable ─────────────────────────────────
+        case OpCode.STORE_VAR: {
+          const val = stack.pop()!;
+          const varIdx = opcodes[ip++];
+          const varName = strings[varIdx];
+          // Phase 5.3: If arena is active, clone before storing in variables.
+          // Arena Values are recycled on reset() — variable references must survive.
+          vm.setVar(varName, hasArena ? persistentValue(val) : val);
+          stack.push(val);
+          break;
+        }
+
+        // ── Hot path: push boolean ───────────────────────────────────
+        case OpCode.PUSH_BOOLEAN:
+          stack.push(boolValue(opcodes[ip++] === 1));
+          break;
+
+        // ── Subtract (with inlined numeric fast path) ────────────────
         case OpCode.SUB: {
           const r = stack.pop()!, l = stack.pop()!;
-          if (l.type === ValueType.Datetime) {
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(numberValue((l.value as number) - (r.value as number)));
+          } else if (l.type === ValueType.Datetime) {
             let durMs = 0;
             if (r.type === ValueType.Uom) {
               const unit = r.unit;
@@ -211,11 +233,19 @@ export function executeBytecode(
           }
           break;
         }
+
+        // ── Multiply (with inlined numeric fast path) ────────────────
         case OpCode.MUL: {
           const r = stack.pop()!, l = stack.pop()!;
-          stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b));
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(numberValue((l.value as number) * (r.value as number)));
+          } else {
+            stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b));
+          }
           break;
         }
+
+        // ── Division ─────────────────────────────────────────────────
         case OpCode.DIV: {
           const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
@@ -230,16 +260,125 @@ export function executeBytecode(
           }
           break;
         }
+
+        // ── No-op ────────────────────────────────────────────────────────
+        case OpCode.NOP: break;
+
+        // ── Swap ─────────────────────────────────────────────────────
+        case OpCode.SWAP: {
+          const a = stack.pop()!;
+          const b = stack.pop()!;
+          stack.push(a);
+          stack.push(b);
+          break;
+        }
+
+        // ── Negate ───────────────────────────────────────────────────
+        case OpCode.NEG: {
+          const v = stack.pop()!;
+          if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
+          else if (v.type === ValueType.Uom) stack.push(uomValue(-v.toNumber(), v.unit!));
+          else stack.push(numberValue(-v.toNumber()));
+          break;
+        }
+
+        // ── Positive ─────────────────────────────────────────────────
+        case OpCode.POS: {
+          const v = stack.pop()!;
+          if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
+          else stack.push(numberValue(v.toNumber()));
+          break;
+        }
+
+        // ── Percentage ───────────────────────────────────────────────
+        case OpCode.TO_PERCENTAGE: {
+          const v = stack.pop()!;
+          stack.push(percentageValue(v.toNumber()));
+          break;
+        }
+
+        // ── Modulus ──────────────────────────────────────────────────
         case OpCode.MOD: {
           const r = stack.pop()!, l = stack.pop()!;
           stack.push(binaryOp(l, r, (a, b) => a % b, (a, b) => a % b));
           break;
         }
+
+        // ── Exponent ─────────────────────────────────────────────────
         case OpCode.EXP: {
           const r = stack.pop()!, l = stack.pop()!;
           stack.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
           break;
         }
+
+        // ── Push string ──────────────────────────────────────────────
+        case OpCode.PUSH_STRING: {
+          const strIdx = opcodes[ip++];
+          stack.push(stringValue(strings[strIdx]));
+          break;
+        }
+
+        // ── Push bigint ──────────────────────────────────────────────
+        case OpCode.PUSH_BIGINT:
+          stack.push(bigIntValue(BigInt(numbers[opcodes[ip++]])));
+          break;
+
+        // ── Push hex ─────────────────────────────────────────────────
+        case OpCode.PUSH_HEX:
+          stack.push(hexValue(numbers[opcodes[ip++]]));
+          break;
+
+        // ── Call builtin ─────────────────────────────────────────────
+        case OpCode.CALL_BUILTIN: {
+          const fnIdx = opcodes[ip++];
+          const argCount = opcodes[ip++];
+          const args: Value[] = [];
+          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
+          const fn = builtinFunctions[fnIdx];
+          if (fn) stack.push(fn(args.reverse()));
+          break;
+        }
+
+        // ── Dice roll ────────────────────────────────────────────────
+        case OpCode.DICE_ROLL: {
+          const to = stack.pop()!.toNumber();
+          const from = stack.pop()!.toNumber();
+          stack.push(numberValue(Math.floor(Math.random() * (to - from + 1)) + from));
+          break;
+        }
+
+        // ── Vector operations ────────────────────────────────────────
+        case OpCode.VEC_NEW: {
+          const count = opcodes[ip++];
+          const components: number[] = [];
+          for (let i = 0; i < count; i++) components.unshift(stack.pop()!.toNumber());
+          stack.push(vectorValue(components));
+          break;
+        }
+        case OpCode.VEC_ADD: {
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a + b));
+          break;
+        }
+        case OpCode.VEC_SUB: {
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a - b));
+          break;
+        }
+
+        // ── Type conversions ─────────────────────────────────────────
+        case OpCode.TO_NUMBER: {
+          const v = stack.pop()!;
+          stack.push(numberValue(v.toNumber()));
+          break;
+        }
+        case OpCode.TO_HEX: {
+          const v = stack.pop()!;
+          stack.push(hexValue(v.toNumber()));
+          break;
+        }
+
+        // ── Bitwise operations ───────────────────────────────────────
         case OpCode.LSHIFT: {
           const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -291,53 +430,8 @@ export function executeBytecode(
           else stack.push(numberValue(~v.toNumber()));
           break;
         }
-        case OpCode.TO_NUMBER: {
-          const v = stack.pop()!;
-          stack.push(numberValue(v.toNumber()));
-          break;
-        }
-        case OpCode.TO_HEX: {
-          const v = stack.pop()!;
-          stack.push(hexValue(v.toNumber()));
-          break;
-        }
-        case OpCode.TO_PERCENTAGE: {
-          const v = stack.pop()!;
-          stack.push(percentageValue(v.toNumber()));
-          break;
-        }
-        case OpCode.CALL_BUILTIN: {
-          const fnIdx = opcodes[ip++];
-          const argCount = opcodes[ip++];
-          const args: Value[] = [];
-          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
-          const fn = builtinFunctions[fnIdx];
-          if (fn) stack.push(fn(args.reverse()));
-          break;
-        }
-        case OpCode.DICE_ROLL: {
-          const to = stack.pop()!.toNumber();
-          const from = stack.pop()!.toNumber();
-          stack.push(numberValue(Math.floor(Math.random() * (to - from + 1)) + from));
-          break;
-        }
-        case OpCode.VEC_NEW: {
-          const count = opcodes[ip++];
-          const components: number[] = [];
-          for (let i = 0; i < count; i++) components.unshift(stack.pop()!.toNumber());
-          stack.push(vectorValue(components));
-          break;
-        }
-        case OpCode.VEC_ADD: {
-          const r = stack.pop()!, l = stack.pop()!;
-          stack.push(binaryOp(l, r, (a, b) => a + b));
-          break;
-        }
-        case OpCode.VEC_SUB: {
-          const r = stack.pop()!, l = stack.pop()!;
-          stack.push(binaryOp(l, r, (a, b) => a - b));
-          break;
-        }
+
+        // ── Datetime ─────────────────────────────────────────────────
         case OpCode.DATE_NOW:
           stack.push(datetimeValue(Date.now()));
           break;
@@ -363,6 +457,8 @@ export function executeBytecode(
           stack.push(datetimeValue(dt + sign * durMs));
           break;
         }
+
+        // ── UoM ──────────────────────────────────────────────────────
         case OpCode.UOM_CONVERT: {
           const unit = (stack.pop()!.value as string);
           const val = stack.pop()!.toNumber();
@@ -400,24 +496,6 @@ export function executeBytecode(
         case OpCode.UOM_GET_VALUE: {
           const v = stack.pop()!;
           stack.push(numberValue(v.toNumber()));
-          break;
-        }
-        case OpCode.LOAD_VAR: {
-          const varIdx = opcodes[ip++];
-          const varName = strings[varIdx];
-          const val = vm.getVar(varName);
-          if (val !== undefined) stack.push(val);
-          else stack.push(numberValue(0));
-          break;
-        }
-        case OpCode.STORE_VAR: {
-          const val = stack.pop()!;
-          const varIdx = opcodes[ip++];
-          const varName = strings[varIdx];
-          // Phase 5.3: If arena is active, clone before storing in variables.
-          // Arena Values are recycled on reset() — variable references must survive.
-          vm.setVar(varName, hasArena ? persistentValue(val) : val);
-          stack.push(val);
           break;
         }
         default:
