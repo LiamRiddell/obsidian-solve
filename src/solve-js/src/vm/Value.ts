@@ -14,11 +14,22 @@ export const enum ValueType {
 }
 
 export class Value {
+	// Cached numeric representation — computed once on first toNumber() call.
+	// Value is effectively immutable (all public fields are readonly), so the
+	// cache is safe: once populated, it never changes for the lifetime of the Value.
+	private _cachedNumber: number | undefined;
+
 	constructor(
 		public readonly type: ValueType,
 		public readonly value: number | bigint | string | boolean | number[],
 		public readonly unit?: string
-	) {}
+	) {
+		// Eagerly cache for Number and Hex types (the most common case).
+		// This avoids a method call + type-check on first toNumber().
+		if (typeof value === 'number') {
+			this._cachedNumber = value;
+		}
+	}
 
 	isNumber(): this is Value & { value: number } {
 		return this.type === ValueType.Number;
@@ -41,11 +52,16 @@ export class Value {
 	}
 
 	toNumber(): number {
-		if (typeof this.value === 'number') return this.value;
-		if (typeof this.value === 'bigint') return Number(this.value);
+		if (this._cachedNumber !== undefined) return this._cachedNumber;
+
+		if (typeof this.value === 'bigint') {
+			this._cachedNumber = Number(this.value);
+			return this._cachedNumber;
+		}
 		// Prevent silent NaN propagation from non-numeric strings
 		const result = parseFloat(this.value as string);
-		return isNaN(result) ? 0 : result;
+		this._cachedNumber = isNaN(result) ? 0 : result;
+		return this._cachedNumber;
 	}
 
 	isNaN(): boolean {

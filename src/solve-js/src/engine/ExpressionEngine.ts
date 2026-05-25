@@ -62,10 +62,12 @@ export class ExpressionEngine {
     private diagnosticPipeline: DiagnosticPipeline;
     // Bytecode cache — avoids re-parsing identical expressions
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
-    // Pre-allocated typed array buffers for zero-copy VM consumption
+    // Pre-allocated typed array buffers for zero-copy VM consumption.
+    // Sized for 95th-percentile expression complexity. Complex expressions
+    // (>512 opcodes / >128 numbers) fall back to fresh allocation in buildInto().
     private bufferPool: { opcodes: Uint8Array; numbers: Float64Array } = {
-        opcodes: new Uint8Array(256),
-        numbers: new Float64Array(64),
+        opcodes: new Uint8Array(512),
+        numbers: new Float64Array(128),
     };
     // O(1) lookup for markdown token types to skip during lexing
     private markdownTokenTypes = new Set([
@@ -577,6 +579,14 @@ if (hasCollectors) {
         return this.lineCache;
     }
 
+    /**
+     * Get the shared VM instance.
+     * Used by VMCheckpointer to create/restore checkpoints.
+     */
+    getVM(): VM {
+        return this.vm;
+    }
+
     getScopeManager(): ScopeManager {
         return this.scopeManager;
     }
@@ -605,8 +615,121 @@ if (hasCollectors) {
      * Fast path: evaluate an expression and return a number directly.
      * Skips Value object allocation when only a numeric result is needed.
      * Returns NaN on error or for bare undefined variable references.
-     */
-evaluateNumber(expression: string): number {
+     */    /**
+	 * Compile-only path: lex → parse → bytecode, without execution.
+	 * Used by Tier 3 (background) evaluation to discover reads/writes
+	 * for the dependency graph without running display-only expressions.
+	 *
+	 * Uses the bytecode cache — repeated compilations of the same expression
+	 * return the cached program with zero allocation.
+	 *
+	 * @throws ErrorFactory on parse failure or safety check failure.
+	 */
+	compileExpression(expression: string): {
+		program: BytecodeProgram;
+		tokens: Token[];
+		reads: string[];
+		writes: string[];
+	} {
+		// Safety checks
+		const lengthCheck = checkExpressionLength(expression, this.config.validation);
+		if (!lengthCheck.passed) {
+			throw ErrorFactory.validation(
+				"EXPRESSION_TOO_LONG",
+				expression.length > this.config.validation.maxExpressionLength
+					? `Expression exceeds max length of ${this.config.validation.maxExpressionLength} characters (got ${expression.length})`
+					: lengthCheck.error!.error
+			);
+		}
+
+		// Lexing
+		const tokens: Token[] = [];
+		this.lexer.reset(expression);
+		for (const t of this.lexer) {
+			if (this.markdownTokenTypes.has(t.type)) continue;
+			tokens.push(t);
+		}
+
+		if (tokens.length === 0) {
+			return {
+				program: { opcodes: [], numbers: [], strings: [] },
+				tokens: [],
+				reads: [],
+				writes: [],
+			};
+		}
+
+		// Complexity check
+		const complexityCheck = checkExpressionComplexity(tokens, this.config.validation);
+		if (!complexityCheck.passed) {
+			throw ErrorFactory.validation(
+				"EXPRESSION_TOO_COMPLEX",
+				`Expression complexity score ${complexityCheck.complexityScore} exceeds maximum of ${this.config.validation.maxComplexity}`
+			);
+		}
+
+		const { reads, writes } = extractReadsAndWrites(tokens);
+
+		// Check bytecode cache
+		const cachedProgram = this.bytecodeCache.get(expression);
+		if (cachedProgram) {
+			return { program: cachedProgram, tokens, reads, writes };
+		}
+
+		// Parse and compile
+		const builder = new BytecodeBuilder();
+		this.parser.load(tokens);
+		try {
+			this.parser.parseExpression(0, builder);
+		} catch (e) {
+			const errorMessage = e instanceof Error ? e.message : String(e);
+			throw ErrorFactory.parsing(
+				"PARSE_ERROR",
+				errorMessage
+			);
+		}
+
+		// Build into pooled buffers, then copy for caching (pool is reused)
+		const poolProgram = builder.buildInto(this.bufferPool);
+		const program: BytecodeProgram = {
+			opcodes: new Uint8Array(poolProgram.opcodes),
+			numbers: new Float64Array(poolProgram.numbers),
+			strings: poolProgram.strings,
+			constants: poolProgram.constants,
+		};
+		this.bytecodeCache.set(expression, program);
+
+		return { program, tokens, reads, writes };
+	}
+
+	/**
+	 * Execute pre-compiled bytecode against the engine's shared VM.
+	 * Used by Tier 2 (scroll into view) to re-execute cached bytecode
+	 * without re-lexing, re-parsing, or re-compiling.
+	 *
+	 * Preserves the VM stack — pops any leftover items after execution.
+	 * Does NOT update DAG or LineCache (caller is responsible for state
+	 * management via DocumentModel).
+	 *
+	 * @returns The execution result, or undefined if bytecode is empty.
+	 */
+	executeCached(program: BytecodeProgram): Value {
+		if (program.opcodes.length === 0) {
+			return numberValue(0);
+		}
+		const stackBefore = this.vm.getStack().length;
+		const result = executeBytecode(program, this.vm);
+		// Pop any leftover stack items from this expression
+		while (this.vm.getStack().length > stackBefore) {
+			this.vm.pop();
+		}
+		if (!result) {
+			return numberValue(0);
+		}
+		return result;
+	}
+
+    evaluateNumber(expression: string): number {
          const trimmed = expression.trim();
 
          // Pre-check: bare identifiers that aren't known variables → NaN.

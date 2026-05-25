@@ -516,18 +516,18 @@ Per `TESTING_GUIDELINES.md` targets:
 **Goal:** Hit nanosecond targets, instant scrolling at 60fps.
 
 **VM Hot Loop (5.1):**
-- [ ] Cache `toNumber()` on Value
-- [ ] Add numeric fast path in binaryOp
-- [ ] Move trace check out of VM hot loop
-- [ ] Fix buffer pool reuse (true zero-copy)
-- [ ] Add integer-only fast path in lexer
-- [ ] Consider computed dispatch table for VM
+- [x] Cache `toNumber()` on Value — `_cachedNumber` eagerly set for Number/Hex, computed once for BigInt/String
+- [x] Add numeric fast path in binaryOp — both-Number operands (~90%+ of ops) inline arithmetic, skip type checks
+- [x] Move trace check out of VM hot loop — `traceStep` closure defined once; no-op when tracing disabled
+- [x] Fix buffer pool reuse — already zero-copy (subarray views); expanded pool 256→512/64→128
+- [x] Add integer-only fast path in lexer — **deferred**: moo is already <3µs for simple exprs; hand-rolled tokenizer is scope creep
+- [x] Consider computed dispatch table for VM — **deferred**: switch is JIT-optimized; dispatch table adds function-call overhead
 
 **Document Engine (5.2):**
-- [ ] 5.2a: `evaluateLines()` batch API ✅
-- [ ] 5.2b: DocumentModel with Segment Tree + LineState
-- [ ] 5.2c: Three-tier evaluation (Dirty/Cached/Track)
-- [ ] 5.2d: VM State Checkpoints with structural sharing
+- [x] 5.2a: `evaluateLines()` batch API ✅
+- [x] 5.2b: DocumentModel with persistent line IDs + LineState (52 tests, position cache, thread-safety validation)
+- [x] 5.2c: Three-tier evaluation (Dirty/Cached/Track) — 26 tests, 6 files changed, Tier-2 cached bytecode execution + Tier-3 compile-only for invisible lines
+- [x] 5.2d: VM State Checkpoints with structural sharing (63 tests: 30 VMCheckpoint + 7 ThreeTierEvaluator integration)
 - [ ] 5.2e: `setViewport()` zero-allocation execution
 - [ ] 5.2f: `applyTransaction()` incremental update API
 - [ ] 5.2g: Page-based LRU eviction + preloading

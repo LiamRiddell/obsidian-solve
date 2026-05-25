@@ -76,7 +76,23 @@ export function executeBytecode(
     const opcodes = rawOpcodes instanceof Uint8Array ? rawOpcodes : new Uint8Array(rawOpcodes);
     const numbers = rawNumbers instanceof Float64Array ? rawNumbers : new Float64Array(rawNumbers);
 
-    const traceEnabled = pipeline?.hasCollectors ?? false;
+    // Hoist trace check outside the hot loop. When disabled (production),
+    // traceStep is a no-op that the JIT will inline away entirely.
+    // When enabled, it fires a diagnostic VM step event per opcode.
+    const traceStep = pipeline?.hasCollectors
+      ? (op: OpCode, ipVal: number, instrNum: number) => {
+          pipeline!.fireVmStep({
+            type: DiagnosticEventType.VmStep,
+            elapsedNs: 0,
+            expression: expression ?? "",
+            opcode: op,
+            opcodeName: getOpCodeName(op),
+            ip: ipVal,
+            stackDepth: vm.getStack().length,
+            instructionNumber: instrNum,
+          });
+        }
+      : (_op: OpCode, _ipVal: number, _instrNum: number) => {};
 
     if (opcodes.length === 0) return undefined;
 
@@ -87,18 +103,7 @@ export function executeBytecode(
       }
       const op = opcodes[ip++] as OpCode;
 
-      if (traceEnabled) {
-        pipeline!.fireVmStep({
-            type: DiagnosticEventType.VmStep,
-            elapsedNs: 0,
-            expression: expression ?? "",
-            opcode: op,
-            opcodeName: getOpCodeName(op),
-            ip: ip - 1,
-            stackDepth: vm.getStack().length,
-            instructionNumber: localInstructionCount,
-        });
-      }
+      traceStep(op, ip - 1, localInstructionCount);
 
       switch (op) {
         case OpCode.NOP: break;

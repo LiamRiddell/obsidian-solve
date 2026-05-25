@@ -84,8 +84,22 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
     const writes: string[] = [];
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
-        if (t.value.startsWith(":") && t.type === "COLON") reads.push(t.value.slice(1));
+        if (t.type === "COLON") {
+            // The moo lexer produces COLON as a bare ":" token. The variable
+            // name follows as a separate IDENT token (matching VariableParselet).
+            if (i + 1 < tokens.length && tokens[i + 1].type === "IDENT") {
+                const varName = tokens[i + 1].value;
+                reads.push(varName);
+                // Colon-prefix variable definition: :name = expr
+                // COLON + IDENT are separate tokens, so EQUALS is at i+2.
+                if (i + 2 < tokens.length && tokens[i + 2].type === "EQUALS") {
+                    writes.push(varName);
+                }
+            }
+        }
         if (t.type === "IDENT") {
+            // Skip if already consumed by preceding COLON handler above.
+            if (i > 0 && tokens[i - 1].type === "COLON") continue;
             reads.push(t.value);
             // Check if next token is EQUALS -> this is a write
             if (i + 1 < tokens.length && tokens[i + 1].type === "EQUALS") {
