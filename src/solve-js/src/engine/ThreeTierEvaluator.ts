@@ -5,7 +5,7 @@ import {
 	LineState,
 	ViewportRange,
 } from "@solve-js/engine/DocumentModel";
-import { Value } from "@solve-js/vm/Value";
+import { Value, enableValueArena, disableValueArena } from "@solve-js/vm/Value";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { isEmptyLine, findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
@@ -116,43 +116,51 @@ export class ThreeTierEvaluator {
 	 * @returns Results for all processed lines, including tier metadata.
 	 */
 	evaluate(viewport: ViewportRange): EvalResult {
-		const lines: EvalLineResult[] = [];
-		const resultMap = new Map<number, Value>();
-		const tierCounts = { tier1: 0, tier2: 0, tier3: 0, skipped: 0 };
+		// ── Phase 5.3: Enable arena for zero-allocation Value reuse ──
+		enableValueArena();
+		try {
+			const lines: EvalLineResult[] = [];
+			const resultMap = new Map<number, Value>();
+			const tierCounts = { tier1: 0, tier2: 0, tier3: 0, skipped: 0 };
 
-		// Process from line 1 to the end of the viewport for correct VM state.
-		// We go to viewport.endLine because Tier 3 for invisible lines can be
-		// done separately via backgroundCompile().
-		const docEnd = this.doc.lineCount;
-		const evalEnd = Math.min(viewport.endLine, docEnd);
+			// Process from line 1 to the end of the viewport for correct VM state.
+			// We go to viewport.endLine because Tier 3 for invisible lines can be
+			// done separately via backgroundCompile().
+			const docEnd = this.doc.lineCount;
+			const evalEnd = Math.min(viewport.endLine, docEnd);
 
-		for (let pos = 1; pos <= evalEnd; pos++) {
-			const state = this.doc.getLineAt(pos);
-			if (!state) {
-				tierCounts.skipped++;
-				continue;
+			for (let pos = 1; pos <= evalEnd; pos++) {
+				const state = this.doc.getLineAt(pos);
+				if (!state) {
+					tierCounts.skipped++;
+					continue;
+				}
+
+				const inViewport = pos >= viewport.startLine && pos <= viewport.endLine;
+
+				const lineResult = this.evaluateSingleLine(state, pos, inViewport);
+				lines.push(lineResult);
+
+				if (lineResult.tier === EvalTier.Tier1) tierCounts.tier1++;
+				else if (lineResult.tier === EvalTier.Tier2) tierCounts.tier2++;
+				else if (lineResult.tier === EvalTier.Tier3) tierCounts.tier3++;
+				else tierCounts.skipped++;
+
+				if (lineResult.result && inViewport) {
+					resultMap.set(pos, lineResult.result);
+				}
 			}
 
-			const inViewport = pos >= viewport.startLine && pos <= viewport.endLine;
+			// ── Phase 5.2g: Page-based LRU eviction ──────────────────────
+			// Evict bytecode/results from cold/warm pages to bound memory.
+			this.pageManager.maintainAfterEval(viewport, this.doc);
 
-			const lineResult = this.evaluateSingleLine(state, pos, inViewport);
-			lines.push(lineResult);
-
-			if (lineResult.tier === EvalTier.Tier1) tierCounts.tier1++;
-			else if (lineResult.tier === EvalTier.Tier2) tierCounts.tier2++;
-			else if (lineResult.tier === EvalTier.Tier3) tierCounts.tier3++;
-			else tierCounts.skipped++;
-
-			if (lineResult.result && inViewport) {
-				resultMap.set(pos, lineResult.result);
-			}
+			return { lines, resultMap, tierCounts };
+		} finally {
+			// Phase 5.3: Always disable arena — even on exception.
+			// Prevents arena Values from leaking into subsequent evaluations or tests.
+			disableValueArena();
 		}
-
-		// ── Phase 5.2g: Page-based LRU eviction ──────────────────────
-		// Evict bytecode/results from cold/warm pages to bound memory.
-		this.pageManager.maintainAfterEval(viewport, this.doc);
-
-		return { lines, resultMap, tierCounts };
 	}
 
 	/**
@@ -291,6 +299,7 @@ export class ThreeTierEvaluator {
 		// ── Correctness guard: dirty lines before viewport invalidate checkpoints ──
 		if (viewport.startLine > 1 && this.hasDirtyLinesBefore(viewport.startLine)) {
 			// Clear stale checkpoints — evaluate() will rebuild them from line 1.
+			// evaluate() handles its own arena enable/disable.
 			this.checkpointer?.clear();
 			return this.evaluate(viewport);
 		}
@@ -307,10 +316,17 @@ export class ThreeTierEvaluator {
 		// This sets all variables that were defined at or before startLine-1.
 		this.restoreTo(viewport.startLine - 1);
 
-		// ── Evaluate only visible lines ──
-		const result = this.collectEvalResults(viewport.startLine, viewport.endLine);
-
-		return result;
+		// ── Phase 5.3: Enable arena for zero-allocation Tier 2 execution ──
+		enableValueArena();
+		try {
+			// ── Evaluate only visible lines ──
+			const result = this.collectEvalResults(viewport.startLine, viewport.endLine);
+			return result;
+		} finally {
+			// Phase 5.3: Always disable arena — even on exception.
+			// Prevents cross-test contamination from arena leaks.
+			disableValueArena();
+		}
 	}
 
 	/**

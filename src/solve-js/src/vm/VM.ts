@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, vectorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, vectorValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive } from "@solve-js/vm/Value";
 import { OpRegistry, type VM } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -117,7 +117,11 @@ export function executeBytecode(
       switch (op) {
         case OpCode.NOP: break;
         case OpCode.HALT: {
-          return stack.pop()!;
+          const result = stack.pop()!;
+          // Phase 5.3: If arena is active, clone the result before returning.
+          // The caller (ThreeTierEvaluator) stores this in DocumentModel.result —
+          // it must survive arena.reset() on the next scroll frame.
+          return isArenaActive() ? persistentValue(result) : result;
         }
         case OpCode.SWAP: {
           const a = stack.pop()!;
@@ -138,7 +142,7 @@ export function executeBytecode(
           stack.push(stringValue(strings[strIdx]));
           break;
         }
-        case OpCode.PUSH_BOOLEAN: stack.push(new Value(ValueType.Boolean, opcodes[ip++] === 1)); break;
+        case OpCode.PUSH_BOOLEAN: stack.push(boolValue(opcodes[ip++] === 1)); break;
         case OpCode.NEG: {
           const v = stack.pop()!;
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
@@ -168,7 +172,7 @@ export function executeBytecode(
             } else {
               durMs = r.toNumber();
             }
-            stack.push(new Value(ValueType.Datetime, l.toNumber() + durMs));
+            stack.push(datetimeValue(l.toNumber() + durMs));
           } else {
             stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
           }
@@ -190,7 +194,7 @@ export function executeBytecode(
             } else {
               durMs = r.toNumber();
             }
-            stack.push(new Value(ValueType.Datetime, l.toNumber() - durMs));
+            stack.push(datetimeValue(l.toNumber() - durMs));
           } else {
             stack.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
           }
@@ -288,7 +292,7 @@ export function executeBytecode(
         }
         case OpCode.TO_PERCENTAGE: {
           const v = stack.pop()!;
-          stack.push(new Value(ValueType.Percentage, v.toNumber()));
+          stack.push(percentageValue(v.toNumber()));
           break;
         }
         case OpCode.CALL_BUILTIN: {
@@ -324,7 +328,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.DATE_NOW:
-          stack.push(new Value(ValueType.Datetime, Date.now()));
+          stack.push(datetimeValue(Date.now()));
           break;
         case OpCode.DATE_ADD:
         case OpCode.DATE_SUB: {
@@ -345,7 +349,7 @@ export function executeBytecode(
             durMs = durValue.toNumber();
           }
           const sign = op === OpCode.DATE_ADD ? 1 : -1;
-          stack.push(new Value(ValueType.Datetime, dt + sign * durMs));
+          stack.push(datetimeValue(dt + sign * durMs));
           break;
         }
         case OpCode.UOM_CONVERT: {
@@ -399,7 +403,9 @@ export function executeBytecode(
           const val = stack.pop()!;
           const varIdx = opcodes[ip++];
           const varName = strings[varIdx];
-          vm.setVar(varName, val);
+          // Phase 5.3: If arena is active, clone before storing in variables.
+          // Arena Values are recycled on reset() — variable references must survive.
+          vm.setVar(varName, isArenaActive() ? persistentValue(val) : val);
           stack.push(val);
           break;
         }
@@ -414,5 +420,7 @@ export function executeBytecode(
       }
     }
 
-    return stack.pop()!;
+    // Fallback return (reached if while loop exits without HALT — shouldn't happen on valid bytecode)
+    const fallback = stack.pop()!;
+    return isArenaActive() ? persistentValue(fallback) : fallback;
 }
