@@ -140,6 +140,12 @@ function handleSetLocale(msg: SetLocaleMsg): void {
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 
+// This file is transformed by esbuild-plugin-inline-worker into a factory
+// that returns Worker. If you see this error, the plugin isn't configured.
+export default (() => {
+	throw new Error("eval.worker.ts must be processed by esbuild-plugin-inline-worker");
+}) as unknown as () => Worker;
+
 // Worker message boundaries are inherently untyped — data arrives as unknown.
 // We cast to the discriminated union for internal dispatch safety.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

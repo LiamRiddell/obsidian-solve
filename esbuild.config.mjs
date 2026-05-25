@@ -1,8 +1,8 @@
 import { Buffer } from "buffer";
 import builtins from "builtin-modules";
 import esbuild from "esbuild";
+import inlineWorker from "esbuild-plugin-inline-worker";
 import fs from "fs/promises";
-import fsSync from "fs";
 import process from "process";
 
 const prod = process.argv[2] === "production";
@@ -30,23 +30,6 @@ const cssCommentPlugin = {
 		});
 	},
 };
-
-const ensureDirPlugin = (name) => ({
-	name,
-	setup(build) {
-		build.onStart(() => {
-			if (!fsSync.existsSync("workers")) {
-				fsSync.mkdirSync("workers", { recursive: true });
-			}
-		});
-		build.onEnd(async (result) => {
-			if (!result.outputFiles) return;
-			for (const file of result.outputFiles) {
-				await fs.writeFile(file.path, file.contents);
-			}
-		});
-	},
-});
 
 const baseConfig = {
 	bundle: true,
@@ -81,42 +64,13 @@ const baseConfig = {
 const mainBuild = await esbuild.context({
 	...baseConfig,
 	entryPoints: ["src/app/main.ts", "src/app/styles.css"],
-	plugins: [cssCommentPlugin],
+	plugins: [cssCommentPlugin, inlineWorker({ minify: prod })],
 	outdir: ".",
-});
-
-const workerEntryBuild = await esbuild.context({
-	...baseConfig,
-	entryPoints: ["src/solve-js/src/workers/eval-worker.ts"],
-	plugins: [ensureDirPlugin("ensure-workers-dir")],
-	outdir: "workers",
-});
-
-const compilationWorkerBuild = await esbuild.context({
-	...baseConfig,
-	entryPoints: ["src/solve-js/src/workers/compilation-worker.ts"],
-	plugins: [ensureDirPlugin("ensure-workers-dir-3")],
-	outdir: "workers",
-});
-
-const dataQueryBuild = await esbuild.context({
-	...baseConfig,
-	entryPoints: ["src/solve-js/src/workers/DataQueryWorker.ts"],
-	plugins: [ensureDirPlugin("ensure-workers-dir-4")],
-	outdir: "workers",
 });
 
 if (prod) {
 	await mainBuild.rebuild();
-	await workerEntryBuild.rebuild();
-	await compilationWorkerBuild.rebuild();
-	await dataQueryBuild.rebuild();
 	process.exit(0);
 } else {
-	await Promise.all([
-		mainBuild.watch(),
-		workerEntryBuild.watch(),
-		compilationWorkerBuild.watch(),
-		dataQueryBuild.watch(),
-	]);
+	await mainBuild.watch();
 }

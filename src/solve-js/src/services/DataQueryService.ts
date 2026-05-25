@@ -6,6 +6,7 @@
 import { QueryClient } from "@tanstack/query-core";
 import { DataSourceConfig, FetchRequest, FetchResponse } from "@solve-js/workers/DataQueryWorker";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import createDataQueryWorker from "@solve-js/workers/DataQueryWorker.worker";
 
 // Re-export types from DataQueryWorker
 export type { DataSourceConfig };
@@ -16,7 +17,6 @@ export type { DataSourceConfig };
 
 export interface ServiceConfig {
   useWorker: boolean;
-  workerUrl: string;
   maxConcurrentQueries: number;
   cacheSize: number;
 }
@@ -53,7 +53,6 @@ export class DataQueryService {
     console.log("[DataQueryService] Constructor called");
     this.config = {
       useWorker: true,
-      workerUrl: this.getWorkerUrl(),
       maxConcurrentQueries: 100,
       cacheSize: 1000,
       ...config,
@@ -73,16 +72,14 @@ export class DataQueryService {
       },
     });
 
-    // Delay worker initialization until page is ready
+    // Worker uses esbuild-plugin-inline-worker — always available, no URL needed.
+    // Delay initialization until page is ready so DOM APIs (Blob, URL) are available.
     if (this.config.useWorker && typeof Worker !== "undefined") {
       if (typeof document !== "undefined" && document.readyState === "loading") {
-        console.log("[DataQueryService] Page not ready, delaying worker initialization");
         document.addEventListener("DOMContentLoaded", () => {
-          console.log("[DataQueryService] DOMContentLoaded, initializing worker");
           this.initializeWorker();
         });
       } else {
-        console.log("[DataQueryService] Page ready, initializing worker");
         this.initializeWorker();
       }
     }
@@ -91,46 +88,18 @@ export class DataQueryService {
     setInterval(() => this.cleanupCache(), 30000); // Every 30 seconds
   }
 
-  private getWorkerUrl(): string {
-    // Check if we're in a playground environment
-    if (typeof window !== 'undefined') {
-      console.log("[DataQueryService] getWorkerUrl: pathname =", window.location.pathname);
-      console.log("[DataQueryService] getWorkerUrl: href =", window.location.href);
-      console.log("[DataQueryService] getWorkerUrl: hostname =", window.location.hostname);
-      console.log("[DataQueryService] getWorkerUrl: port =", window.location.port);
-      
-      // In playground, the app is served from root (e.g., http://localhost:5173/)
-      // Check if we're on localhost with port 5173 (Vite dev server)
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      const isVitePort = window.location.port === '5173' || window.location.port === '';
-      const isRootPath = window.location.pathname === '/' || window.location.pathname === '';
-      
-      if (isLocalhost && isVitePort && isRootPath) {
-        // The worker is located at src/data-query.worker.ts relative to the playground root
-        const url = new URL('src/data-query.worker.ts', window.location.href).href;
-        console.log("[DataQueryService] Playground worker URL:", url);
-        return url;
-      }
-    }
-    
-// Default worker path for the plugin
-     console.log("[DataQueryService] Plugin worker URL: /workers/DataQueryWorker.js");
-     return "/workers/DataQueryWorker.js";
-  }
-
   // ------------------------------------------------------------------------
   // WORKER INITIALIZATION
   // ------------------------------------------------------------------------
 
   private initializeWorker(): void {
     try {
-      console.log("[DataQueryService] Attempting to create worker with URL:", this.config.workerUrl);
-      this.worker = new Worker(this.config.workerUrl, { type: "module" });
+      // esbuild-plugin-inline-worker bundles the worker as a blob URL at build time.
+      // No file path needed — works in Obsidian's plugin sandbox.
+      this.worker = createDataQueryWorker();
       
       this.worker.onmessage = this.handleWorkerMessage.bind(this);
       this.worker.onerror = this.handleWorkerError.bind(this);
-      
-      console.log("[DataQueryService] Worker initialized successfully");
     } catch (error) {
       console.error("[DataQueryService] Failed to initialize worker:", error);
       this.config.useWorker = false;
@@ -166,13 +135,6 @@ export class DataQueryService {
   private handleWorkerError(error: ErrorEvent): void {
     console.error("[DataQueryService] Worker error:", error);
     console.error("[DataQueryService] Worker error message:", error.message);
-    console.error("[DataQueryService] Worker error filename:", error.filename);
-    console.error("[DataQueryService] Worker error lineno:", error.lineno);
-    console.error("[DataQueryService] Worker error colno:", error.colno);
-    console.error("[DataQueryService] Worker error error:", error.error);
-    console.error("[DataQueryService] Worker error type:", error.type);
-    console.error("[DataQueryService] Worker error target:", error.target);
-    console.error("[DataQueryService] Worker URL:", this.config.workerUrl);
     // Fallback to main thread execution
     this.config.useWorker = false;
   }

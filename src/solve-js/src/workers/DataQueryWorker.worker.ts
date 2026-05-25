@@ -18,12 +18,13 @@
 type WorkerPostMessage = { postMessage(msg: unknown): void };
 const workerSelf = this as unknown as WorkerPostMessage;
 
+import { CurrencyDataSource, HttpDataSource } from "./DataSourceStrategy";
 import type { DataSourceStrategy } from "./DataSourceStrategy";
 import type { DataSourceConfig, FetchRequest, FetchResponse } from "./DataSourceStrategy";
 
 class DataQueryWorkerInternal {
-	private strategies: Map<string, DataSourceStrategy> = new Map();
-	private activeRequests: Set<string> = new Set();
+	public strategies: Map<string, DataSourceStrategy> = new Map();
+	public activeRequests: Set<string> = new Set();
 
 	postMessage(message: unknown): void {
 		workerSelf.postMessage(message);
@@ -35,10 +36,10 @@ class DataQueryWorkerInternal {
 
 		switch (config.type) {
 			case "currency":
-				strategy = new (DataSourceStrategy as any).CurrencyDataSource(config.endpoint || "");
+				strategy = new CurrencyDataSource(config.endpoint || "");
 				break;
 			case "http":
-				strategy = new (DataSourceStrategy as any).HttpDataSource(config);
+				strategy = new HttpDataSource(config);
 				break;
 			default:
 				this.postMessage({
@@ -107,6 +108,12 @@ class DataQueryWorkerInternal {
 }
 
 const worker = new DataQueryWorkerInternal();
+
+// This file is transformed by esbuild-plugin-inline-worker into a factory
+// that returns Worker. If you see this error, the plugin isn't configured.
+export default (() => {
+	throw new Error("DataQueryWorker.worker.ts must be processed by esbuild-plugin-inline-worker");
+}) as unknown as () => Worker;
 
 self.onmessage = (event: MessageEvent) => {
 	const { type, payload, id } = event.data;

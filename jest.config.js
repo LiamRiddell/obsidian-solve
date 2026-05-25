@@ -89,6 +89,7 @@ const config = {
 	moduleNameMapper: {
 		"@/(.*)": "<rootDir>/src/$1",
 		"@app/(.*)": "<rootDir>/src/app/$1",
+		"@solve-js/workers/(.*)\\.worker$": "<rootDir>/src/solve-js/__tests__/__mocks__/worker-mock.ts",
 		"@solve-js/(.*)": "<rootDir>/src/solve-js/src/$1",
 		"@tools/(.*)": "<rootDir>/src/solve-js/tools/$1",
 		"test/(.*)": "<rootDir>/src/solve-js/__tests__/$1",

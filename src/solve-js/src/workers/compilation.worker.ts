@@ -79,6 +79,12 @@ interface CompileResult {
 
 // ── Worker body ───────────────────────────────────────────────────────────
 
+// This file is transformed by esbuild-plugin-inline-worker into a factory
+// that returns Worker. If you see this error, the plugin isn't configured.
+export default (() => {
+	throw new Error("compilation.worker.ts must be processed by esbuild-plugin-inline-worker");
+}) as unknown as () => Worker;
+
 let engine: ExpressionEngine | null = null;
 
 function getEngine(): ExpressionEngine {

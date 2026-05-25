@@ -25,6 +25,16 @@ import { IWorker, WorkerMessage, WorkerResponse } from './WorkerInterface';
  * });
  * ```
  */
+/** Payload shape for data query worker fetch responses */
+interface FetcherPayload {
+  id: string;
+  error?: string;
+  data?: unknown;
+  dataSourceId?: string;
+  queryKey?: string[];
+  timestamp?: number;
+}
+
 export class DataQueryWorker {
   private worker: IWorker;
   private messageHandlers: Map<string, (response: WorkerResponse) => void> = new Map();
@@ -50,16 +60,17 @@ export class DataQueryWorker {
   async executeFetch(request: FetchRequest): Promise<FetchResponse> {
     return new Promise((resolve) => {
       const handler = (response: WorkerResponse) => {
-        if (response.type === 'FETCH_RESPONSE' && response.payload?.id === request.id) {
+        const payload = response.payload as FetcherPayload | undefined;
+        if (response.type === 'FETCH_RESPONSE' && payload?.id === request.id) {
           this.worker.onMessage(() => {}); // Clear handler
           resolve(response.payload as FetchResponse);
-        } else if (response.type === 'FETCH_ERROR' && response.payload?.id === request.id) {
+        } else if (response.type === 'FETCH_ERROR' && payload?.id === request.id) {
           this.worker.onMessage(() => {});
           resolve({
             id: request.id,
             dataSourceId: request.dataSourceId,
             queryKey: request.queryKey,
-            error: response.payload.error,
+            error: payload?.error,
             timestamp: Date.now()
           });
         }

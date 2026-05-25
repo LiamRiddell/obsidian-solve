@@ -132,16 +132,16 @@ describe("Datetime Parselets", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 10 seconds");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeGreaterThanOrEqual(9995);
-    expect(elapsed).toBeLessThanOrEqual(10020); // Increased tolerance for system timing variability
+    expect(elapsed).toBeGreaterThanOrEqual(9950);
+    expect(elapsed).toBeLessThanOrEqual(10050); // 50ms tolerance for parse+execution overhead
   });
 
   test("now - 10 seconds yields timestamp - ~10000", () => {
     const now = Date.now();
     const result = parseAndExecute("now - 10 seconds");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeGreaterThanOrEqual(-10010);
-    expect(elapsed).toBeLessThanOrEqual(-9985); // Increased tolerance for timing variability
+    expect(elapsed).toBeGreaterThanOrEqual(-10050);
+    expect(elapsed).toBeLessThanOrEqual(-9950); // 50ms tolerance for parse+execution overhead
   });
 
   test("now + 5 minutes yields ~300000", () => {

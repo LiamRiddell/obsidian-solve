@@ -18,6 +18,7 @@
 
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
+import createCompilationWorker from "@solve-js/workers/compilation.worker";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -57,7 +58,6 @@ interface WorkerCompileResult {
 
 export class CompilationWorkerManager {
 	private worker: Worker | null = null;
-	private workerUrl: string | null = null;
 	private nextId = 1;
 	private pending = new Map<
 		number,
@@ -67,22 +67,16 @@ export class CompilationWorkerManager {
 		}
 	>();
 
-	/**
-	 * @param workerUrl URL to the compilation worker bundle.
-	 * If omitted, falls back to a relative path under /workers/.
-	 */
-	constructor(workerUrl?: string) {
-		this.workerUrl = workerUrl ?? null;
-	}
+	constructor() {}
 
 	/**
 	 * Ensure the worker is started (lazy initialization).
+	 * Uses esbuild-plugin-inline-worker to inline the worker as a blob URL.
 	 */
 	private ensureWorker(): Worker {
 		if (this.worker) return this.worker;
 
-		const url = this.workerUrl ?? "/workers/compilation-worker.js";
-		this.worker = new Worker(url, { type: "module", name: "solve-compile" });
+		this.worker = createCompilationWorker();
 
 		this.worker.onmessage = (event: MessageEvent) => {
 			const data = event.data;

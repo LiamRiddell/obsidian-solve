@@ -45,8 +45,7 @@ import {
     findInlineSolvesInLine,
 } from "@solve-js/engine/ExpressionEngineSafety";
 
-// Pre-existing: __WORKER_URL__ is substituted by esbuild define at build time
-declare var __WORKER_URL__: string | undefined;
+
 
 export class ExpressionEngine {
     private dag = new DependencyGraph();
@@ -772,22 +771,25 @@ if (hasCollectors) {
             return results;
         }
 
+        // Dynamic import to avoid circular dependency:
+        // eval.worker.ts imports ExpressionEngine, so we can't statically import it here.
+        let createEvalWorker: () => Worker;
+        try {
+            ({ default: createEvalWorker } = await import("@solve-js/workers/eval.worker"));
+        } catch {
+            // Fallback: evaluate on main thread if worker can't be created
+            for (let i = 0; i < expressions.length; i++) {
+                try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
+            }
+            return results;
+        }
+
         const maxWorkers = Math.min(expressions.length, 4);
         const chunkSize = Math.ceil(expressions.length / maxWorkers);
         const promises: Promise<void>[] = [];
 
         for (let w = 0; w < maxWorkers; w++) {
-            const workerUrl = this.getWorkerUrl();
-            if (!workerUrl) {
-                const start = w * chunkSize;
-                const end = Math.min(start + chunkSize, expressions.length);
-                for (let i = start; i < end; i++) {
-                    try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
-                }
-                continue;
-            }
-
-            const worker = new Worker(workerUrl, { type: "module", name: `solve-eval-${w}` });
+            const worker = createEvalWorker();
             workers.push(worker);
             const start = w * chunkSize;
             const end = Math.min(start + chunkSize, expressions.length);
@@ -813,12 +815,6 @@ if (hasCollectors) {
         await Promise.all(promises);
         workers.forEach((w) => w.terminate());
         return results;
-    }
-
-    private getWorkerUrl(): string | null {
-		if (typeof __WORKER_URL__ !== "undefined") return __WORKER_URL__;
-        const base = typeof window !== "undefined" ? window.location.origin : "";
-        return `${base}/workers/eval-worker.js`;
     }
 
     /**

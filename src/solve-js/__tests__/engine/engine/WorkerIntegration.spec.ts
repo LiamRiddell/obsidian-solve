@@ -21,8 +21,8 @@ describe("Worker Integration", () => {
 			manager.terminate();
 		});
 
-		test("construct with explicit worker URL", () => {
-			const manager = new CompilationWorkerManager("/custom/path/worker.js");
+		test("construct — worker is created lazily via inline blob URL", () => {
+			const manager = new CompilationWorkerManager();
 			expect(manager).toBeDefined();
 			expect(manager.isActive).toBe(false);
 			manager.terminate();
@@ -297,8 +297,8 @@ describe("Worker Integration", () => {
 
 	describe("multiple manager instances", () => {
 		test("managers are independent", () => {
-			const mgr1 = new CompilationWorkerManager("/worker1.js");
-			const mgr2 = new CompilationWorkerManager("/worker2.js");
+			const mgr1 = new CompilationWorkerManager();
+			const mgr2 = new CompilationWorkerManager();
 
 			expect(mgr1).not.toBe(mgr2);
 			expect(mgr1.isActive).toBe(false);
