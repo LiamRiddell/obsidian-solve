@@ -1,6 +1,7 @@
 import { Value } from "@solve-js/vm/Value";
 import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { djb2Hash } from "@solve-js/utilities/Hash";
+import { SegmentTree } from "@solve-js/engine/SegmentTree";
 
 // ── LineState ──────────────────────────────────────────────────────────────
 
@@ -87,14 +88,12 @@ export interface ApplyChangesResult {
  * Design:
  * - Each line has an immutable `lineId` (monotonically increasing counter).
  * - `LineState` objects are stored in a `Map<lineId, LineState>` for O(1) access.
- * - Line ordering is maintained in a sorted `lineId[]` array with index-based lookup.
+ * - Line ordering is maintained in a `SegmentTree` (order-statistic Treap) that
+ *   supports O(log N) insert, delete, and get-at-index operations.
  * - A lazy position cache (`Map<lineId, number>`) provides O(1) position lookups
  *   after the first `getLinePosition()` call and is invalidated on structural edits.
- * - Array splices are O(N) but adequate for typical Obsidian documents (< 5000 lines).
- *   The structure can be upgraded to a Segment Tree / Order Statistic Tree for
- *   true O(log N) splices if needed for 100K+ line documents.
  *
- * Key invariant: line IDs never change, only their positions in the order array.
+ * Key invariant: line IDs never change, only their positions in the order tree.
  * This means cached bytecode, dependency graph entries, and VM checkpoints
  * keyed by lineId remain valid across all structural edits.
  */
@@ -102,8 +101,8 @@ export class DocumentModel {
 	/** Persistent line ID → LineState. */
 	private lines: Map<number, LineState> = new Map();
 
-	/** Ordered array of line IDs representing the current document structure. */
-	private lineOrder: number[] = [];
+	/** Order-statistic treap representing the current document line order. */
+	private orderTree: SegmentTree = new SegmentTree();
 
 	/** Monotonically increasing counter for new line IDs. */
 	private nextLineId: number = 1;
@@ -122,16 +121,16 @@ export class DocumentModel {
 	 */
 	setDocument(text: string): void {
 		this.lines.clear();
-		this.lineOrder = [];
+		this.orderTree.clear();
 		this._positionCache = null;
 		this.nextLineId = 1;
 
 		const rawLines = text.split("\n");
-		this.lineOrder = new Array(rawLines.length);
+		const lineIds = new Array<number>(rawLines.length);
 
 		for (let i = 0; i < rawLines.length; i++) {
 			const lineId = this.nextLineId++;
-			this.lineOrder[i] = lineId;
+			lineIds[i] = lineId;
 			this.lines.set(lineId, {
 				lineId,
 				textHash: djb2Hash(rawLines[i]),
@@ -146,6 +145,9 @@ export class DocumentModel {
 				isEmpty: rawLines[i].trim().length === 0,
 			});
 		}
+
+		// O(N) balanced treap build from flat array
+		this.orderTree.replaceAll(lineIds);
 	}
 
 	// ── Structural edits ────────────────────────────────────────────────
@@ -176,15 +178,6 @@ export class DocumentModel {
 		for (const change of sorted) {
 			const startIdx = change.startLine - 1; // convert to 0-based
 
-			// Collect old line IDs being removed
-			const removedIds = this.lineOrder.slice(
-				startIdx,
-				startIdx + change.deleteCount
-			);
-			for (const id of removedIds) {
-				removed.push(id);
-			}
-
 			// Create new LineState entries for inserted lines
 			const newIds: number[] = [];
 			for (const text of change.insertLines) {
@@ -206,11 +199,14 @@ export class DocumentModel {
 				});
 			}
 
-			// Splice: remove old IDs, insert new IDs
-			this.lineOrder.splice(startIdx, change.deleteCount, ...newIds);
-
-			// Remove old LineState entries from the map
+			// O(log N) splice: delete old IDs, insert new IDs
+			const removedIds = this.orderTree.spliceAt(
+				startIdx,
+				change.deleteCount,
+				newIds
+			);
 			for (const id of removedIds) {
+				removed.push(id);
 				this.lines.delete(id);
 			}
 		}
@@ -280,8 +276,9 @@ export class DocumentModel {
 	 */
 	getLineAt(position: number): LineState | undefined {
 		const idx = position - 1;
-		if (idx < 0 || idx >= this.lineOrder.length) return undefined;
-		return this.lines.get(this.lineOrder[idx]);
+		const lineId = this.orderTree.getAt(idx);
+		if (lineId === undefined) return undefined;
+		return this.lines.get(lineId);
 	}
 
 	/**
@@ -298,8 +295,9 @@ export class DocumentModel {
 
 		// Build position cache on first call after invalidation
 		this._positionCache = new Map();
-		for (let i = 0; i < this.lineOrder.length; i++) {
-			this._positionCache.set(this.lineOrder[i], i + 1);
+		let pos = 1;
+		for (const id of this.orderTree) {
+			this._positionCache.set(id, pos++);
 		}
 
 		return this._positionCache.get(lineId) ?? -1;
@@ -307,17 +305,14 @@ export class DocumentModel {
 
 	/**
 	 * Get all LineState entries within the given viewport range (1-based, inclusive).
-	 * The returned array is in document order.
+	 * Uses SegmentTree.getRange() for O(viewport + log N) collection instead of
+	 * O(viewport × log N) per-line lookups.
 	 */
 	getVisibleLines(startLine: number, endLine: number): LineState[] {
-		const startIdx = Math.max(0, startLine - 1);
-		const endIdx = Math.min(this.lineOrder.length - 1, endLine - 1);
-
-		if (startIdx > endIdx) return [];
-
+		const lineIds = this.orderTree.getRange(startLine - 1, endLine - 1);
 		const result: LineState[] = [];
-		for (let i = startIdx; i <= endIdx; i++) {
-			const state = this.lines.get(this.lineOrder[i]);
+		for (const lineId of lineIds) {
+			const state = this.lines.get(lineId);
 			if (state) result.push(state);
 		}
 		return result;
@@ -454,18 +449,18 @@ export class DocumentModel {
 	// ── Properties ──────────────────────────────────────────────────────
 
 	get lineCount(): number {
-		return this.lineOrder.length;
+		return this.orderTree.length;
 	}
 
 	get isEmpty(): boolean {
-		return this.lineOrder.length === 0;
+		return this.orderTree.isEmpty;
 	}
 
 	/**
 	 * Iterator over LineState in document order.
 	 */
 	*[Symbol.iterator](): IterableIterator<LineState> {
-		for (const lineId of this.lineOrder) {
+		for (const lineId of this.orderTree) {
 			const state = this.lines.get(lineId);
 			if (state) yield state;
 		}
@@ -475,7 +470,7 @@ export class DocumentModel {
 
 	clear(): void {
 		this.lines.clear();
-		this.lineOrder = [];
+		this.orderTree.clear();
 		this._positionCache = null;
 		this.nextLineId = 1;
 	}
