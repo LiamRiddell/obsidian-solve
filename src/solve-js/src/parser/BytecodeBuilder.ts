@@ -1,8 +1,8 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 
 export interface BytecodeProgram {
-	opcodes: Uint8Array | number[];
-	numbers: Float64Array | number[];
+	opcodes: Uint8Array;
+	numbers: Float64Array;
 	strings: string[];
 	constants?: Map<number, number>;
 }
@@ -51,8 +51,8 @@ export class BytecodeBuilder {
 
 	build(): BytecodeProgram {
 		return {
-			opcodes: [...this.opcodes],
-			numbers: [...this.numbers],
+			opcodes: new Uint8Array(this.opcodes),
+			numbers: new Float64Array(this.numbers),
 			strings: this.strings,
 			constants: new Map(),
 		};

@@ -131,7 +131,7 @@ describe("Worker Integration", () => {
 			const result = {
 				lineId: line1.lineId,
 				compiledAgainstHash: line1.textHash,
-				program: { opcodes: [], numbers: [], strings: [] },
+				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
 				reads: [],
 				writes: [],
 				isVariableDef: false,

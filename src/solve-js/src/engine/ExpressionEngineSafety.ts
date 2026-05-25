@@ -38,7 +38,7 @@ export function checkExpressionLength(
             error: {
                 value: numberValue(0),
                 tokens: [],
-                program: { opcodes: [], numbers: [], strings: [] },
+                program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
                 error: err.message,
             },
         };

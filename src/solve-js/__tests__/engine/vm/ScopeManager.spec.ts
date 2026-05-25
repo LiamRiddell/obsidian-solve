@@ -6,7 +6,7 @@ function makeRecord(lineNumber: number, value: Value) {
   return {
     lineNumber,
     expression: "test",
-    bytecode: { opcodes: [], numbers: [], strings: [] },
+    bytecode: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
     lastResult: value,
     readVariables: [],
     writeVariable: null,

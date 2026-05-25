@@ -370,7 +370,7 @@ export class ExpressionEngine {
                 });
             }
 
-            return { value: v, tokens, program: { opcodes: [], numbers: [], strings: [] }, debug: undefined };
+            return { value: v, tokens, program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, debug: undefined };
         }
 
         // === SAFETY CHECK 2: Complexity scoring ===
@@ -389,7 +389,7 @@ export class ExpressionEngine {
             return {
                 value: numberValue(0),
                 tokens: [],
-                program: { opcodes: [], numbers: [], strings: [] },
+                program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
                 error: complexityCheck.errorMessage!,
                 debug: undefined
             };
@@ -460,7 +460,7 @@ export class ExpressionEngine {
                 return {
                     value: numberValue(0),
                     tokens,
-                    program: { opcodes: [], numbers: [], strings: [] },
+                    program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
                     error: errorMessage,
                     debug: undefined
                 };
@@ -648,7 +648,7 @@ if (hasCollectors) {
 
 		if (tokens.length === 0) {
 			return {
-				program: { opcodes: [], numbers: [], strings: [] },
+				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
 				tokens: [],
 				reads: [],
 				writes: [],

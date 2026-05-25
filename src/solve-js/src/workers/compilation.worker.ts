@@ -123,12 +123,8 @@ function compileOne(item: CompileItem): CompileResult {
 		// Extract ArrayBuffers from TypedArrays for Transferable transfer.
 		// Uint8Array and Float64Array may be views into pooled buffers
 		// (from buildInto), so we extract the exact byte range.
-		const opcodes = program.opcodes instanceof Uint8Array
-			? program.opcodes
-			: new Uint8Array(program.opcodes);
-		const numbers = program.numbers instanceof Float64Array
-			? program.numbers
-			: new Float64Array(program.numbers);
+		const opcodes = program.opcodes;
+		const numbers = program.numbers;
 
 		// Transfer only the exact used slice of the ArrayBuffer.
 		// After this call, the source TypedArrays are detached on the worker

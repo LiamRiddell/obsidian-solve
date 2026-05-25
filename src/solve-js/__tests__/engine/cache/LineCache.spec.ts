@@ -13,7 +13,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(42),
-      { opcodes: [10], numbers: [42], strings: [] },
+      { opcodes: new Uint8Array([10]), numbers: new Float64Array([42]), strings: [] },
       [],
       null
     );
@@ -27,7 +27,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(0),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     );
@@ -43,7 +43,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(42),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     );
@@ -62,7 +62,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(0),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     );
@@ -75,7 +75,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     cache.set(1, new LineCacheEntry(
       numberValue(1),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     ));
@@ -88,13 +88,13 @@ describe("LineCache", () => {
     const cache = new LineCache();
     cache.set(10, new LineCacheEntry(
       numberValue(1),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     ), "expr1");
     cache.set(10, new LineCacheEntry(
       numberValue(2),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     ), "expr2");
@@ -107,7 +107,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     cache.set(5, new LineCacheEntry(
       numberValue(1),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     ));
@@ -119,7 +119,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       stringValue("hello"),
-      { opcodes: [10, 20], numbers: [], strings: ["hello"] },
+      { opcodes: new Uint8Array([10, 20]), numbers: new Float64Array(0), strings: ["hello"] },
       ["x", "y"],
       "z"
     );
@@ -135,14 +135,14 @@ describe("LineCache", () => {
     expect(cache.size).toBe(0);
     cache.set(1, new LineCacheEntry(
       numberValue(1),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     ));
     expect(cache.size).toBe(1);
     cache.set(2, new LineCacheEntry(
       numberValue(2),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     ));
@@ -155,13 +155,13 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry1 = new LineCacheEntry(
       numberValue(1),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     );
     const entry2 = new LineCacheEntry(
       numberValue(2),
-      { opcodes: [], numbers: [], strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
       [],
       null
     );

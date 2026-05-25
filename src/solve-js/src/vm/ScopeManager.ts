@@ -3,7 +3,7 @@ import { Value } from "@solve-js/vm/Value";
 export interface ExpressionRecord {
   lineNumber: number;
   expression: string;
-  bytecode: { opcodes: number[]; numbers: number[]; strings: string[] };
+  bytecode: { opcodes: Uint8Array; numbers: Float64Array; strings: string[] };
   lastResult: Value;
   readVariables: string[];
   writeVariable: string | null;

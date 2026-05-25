@@ -6,8 +6,8 @@ describe("BytecodeBuilder", () => {
   test("build produces empty program", () => {
     const builder = new BytecodeBuilder();
     const program = builder.build();
-    expect(program.opcodes).toEqual([]);
-    expect(program.numbers).toEqual([]);
+    expect(program.opcodes.length).toBe(0);
+    expect(program.numbers.length).toBe(0);
     expect(program.strings).toEqual([]);
   });
 
@@ -15,7 +15,8 @@ describe("BytecodeBuilder", () => {
     const builder = new BytecodeBuilder();
     builder.emitOpcode(OpCode.HALT);
     const program = builder.build();
-    expect(program.opcodes).toEqual([OpCode.HALT]);
+    expect(program.opcodes.length).toBe(1);
+    expect(program.opcodes[0]).toBe(OpCode.HALT);
   });
 
   test("emitNumber adds number and pushes its index to opcodes", () => {
@@ -24,8 +25,12 @@ describe("BytecodeBuilder", () => {
     builder.emitNumber(3.14);
     builder.emitOpcode(OpCode.HALT);
     const program = builder.build();
-    expect(program.numbers).toEqual([3.14]);
-    expect(program.opcodes).toEqual([OpCode.PUSH_NUMBER, 0, OpCode.HALT]);
+    expect(program.numbers.length).toBe(1);
+    expect(program.numbers[0]).toBeCloseTo(3.14);
+    expect(program.opcodes.length).toBe(3);
+    expect(program.opcodes[0]).toBe(OpCode.PUSH_NUMBER);
+    expect(program.opcodes[1]).toBe(0);
+    expect(program.opcodes[2]).toBe(OpCode.HALT);
   });
 
   test("emitString adds string and pushes its index to opcodes", () => {
@@ -35,7 +40,10 @@ describe("BytecodeBuilder", () => {
     builder.emitOpcode(OpCode.HALT);
     const program = builder.build();
     expect(program.strings).toEqual(["hello"]);
-    expect(program.opcodes).toEqual([OpCode.PUSH_STRING, 0, OpCode.HALT]);
+    expect(program.opcodes.length).toBe(3);
+    expect(program.opcodes[0]).toBe(OpCode.PUSH_STRING);
+    expect(program.opcodes[1]).toBe(0);
+    expect(program.opcodes[2]).toBe(OpCode.HALT);
   });
 
   test("emitIndex appends integer index", () => {
@@ -43,7 +51,9 @@ describe("BytecodeBuilder", () => {
     builder.emitIndex(5);
     builder.emitIndex(42);
     const program = builder.build();
-    expect(program.opcodes).toEqual([5, 42]);
+    expect(program.opcodes.length).toBe(2);
+    expect(program.opcodes[0]).toBe(5);
+    expect(program.opcodes[1]).toBe(42);
   });
 
   test("PUSH_NUMBER followed by HALT produces correct bytecode", () => {
@@ -52,8 +62,12 @@ describe("BytecodeBuilder", () => {
     builder.emitNumber(42);
     builder.emitOpcode(OpCode.HALT);
     const program = builder.build();
-    expect(program.opcodes).toEqual([OpCode.PUSH_NUMBER, 0, OpCode.HALT]);
-    expect(program.numbers).toEqual([42]);
+    expect(program.opcodes.length).toBe(3);
+    expect(program.opcodes[0]).toBe(OpCode.PUSH_NUMBER);
+    expect(program.opcodes[1]).toBe(0);
+    expect(program.opcodes[2]).toBe(OpCode.HALT);
+    expect(program.numbers.length).toBe(1);
+    expect(program.numbers[0]).toBe(42);
   });
 
   test("multiple numbers and strings interleaved", () => {
@@ -67,8 +81,14 @@ describe("BytecodeBuilder", () => {
     builder.emitOpcode(OpCode.HALT);
 
     const program = builder.build();
-    expect(program.opcodes).toEqual([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_STRING, 0, OpCode.PUSH_NUMBER, 1, OpCode.HALT]);
-    expect(program.numbers).toEqual([10, 20]);
+    const expectedOpcodes = [OpCode.PUSH_NUMBER, 0, OpCode.PUSH_STRING, 0, OpCode.PUSH_NUMBER, 1, OpCode.HALT];
+    expect(program.opcodes.length).toBe(expectedOpcodes.length);
+    for (let i = 0; i < expectedOpcodes.length; i++) {
+      expect(program.opcodes[i]).toBe(expectedOpcodes[i]);
+    }
+    expect(program.numbers.length).toBe(2);
+    expect(program.numbers[0]).toBe(10);
+    expect(program.numbers[1]).toBe(20);
     expect(program.strings).toEqual(["foo"]);
   });
 
