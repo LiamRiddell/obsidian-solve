@@ -2,7 +2,7 @@ import { describe, expect, test } from "@jest/globals";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { sharedOpRegistry, OpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { ValueType, enableValueArena, disableValueArena, numberValue, datetimeValue } from "@solve-js/vm/Value";
+import { Value, ValueType, enableValueArena, disableValueArena, numberValue, bigIntValue, uomValue, vectorValue, percentageValue, datetimeValue, stringValue } from "@solve-js/vm/Value";
 import type { VM } from "@solve-js/vm/OpRegistry";
 
 function bc(
@@ -20,6 +20,10 @@ function bc(
 /** Helper to create a fresh VM */
 function freshVM(maxStackDepth = 200, maxInstructions = 50000): VM {
   return createVM(sharedOpRegistry, maxStackDepth, maxInstructions);
+}
+
+function pushValues(vm: VM, ...values: Value[]): void {
+  for (const v of values) vm.push(v);
 }
 
 describe("VM — Stack operations", () => {
@@ -123,6 +127,161 @@ describe("VM — Arithmetic", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.MOD, OpCode.HALT], [10, -3]), vm);
     expect(result!.toNumber()).toBeCloseTo(10 % -3);
+  });
+});
+
+describe("VM — binaryOp fallback paths", () => {
+  // These tests exercise the binaryOp() fallback in ADD/SUB/MUL/DIV/MOD.
+  // The inlined numeric fast path (both operands Number) handles ~90%+ of
+  // arithmetic. When one or both operands is a non-Number type (Vector, BigInt,
+  // UoM, String), execution falls through to binaryOp() for type-aware dispatch.
+  // These tests guard against regressions where the inlined path accidentally
+  // excludes valid operand type combinations.
+
+  // ── ADD: mixed-type fallback ────────────────────────────────────────
+
+  test("ADD Number + Vector (vector scaling)", () => {
+    const vm = freshVM();
+    pushValues(vm, numberValue(10), vectorValue([1, 2]));
+    // Stack: [Number(10), Vector[1,2]]; ADD pops r=Vector, l=Number
+    const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
+    // binaryOp: l=Number, r=Vector → rv.map(v => op(lv, v)) → [10+1, 10+2]
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([11, 12]);
+  });
+
+  test("ADD Vector + Number (vector scaling)", () => {
+    const vm = freshVM();
+    pushValues(vm, vectorValue([1, 2]), numberValue(10));
+    // Stack: [Vector[1,2], Number(10)]; ADD pops r=Number, l=Vector
+    const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
+    // binaryOp: l=Vector, r=Number → lv.map(v => op(v, rv)) → [1+10, 2+10]
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([11, 12]);
+  });
+
+  test("ADD BigInt + Number", () => {
+    const vm = freshVM();
+    pushValues(vm, bigIntValue(BigInt(100)), numberValue(50));
+    const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.BigInt);
+    expect(result!.value).toEqual(BigInt(150));
+  });
+
+  test("ADD Number + BigInt", () => {
+    const vm = freshVM();
+    pushValues(vm, numberValue(50), bigIntValue(BigInt(100)));
+    const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.BigInt);
+    expect(result!.value).toEqual(BigInt(150));
+  });
+
+  test("ADD Number + UoM", () => {
+    const vm = freshVM();
+    pushValues(vm, numberValue(75), uomValue(5, "m"));
+    const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.Uom);
+    expect(result!.toNumber()).toBe(80);
+    expect(result!.unit).toBe("m");
+  });
+
+  test("ADD Number + String (falls through to numeric conversion)", () => {
+    const vm = freshVM();
+    // PUSH_STRING r, PUSH_NUMBER l — stack bottom to top: [Number, String]
+    // ADD pops: r=String("5"), l=Number(10)
+    pushValues(vm, numberValue(10), stringValue("5"));
+    const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
+    // binaryOp final fallback: both toNumber() → 10 + 5 = 15
+    expect(result!.type).toBe(ValueType.Number);
+    expect(result!.toNumber()).toBe(15);
+  });
+
+  // ── SUB: mixed-type fallback ────────────────────────────────────────
+
+  test("SUB BigInt - Number", () => {
+    const vm = freshVM();
+    pushValues(vm, bigIntValue(BigInt(100)), numberValue(30));
+    const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.BigInt);
+    expect(result!.value).toEqual(BigInt(70));
+  });
+
+  test("SUB Vector - Number", () => {
+    const vm = freshVM();
+    pushValues(vm, vectorValue([10, 20]), numberValue(3));
+    const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([7, 17]);
+  });
+
+  test("SUB Number - Vector", () => {
+    const vm = freshVM();
+    pushValues(vm, numberValue(10), vectorValue([1, 2]));
+    const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([9, 8]);
+  });
+
+  // ── MUL: mixed-type fallback ────────────────────────────────────────
+
+  test("MUL BigInt * Number", () => {
+    const vm = freshVM();
+    pushValues(vm, bigIntValue(BigInt(10)), numberValue(3));
+    const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.BigInt);
+    expect(result!.value).toEqual(BigInt(30));
+  });
+
+  test("MUL Vector * Number", () => {
+    const vm = freshVM();
+    pushValues(vm, vectorValue([2, 3]), numberValue(4));
+    const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([8, 12]);
+  });
+
+  test("MUL Number * Vector", () => {
+    const vm = freshVM();
+    pushValues(vm, numberValue(4), vectorValue([2, 3]));
+    const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([8, 12]);
+  });
+
+  // ── DIV/MOD: mixed-type fallback (always go through binaryOp) ──────
+
+  test("DIV Vector / Number", () => {
+    const vm = freshVM();
+    pushValues(vm, vectorValue([10, 20]), numberValue(2));
+    const result = executeBytecode(bc([OpCode.DIV, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([5, 10]);
+  });
+
+  test("MOD BigInt % Number", () => {
+    const vm = freshVM();
+    pushValues(vm, bigIntValue(BigInt(10)), numberValue(3));
+    const result = executeBytecode(bc([OpCode.MOD, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.BigInt);
+    expect(result!.value).toEqual(BigInt(1));
+  });
+
+  // ── VEC_ADD/VEC_SUB: always delegate to binaryOp (no inlined fast path) ─
+
+  test("VEC_ADD Vector + Number", () => {
+    const vm = freshVM();
+    pushValues(vm, vectorValue([5, 10]), numberValue(3));
+    const result = executeBytecode(bc([OpCode.VEC_ADD, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([8, 13]);
+  });
+
+  test("VEC_SUB Vector - Number", () => {
+    const vm = freshVM();
+    pushValues(vm, vectorValue([5, 10]), numberValue(3));
+    const result = executeBytecode(bc([OpCode.VEC_SUB, OpCode.HALT]), vm);
+    expect(result!.type).toBe(ValueType.Vector2);
+    expect(result!.value).toEqual([2, 7]);
   });
 });
 
