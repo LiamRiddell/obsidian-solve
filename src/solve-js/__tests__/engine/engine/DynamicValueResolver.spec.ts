@@ -1,14 +1,11 @@
 import { describe, expect, test } from "@jest/globals";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
-import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { DynamicValueResolver } from "@solve-js/engine/DynamicValueResolver";
-import { numberValue } from "@solve-js/vm/Value";
 import type { IDynamicDataSource } from "@solve-js/engine/IDynamicDataSource";
 
 describe("DynamicValueResolver", () => {
   test("enqueue and flush batch merges affected lines", () => {
     const dag = new DependencyGraph();
-    const cache = new LineCache();
 
     dag.registerLine(10, ["x"], ["y"]);
     dag.registerLine(20, ["x"], []);
@@ -16,7 +13,7 @@ describe("DynamicValueResolver", () => {
 
     let batchLines: Set<number> = new Set();
     const resolver = new DynamicValueResolver(
-      dag, cache,
+      dag,
       (lines) => { batchLines = lines; },
       10
     );
@@ -31,12 +28,11 @@ describe("DynamicValueResolver", () => {
 
   test("multiple updates to same variable merged into one batch", () => {
     const dag = new DependencyGraph();
-    const cache = new LineCache();
     dag.registerLine(10, ["x"], []);
 
     let callCount = 0;
     const resolver = new DynamicValueResolver(
-      dag, cache,
+      dag,
       () => { callCount++; },
       20
     );
@@ -51,7 +47,6 @@ describe("DynamicValueResolver", () => {
 
   test("pause prevents fetch during polling", () => {
     const dag = new DependencyGraph();
-    const cache = new LineCache();
 
     let fetchCount = 0;
     const source: IDynamicDataSource = {
@@ -60,7 +55,7 @@ describe("DynamicValueResolver", () => {
       async fetch() { fetchCount++; return 42; },
     };
 
-    const resolver = new DynamicValueResolver(dag, cache, () => {}, 50);
+    const resolver = new DynamicValueResolver(dag, () => {}, 50);
     resolver.registerSource(source);
     resolver.pause();
     resolver.subscribe("sym", "test");
@@ -76,13 +71,11 @@ describe("DynamicValueResolver", () => {
 
   test("flushBatch invokes callback with merged affected lines", () => {
     const dag = new DependencyGraph();
-    const cache = new LineCache();
 
-    cache.set(10, new LineCacheEntry(numberValue(0), { opcodes: [], numbers: [], strings: [] }, ["x"], null));
     dag.registerLine(10, ["x"], []);
 
     let receivedLines: Set<number> = new Set();
-    const resolver = new DynamicValueResolver(dag, cache, (lines) => { receivedLines = lines; }, 10);
+    const resolver = new DynamicValueResolver(dag, (lines) => { receivedLines = lines; }, 10);
     resolver["enqueueUpdate"]("x", 99);
     resolver.flushBatch();
 
@@ -92,8 +85,7 @@ describe("DynamicValueResolver", () => {
 
   test("clear stops all timers and resets state", () => {
     const dag = new DependencyGraph();
-    const cache = new LineCache();
-    const resolver = new DynamicValueResolver(dag, cache, () => {}, 10);
+    const resolver = new DynamicValueResolver(dag, () => {}, 10);
 
     const source: IDynamicDataSource = {
       name: "test",

@@ -621,6 +621,11 @@ Per `TESTING_GUIDELINES.md` targets:
 27. ✅ **Remove Phase3_cacheConsolidation.spec.ts** — All tests were for removed features (epoch, getOrCompute). Rewrote 12 LineCache tests for simplified API. Updated Phase6/Issue78/pipeline benchmark tests.
 28. ✅ **1,476 tests pass, 0 regressions, typecheck clean**
 
+### ✅ Phase 1.6: Remove DynamicValueResolver's vestigial LineCache dependency
+
+29. ✅ **Remove LineCache from DynamicValueResolver** — Removed `import { LineCache }` and `private lineCache: LineCache` constructor param. Removed `this.lineCache.markDirty(line)` loop in `flushBatch()` (already a no-op since Phase 1.5). Updated all 5 test cases to remove `new LineCache()` and `cache` params. Removed unused `LineCacheEntry`, `numberValue` imports from test.
+30. ✅ **5 DynamicValueResolver tests pass, 1,542 total pass, 0 regressions, typecheck clean**
+
 ---
 
 ## Questions for User

@@ -1,6 +1,5 @@
 import { IDynamicDataSource } from "@solve-js/engine/IDynamicDataSource";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
-import { LineCache } from "@solve-js/cache/LineCache";
 
 export interface PendingUpdate {
   variable: string;
@@ -16,7 +15,6 @@ export class DynamicValueResolver {
 
   constructor(
     private dag: DependencyGraph,
-    private lineCache: LineCache,
     private onBatch: (lines: Set<number>) => void,
     private batchIntervalMs = 100
   ) {}
@@ -86,10 +84,6 @@ export class DynamicValueResolver {
       }
     }
     this.pendingUpdates = [];
-
-    for (const line of mergedLines) {
-      this.lineCache.markDirty(line);
-    }
 
     this.onBatch(mergedLines);
   }
