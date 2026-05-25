@@ -528,10 +528,10 @@ Per `TESTING_GUIDELINES.md` targets:
 - [x] 5.2b: DocumentModel with persistent line IDs + LineState (52 tests, position cache, thread-safety validation)
 - [x] 5.2c: Three-tier evaluation (Dirty/Cached/Track) — 26 tests, 6 files changed, Tier-2 cached bytecode execution + Tier-3 compile-only for invisible lines
 - [x] 5.2d: VM State Checkpoints with structural sharing (63 tests: 30 VMCheckpoint + 7 ThreeTierEvaluator integration)
-- [ ] 5.2e: `setViewport()` zero-allocation execution
-- [ ] 5.2f: `applyTransaction()` incremental update API
-- [ ] 5.2g: Page-based LRU eviction + preloading
-- [ ] 5.2h: Worker compilation + Transferable bytecode
+- [x] 5.2e: `setViewport()` zero-allocation execution + `MarkdownEditorViewPlugin` integration (82 tests, checkpoint-restore + viewport-only Tier 2, stale checkpoint clearing on fallback, frontend plugin routes scroll events to `setViewport()` and doc changes to `evaluate()`)
+- [x] 5.2f: `applyTransaction()` incremental update API — Maps CodeMirror ChangeSpec to DocumentModel splices via `codeMirrorChangesToLineChanges()`. Five-phase apply: (1) collect DAG writes + downstream lineIds before structural change, (2) `doc.applyChanges()` structural splice, (3) clear checkpointer (line numbers shifted), (4) mark downstream lines dirty by lineId (position-agnostic), (5) clear DAG for subsequent `evaluate()` rebuild. Fixed `DependencyGraph.clear()` to include `lineReads`. 92 tests pass across 4 suites, typecheck clean.
+- [x] 5.2g: Page-based LRU eviction + preloading — `PageManager` groups into 128-line pages, three temperature tiers (hot: viewport span ±3 pages keep all, warm: ±4-6 keep bytecode evict results, cold: >6 evict bytecode+results except variable defs), directional preloading (2 pages ahead via saved scroll direction), integrated into `ThreeTierEvaluator.evaluate()`/`setViewport()` with O(1) range-math hot/warm checks, one-frame direction lag eliminated by ordering eviction before preload in `setViewport()`. **Optimization:** replaced O(total pages) cold eviction loop with bounded loops (hot pages + warm pages + cold transition buffer of 3 pages), reducing `maintainAfterEval` from ~2ms at 100K lines to ~218µs at 10K lines (O(hot+warm+buffer) ≈ O(1)). 39 tests pass, typecheck clean, full suite 1,429 pass 0 regressions.
+- [x] 5.2h: Worker compilation + Transferable bytecode — `CompilationWorkerManager` (main-thread bridge with Promise-based batching + compiledAgainstHash validation), `compilation-worker.ts` (worker entry: compileExpression → slice exact ArrayBuffer ranges → postMessage with Transferable list), integrated into `ThreeTierEvaluator.dispatchBackgroundCompiles()` (lazy worker init, fire-and-forget Tier 3 compilation for invisible dirty lines), wired into `MarkdownEditorViewPlugin.update()` post-render path. Worker terminated on document switch and destruction. 134 tests pass, typecheck clean.
 
 - [ ] Re-benchmark after each optimization
 

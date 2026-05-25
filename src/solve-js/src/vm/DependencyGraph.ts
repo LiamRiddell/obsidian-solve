@@ -115,6 +115,7 @@ removeLine(lineNumber: number): void {
     this.consumers.clear();
     this.dependencies.clear();
     this.writes.clear();
+    this.lineReads.clear();
     this.dataSourceDependencies.clear();
     this.dataSourceConsumers.clear();
   }

@@ -1,6 +1,7 @@
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import {
 	DocumentModel,
+	LineChange,
 	LineState,
 	ViewportRange,
 } from "@solve-js/engine/DocumentModel";
@@ -8,6 +9,8 @@ import { Value } from "@solve-js/vm/Value";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { isEmptyLine, findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { CompilationWorkerManager, type CompileRequestItem } from "@solve-js/engine/CompilationWorkerManager";
+import { PageManager } from "@solve-js/engine/PageManager";
 
 // ── EvalTier (diagnostic enum) ──────────────────────────────────────────
 
@@ -68,16 +71,20 @@ export interface EvalResult {
  * the VM already contains all variables from preceding Tier-1 lines.
  *
  * ── Thread safety ────────────────────────────────────────────────────
- * The evaluator runs synchronously on the main thread. Tier 3 compilation
- * is synchronous in this phase; Phase 5.2h will move it to a worker.
- * The `isBytecodeValid()` guard on DocumentModel allows worker-produced
- * bytecode to be safely applied by checking the text hash before use.
+ * Tier 1 (visible+dirty) compilation runs synchronously on the main thread
+ * for immediate rendering. Tier 3 (invisible+dirty) compilation can be
+ * dispatched to a Web Worker via `dispatchBackgroundCompiles()`. Worker-
+ * compiled bytecode is stored in the DocumentModel and validated via
+ * `isBytecodeValid()` to ensure the line text hasn't changed between
+ * dispatch and response.
  */
 export class ThreeTierEvaluator {
 	private doc: DocumentModel;
 	private engine: ExpressionEngine;
 	private dag: DependencyGraph;
 	private checkpointer: VMCheckpointer | null;
+	private compilationWorker: CompilationWorkerManager | null = null;
+	private pageManager: PageManager;
 
 	/**
 	 * @param doc The persistent document model.
@@ -95,6 +102,7 @@ export class ThreeTierEvaluator {
 		this.engine = engine;
 		this.dag = engine.getDag();
 		this.checkpointer = checkpointer ?? null;
+		this.pageManager = new PageManager();
 	}
 
 	/**
@@ -140,6 +148,10 @@ export class ThreeTierEvaluator {
 			}
 		}
 
+		// ── Phase 5.2g: Page-based LRU eviction ──────────────────────
+		// Evict bytecode/results from cold/warm pages to bound memory.
+		this.pageManager.maintainAfterEval(viewport, this.doc);
+
 		return { lines, resultMap, tierCounts };
 	}
 
@@ -152,6 +164,10 @@ export class ThreeTierEvaluator {
 	 *
 	 * This is intended to be called after evaluate() so visible lines are
 	 * rendered first, then background work fills in the dependency graph.
+	 *
+	 * **Phase 5.2h:** This synchronous method is retained for environments
+	 * without Worker support. Prefer `dispatchBackgroundCompiles()` which
+	 * offloads compilation to a Web Worker with Transferable bytecode.
 	 */
 	backgroundCompile(viewport: ViewportRange): EvalLineResult[] {
 		const results: EvalLineResult[] = [];
@@ -179,14 +195,275 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
+	 * Dispatch background compilation to a Web Worker (Phase 5.2h).
+	 *
+	 * Collects invisible dirty lines beyond the viewport that need compilation,
+	 * sends them to the compilation worker, and asynchronously stores the
+	 * transferred bytecode in the DocumentModel when the worker responds.
+	 *
+	 * This is the non-blocking alternative to `backgroundCompile()`. The worker
+	 * compiles expressions with Transferable ArrayBuffers (zero-copy postMessage),
+	 * so bytecode appears on the main thread without serialization overhead.
+	 *
+	 * Lines that already have cached bytecode (from a previous worker pass or
+	 * synchronous compile) are skipped — only truly uncompiled dirty lines are
+	 * sent to the worker.
+	 *
+	 * **Usage:** Call after `evaluate()` so visible lines render first, then
+	 * this fills the bytecode cache for future Tier-2 scrolls.
+	 *
+	 * @param viewport The current visible range. Lines beyond viewport.endLine
+	 * that are dirty and don't have bytecode are dispatched.
+	 */
+	dispatchBackgroundCompiles(viewport: ViewportRange): void {
+		// Collect invisible dirty lines that need compilation
+		const items = this.collectInvisibleCompileTargets(viewport);
+		if (items.length === 0) return;
+
+		// Lazy-init the worker (only if there are items to compile)
+		if (!this.compilationWorker) {
+			this.compilationWorker = new CompilationWorkerManager();
+		}
+
+		// Fire-and-forget: send to worker, store results when they arrive
+		this.compilationWorker.compileBatch(items).then((results) => {
+			this.compilationWorker!.storeResults(results, this.doc);
+		}).catch((_err) => {
+			// Worker failure is non-fatal — next evaluate() will compile
+			// these expressions synchronously.
+		});
+	}
+
+	/**
+	 * Terminate the compilation worker if active.
+	 * Call this when the evaluator is no longer needed to clean up resources.
+	 */
+	terminateWorker(): void {
+		if (this.compilationWorker) {
+			this.compilationWorker.terminate();
+			this.compilationWorker = null;
+		}
+	}
+
+	/**
+	 * Get the DocumentModel (read-only access for decoration building).
+	 */
+	getDoc(): DocumentModel {
+		return this.doc;
+	}
+
+	/**
 	 * Evaluate all dirty lines in the document, regardless of viewport.
 	 * Used for full re-evaluation after plugin register/unregister.
 	 */
 	evaluateAll(): EvalResult {
-		return this.evaluate({ startLine: 1, endLine: this.doc.lineCount });
+		const viewport = { startLine: 1, endLine: this.doc.lineCount };
+		const result = this.evaluate(viewport);
+		// evaluate() already calls maintainAfterEval internally
+		return result;
+	}
+
+	/**
+	 * Zero-allocation viewport evaluation — the Phase 5.2e "holy grail."
+	 *
+	 * **Key insight:** When the user scrolls (viewport-only change, no edits),
+	 * we don't need to re-evaluate from line 1. Instead:
+	 *
+	 * 1. Restore the VM to just before the viewport via the nearest checkpoint.
+	 * 2. Evaluate ONLY the visible lines (Tier 2 for clean cached, Tier 1 for dirty).
+	 * 3. Lines before the viewport are completely skipped — their state lives in
+	 *    the VM checkpointer's prototypal chain.
+	 *
+	 * **Correctness guard:** If any line before the viewport is dirty (e.g., the
+	 * user edited a variable def that hasn't been re-evaluated yet), we clear
+	 * stale checkpoints and fall back to `evaluate()` which processes from line 1
+	 * and rebuilds fresh checkpoints. This guarantees that stale checkpoints are
+	 * never used as restoration targets.
+	 *
+	 * **Performance:** O(visible lines) instead of O(document length). Target:
+	 * < 1ms for a typical ~30-line viewport, independent of document size.
+	 *
+	 * @param viewport The visible line range.
+	 * @returns Results for visible lines only. Lines before the viewport are
+	 * not included in `lines[]` or `resultMap`.
+	 */
+	setViewport(viewport: ViewportRange): EvalResult {
+		// ── Correctness guard: dirty lines before viewport invalidate checkpoints ──
+		if (viewport.startLine > 1 && this.hasDirtyLinesBefore(viewport.startLine)) {
+			// Clear stale checkpoints — evaluate() will rebuild them from line 1.
+			this.checkpointer?.clear();
+			return this.evaluate(viewport);
+		}
+
+		// ── Phase 5.2g: Page-based LRU eviction (MUST run before preload) ──
+		// maintainAfterEval captures the scroll direction and updates lastViewportStart
+		// BEFORE preloadNextPages reads the direction for preloading.
+		this.pageManager.maintainAfterEval(viewport, this.doc);
+
+		// ── Phase 5.2g: Detect scroll direction & preload ───────────
+		this.preloadNextPages(viewport);
+
+		// ── Restore VM state from nearest checkpoint before the viewport ──
+		// This sets all variables that were defined at or before startLine-1.
+		this.restoreTo(viewport.startLine - 1);
+
+		// ── Evaluate only visible lines ──
+		const result = this.collectEvalResults(viewport.startLine, viewport.endLine);
+
+		return result;
+	}
+
+	/**
+	 * Apply incremental line-level changes to the document model.
+	 *
+	 * **Phase 5.2f:** Replaces the O(N) `setDocument()` + full re-evaluation
+	 * with O(changed) incremental updates. Key benefits:
+	 *
+	 * 1. Unchanged lines retain their persistent lineIds → bytecode survives
+	 * 2. Only changed + DAG-downstream lines are marked dirty → Tier 1 re-evaluation
+	 * 3. Clean lines in viewport use Tier 2 (cached bytecode execution)
+	 * 4. Clean lines outside viewport are skipped entirely
+	 *
+	 * The DAG is fully cleared after propagation: shifted lines would have
+	 * stale entries keyed by old line numbers, so the DAG is rebuilt from
+	 * scratch during the subsequent `evaluate()` call.
+	 *
+	 * **Caller should follow up with `evaluate(viewport)`** to re-evaluate
+	 * dirty lines from line 1 and rebuild the DAG + checkpoints.
+	 *
+	 * @param changes Line-level changes to apply. Must be non-overlapping.
+	 * @returns Metadata about the applied changes.
+	 */
+	applyTransaction(changes: LineChange[]): {
+		inserted: number[];
+		removed: number[];
+	} {
+		// ── Phase 1: Collect DAG writes + downstream lineIds ───────────
+		// Must happen BEFORE applyChanges() because line numbers are still
+		// valid at this point. We collect writes from deleted lines and
+		// resolve downstream consumers to lineIds (not line numbers) so
+		// they survive the position shifts that applyChanges() causes.
+		const allWrites = new Set<string>();
+
+		for (const change of changes) {
+			for (let i = 0; i < change.deleteCount; i++) {
+				const lineNum = change.startLine + i;
+				const writes = this.dag.getWrites(lineNum);
+				for (const w of writes) {
+					allWrites.add(w);
+				}
+				// Clean up DAG references for this line
+				this.dag.removeLine(lineNum);
+			}
+		}
+
+		// Resolve downstream consumers to persistent lineIds BEFORE the
+		// structural change shifts line numbers. After applyChanges(),
+		// we mark these lineIds dirty — their positions don't matter.
+		const downstreamLineIds = new Set<number>();
+		for (const writeVar of allWrites) {
+			const affected = this.dag.getAffectedLines(writeVar);
+			for (const lineNum of affected) {
+				const state = this.doc.getLineAt(lineNum);
+				if (state) {
+					downstreamLineIds.add(state.lineId);
+				}
+			}
+		}
+
+		// ── Phase 2: Apply structural changes to DocumentModel ─────────
+		const result = this.doc.applyChanges(changes);
+
+		// ── Phase 3: Clear checkpointer (line numbers shifted) ─────────
+		this.checkpointer?.clear();
+
+		// ── Phase 4: Mark DAG-downstream lines dirty by lineId ─────────
+		// Using lineId instead of line number is position-agnostic:
+		// lines that shifted due to insertions/deletions above them are
+		// still correctly targeted. Lines that were deleted (lineId no
+		// longer in the doc) are silently ignored by markDirty().
+		for (const lineId of downstreamLineIds) {
+			this.doc.markDirty(lineId);
+		}
+
+		// ── Phase 5: Clear DAG to avoid phantom entries ────────────────
+		// Entries keyed by old line numbers are stale after structural
+		// changes. Rather than updating shifted entries, we clear the DAG
+		// and let the subsequent evaluate() call rebuild it from scratch.
+		this.dag.clear();
+
+		return {
+			inserted: result.inserted,
+			removed: result.removed,
+		};
 	}
 
 	// ── Private helpers ─────────────────────────────────────────────────
+
+	/**
+	 * Collect evaluation results for a contiguous range of lines.
+	 *
+	 * Used by both `evaluate()` (startLine=1) and `setViewport()` (any start).
+	 * All lines in the range are treated as in-viewport (visible) — callers that
+	 * need the invisible/dirty → Tier 3 handling should use `evaluate()` instead.
+	 *
+	 * @param startLine First line to evaluate (1-based, inclusive).
+	 * @param endLine Last line to evaluate (1-based, inclusive). Clamped to docEnd.
+	 */
+	private collectEvalResults(startLine: number, endLine: number): EvalResult {
+		const lines: EvalLineResult[] = [];
+		const resultMap = new Map<number, Value>();
+		const tierCounts = { tier1: 0, tier2: 0, tier3: 0, skipped: 0 };
+
+		const docEnd = this.doc.lineCount;
+		const evalEnd = Math.min(endLine, docEnd);
+
+		for (let pos = startLine; pos <= evalEnd; pos++) {
+			const state = this.doc.getLineAt(pos);
+			if (!state) continue;
+
+			// All processed lines are in-viewport for setViewport, or conditionally
+			// in-viewport for evaluate (handled by caller). We pass `true` here
+			// because evaluateSingleLine's `inViewport` param controls Tier 1 vs
+			// Tier 3 dispatch; callers must manage this distinction externally.
+			//
+			// evaluate() handles this by passing `inViewport` per-line; it loops
+			// directly rather than using this helper for that reason.
+			const lineResult = this.evaluateSingleLine(state, pos, true);
+			lines.push(lineResult);
+
+			if (lineResult.tier === EvalTier.Tier1) tierCounts.tier1++;
+			else if (lineResult.tier === EvalTier.Tier2) tierCounts.tier2++;
+			else if (lineResult.tier === EvalTier.Tier3) tierCounts.tier3++;
+			else tierCounts.skipped++;
+
+			if (lineResult.result) {
+				resultMap.set(pos, lineResult.result);
+			}
+		}
+
+		return { lines, resultMap, tierCounts };
+	}
+
+	/**
+	 * Check whether any line before `position` (1-based, exclusive) is dirty.
+	 *
+	 * Used by `setViewport()` to decide whether to fall back to `evaluate()`:
+	 * if there are dirty lines before the viewport, checkpoint state may be
+	 * stale and we need to reprocess from line 1.
+	 *
+	 * Scans from line 1 to position-1. For typical Obsidian documents
+	 * (< 5000 lines), this linear scan is negligible. The method returns
+	 * early on first dirty line found.
+	 */
+	private hasDirtyLinesBefore(position: number): boolean {
+		const end = Math.min(position - 1, this.doc.lineCount);
+		for (let pos = 1; pos <= end; pos++) {
+			const state = this.doc.getLineAt(pos);
+			if (state?.dirty) return true;
+		}
+		return false;
+	}
 
 	/**
 	 * Evaluate a single line using the appropriate tier.
@@ -432,6 +709,82 @@ export class ThreeTierEvaluator {
 	 */
 	getCheckpointer(): VMCheckpointer | null {
 		return this.checkpointer;
+	}
+
+	/**
+	 * Get the PageManager (Phase 5.2g).
+	 * Exposed for testing.
+	 */
+	getPageManager(): PageManager {
+		return this.pageManager;
+	}
+
+	// ── Phase 5.2g: Directional preloading ──────────────────────────
+
+	/**
+	 * Preload the next 1–2 pages in the current scroll direction.
+	 *
+	 * Called during `setViewport()` (scroll-only path). Collects dirty
+	 * uncompiled lines in pages just beyond the viewport and dispatches
+	 * them to the background compilation worker so bytecode is ready
+	 * before the user scrolls those lines into view.
+	 */
+	private preloadNextPages(viewport: ViewportRange): void {
+		const targets = this.pageManager.getPreloadTargets(viewport, this.doc);
+		if (targets.length === 0) return;
+
+		// Lazy-init worker if needed
+		if (!this.compilationWorker) {
+			this.compilationWorker = new CompilationWorkerManager();
+		}
+
+		// Fire-and-forget: worker compiles, stores bytecode on response
+		this.compilationWorker.compileBatch(targets).then((results) => {
+			this.compilationWorker!.storeResults(results, this.doc);
+		}).catch((_err) => {
+			// Non-fatal — next evaluate() will compile synchronously
+		});
+	}
+
+	/**
+	 * Collect invisible dirty lines that need background compilation.
+	 *
+	 * Iterates lines beyond `viewport.endLine`, filtering for:
+	 * - Dirty lines (need re-compilation)
+	 * - Non-empty, non-markdown lines
+	 * - No existing bytecode (skip already-compiled Tier 3 lines)
+	 *
+	 * Returns CompileRequestItem[] suitable for CompilationWorkerManager.
+	 */
+	private collectInvisibleCompileTargets(viewport: ViewportRange): CompileRequestItem[] {
+		const items: CompileRequestItem[] = [];
+		const docEnd = this.doc.lineCount;
+		const startPos = viewport.endLine + 1;
+
+		for (let pos = startPos; pos <= docEnd; pos++) {
+			const state = this.doc.getLineAt(pos);
+			if (!state) continue;
+
+			// Skip clean lines
+			if (!state.dirty) continue;
+
+			// Skip already-compiled lines
+			if (state.bytecode !== null && !state.isVariableDef) continue;
+
+			// Skip empty/markdown-only lines
+			if (state.isEmpty || isEmptyLine(state.text)) continue;
+
+			const expression = this.extractExpression(state);
+			if (!expression) continue;
+
+			items.push({
+				lineId: state.lineId,
+				expression,
+				textHash: state.textHash,
+			});
+		}
+
+		return items;
 	}
 
 	/**

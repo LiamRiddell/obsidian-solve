@@ -654,3 +654,351 @@ describe("ThreeTierEvaluator — VMCheckpointer Integration", () => {
 		expect(checkpointer.lookupVariable("v")?.toNumber()).toBe(5);
 	});
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 5.2e: setViewport() Zero-Allocation Execution
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
+	// ── Core: Pure scrolling uses Tier 2 ──────────────────────────────
+
+	test("pure scroll: all visible lines use Tier 2 after initial evaluateAll", () => {
+		const doc = createDoc([
+			":x = 10",
+			"x + 5",
+			"x * 2",
+			"x + 20",
+			"x - 3",
+			":y = 100",
+			"y / 2",
+			"y + x",
+			"50 * 3",
+			"200 / 4",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		// Full initial evaluation — populates bytecode cache + checkpoints
+		evaluator.evaluateAll();
+		expect(checkpointer.count).toBe(2); // :x and :y
+
+		// Scroll to lines 4-6 — all clean + cached → Tier 2
+		const result = evaluator.setViewport({ startLine: 4, endLine: 6 });
+
+		expect(result.tierCounts.tier2).toBe(3);
+		expect(result.tierCounts.tier1).toBe(0);
+		expect(result.resultMap.get(4)!.toNumber()).toBe(30);   // x + 20
+		expect(result.resultMap.get(5)!.toNumber()).toBe(7);    // x - 3
+		expect(result.resultMap.get(6)!.toNumber()).toBe(100);  // :y = 100
+		expect(result.lines.length).toBe(3); // only visible lines
+	});
+
+	test("pure scroll: only visible lines in result (no pre-viewport lines)", () => {
+		const doc = createDoc([
+			":aa = 1",
+			":bb = 2",
+			":cc = 3",
+			"aa + bb + cc",
+			"aa * bb * cc",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		// Scroll to line 5 only — result should ONLY contain line 5
+		const result = evaluator.setViewport({ startLine: 5, endLine: 5 });
+
+		expect(result.lines.length).toBe(1);
+		expect(result.lines[0].lineNumber).toBe(5);
+		expect(result.resultMap.size).toBe(1);
+		expect(result.resultMap.has(5)).toBe(true);
+		expect(result.resultMap.has(4)).toBe(false);
+	});
+
+	test("pure scroll: VM has correct variable state from checkpoint restore", () => {
+		const doc = createDoc([
+			":aa = 5",
+			":bb = aa + 10",
+			":cc = bb * 3",
+			"aa + bb + cc",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		// Scroll to line 4 — should have aa=5, bb=15, cc=45 from checkpoints
+		const result = evaluator.setViewport({ startLine: 4, endLine: 4 });
+
+		expect(result.tierCounts.tier2).toBe(1);
+		expect(result.resultMap.get(4)!.toNumber()).toBe(65); // 5 + 15 + 45
+	});
+
+	// ── Dirty-line fallback ──────────────────────────────────────────
+
+	test("dirty before viewport: falls back to evaluate() (full re-eval from line 1)", () => {
+		const doc = createDoc([
+			":xx = 5",
+			"xx + 3",
+			"xx * 2",
+			"xx + 10",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		// Initial full eval
+		evaluator.evaluateAll();
+
+		// Edit line 1 (variable def) to change xx
+		doc.editLine(1, ":xx = 20");
+		// Line 1 is now dirty, lines 2-4 depend on xx
+
+		// setViewport at lines 3-4 — line 1 is dirty before viewport
+		const result = evaluator.setViewport({ startLine: 3, endLine: 4 });
+
+		// Should have fallen back to evaluate(), which processes from line 1.
+		// Line 1: dirty + invisible → Tier 3 (variable def, executed)
+		// Line 2: dirty + invisible → Tier 3 (non-var-def, compiled only)
+		// Lines 3-4: dirty + visible → Tier 1
+		expect(result.tierCounts.tier3).toBeGreaterThanOrEqual(1); // line 1 or 2
+		expect(result.resultMap.get(3)!.toNumber()).toBe(40); // xx*2 = 20*2
+		expect(result.resultMap.get(4)!.toNumber()).toBe(30); // xx+10 = 20+10
+	});
+
+	test("no dirty before viewport: uses optimized path (no fallback)", () => {
+		const doc = createDoc([
+			":x = 5",
+			"x + 3",
+			"x * 2",
+			"x + 10",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		// All lines clean — setViewport should NOT fall back
+		const result = evaluator.setViewport({ startLine: 2, endLine: 3 });
+
+		// Should use optimized path: only Tier 2 (no Tier 1 or Tier 3)
+		expect(result.tierCounts.tier2).toBe(2);
+		expect(result.tierCounts.tier1).toBe(0);
+		expect(result.tierCounts.tier3).toBe(0);
+	});
+
+	test("edit at a line AFTER viewport: does NOT trigger fallback", () => {
+		const doc = createDoc([
+			":x = 5",
+			"x + 3",
+			"x * 2",
+			"x + 10",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		// Edit line 4 (after viewport) — viewport is lines 1-2
+		doc.editLine(4, "x + 100");
+
+		// setViewport at lines 1-2 — dirty is at line 4, AFTER the viewport
+		// hasDirtyLinesBefore(1) = false (startLine=1, no lines before)
+		const result = evaluator.setViewport({ startLine: 1, endLine: 2 });
+
+		// Should use optimized path: Tier 2 (no dirty before viewport)
+		expect(result.tierCounts.tier2).toBe(2);
+		expect(result.resultMap.get(1)!.toNumber()).toBe(5);
+	});
+
+	// ── Variable defs inside viewport ─────────────────────────────────
+
+	test("dirty variable def inside viewport: Tier 1 with checkpoint creation", () => {
+		const doc = createDoc([
+			":x = 5",
+			"x + 3",
+			":y = x * 4",
+			"y / 2",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		// Initial eval of lines 1-2
+		evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		// setViewport at lines 3-4 where line 3 is a dirty variable def
+		const result = evaluator.setViewport({ startLine: 3, endLine: 4 });
+
+		// Line 3 is dirty + visible → Tier 1 with checkpoint
+		expect(result.resultMap.get(3)!.toNumber()).toBe(20); // y = 5*4
+		expect(result.resultMap.get(4)!.toNumber()).toBe(10); // y/2 = 10
+		expect(checkpointer.getCheckpointAt(3)).toBeDefined();
+	});
+
+	// ── No checkpointer → still works ────────────────────────────────
+
+	test("setViewport without checkpointer: evaluates visible lines via VM state", () => {
+		const doc = createDoc([
+			":x = 5",
+			"x + 3",
+			"x * 2",
+		]);
+		const engine = createEngine();
+		// No checkpointer — VM has whatever state from prior evaluations
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		// Initial evaluateAll sets VM state
+		evaluator.evaluateAll();
+
+		// setViewport at line 3 — no checkpoint, but VM still has x=5
+		const result = evaluator.setViewport({ startLine: 3, endLine: 3 });
+
+		expect(result.tierCounts.tier2).toBe(1);
+		expect(result.resultMap.get(3)!.toNumber()).toBe(10);
+	});
+
+	// ── Edge cases ───────────────────────────────────────────────────
+
+	test("setViewport at line 1: no dirty-before check needed, no restore needed", () => {
+		const doc = createDoc([
+			":x = 42",
+			"x + 1",
+			"x + 2",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		// setViewport starting at line 1 — no lines before, so no dirty check
+		const result = evaluator.setViewport({ startLine: 1, endLine: 2 });
+
+		expect(result.tierCounts.tier2).toBe(2);
+		expect(result.resultMap.get(1)!.toNumber()).toBe(42);
+		expect(result.resultMap.get(2)!.toNumber()).toBe(43);
+	});
+
+	test("setViewport beyond document end: clamped to docEnd", () => {
+		const doc = createDoc([
+			":x = 5",
+			"x + 3",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		const result = evaluator.setViewport({ startLine: 1, endLine: 100 });
+
+		expect(result.lines.length).toBe(2); // clamped to doc line count
+	});
+
+	test("setViewport on empty document", () => {
+		const doc = createDoc([]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		const result = evaluator.setViewport({ startLine: 1, endLine: 10 });
+
+		expect(result.lines.length).toBeGreaterThanOrEqual(0);
+		expect(result.resultMap.size).toBe(0);
+	});
+
+	test("setViewport with empty/markdown lines in viewport skips them", () => {
+		const doc = createDoc([
+			":x = 5",
+			"",
+			"x + 10",
+			"# ",
+			":y = x * 2",
+		]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		// setViewport covering lines 2-4 (empty, expression, markdown-only)
+		const result = evaluator.setViewport({ startLine: 2, endLine: 4 });
+
+		// Line 2 (empty) → skipped, line 3 (x+10) → Tier 2, line 4 (# ) → skipped (bare structural marker)
+		expect(result.tierCounts.tier2).toBe(1);
+		expect(result.tierCounts.skipped).toBe(2);
+		expect(result.resultMap.get(3)!.toNumber()).toBe(15);
+	});
+
+	// ── Performance characteristic ────────────────────────────────────
+
+	test("setViewport processes fewer lines than evaluate() for non-trivial viewport", () => {
+		const lines: string[] = [];
+		for (let i = 1; i <= 20; i++) {
+			lines.push(`:v${i} = ${i * 10}`);
+		}
+		// Add consumers at the end
+		lines.push("v1 + v2");
+		lines.push("v3 + v4");
+		lines.push("v5 + v6");
+
+		const doc = createDoc(lines);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		// evaluate() processes ALL lines from 1 to endLine
+		const evalResult = evaluator.evaluate({ startLine: 21, endLine: 23 });
+		const evalLineCount = evalResult.lines.length;
+
+		// setViewport() only processes visible lines
+		const svpResult = evaluator.setViewport({ startLine: 21, endLine: 23 });
+
+		// setViewport should have fewer lines (just 3 visible vs 23 total)
+		expect(svpResult.lines.length).toBe(3);
+		expect(svpResult.lines.length).toBeLessThan(evalLineCount);
+	});
+
+	test("setViewport with inverted range (startLine > endLine): returns empty result", () => {
+		const doc = createDoc([":x = 1", ":y = 2", ":z = 3", "x + y + z"]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		const result = evaluator.setViewport({ startLine: 5, endLine: 2 });
+
+		expect(result.lines.length).toBe(0);
+		expect(result.resultMap.size).toBe(0);
+		expect(result.tierCounts.tier1).toBe(0);
+		expect(result.tierCounts.tier2).toBe(0);
+	});
+
+	test("setViewport result lines always match visible range", () => {
+		const doc = createDoc([":x = 1", ":y = 2", ":z = 3", "x + y + z"]);
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		// Scroll to different viewports and verify line count
+		const r1 = evaluator.setViewport({ startLine: 1, endLine: 1 });
+		expect(r1.lines.length).toBe(1);
+
+		const r2 = evaluator.setViewport({ startLine: 2, endLine: 4 });
+		expect(r2.lines.length).toBe(3);
+
+		const r3 = evaluator.setViewport({ startLine: 4, endLine: 4 });
+		expect(r3.lines.length).toBe(1);
+	});
+});

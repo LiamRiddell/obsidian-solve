@@ -376,6 +376,15 @@ export class DocumentModel {
 	}
 
 	/**
+	 * Mark a line as dirty (needs re-evaluation) by its 1-based position.
+	 * Convenience for callers that have line numbers instead of line IDs.
+	 */
+	markDirtyByLineNumber(lineNumber: number): void {
+		const state = this.getLineAt(lineNumber);
+		if (state) state.dirty = true;
+	}
+
+	/**
 	 * Mark a line as dirty (needs re-evaluation).
 	 */
 	markDirty(lineId: number): void {
