@@ -65,6 +65,97 @@ export class SettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		// ── Safety limits ────────────────────────────────────────────────
+		new Setting(this.containerEl).setName("Safety limits").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Max expression length")
+			.setDesc(
+				`Maximum allowed expression length in characters. Prevents runaway expressions. Default is ${DEFAULT_SETTINGS.engine.validation.maxExpressionLength}. Changes take effect after restart.`
+			)
+			.addText((text) =>
+				text
+					.setValue(String(this.plugin.settings.engine.maxExpressionLength))
+					.onChange(async (value) => {
+						const num = parseInt(value, 10);
+						if (!isNaN(num) && num > 0) {
+							this.plugin.settings.engine.maxExpressionLength = num;
+							await this.plugin.saveSettings();
+						}
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Max expression complexity")
+			.setDesc(
+				`Maximum expression complexity score (token count + functionCalls×5 + nesting×10). Protects against deeply nested expressions. Default is ${DEFAULT_SETTINGS.engine.validation.maxComplexity}. Changes take effect after restart.`
+			)
+			.addText((text) =>
+				text
+					.setValue(String(this.plugin.settings.engine.maxComplexity))
+					.onChange(async (value) => {
+						const num = parseInt(value, 10);
+						if (!isNaN(num) && num > 0) {
+							this.plugin.settings.engine.maxComplexity = num;
+							await this.plugin.saveSettings();
+						}
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Max nesting depth")
+			.setDesc(
+				`Maximum parentheses nesting depth. Prevents stack overflow from deeply nested expressions. Default is ${DEFAULT_SETTINGS.engine.validation.maxNestingDepth}. Changes take effect after restart.`
+			)
+			.addText((text) =>
+				text
+					.setValue(String(this.plugin.settings.engine.maxNestingDepth))
+					.onChange(async (value) => {
+						const num = parseInt(value, 10);
+						if (!isNaN(num) && num > 0) {
+							this.plugin.settings.engine.maxNestingDepth = num;
+							await this.plugin.saveSettings();
+						}
+					})
+			);
+
+		// ── VM limits ───────────────────────────────────────────────────
+		new Setting(this.containerEl).setName("VM limits").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Max stack depth")
+			.setDesc(
+				`Maximum stack depth (value slots) for VM execution. Prevents stack overflow in recursive code. Default is ${DEFAULT_SETTINGS.engine.vm.maxStackDepth}. Changes take effect after restart.`
+			)
+			.addText((text) =>
+				text
+					.setValue(String(this.plugin.settings.engine.maxStackDepth))
+					.onChange(async (value) => {
+						const num = parseInt(value, 10);
+						if (!isNaN(num) && num > 0) {
+							this.plugin.settings.engine.maxStackDepth = num;
+							await this.plugin.saveSettings();
+						}
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Max instructions")
+			.setDesc(
+				`Maximum number of opcodes executed per expression. Halts runaway infinite loops. Default is ${DEFAULT_SETTINGS.engine.vm.maxInstructions.toLocaleString()}. Changes take effect after restart.`
+			)
+			.addText((text) =>
+				text
+					.setValue(String(this.plugin.settings.engine.maxInstructions))
+					.onChange(async (value) => {
+						const num = parseInt(value, 10);
+						if (!isNaN(num) && num > 0) {
+							this.plugin.settings.engine.maxInstructions = num;
+							await this.plugin.saveSettings();
+						}
+					})
+			);
 	}
 
 	displayInlineSolveSettings() {

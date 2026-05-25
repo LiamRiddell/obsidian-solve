@@ -1,7 +1,23 @@
 /**
  * Configuration Module for solve-js Engine
  * 
- * This module provides centralized configuration management with validation.
+ * This module provides the **single source of truth** for all engine configuration.
+ * Every configurable aspect of the engine — from safety limits and performance
+ * budgets to VM constraints and worker pool sizing — is defined here.
+ * 
+ * ### Design principles
+ * 
+ * 1. **Engine owns its config.** The engine defines its own config shape and defaults.
+ *    Consumers (e.g., the Obsidian plugin) pass partial overrides; all unspecified
+ *    fields fall back to `DEFAULT_CONFIG`.
+ * 
+ * 2. **Self-documenting.** Every interface and field has descriptive JSDoc so the
+ *    config is understandable at a glance, whether you're using the engine as an
+ *    npm package or reading the source.
+ * 
+ * 3. **Minimal consumer knowledge.** Consumers only need to pass `Partial<EngineConfig>`.
+ *    They don't need to replicate the full config shape — just the fields they
+ *    want to override.
  * 
  * @module Configuration
  */
@@ -9,103 +25,136 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
- * Date-related configuration
+ * Date-related configuration.
+ * Controls the bounds and formatting for date/time expression evaluation
+ * (e.g., `today + 20 days`, `last monday`).
  */
 export interface DateConfig {
-  /** Default offset in days for date calculations */
+  /** Default offset in days for relative date calculations when no offset is specified */
   readonly defaultOffsetDays: number;
-  /** Maximum allowed offset in years (positive) */
+  /** Maximum allowed positive offset in years (safety limit) */
   readonly maxOffsetYears: number;
-  /** Maximum allowed offset in years (negative) */
+  /** Maximum allowed negative offset in years (safety limit) */
   readonly minOffsetYears: number;
-  /** Default date format for display */
+  /** Default date string format for display (moment.js format string) */
   readonly defaultFormat: string;
 }
 
 /**
- * Dice-related configuration
+ * Dice-related configuration.
+ * Controls dice expression evaluation (e.g., `roll(1, 100)`, `3d6`).
  */
 export interface DiceConfig {
-  /** Default number of sides on a die */
+  /** Default number of sides on a die when not specified */
   readonly defaultSides: number;
-  /** Maximum allowed sides */
+  /** Maximum allowed sides per die (prevents excessive allocation) */
   readonly maxSides: number;
-  /** Maximum number of dice per roll */
+  /** Maximum number of dice in a single roll expression */
   readonly maxDice: number;
-  /** Default number of dice */
+  /** Default number of dice when not specified */
   readonly defaultDice: number;
 }
 
 /**
- * Performance-related configuration
+ * Performance-related configuration.
+ * Controls caching, timeouts, and processing limits to prevent runaway
+ * resource consumption on large documents.
  */
 export interface PerformanceConfig {
-  /** Default cache size (number of entries) */
+  /** Default number of entries in the line cache before eviction */
   readonly defaultCacheSize: number;
-  /** Maximum document lines to process */
+  /** Maximum number of document lines processed in a single pass */
   readonly maxDocumentLines: number;
-  /** Parse timeout in milliseconds */
+  /** Maximum time (ms) allowed for parsing a single expression before timeout */
   readonly parseTimeoutMs: number;
-  /** Execution timeout in milliseconds */
+  /** Maximum time (ms) allowed for executing a single expression before timeout */
   readonly executionTimeoutMs: number;
 }
 
 /**
- * Validation-related configuration
+ * Validation / safety-limit configuration.
+ * Protects against runaway expressions that could cause excessive memory use
+ * or stack overflow. These limits are checked during lexing and parsing.
  */
 export interface ValidationConfig {
-  /** Maximum expression length in characters */
+  /** Maximum expression length in characters. Prevents excessively long strings from entering the pipeline. */
   readonly maxExpressionLength: number;
-  /** Maximum expression complexity score */
+  /** Maximum expression complexity score (`tokens + functionCalls×5 + nestingDepth×10`). Protects against deeply nested or combinatorially complex expressions. */
   readonly maxComplexity: number;
-  /** Maximum nesting depth for parentheses */
+  /** Maximum parentheses nesting depth. Prevents stack overflow in the recursive-descent parser. */
   readonly maxNestingDepth: number;
 }
 
 /**
- * Worker-related configuration
+ * Worker pool configuration.
+ * Controls the parallel execution workers used for batch evaluation.
  */
 export interface WorkerConfig {
-  /** Maximum concurrent workers */
+  /** Maximum number of concurrent Web Workers allowed */
   readonly maxConcurrentWorkers: number;
-  /** Worker idle timeout in milliseconds */
+  /** Time (ms) a worker stays alive while idle before being terminated */
   readonly idleTimeoutMs: number;
-  /** Maximum retry attempts for failed operations */
+  /** Maximum retry attempts for a failed worker operation */
   readonly maxRetries: number;
-  /** Base backoff delay in milliseconds */
+  /** Base backoff delay (ms) between retries (exponential backoff applied on top) */
   readonly baseBackoffMs: number;
-}
-
-/**
-   * Diagnostic-related configuration
+}  /**
+   * Diagnostic / telemetry configuration.
+   * Controls the diagnostic event pipeline for profiling and debugging.
+   * All diagnostics are disabled by default for maximum production performance.
    */
   export interface DiagnosticConfig {
-    /** Enable diagnostic pipeline — collectors events for all pipeline stages */
+    /** Master switch: enable the diagnostic pipeline (collectors receive events for all pipeline stages) */
     readonly enabled: boolean;
-    /** Enable VM trace mode — emits per-opcode events (very verbose, disables some optimizations) */
+    /** Enable VM trace mode — emits per-opcode execution events (very verbose; disables some optimizations) */
     readonly vmTraceEnabled: boolean;
   }
 
   /**
-   * VM-related configuration
+   * Virtual Machine configuration.
+   * Controls the internal bytecode VM that executes compiled expressions.
    */
   export interface VMConfig {
-    /** Maximum stack depth for VM execution */
+    /** Maximum stack depth (value slots) for VM execution — prevents stack overflow in recursive/pratt-parser generated bytecode */
     readonly maxStackDepth: number;
-    /** Maximum instructions per expression execution */
+    /** Maximum opcodes executed per expression — halts runaway infinite loops */
     readonly maxInstructions: number;
   }
 
 /**
-   * Complete engine configuration
-   */
-  export interface EngineConfig {
+ * Complete engine configuration.
+ *
+ * Every field has a default in `DEFAULT_CONFIG`. To customize, pass a
+ * `Partial<EngineConfig>` when constructing `ExpressionEngine`. Only the
+ * sections/fields you supply are overridden; all others use their defaults.
+ *
+ * @example
+ * ```typescript
+ * import { ExpressionEngine } from "solve-js";
+ *
+ * const engine = new ExpressionEngine("en", false, {
+ *   validation: {
+ *     maxExpressionLength: 1000,
+ *     maxComplexity: 200,
+ *   },
+ *   // date, dice, performance, vm, worker, diagnostic all use defaults
+ * });
+ * ```
+ */
+export interface EngineConfig {
+    /** Date/time expression evaluation bounds and formatting */
     readonly date: DateConfig;
+    /** Dice roll expression controls */
     readonly dice: DiceConfig;
+    /** Performance budgets and cache sizing */
     readonly performance: PerformanceConfig;
+    /** Safety limits for expression complexity */
     readonly validation: ValidationConfig;
+    /** Internal bytecode VM configuration */
     readonly vm: VMConfig;
+    /** Parallel worker pool configuration */
     readonly worker: WorkerConfig;
+    /** Diagnostic pipeline configuration */
     readonly diagnostic: DiagnosticConfig;
   }
 

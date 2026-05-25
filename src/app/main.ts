@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import { SettingTab } from "@app/settings/SettingsTab";
 import UserSettings from "@app/settings/UserSettings";
 import { minValueExcludingBelow } from "@app/utilities/Array";
+import { deepMerge } from "@app/utilities/DeepMerge";
 import { logger } from "@app/utilities/Logger";
 import { insertAtIndex } from "@app/utilities/String";
 import { ViewPlugin } from "@codemirror/view";
@@ -76,7 +77,7 @@ export default class SolvePlugin extends Plugin {
 		const savedSettings = await this.loadData();
 
 		this.settings.updateSettings(
-			Object.assign({}, DEFAULT_SETTINGS, savedSettings)
+			deepMerge(DEFAULT_SETTINGS, savedSettings ?? {})
 		);
 
 		await this.restoreFeatureFlags();

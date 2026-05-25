@@ -6,6 +6,15 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	engine: {
 		explicitMode: false,
 		locale: "en",
+		validation: {
+			maxExpressionLength: 2000,
+			maxComplexity: 500,
+			maxNestingDepth: 50,
+		},
+		vm: {
+			maxStackDepth: 200,
+			maxInstructions: 50000,
+		},
 	},
 
 	interface: {

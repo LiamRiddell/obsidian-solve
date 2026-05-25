@@ -28,7 +28,7 @@ import {
 } from "@solve-js/types/ParsingResult";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
 import type { Token } from "@solve-js/lexer/Token";
-import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
+import { DEFAULT_CONFIG, type EngineConfig } from "@solve-js/constants/Configuration";
 import {
     DiagnosticPipeline,
     NullDiagnosticCollector,
@@ -111,6 +111,16 @@ export class ExpressionEngine {
         registerBigIntParselets(this.registry);
         this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth, localeCode);
         this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
+    }
+
+    /**
+     * Get the effective engine configuration currently in use.
+     * Includes all defaults merged with any constructor overrides.
+     * Useful for introspection — lets consumers see what values are actually
+     * in effect after merging with DEFAULT_CONFIG.
+     */
+    getConfig(): EngineConfig {
+        return { ...this.config };
     }
 
     /**
@@ -622,15 +632,10 @@ if (hasCollectors) {
 		reads: string[];
 		writes: string[];
 	} {
-		// Safety checks
+		// Safety checks — delegate to ExpressionEngineSafety.ts
 		const lengthCheck = checkExpressionLength(expression, this.config.validation);
 		if (!lengthCheck.passed) {
-			throw ErrorFactory.validation(
-				"EXPRESSION_TOO_LONG",
-				expression.length > this.config.validation.maxExpressionLength
-					? `Expression exceeds max length of ${this.config.validation.maxExpressionLength} characters (got ${expression.length})`
-					: lengthCheck.error!.error
-			);
+			throw ErrorFactory.validation("EXPRESSION_TOO_LONG", lengthCheck.error!.error);
 		}
 
 		// Lexing
@@ -650,13 +655,10 @@ if (hasCollectors) {
 			};
 		}
 
-		// Complexity check
+		// Complexity check — delegate to ExpressionEngineSafety.ts
 		const complexityCheck = checkExpressionComplexity(tokens, this.config.validation);
 		if (!complexityCheck.passed) {
-			throw ErrorFactory.validation(
-				"EXPRESSION_TOO_COMPLEX",
-				`Expression complexity score ${complexityCheck.complexityScore} exceeds maximum of ${this.config.validation.maxComplexity}`
-			);
+			throw ErrorFactory.validation("EXPRESSION_TOO_COMPLEX", complexityCheck.errorMessage!);
 		}
 
 		const { reads, writes } = extractReadsAndWrites(tokens);
