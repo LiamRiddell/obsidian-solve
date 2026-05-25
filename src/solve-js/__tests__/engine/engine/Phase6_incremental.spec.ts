@@ -13,14 +13,11 @@ describe("Phase 6: Incremental Evaluation", () => {
       expect(result).toBeInstanceOf(Map);
     });
 
-    test("markDirtyFromVariable is accessible and marks dirty", () => {
+    test("markDirtyFromVariable is a no-op (dirty state consolidated into DocumentModel)", () => {
       const engine = new ExpressionEngine();
       engine.parseDocument(":x = 5\nx + 3");
-
+      // Should not throw — dirty state tracked in DocumentModel now.
       engine.markDirtyFromVariable("x");
-      const dirtyLines = engine.getLineCache().getDirtyLines();
-      // At least one dirty line
-      expect(dirtyLines.size).toBeGreaterThanOrEqual(0);
     });
 
     test("getDag returns dependency graph with correct methods", () => {
@@ -40,14 +37,6 @@ describe("Phase 6: Incremental Evaluation", () => {
       expect(typeof lc.has).toBe("function");
       expect(typeof lc.markDirty).toBe("function");
       expect(typeof lc.markClean).toBe("function");
-    });
-
-    test("invalidateEpoch on LineCache increments epoch", () => {
-      const { LineCache } = require("@solve-js/cache/LineCache");
-      const cache = new LineCache();
-      expect(cache.getEpoch()).toBe(0);
-      cache.invalidateEpoch();
-      expect(cache.getEpoch()).toBe(1);
     });
   });
 
@@ -111,14 +100,14 @@ describe("Phase 6: Incremental Evaluation", () => {
       expect(entry!.bytecode.opcodes.length).toBe(0);
     });
 
-    test("marks re-evaluated lines as clean", () => {
+    test("re-evaluated lines are accessible from LineCache", () => {
       engine.parseDocument(":x = 5\nx + 3");
       engine.evaluateIncremental("x", 10);
 
-      // The re-evaluated entry's dirty flag should be false
+      // The re-evaluated entry should still be in the LineCache
       const entry = engine.getLineCache().getEntryForLine(2);
       expect(entry).toBeDefined();
-      expect(entry!.dirty).toBe(false);
+      expect(entry!.result.toNumber()).toBe(13);
     });
 
     test("cached results persist for subsequent evaluateNumber calls", () => {

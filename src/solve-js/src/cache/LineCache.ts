@@ -13,16 +13,12 @@ export class LineCacheEntry {
     public bytecode: BytecodeProgram,
     public readVariables: string[],
     public writeVariable: string | null,
-    public dirty: boolean,
-    public highlights: HighlightRange[] = [],
-    public epoch: number = 0
+    public highlights: HighlightRange[] = []
   ) {}
 }
 
 export class LineCache {
   private entries: Map<string, LineCacheEntry> = new Map();
-  private dirtyLines: Set<string> = new Set();
-  private currentEpoch = 0;
 
   private getKey(line: number, expression?: string): string {
     return expression ? `${line}:${expression}` : `${line}`;
@@ -47,65 +43,25 @@ get(line: number, expression?: string): LineCacheEntry | undefined {
     this.entries.set(this.getKey(line, expression), entry);
   }
 
-markDirty(line: number, expression?: string): void {
-     if (expression !== undefined) {
-       const key = this.getKey(line, expression);
-       const entry = this.entries.get(key);
-       if (entry) entry.dirty = true;
-       this.dirtyLines.add(key);
-     } else {
-       // Mark all entries for this line number as dirty
-       const linePrefix = `${line}:`;
-       let found = false;
-       for (const key of this.entries.keys()) {
-         if (key === `${line}` || key.startsWith(linePrefix)) {
-           const entry = this.entries.get(key);
-           if (entry) entry.dirty = true;
-           this.dirtyLines.add(key);
-           found = true;
-         }
-       }
-       // If no entry exists yet, still track the dirty line
-       if (!found) {
-         this.dirtyLines.add(`${line}`);
-       }
-     }
-   }
-
-  markClean(line: number, expression?: string): void {
-    if (expression !== undefined) {
-      const key = this.getKey(line, expression);
-      const entry = this.entries.get(key);
-      if (entry) entry.dirty = false;
-      this.dirtyLines.delete(key);
-    } else {
-      // Clean all entries for this line number (mirrors markDirty's bulk path)
-      const linePrefix = `${line}:`;
-      for (const key of this.entries.keys()) {
-        if (key === `${line}` || key.startsWith(linePrefix)) {
-          const entry = this.entries.get(key);
-          if (entry) entry.dirty = false;
-          this.dirtyLines.delete(key);
-        }
-      }
-      // Also clean bare line-key if present
-      this.dirtyLines.delete(`${line}`);
-    }
+/**
+   * Mark a line's cache entries as stale.
+   *
+   * NOTE: Dirty-state tracking has been consolidated into DocumentModel.
+   * This method is retained for backward compatibility but is a no-op —
+   * the caller (DynamicValueResolver, markDirtyFromVariable) manages
+   * dirty state through DocumentModel.LineState.dirty instead.
+   */
+  markDirty(_line: number, _expression?: string): void {
+    // DocumentModel.LineState.dirty is the canonical dirty flag.
   }
 
-  isDirty(line: number, expression?: string): boolean {
-    const key = this.getKey(line, expression);
-    const entry = this.entries.get(key);
-    return entry ? entry.dirty : false;
-  }
-
-  getDirtyLines(): Set<number> {
-    const dirtyLineNumbers = new Set<number>();
-    for (const key of this.dirtyLines) {
-      const line = parseInt(key.split(':')[0]);
-      dirtyLineNumbers.add(line);
-    }
-    return dirtyLineNumbers;
+  /**
+   * Mark a line's cache entries as clean.
+   *
+   * NOTE: See markDirty — dirty state is tracked in DocumentModel.
+   */
+  markClean(_line: number, _expression?: string): void {
+    // DocumentModel.LineState.dirty is the canonical dirty flag.
   }
 
   has(line: number, expression?: string): boolean {
@@ -115,7 +71,6 @@ markDirty(line: number, expression?: string): void {
   remove(line: number, expression?: string): void {
     const key = this.getKey(line, expression);
     this.entries.delete(key);
-    this.dirtyLines.delete(key);
   }
 
   removeAllForLine(line: number): void {
@@ -123,7 +78,6 @@ markDirty(line: number, expression?: string): void {
     for (const key of Array.from(this.entries.keys())) {
       if (key === `${line}` || key.startsWith(prefix)) {
         this.entries.delete(key);
-        this.dirtyLines.delete(key);
       }
     }
   }
@@ -132,35 +86,14 @@ markDirty(line: number, expression?: string): void {
     this.removeAllForLine(line);
   }
 
+  /**
+   * Number of entries in the cache. Useful for diagnostics.
+   */
+  get size(): number {
+    return this.entries.size;
+  }
+
   clear(): void {
     this.entries.clear();
-    this.dirtyLines.clear();
-    this.currentEpoch = 0;
-  }
-
-  // === MemoCache integration: epoch-based global invalidation ===
-  invalidateEpoch(): void {
-    this.currentEpoch++;
-  }
-
-  getEpoch(): number {
-    return this.currentEpoch;
-  }
-
-  /**
-   * Get or compute a cached result, respecting the current epoch.
-   * If the entry's epoch doesn't match the current epoch, recompute.
-   */
-  getOrCompute(line: number, expression: string, compute: () => LineCacheEntry): LineCacheEntry {
-    const key = this.getKey(line, expression);
-    const existing = this.entries.get(key);
-    if (existing && existing.epoch === this.currentEpoch && !existing.dirty) {
-      return existing;
-    }
-    const result = compute();
-    result.epoch = this.currentEpoch;
-    this.entries.set(key, result);
-    this.dirtyLines.delete(key);
-    return result;
   }
 }

@@ -74,18 +74,20 @@ describe("DynamicValueResolver", () => {
     });
   }, 5000);
 
-  test("flushBatch marks dirty lines in cache", () => {
+  test("flushBatch invokes callback with merged affected lines", () => {
     const dag = new DependencyGraph();
     const cache = new LineCache();
 
-    cache.set(10, new LineCacheEntry(numberValue(0), { opcodes: [], numbers: [], strings: [] }, ["x"], null, false));
+    cache.set(10, new LineCacheEntry(numberValue(0), { opcodes: [], numbers: [], strings: [] }, ["x"], null));
     dag.registerLine(10, ["x"], []);
 
-    const resolver = new DynamicValueResolver(dag, cache, () => {}, 10);
+    let receivedLines: Set<number> = new Set();
+    const resolver = new DynamicValueResolver(dag, cache, (lines) => { receivedLines = lines; }, 10);
     resolver["enqueueUpdate"]("x", 99);
     resolver.flushBatch();
 
-    expect(cache.isDirty(10)).toBe(true);
+    // The callback should receive the affected lines (dirty state now in DocumentModel)
+    expect(receivedLines.has(10)).toBe(true);
   });
 
   test("clear stops all timers and resets state", () => {

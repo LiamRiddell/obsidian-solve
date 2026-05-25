@@ -348,7 +348,7 @@ export class ExpressionEngine {
 
         if (tokens.length === 0) {
             const v = numberValue(0);
-            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, [], null, false), expression);
+            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, [], null), expression);
 
             if (hasCollectors) {
                 pipeline.firePipelineEnd({
@@ -501,8 +501,7 @@ export class ExpressionEngine {
                 result,
                 program,
                 reads,
-                writes.length > 0 ? writes[0] : null,
-                false
+                writes.length > 0 ? writes[0] : null
             ), expression);
         }
 
@@ -562,13 +561,6 @@ if (hasCollectors) {
         }
 
         return result;
-    }
-
-    markDirtyFromVariable(variable: string): void {
-        const affected = this.dag.getAffectedLines(variable);
-        for (const line of affected) {
-            this.lineCache.markDirty(line);
-        }
     }
 
     getDag(): DependencyGraph {
@@ -756,6 +748,14 @@ if (hasCollectors) {
          this.bytecodeCache.clear();
          this.vm.reset();
      }
+
+    /**
+     * @deprecated Dirty-state tracking consolidated into DocumentModel.
+     * Use DocumentModel.markDirty() or DocumentModel.markDirtyByLineNumber() instead.
+     */
+    markDirtyFromVariable(_variable: string): void {
+        // No-op: DocumentModel is the canonical dirty-state source.
+    }
 
     /**
      * Evaluate independent expressions using a worker pool (Web Workers).

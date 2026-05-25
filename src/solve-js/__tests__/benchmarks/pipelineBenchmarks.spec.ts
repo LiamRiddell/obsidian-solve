@@ -108,7 +108,6 @@ describe("Pipeline Benchmarks", () => {
     const r = benchmarkFn(() => {
       const e = new ExpressionEngine("en", false);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2");
-      e.markDirtyFromVariable("x");
       e.reEvaluateLine(2, ":x + 1");
       e.reEvaluateLine(3, ":x + 2");
     }, 10000, 200);

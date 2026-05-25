@@ -335,9 +335,9 @@ All three create an ExpressionEngine, handle EVAL/EVAL_DOC messages, and post ba
 - `LFUCache` — simpler LFU cache — appears unused by engine
 
 **Plan:**
-1. **Delete `MemoCache`** — Already marked as consolidated. Remove the file and all references.
-2. **Delete `UnifiedCache` or `LFUCache`** — Keep one generic cache utility if it's actually used. Delete the other.
-3. **Audit LineCache for completeness** — Ensure the epoch-based invalidation fully replaces MemoCache's functionality.
+1. **Delete `MemoCache`** — Already marked as consolidated. Remove the file and all references. ✅ DONE
+2. **Delete `UnifiedCache` or `LFUCache`** — Keep one generic cache utility if it's actually used. Delete the other. ✅ DONE (UnifiedCache deleted, LFUCache kept — used by UomConverter)
+3. **Audit LineCache for completeness** — Ensure the epoch-based invalidation fully replaces MemoCache's functionality. ✅ DONE (Phase 1.5)
 
 ### 3.3 Prepare for npm Package Extraction
 
@@ -613,6 +613,13 @@ Per `TESTING_GUIDELINES.md` targets:
 22. ✅ **Split ExpressionEngine.ts** — Extracted `ExpressionEngineSafety.ts` with 5 safety/validation helpers
 23. ✅ **Split VM.ts** — Extracted `VMBuiltins.ts` (37 builtins) and `VMConversion.ts` (unifyUom, binaryOp)
 24. ✅ **Fix `buildInto()` zero-copy** — Subarray views instead of `.slice()` copies; engine correctly copies before caching
+
+### ✅ Phase 1.5: Cache Consolidation
+
+25. ✅ **Remove dead dirty-state tracking from LineCache** — Removed `dirtyLines: Set<string>`, `getDirtyLines()`, `isDirty()`, `LineCacheEntry.dirty/epoch`, `getOrCompute()`, `invalidateEpoch()`, `getEpoch()`. Dirty-state tracking consolidated into `DocumentModel.LineState.dirty` (Phase 1.2). Simplified `markDirty`/`markClean` to no-ops with deprecation comments. LineCache is now a simple key-value store for results/bytecode.
+26. ✅ **Deprecate `ExpressionEngine.markDirtyFromVariable()`** — Changed to no-op (dirty state in DocumentModel). Removed `false` dirty/epoch args from all `new LineCacheEntry(...)` callsites.
+27. ✅ **Remove Phase3_cacheConsolidation.spec.ts** — All tests were for removed features (epoch, getOrCompute). Rewrote 12 LineCache tests for simplified API. Updated Phase6/Issue78/pipeline benchmark tests.
+28. ✅ **1,476 tests pass, 0 regressions, typecheck clean**
 
 ---
 
