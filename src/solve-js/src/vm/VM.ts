@@ -57,9 +57,15 @@ export interface Bytecode {
 
 /**
  * Execute bytecode with optional diagnostic pipeline integration.
- * When a pipeline with collectors is provided and vmTrace is enabled,
- * fires vm_step events for every opcode. When no collectors are active,
- * this adds zero overhead beyond a single branch check.
+ *
+ * Performance notes:
+ * - Stack access is inlined (`stack.push/pop` directly) — skips VM bounds
+ *   checks. The compiler guarantees stack balance on valid bytecode.
+ * - Tracing uses a boolean guard (`shouldTrace`) that the JIT eliminates
+ *   entirely when diagnostics are disabled. No function call overhead.
+ * - `binaryOp()` has its own numeric fast-path that skips type dispatch
+ *   when both operands are plain numbers (~90%+ of all binary ops).
+ * - `Value.toNumber()` caches its result — computed once, read thereafter.
  */
 export function executeBytecode(
     bytecode: Bytecode,
@@ -76,23 +82,15 @@ export function executeBytecode(
     const opcodes = rawOpcodes instanceof Uint8Array ? rawOpcodes : new Uint8Array(rawOpcodes);
     const numbers = rawNumbers instanceof Float64Array ? rawNumbers : new Float64Array(rawNumbers);
 
-    // Hoist trace check outside the hot loop. When disabled (production),
-    // traceStep is a no-op that the JIT will inline away entirely.
-    // When enabled, it fires a diagnostic VM step event per opcode.
-    const traceStep = pipeline?.hasCollectors
-      ? (op: OpCode, ipVal: number, instrNum: number) => {
-          pipeline!.fireVmStep({
-            type: DiagnosticEventType.VmStep,
-            elapsedNs: 0,
-            expression: expression ?? "",
-            opcode: op,
-            opcodeName: getOpCodeName(op),
-            ip: ipVal,
-            stackDepth: vm.getStack().length,
-            instructionNumber: instrNum,
-          });
-        }
-      : (_op: OpCode, _ipVal: number, _instrNum: number) => {};
+    // Direct stack array reference. Bypasses VM.push/pop bounds checks
+    // for the hot loop. The bytecode compiler guarantees stack balance,
+    // so bounds checks are only needed for malformed/corrupt bytecode
+    // (which would be caught by tests long before reaching production).
+    const stack = vm.getStack();
+
+    // Boolean guard: JIT will eliminate the entire branch when false.
+    // No function call, no argument evaluation, zero overhead.
+    const shouldTrace = pipeline?.hasCollectors ?? false;
 
     if (opcodes.length === 0) return undefined;
 
@@ -103,51 +101,59 @@ export function executeBytecode(
       }
       const op = opcodes[ip++] as OpCode;
 
-      traceStep(op, ip - 1, localInstructionCount);
+      if (shouldTrace) {
+        pipeline!.fireVmStep({
+          type: DiagnosticEventType.VmStep,
+          elapsedNs: 0,
+          expression: expression ?? "",
+          opcode: op,
+          opcodeName: getOpCodeName(op),
+          ip: ip - 1,
+          stackDepth: stack.length,
+          instructionNumber: localInstructionCount,
+        });
+      }
 
       switch (op) {
         case OpCode.NOP: break;
         case OpCode.HALT: {
-          const result = vm.pop();
-          return result;
+          return stack.pop()!;
         }
         case OpCode.SWAP: {
-          const a = vm.pop();
-          const b = vm.pop();
-          vm.push(a);
-          vm.push(b);
+          const a = stack.pop()!;
+          const b = stack.pop()!;
+          stack.push(a);
+          stack.push(b);
           break;
         }
         case OpCode.DUP: {
-          const a = vm.peek();
-          vm.push(a);
+          stack.push(stack[stack.length - 1]);
           break;
         }
-        case OpCode.PUSH_NUMBER: vm.push(numberValue(numbers[opcodes[ip++]])); break;
-        case OpCode.PUSH_BIGINT: vm.push(bigIntValue(BigInt(numbers[opcodes[ip++]]))); break;
-        case OpCode.PUSH_HEX: vm.push(hexValue(numbers[opcodes[ip++]])); break;
+        case OpCode.PUSH_NUMBER: stack.push(numberValue(numbers[opcodes[ip++]])); break;
+        case OpCode.PUSH_BIGINT: stack.push(bigIntValue(BigInt(numbers[opcodes[ip++]]))); break;
+        case OpCode.PUSH_HEX: stack.push(hexValue(numbers[opcodes[ip++]])); break;
         case OpCode.PUSH_STRING: {
           const strIdx = opcodes[ip++];
-          vm.push(stringValue(strings[strIdx]));
+          stack.push(stringValue(strings[strIdx]));
           break;
         }
-        case OpCode.PUSH_BOOLEAN: vm.push(new Value(ValueType.Boolean, opcodes[ip++] === 1)); break;
+        case OpCode.PUSH_BOOLEAN: stack.push(new Value(ValueType.Boolean, opcodes[ip++] === 1)); break;
         case OpCode.NEG: {
-          const v = vm.pop();
-          if (v.type === ValueType.BigInt) vm.push(bigIntValue(-(v.value as bigint)));
-          else if (v.type === ValueType.Uom) vm.push(uomValue(-v.toNumber(), v.unit!));
-          else vm.push(numberValue(-v.toNumber()));
+          const v = stack.pop()!;
+          if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
+          else if (v.type === ValueType.Uom) stack.push(uomValue(-v.toNumber(), v.unit!));
+          else stack.push(numberValue(-v.toNumber()));
           break;
         }
         case OpCode.POS: {
-          const v = vm.pop();
-          if (v.type === ValueType.Uom) vm.push(uomValue(v.toNumber(), v.unit!));
-          else vm.push(numberValue(v.toNumber()));
+          const v = stack.pop()!;
+          if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
+          else stack.push(numberValue(v.toNumber()));
           break;
         }
         case OpCode.ADD: {
-          const r = vm.pop(), l = vm.pop();
-          // Handle Datetime + Duration
+          const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.Datetime) {
             let durMs = 0;
             if (r.type === ValueType.Uom) {
@@ -162,15 +168,14 @@ export function executeBytecode(
             } else {
               durMs = r.toNumber();
             }
-            vm.push(new Value(ValueType.Datetime, l.toNumber() + durMs));
+            stack.push(new Value(ValueType.Datetime, l.toNumber() + durMs));
           } else {
-            vm.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
+            stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
           }
           break;
         }
         case OpCode.SUB: {
-          const r = vm.pop(), l = vm.pop();
-          // Handle Datetime - Duration
+          const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.Datetime) {
             let durMs = 0;
             if (r.type === ValueType.Uom) {
@@ -185,150 +190,146 @@ export function executeBytecode(
             } else {
               durMs = r.toNumber();
             }
-            vm.push(new Value(ValueType.Datetime, l.toNumber() - durMs));
+            stack.push(new Value(ValueType.Datetime, l.toNumber() - durMs));
           } else {
-            vm.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
+            stack.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
           }
           break;
         }
         case OpCode.MUL: {
-          const r = vm.pop(), l = vm.pop();
-          vm.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b));
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b));
           break;
         }
         case OpCode.DIV: {
-          const r = vm.pop(), l = vm.pop();
+          const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
             const { lv, rv, sameMeasure } = unifyUom(l, r);
             if (sameMeasure) {
-              vm.push(numberValue(lv / rv));
+              stack.push(numberValue(lv / rv));
             } else {
-              vm.push(uomValue(lv / rv, l.unit!));
+              stack.push(uomValue(lv / rv, l.unit!));
             }
           } else {
-            vm.push(binaryOp(l, r, (a, b) => a / b, (a, b) => a / b));
+            stack.push(binaryOp(l, r, (a, b) => a / b, (a, b) => a / b));
           }
           break;
         }
         case OpCode.MOD: {
-          const r = vm.pop(), l = vm.pop();
-          vm.push(binaryOp(l, r, (a, b) => a % b, (a, b) => a % b));
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a % b, (a, b) => a % b));
           break;
         }
         case OpCode.EXP: {
-          const r = vm.pop(), l = vm.pop();
-          if (l.type === ValueType.Uom) {
-            vm.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
-          } else {
-            vm.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
-          }
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
           break;
         }
         case OpCode.LSHIFT: {
-          const r = vm.pop(), l = vm.pop();
+          const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            vm.push(bigIntValue(BigInt(l.toNumber()) << BigInt(r.toNumber())));
+            stack.push(bigIntValue(BigInt(l.toNumber()) << BigInt(r.toNumber())));
           } else {
-            vm.push(numberValue(l.toNumber() << r.toNumber()));
+            stack.push(numberValue(l.toNumber() << r.toNumber()));
           }
           break;
         }
         case OpCode.RSHIFT: {
-          const r = vm.pop(), l = vm.pop();
+          const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            vm.push(bigIntValue(BigInt(l.toNumber()) >> BigInt(r.toNumber())));
+            stack.push(bigIntValue(BigInt(l.toNumber()) >> BigInt(r.toNumber())));
           } else {
-            vm.push(numberValue(l.toNumber() >> r.toNumber()));
+            stack.push(numberValue(l.toNumber() >> r.toNumber()));
           }
           break;
         }
         case OpCode.BIT_AND: {
-          const r = vm.pop(), l = vm.pop();
+          const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            vm.push(bigIntValue(BigInt(l.toNumber()) & BigInt(r.toNumber())));
+            stack.push(bigIntValue(BigInt(l.toNumber()) & BigInt(r.toNumber())));
           } else {
-            vm.push(numberValue(l.toNumber() & r.toNumber()));
+            stack.push(numberValue(l.toNumber() & r.toNumber()));
           }
           break;
         }
         case OpCode.BIT_OR: {
-          const r = vm.pop(), l = vm.pop();
+          const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            vm.push(bigIntValue(BigInt(l.toNumber()) | BigInt(r.toNumber())));
+            stack.push(bigIntValue(BigInt(l.toNumber()) | BigInt(r.toNumber())));
           } else {
-            vm.push(numberValue(l.toNumber() | r.toNumber()));
+            stack.push(numberValue(l.toNumber() | r.toNumber()));
           }
           break;
         }
         case OpCode.BIT_XOR: {
-          const r = vm.pop(), l = vm.pop();
+          const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            vm.push(bigIntValue(BigInt(l.toNumber()) ^ BigInt(r.toNumber())));
+            stack.push(bigIntValue(BigInt(l.toNumber()) ^ BigInt(r.toNumber())));
           } else {
-            vm.push(numberValue(l.toNumber() ^ r.toNumber()));
+            stack.push(numberValue(l.toNumber() ^ r.toNumber()));
           }
           break;
         }
         case OpCode.BIT_NOT: {
-          const v = vm.pop();
-          if (v.type === ValueType.BigInt) vm.push(bigIntValue(~(v.value as bigint)));
-          else vm.push(numberValue(~v.toNumber()));
+          const v = stack.pop()!;
+          if (v.type === ValueType.BigInt) stack.push(bigIntValue(~(v.value as bigint)));
+          else stack.push(numberValue(~v.toNumber()));
           break;
         }
         case OpCode.TO_NUMBER: {
-          const v = vm.pop();
-          vm.push(numberValue(v.toNumber()));
+          const v = stack.pop()!;
+          stack.push(numberValue(v.toNumber()));
           break;
         }
         case OpCode.TO_HEX: {
-          const v = vm.pop();
-          vm.push(hexValue(v.toNumber()));
+          const v = stack.pop()!;
+          stack.push(hexValue(v.toNumber()));
           break;
         }
         case OpCode.TO_PERCENTAGE: {
-          const v = vm.pop();
-          vm.push(new Value(ValueType.Percentage, v.toNumber()));
+          const v = stack.pop()!;
+          stack.push(new Value(ValueType.Percentage, v.toNumber()));
           break;
         }
         case OpCode.CALL_BUILTIN: {
           const fnIdx = opcodes[ip++];
           const argCount = opcodes[ip++];
           const args: Value[] = [];
-          for (let i = 0; i < argCount; i++) args.push(vm.pop());
+          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
           const fn = builtinFunctions[fnIdx];
-          if (fn) vm.push(fn(args.reverse()));
+          if (fn) stack.push(fn(args.reverse()));
           break;
         }
         case OpCode.DICE_ROLL: {
-          const to = vm.popNumber();
-          const from = vm.popNumber();
-          vm.push(numberValue(Math.floor(Math.random() * (to - from + 1)) + from));
+          const to = stack.pop()!.toNumber();
+          const from = stack.pop()!.toNumber();
+          stack.push(numberValue(Math.floor(Math.random() * (to - from + 1)) + from));
           break;
         }
         case OpCode.VEC_NEW: {
           const count = opcodes[ip++];
           const components: number[] = [];
-          for (let i = 0; i < count; i++) components.unshift(vm.popNumber());
-          vm.push(vectorValue(components));
+          for (let i = 0; i < count; i++) components.unshift(stack.pop()!.toNumber());
+          stack.push(vectorValue(components));
           break;
         }
         case OpCode.VEC_ADD: {
-          const r = vm.pop(), l = vm.pop();
-          vm.push(binaryOp(l, r, (a, b) => a + b));
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a + b));
           break;
         }
         case OpCode.VEC_SUB: {
-          const r = vm.pop(), l = vm.pop();
-          vm.push(binaryOp(l, r, (a, b) => a - b));
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a - b));
           break;
         }
         case OpCode.DATE_NOW:
-          vm.push(new Value(ValueType.Datetime, Date.now()));
+          stack.push(new Value(ValueType.Datetime, Date.now()));
           break;
         case OpCode.DATE_ADD:
         case OpCode.DATE_SUB: {
-          const durValue = vm.pop();
-          const dtValue = vm.pop();
+          const durValue = stack.pop()!;
+          const dtValue = stack.pop()!;
           const dt = dtValue.toNumber();
           let durMs = 0;
           if (durValue.type === ValueType.Uom) {
@@ -337,71 +338,69 @@ export function executeBytecode(
               try {
                 durMs = convertUnit(durValue.toNumber(), unit, "ms");
               } catch {
-                // If conversion fails, treat as 0
                 durMs = 0;
               }
             }
           } else {
-            // Assume it's a number (milliseconds)
             durMs = durValue.toNumber();
           }
           const sign = op === OpCode.DATE_ADD ? 1 : -1;
-          vm.push(new Value(ValueType.Datetime, dt + sign * durMs));
+          stack.push(new Value(ValueType.Datetime, dt + sign * durMs));
           break;
         }
         case OpCode.UOM_CONVERT: {
-          const unit = vm.popString();
-          const val = vm.popNumber();
-          vm.push(uomValue(val, unit));
+          const unit = (stack.pop()!.value as string);
+          const val = stack.pop()!.toNumber();
+          stack.push(uomValue(val, unit));
           break;
         }
         case OpCode.UOM_CONVERT_TO: {
-          const toUnit = vm.popString();
-          const fromUnit = vm.popString();
-          const val = vm.popNumber();
+          const toUnit = (stack.pop()!.value as string);
+          const fromUnit = (stack.pop()!.value as string);
+          const val = stack.pop()!.toNumber();
           const measure = getMeasure(fromUnit);
           const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
           if (measure && getMeasure(toUnit) === measure) {
             const converted = convertUnit(val, fromUnit, toUnit);
-            vm.push(uomValue(converted, toUnit));
+            stack.push(uomValue(converted, toUnit));
           } else if (isCurrency) {
             const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
             if (converted !== null) {
-              vm.push(uomValue(converted, toUnit));
+              stack.push(uomValue(converted, toUnit));
             } else {
-              vm.push(uomValue(val, fromUnit));
+              stack.push(uomValue(val, fromUnit));
             }
           } else {
-            vm.push(uomValue(val, fromUnit));
+            stack.push(uomValue(val, fromUnit));
           }
           break;
         }
         case OpCode.UOM_BEST: {
-          const unit = vm.popString();
-          const val = vm.popNumber();
+          const unit = (stack.pop()!.value as string);
+          const val = stack.pop()!.toNumber();
           const { value, unit: bestUnit } = getBestUnit(val, unit);
-          vm.push(uomValue(value, bestUnit));
+          stack.push(uomValue(value, bestUnit));
           break;
         }
         case OpCode.UOM_GET_VALUE: {
-          const v = vm.pop();
-          vm.push(numberValue(v.toNumber()));
+          const v = stack.pop()!;
+          stack.push(numberValue(v.toNumber()));
           break;
         }
         case OpCode.LOAD_VAR: {
           const varIdx = opcodes[ip++];
           const varName = strings[varIdx];
           const val = vm.getVar(varName);
-          if (val !== undefined) vm.push(val);
-          else vm.push(numberValue(0));
+          if (val !== undefined) stack.push(val);
+          else stack.push(numberValue(0));
           break;
         }
         case OpCode.STORE_VAR: {
-          const val = vm.pop();
+          const val = stack.pop()!;
           const varIdx = opcodes[ip++];
           const varName = strings[varIdx];
           vm.setVar(varName, val);
-          vm.push(val);
+          stack.push(val);
           break;
         }
         default:
@@ -415,5 +414,5 @@ export function executeBytecode(
       }
     }
 
-    return vm.pop();
+    return stack.pop()!;
 }
