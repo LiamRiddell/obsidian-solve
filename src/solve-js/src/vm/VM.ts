@@ -92,11 +92,22 @@ export function executeBytecode(
     // No function call, no argument evaluation, zero overhead.
     const shouldTrace = pipeline?.hasCollectors ?? false;
 
+    // Hoist arena check to a local constant — avoids a function call at
+    // every HALT/STORE_VAR/fallback-return in the dispatch loop.
+    // The arena is only active during scroll execution (ThreeTierEvaluator
+    // Tier 2); in all other paths this is always false and the JIT can
+    // eliminate the unreachable persistentValue() branch entirely.
+    const hasArena = isArenaActive();
+
     if (opcodes.length === 0) return undefined;
 
     while (ip < opcodes.length) {
-      localInstructionCount++;
-      if (localInstructionCount > maxInstructions) {
+      // Tighten instruction limit check: combined increment + guard.
+      // V8 optimises `++localInstructionCount > maxInstructions` into a
+      // single fused add-and-compare on the hot path. The default limit
+      // (50k) is never reached in benchmarks, so this branch is statically
+      // predicted not-taken by the CPU.
+      if (++localInstructionCount > maxInstructions) {
         throw ErrorFactory.execution("INSTRUCTION_LIMIT_EXCEEDED", `Execution exceeded maximum of ${maxInstructions} instructions`);
       }
       const op = opcodes[ip++] as OpCode;
@@ -121,7 +132,7 @@ export function executeBytecode(
           // Phase 5.3: If arena is active, clone the result before returning.
           // The caller (ThreeTierEvaluator) stores this in DocumentModel.result —
           // it must survive arena.reset() on the next scroll frame.
-          return isArenaActive() ? persistentValue(result) : result;
+          return hasArena ? persistentValue(result) : result;
         }
         case OpCode.SWAP: {
           const a = stack.pop()!;
@@ -405,7 +416,7 @@ export function executeBytecode(
           const varName = strings[varIdx];
           // Phase 5.3: If arena is active, clone before storing in variables.
           // Arena Values are recycled on reset() — variable references must survive.
-          vm.setVar(varName, isArenaActive() ? persistentValue(val) : val);
+          vm.setVar(varName, hasArena ? persistentValue(val) : val);
           stack.push(val);
           break;
         }
@@ -422,5 +433,5 @@ export function executeBytecode(
 
     // Fallback return (reached if while loop exits without HALT — shouldn't happen on valid bytecode)
     const fallback = stack.pop()!;
-    return isArenaActive() ? persistentValue(fallback) : fallback;
+    return hasArena ? persistentValue(fallback) : fallback;
 }

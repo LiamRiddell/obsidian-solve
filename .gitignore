@@ -24,3 +24,13 @@ playground/dist
 playground/.vite
 playground/*.local
 playground/*.env
+
+# Testing
+coverage/
+
+# V8 profiling logs
+isolate-*.log
+
+# Standalone profiler (not part of the project)
+benchmarks/preload-globals.cjs
+benchmarks/profile-vm.ts

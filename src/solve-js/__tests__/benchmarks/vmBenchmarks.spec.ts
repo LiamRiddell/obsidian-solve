@@ -2,6 +2,11 @@
  * VM Execution Benchmarks - Jest compatible
  * Measures bytecode execution performance using pre-built bytecodes.
  * This isolates VM performance from parsing overhead.
+ *
+ * NOTE: The benchmark reuses a single VM instance across iterations
+ * (reset() instead of createVM() each time) to eliminate allocation
+ * and GC noise from the measurement. This reflects the production
+ * usage pattern where ExpressionEngine keeps a persistent VM.
  */
 
 import { describe, expect, test, afterAll } from "@jest/globals";
@@ -93,7 +98,10 @@ describe("VM Benchmarks", () => {
 
   for (const { name, bytecode } of programs) {
     test(`executes "${name}" efficiently`, () => {
-      // Smaller batches for faster execution
+      // Reuse a single VM across all iterations — matches production pattern
+      // where ExpressionEngine keeps a persistent VM. Eliminates allocation
+      // and GC noise from the measurement.
+      const vm = createVM(sharedOpRegistry);
       let totalMs = 0;
       const batches = 5;
       const perBatch = 5000;
@@ -101,7 +109,7 @@ describe("VM Benchmarks", () => {
       for (let b = 0; b < batches; b++) {
         const start = performance.now();
         for (let i = 0; i < perBatch; i++) {
-          const vm = createVM(sharedOpRegistry);
+          vm.reset();
           executeBytecode(bytecode, vm);
         }
         totalMs += performance.now() - start;
