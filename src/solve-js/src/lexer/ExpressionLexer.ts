@@ -264,8 +264,19 @@ export class ExpressionLexer {
       if (cc === CharClass.DIGIT || cc === CharClass.DOT) {
         result.push(new LexerToken('NUMBER', this.input, this.input, 0, 0, 1, 1));
       } else if (cc === CharClass.ALPHA) {
-        const kwType = this.keywordMap.get(this.input.toLowerCase());
-        result.push(new LexerToken(kwType || 'IDENT', this.input, this.input, 0, 0, 1, 1));
+        const input = this.input;
+        const identLower = input.toLowerCase();
+        // Unit lookup (case-sensitive, takes priority over keywords)
+        if (knownUnits.has(input)) {
+          result.push(new LexerToken('UNIT', input, input, 0, 0, 1, 1));
+        }
+        // Inline solve check: lone 's' without backtick is not inline solve
+        // (only 's`' with backtick triggers INLINE_SOLVE_START, but 1-char
+        // input can't have a backtick, so this is always IDENT/UNIT/keyword)
+        else {
+          const kwType = this.keywordMap.get(identLower);
+          result.push(new LexerToken(kwType || 'IDENT', input, input, 0, 0, 1, 1));
+        }
       } else if (c0 === 36) {
         result.push(new LexerToken('DOLLAR', '$', '$', 0, 0, 1, 1));
       } else {
@@ -510,8 +521,9 @@ export class ExpressionLexer {
     }
 
     // ── BigInt suffix check ────────────────────────────────────────────
+    // Only applies to integer literals (no decimal, no exponent).
     if (pos < len && input.charCodeAt(pos) === 110) {  // 'n'
-      if (hasIntPart) {
+      if (hasIntPart && !hasDecimal && !hasExponent) {
         pos++;
         const text = input.slice(start, pos);
         this.pos = pos;
@@ -528,9 +540,9 @@ export class ExpressionLexer {
   // ── Inline identifier / keyword tokenizer ──────────────────────────────
   /**
    * Reads [a-zA-Z_][a-zA-Z0-9_]* and resolves to:
-   *   - A keyword type (via locale keywordMap, case-insensitive)
    *   - A unit type (via knownUnits, case-sensitive)
    *   - A phrase type (multi-word patterns like "to the power of")
+   *   - A keyword type (via locale keywordMap, case-insensitive)
    *   - IDENT if none of the above
    *
    * Advances `this.pos` past the identifier or phrase.
@@ -567,21 +579,16 @@ export class ExpressionLexer {
       return new LexerToken('INLINE_SOLVE_START', fullText, fullText, start, 0, this.line, startCol);
     }
 
-    // ── Unit lookup (case-sensitive, takes priority over keywords) ────
-    // Units like C (Celsius) must not be matched as centiliter (c).
+    // ── Unit lookup (case-sensitive, takes priority over phrases/keywords)
     if (knownUnits.has(identText)) {
       this.pos = pos;
       return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
     }
 
-    // ── Keyword lookup (case-insensitive) ─────────────────────────────
-    const kwType = this.keywordMap.get(identLower);
-    if (kwType) {
-      this.pos = pos;
-      return new LexerToken(kwType, identText, identText, start, 0, this.line, startCol);
-    }
-
-    // ── Phrase matching — multi-word patterns ─────────────────────────
+    // ── Phrase matching — multi-word patterns (before keyword lookup)
+    // This must run before keyword lookup, otherwise phrases like
+    // "increase by", "divide by", "to the power of" are unreachable
+    // because the first word is always caught as a keyword.
     const phraseResult = this.tryMatchPhrase(input, pos, identLower, identText);
     if (phraseResult) {
       this.pos = phraseResult.endPos;
@@ -594,6 +601,13 @@ export class ExpressionLexer {
         this.line,
         startCol,
       );
+    }
+
+    // ── Keyword lookup (case-insensitive) ─────────────────────────────
+    const kwType = this.keywordMap.get(identLower);
+    if (kwType) {
+      this.pos = pos;
+      return new LexerToken(kwType, identText, identText, start, 0, this.line, startCol);
     }
 
     this.pos = pos;

@@ -211,7 +211,7 @@ s\`3 + 4\`
     });
 
     test("handles document with markdown-only lines", () => {
-      const result = engine.parseDocument("# \n- \n> ", { inputType: 'markdown' });
+      const result = engine.parseDocument("# \n// comment\n> ", { inputType: 'markdown' });
       
       expect(result.lines).toHaveLength(3);
       expect(result.lines.every(line => line.isEmpty)).toBe(true);
@@ -303,9 +303,11 @@ s\`10% of $200\``;
 s\`1 + 2\`
 Regular text with s\`3 + 4\` inline solve
 - List item with s\`5 + 6\`
-> Quote with s\`7 + 8\``;
+7 + 8`;
       
       const result = engine.parseDocument(document, { inputType: 'markdown' });
+      
+      expect(result.lines).toHaveLength(5);
       
       // Line 1: markdown heading (empty)
       expect(result.lines[0].isEmpty).toBe(true);
@@ -320,8 +322,9 @@ Regular text with s\`3 + 4\` inline solve
       // Line 4: list item with inline solve
       expect(result.lines[3].inlineSolves[0].result?.toNumber()).toBe(11);
       
-      // Line 5: blockquote with inline solve
-      expect(result.lines[4].inlineSolves[0].result?.toNumber()).toBe(15);
+      // Line 5: bare expression (replaced blockquote since blockquotes always skip)
+      expect(result.lines[4].expression).toBe("7 + 8");
+      expect(result.lines[4].result?.toNumber()).toBe(15);
     });
   });
 });

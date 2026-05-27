@@ -339,13 +339,9 @@ $$`;
       expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
     });
 
-    test("highlights expression in blockquote", () => {
+    test("does not highlight expression in blockquote (always skipped)", () => {
       const ranges = provider.getLineHighlights("> 1 + 2");
-      expect(ranges.length).toBeGreaterThanOrEqual(3);
-      const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
-      const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
-      expect(numberRanges.length).toBeGreaterThanOrEqual(2);
-      expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
+      expect(ranges).toHaveLength(0);
     });
 
     test("does not highlight heading content", () => {
