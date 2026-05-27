@@ -15,6 +15,7 @@ export type MarkdownLineType =
   | 'table_separator'
   | 'hr'
   | 'wikilink'
+  | 'comment'
   | 'empty';
 
 export interface LineClassification {
@@ -779,20 +780,22 @@ export class ExpressionLexer {
    *
    * **Classification rules (in priority order):**
    * 1. Empty/whitespace-only → empty
-   * 2. `#{1,6} ` → heading
-   * 3. `> ` → blockquote
-   * 4. ` ``` ` or `~~~` → code fence
-   * 5. `$$` → math fence (needs closing `$$`, but we classify the opening line)
-   * 6. `---`, `***`, `___` (3+ same char, nothing else) → horizontal rule
-   * 7. `- `, `* `, `+ ` → unordered list item
-   * 8. `\d+\. ` → ordered list item
-   * 9. `|` → table row or table separator
-   * 10. `[[` or `![[` → wikilink/embed (standalone)
-   * 11. Everything else → expression line
+   * 2. `#{1,6} ` → heading (always skip)
+   * 3. `#...` not matching heading → comment (always skip)
+   * 4. `> ` → blockquote (always skip)
+   * 5. ` ``` ` or `~~~` → code fence (always skip)
+   * 6. `$$` → math fence (always skip)
+   * 7. `---`, `***`, `___` (3+ same char, nothing else) → horizontal rule (skip)
+   * 8. `- `, `* `, `+ ` → unordered list item (always evaluate)
+   * 9. `\d+\. ` → ordered list item (always evaluate)
+   * 10. `|` → table row or table separator
+   * 11. `[[` or `![[` → wikilink/embed (standalone, skip)
+   * 12. `//` → comment (always skip)
+   * 13. Everything else → expression line
    *
-   * **Skip rules:** Lines are skipped unless they contain inline solve markers
-   * or are expression lines. Headings/blockquotes/lists WITH content after the
-   * marker are checked for inline solves and evaluated if present.
+   * **Skip rules:** Headings, blockquotes, comments, code/math fences, HRs,
+   * wikilinks/embeds, and table separators are always skipped. Lists (ordered
+   * and unordered) and expression lines are always evaluated.
    *
    * @param lineText The raw line text (without trailing newline).
    * @returns A LineClassification indicating type, skip status, and inline solve presence.
@@ -821,31 +824,28 @@ export class ExpressionLexer {
     const c0 = lineText.charCodeAt(pos);
     const hasInline = lineText.indexOf('s`', pos) !== -1;
 
-    // ── Heading: #{1,6} ' ' ──────────────────────────────────────────
+    // ── Heading / Comment: #{1,6} ' ' or #... ─────────────────────
+    // Headings are always skipped — they're structural markdown, not expressions.
+    // Lines starting with # that don't match the heading pattern are comments.
     if (c0 === 35) {  // #
       let hashCount = 1;
       while (pos + hashCount < len && lineText.charCodeAt(pos + hashCount) === 35) {
         hashCount++;
       }
       if (hashCount <= 6 && pos + hashCount < len && lineText.charCodeAt(pos + hashCount) === 32) {
-        // Heading with content after marker → evaluate if inline solve present.
-        // Bare "# " (no content) is skipped; "# Budget: 100 + 200" is evaluated.
-        const hasContent = pos + hashCount + 1 < len;
-        if (hasInline) {
-          return { type: 'heading', skip: false, hasInlineSolve: true };
-        }
-        return { type: 'heading', skip: !hasContent, hasInlineSolve: false };
+        // Standard heading marker #{1,6} ' ' — always skip
+        return { type: 'heading', skip: true, hasInlineSolve: false };
       }
+      // Not a heading pattern — treat as comment, always skip
+      return { type: 'heading', skip: true, hasInlineSolve: false };
     }
 
     // ── Blockquote: > ' ' ────────────────────────────────────────────
+    // Blockquotes are always skipped — they're structural markdown.
+    // Line number tracking is handled by the caller (evaluateLines).
     if (c0 === 62) {  // >
       if (pos + 1 < len && lineText.charCodeAt(pos + 1) === 32) {
-        const hasContent = pos + 2 < len;
-        if (hasInline) {
-          return { type: 'blockquote', skip: false, hasInlineSolve: true };
-        }
-        return { type: 'blockquote', skip: !hasContent, hasInlineSolve: false };
+        return { type: 'blockquote', skip: true, hasInlineSolve: false };
       }
     }
 
@@ -881,15 +881,14 @@ export class ExpressionLexer {
     }
 
     // ── Unordered list: - ' ', * ' ', + ' ' ──────────────────────────
+    // List items are always evaluated (even bare ones) — the content after
+    // the marker may contain expressions.
     if ((c0 === 45 || c0 === 42 || c0 === 43) && pos + 1 < len && lineText.charCodeAt(pos + 1) === 32) {
-      const hasContent = pos + 2 < len;
-      if (hasInline) {
-        return { type: 'list', skip: false, hasInlineSolve: true };
-      }
-      return { type: 'list', skip: !hasContent, hasInlineSolve: false };
+      return { type: 'list', skip: false, hasInlineSolve: hasInline };
     }
 
     // ── Ordered list: \d+ '. ' ────────────────────────────────────────
+    // Ordered list items are always evaluated — the content may contain expressions.
     if (c0 >= 48 && c0 <= 57) {  // 0-9
       let digitPos = pos;
       while (digitPos < len && lineText.charCodeAt(digitPos) >= 48 && lineText.charCodeAt(digitPos) <= 57) {
@@ -897,11 +896,7 @@ export class ExpressionLexer {
       }
       if (digitPos < len && lineText.charCodeAt(digitPos) === 46) {  // .
         if (digitPos + 1 < len && lineText.charCodeAt(digitPos + 1) === 32) {
-          const hasContent = digitPos + 2 < len;
-          if (hasInline) {
-            return { type: 'list', skip: false, hasInlineSolve: true };
-          }
-          return { type: 'list', skip: !hasContent, hasInlineSolve: false };
+          return { type: 'list', skip: false, hasInlineSolve: hasInline };
         }
       }
     }
@@ -945,28 +940,23 @@ export class ExpressionLexer {
       }
     }
 
-    // ── Default: expression line ──────────────────────────────────────
-    // But first, check for bare markdown markers without trailing space
-    // that fell through the main checks above.
-    // Pattern: #{1,6}, >, -, *, + with only optional whitespace after.
-    if (c0 === 35) {  // # — bare heading without space
-      let count = 1;
-      while (pos + count < len && lineText.charCodeAt(pos + count) === 35) count++;
-      if (count <= 6) {
-        let trail = pos + count;
-        while (trail < len && (lineText.charCodeAt(trail) === 32 || lineText.charCodeAt(trail) === 9)) trail++;
-        if (trail >= len) return { type: 'heading', skip: true, hasInlineSolve: false };
-      }
+    // ── Comment: // ──────────────────────────────────────────────────
+    if (c0 === 47 && pos + 1 < len && lineText.charCodeAt(pos + 1) === 47) {
+      return { type: 'comment', skip: true, hasInlineSolve: false };
     }
+
+    // ── Default: expression line ──────────────────────────────────────
+    // Bare blockquote marker > (no space) — always skip
     if (c0 === 62) {  // > — bare blockquote without space
       let trail = pos + 1;
       while (trail < len && (lineText.charCodeAt(trail) === 32 || lineText.charCodeAt(trail) === 9)) trail++;
       if (trail >= len) return { type: 'blockquote', skip: true, hasInlineSolve: false };
     }
-    if (c0 === 45 || c0 === 42 || c0 === 43) {  // - * + — bare list marker without space
+    // Bare list markers - * + (no space) — always evaluate (they're valid operators)
+    if (c0 === 45 || c0 === 42 || c0 === 43) {  // - * +
       let trail = pos + 1;
       while (trail < len && (lineText.charCodeAt(trail) === 32 || lineText.charCodeAt(trail) === 9)) trail++;
-      if (trail >= len) return { type: 'list', skip: true, hasInlineSolve: false };
+      if (trail >= len) return { type: 'list', skip: false, hasInlineSolve: false };
     }
     return { type: 'expression', skip: false, hasInlineSolve: hasInline };
   }

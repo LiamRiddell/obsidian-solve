@@ -21,8 +21,9 @@ describe("Phase 8: isEmptyLine regression tests", () => {
 
     test("inline solve after markdown marker is not empty", () => {
       expect(isEmptyLine("- s`1 + 2`")).toBe(false);
-      expect(isEmptyLine("> s`3 + 4`")).toBe(false);
-      expect(isEmptyLine("# s`5 + 6`")).toBe(false);
+      // Blockquotes and headings are always skipped — even with inline solves
+      expect(isEmptyLine("> s`3 + 4`")).toBe(true);
+      expect(isEmptyLine("# s`5 + 6`")).toBe(true);
     });
 
     test("inline solve mid-sentence is not empty", () => {
@@ -38,10 +39,10 @@ describe("Phase 8: isEmptyLine regression tests", () => {
       expect(isEmptyLine("###### ")).toBe(true);
     });
 
-    test("heading with content is not empty", () => {
-      expect(isEmptyLine("# Heading")).toBe(false);
-      expect(isEmptyLine("## Subheading")).toBe(false);
-      expect(isEmptyLine("# 1 + 2")).toBe(false);
+    test("heading with content is always skipped", () => {
+      expect(isEmptyLine("# Heading")).toBe(true);
+      expect(isEmptyLine("## Subheading")).toBe(true);
+      expect(isEmptyLine("# 1 + 2")).toBe(true);
     });
 
     test("bare heading without trailing space is empty", () => {
@@ -52,16 +53,16 @@ describe("Phase 8: isEmptyLine regression tests", () => {
   });
 
   describe("List markers", () => {
-    test("bare unordered list markers are empty", () => {
-      expect(isEmptyLine("- ")).toBe(true);
-      expect(isEmptyLine("* ")).toBe(true);
-      expect(isEmptyLine("+ ")).toBe(true);
+    test("bare unordered list markers are evaluated", () => {
+      expect(isEmptyLine("- ")).toBe(false);
+      expect(isEmptyLine("* ")).toBe(false);
+      expect(isEmptyLine("+ ")).toBe(false);
     });
 
-    test("bare unordered list without trailing space is empty", () => {
-      expect(isEmptyLine("-")).toBe(true);
-      expect(isEmptyLine("*")).toBe(true);
-      expect(isEmptyLine("+")).toBe(true);
+    test("bare unordered list without trailing space is evaluated", () => {
+      expect(isEmptyLine("-")).toBe(false);
+      expect(isEmptyLine("*")).toBe(false);
+      expect(isEmptyLine("+")).toBe(false);
     });
 
     test("list items with content are not empty", () => {
@@ -70,10 +71,10 @@ describe("Phase 8: isEmptyLine regression tests", () => {
       expect(isEmptyLine("+ Item")).toBe(false);
     });
 
-    test("bare ordered list markers are empty", () => {
-      expect(isEmptyLine("1. ")).toBe(true);
-      expect(isEmptyLine("42. ")).toBe(true);
-      expect(isEmptyLine("999. ")).toBe(true);
+    test("bare ordered list markers are evaluated", () => {
+      expect(isEmptyLine("1. ")).toBe(false);
+      expect(isEmptyLine("42. ")).toBe(false);
+      expect(isEmptyLine("999. ")).toBe(false);
     });
 
     test("ordered list items with content are not empty", () => {
@@ -88,15 +89,14 @@ describe("Phase 8: isEmptyLine regression tests", () => {
       expect(isEmptyLine(">")).toBe(true);
     });
 
-    test("blockquote with content is not empty", () => {
-      expect(isEmptyLine("> Quote")).toBe(false);
-      expect(isEmptyLine("> 1 + 2")).toBe(false);
+    test("blockquote with content is always skipped", () => {
+      expect(isEmptyLine("> Quote")).toBe(true);
+      expect(isEmptyLine("> 1 + 2")).toBe(true);
     });
 
-    test("Obsidian callouts are not classified as empty (they have content)", () => {
-      // > [!note] has content after the marker
-      expect(isEmptyLine("> [!note]")).toBe(false);
-      expect(isEmptyLine("> [!warning] Careful")).toBe(false);
+    test("Obsidian callouts are always skipped", () => {
+      expect(isEmptyLine("> [!note]")).toBe(true);
+      expect(isEmptyLine("> [!warning] Careful")).toBe(true);
     });
   });
 
@@ -186,15 +186,16 @@ describe("Phase 8: isEmptyLine regression tests", () => {
   describe("Backward compatibility — existing behavior preserved", () => {
     test("markdown-only lines from LineTracking spec still work", () => {
       expect(isEmptyLine("# ")).toBe(true);
-      expect(isEmptyLine("- ")).toBe(true);
+      // Lists are always evaluated, even bare markers
+      expect(isEmptyLine("- ")).toBe(false);
       expect(isEmptyLine("> ")).toBe(true);
     });
 
-    test("content lines with markdown prefix are still not empty", () => {
-      expect(isEmptyLine("# Heading text")).toBe(false);
+    test("content lines with markdown prefix — lists evaluate, headings/blockquotes skip", () => {
+      expect(isEmptyLine("# Heading text")).toBe(true);
       expect(isEmptyLine("- List item with s`5+6`")).toBe(false);
-      expect(isEmptyLine("> Quote with s`7+8`")).toBe(false);
-      expect(isEmptyLine("> [!note] Title")).toBe(false);
+      expect(isEmptyLine("> Quote with s`7+8`")).toBe(true);
+      expect(isEmptyLine("> [!note] Title")).toBe(true);
     });
 
     test("expression lines are not empty", () => {
