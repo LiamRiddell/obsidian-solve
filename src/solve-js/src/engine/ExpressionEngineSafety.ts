@@ -3,6 +3,7 @@ import { InlineSolvePosition } from "@solve-js/types/ParsingResult";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { numberValue, Value } from "@solve-js/vm/Value";
 import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
+import { sharedLexer } from "@solve-js/lexer/Lexer";
 
 // ── Validation config ────────────────────────────────────────────────────
 
@@ -115,9 +116,12 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
 /**
  * Check if a line is effectively empty (whitespace only or only markdown syntax).
  *
+ * Phase B: Delegates to the ExpressionLexer's character-by-character
+ * markdown line scanner, replacing the old regex-based heuristics.
+ *
  * Skips lines that contain no evaluable expression:
  * - Whitespace-only lines
- * - Markdown structural markers with no content (bare #, >, -, *, +, 1.)
+ * - Markdown structural markers (headings, blockquotes, lists without inline solves)
  * - Code block fences (```)
  * - MathJax block fences ($$)
  * - Table separator rows (|---|)
@@ -127,50 +131,23 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
  * Lines containing inline solves (s\`...\`) are never considered empty.
  */
 export function isEmptyLine(lineText: string): boolean {
-    const s = lineText.trimStart();
-    if (s.length === 0) return true;
-
-    // Lines containing inline solves are never empty — they have evaluable expressions
-    if (s.includes('s`')) return false;
-
-    // Markdown structural markers with ONLY whitespace after (no content).
-    // Uses $ anchor to preserve backward compatibility:
-    //   "# " is empty, but "# heading" is not.
-    if (/^(?:#{1,6}|>|[-*+]|\d+\.)\s*$/.test(s)) return true;
-
-    // Code block & MathJax fences (the entire block is non-evaluable structure)
-    if (/^```/.test(s)) return true;
-    if (/^\$\$/.test(s)) return true;
-
-    // Table separator rows (e.g. | --- | :---: |)
-    if (/^\|[-:|\s]+\|$/.test(s)) return true;
-
-    // Horizontal rules (---, ***, ___) with optional trailing whitespace
-    // Each must be 3+ of the SAME character — mixed chars like *-* are not HRs
-    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(s)) return true;
-
-    // Standalone wikilinks / embeds ([[page]] or ![[image]])
-    if (/^!?\[\[.*\]\]\s*$/.test(s)) return true;
-
-    return false;
+    const classification = sharedLexer.classifyLine(lineText);
+    return classification.skip;
 }
 
 /**
  * Find all inline solves in a line with precise coordinate mapping.
+ *
+ * Phase B: Delegates to the ExpressionLexer's character-by-character
+ * scanner (no regex, handles escaped backticks).
  */
 export function findInlineSolvesInLine(lineText: string, lineNumber: number): InlineSolvePosition[] {
-    const results: InlineSolvePosition[] = [];
-    const regex = /s`([^`]*)`/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = regex.exec(lineText)) !== null) {
-        results.push({
-            start: match.index,
-            end: match.index + match[0].length,
-            expression: match[1],
-            lineNumber,
-            columnNumber: match.index + 1,
-        });
-    }
-    return results;
+    const spans = sharedLexer.findInlineSolves(lineText);
+    return spans.map(s => ({
+        start: s.start,
+        end: s.end,
+        expression: s.expression,
+        lineNumber,
+        columnNumber: s.columnNumber,
+    }));
 }

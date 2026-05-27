@@ -1,5 +1,4 @@
-import { ExpressionLexer } from "./ExpressionLexer";
-import { MarkdownLexer } from "./MarkdownLexer";
+import { ExpressionLexer, LineClassification } from "./ExpressionLexer";
 import { Token } from "@solve-js/lexer/Token";
 import { LexerState } from "@solve-js/lexer/LexerState";
 import { getTokenHighlightClass } from "@solve-js/lexer/TokenHighlightMap";
@@ -7,8 +6,6 @@ import { getTokenHighlightClass } from "@solve-js/lexer/TokenHighlightMap";
 export class Lexer {
   /** Expression-mode lexer (Phase A: V8-optimized, replaces moo) */
   private expressionLexer: ExpressionLexer;
-  /** Markdown-mode lexer (moo-based, kept for Phase B integration) */
-  private markdownLexer: MarkdownLexer;
   private currentState: LexerState = LexerState.Main;
   private peekedToken: Token | undefined;
   private hasPeeked = false;
@@ -20,7 +17,6 @@ export class Lexer {
 
   constructor(localeCode = "en") {
     this.expressionLexer = new ExpressionLexer(localeCode);
-    this.markdownLexer = new MarkdownLexer(localeCode, "main");
   }
 
   reset(input: string, state?: LexerState): void {
@@ -29,21 +25,42 @@ export class Lexer {
     this.hasPeeked = false;
     this.peekedToken = undefined;
 
-    // Phase A: Expression mode uses the new V8-optimized lexer.
-    // Markdown mode (Main state) still uses moo-based MarkdownLexer.
+    // Phase B: Main state classifies the line with the markdown scanner.
+    // Skip lines (headings, fences, HRs, etc.) produce empty token arrays.
+    // Expression lines and lines with inline solves are tokenized normally.
     if (newState === LexerState.Main) {
-      // Main state — could be markdown or expression; detect via input content.
-      // For now, treat all main-state resets as expression mode (Phase A scope).
-      // Phase B will add markdown-mode heuristics.
+      const classification = this.expressionLexer.classifyLine(input);
+      if (classification.skip) {
+        this.tokens = [];
+        this.tokenIdx = 0;
+        return;
+      }
+      // Expression line or markdown line with inline solves — tokenize.
       this.expressionLexer.reset(input);
       this.tokens = this.expressionLexer.tokenizeAll('expression');
       this.tokenIdx = 0;
     } else {
-      // Non-main states (Inline, String) — delegate to MarkdownLexer for now.
-      this.markdownLexer.reset(input);
-      this.tokens = [];
+      // Non-main states (Inline, String) — expression tokenization.
+      this.expressionLexer.reset(input);
+      this.tokens = this.expressionLexer.tokenizeAll('expression');
       this.tokenIdx = 0;
     }
+  }
+
+  /**
+   * Classify a single line of markdown text (Phase B).
+   * Delegates to the ExpressionLexer's character-by-character scanner.
+   */
+  classifyLine(lineText: string): LineClassification {
+    return this.expressionLexer.classifyLine(lineText);
+  }
+
+  /**
+   * Find all inline solve markers in a line (Phase B).
+   * Delegates to the ExpressionLexer's character-by-character scanner.
+   */
+  findInlineSolves(lineText: string) {
+    return this.expressionLexer.findInlineSolves(lineText);
   }
 
   next(): Token | undefined {
@@ -51,20 +68,11 @@ export class Lexer {
       this.hasPeeked = false;
       return this.peekedToken;
     }
-    // If we have materialized tokens (ExpressionLexer path), use them.
-    if (this.tokens.length > 0) {
-      if (this.tokenIdx < this.tokens.length) {
-        return this.tokens[this.tokenIdx++];
-      }
-      return undefined;
+    // Materialized token array (ExpressionLexer path).
+    if (this.tokenIdx < this.tokens.length) {
+      return this.tokens[this.tokenIdx++];
     }
-    // Fallback: delegate to MarkdownLexer
-    const t = this.markdownLexer.next();
-    if (t !== undefined) {
-      // Collect into tokens array for iterator support
-      this.tokens.push(t);
-    }
-    return t;
+    return undefined;
   }
 
   peek(): Token | undefined {
@@ -75,12 +83,7 @@ export class Lexer {
   }
 
   [Symbol.iterator](): Iterator<Token> {
-    // If tokens are materialized (ExpressionLexer path), return array iterator.
-    if (this.tokens.length > 0) {
-      return this.tokens[Symbol.iterator]();
-    }
-    // Fallback: delegate to MarkdownLexer
-    return this.markdownLexer[Symbol.iterator]();
+    return this.tokens[Symbol.iterator]();
   }
 
   getState(): LexerState {
