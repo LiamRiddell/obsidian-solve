@@ -72,7 +72,8 @@ export class ExpressionEngine {
         localeCode = "en",
         diagnosticMode = false,
         config?: Partial<typeof DEFAULT_CONFIG>,
-        diagnosticPipeline?: DiagnosticPipeline
+        diagnosticPipeline?: DiagnosticPipeline,
+        packages?: ISolvePackage[]
     ) {
         this.localeCode = localeCode;
         this.config = { ...DEFAULT_CONFIG, ...config };
@@ -91,12 +92,16 @@ export class ExpressionEngine {
              // Production: no collectors — pipeline length-check exits immediately with zero overhead
          }
 
-        // Register built-in providers via ISolvePackage data.
-        // Uses the same package structure as external user packages —
-        // each package's parselets go into the engine's isolated registry
+        // Register providers via ISolvePackage data.
+        // Defaults to BUILTIN_PACKAGES (all built-in providers). Callers can
+        // pass a filtered subset via the `packages` constructor parameter to
+        // selectively include/exclude specific providers (e.g., omit dice or
+        // vector support for a calculator-only engine).
+        // Each package's parselets go into the engine's isolated registry
         // (not sharedParseletRegistry), lexer plugins into the engine's
         // isolated lexer, and opcode/variable handlers into shared registries.
-        for (const pkg of BUILTIN_PACKAGES) {
+        const pkgList = packages ?? BUILTIN_PACKAGES;
+        for (const pkg of pkgList) {
             this.registerPackage(pkg);
         }
         this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth, localeCode);
