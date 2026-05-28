@@ -9,7 +9,8 @@ export class Parser {
      private current = 0;
      private depth = 0;
      private maxDepth: number;
-     private parseletRegistry: ParseletRegistry;
+     /** Cached registry reference — avoids this.parseletRegistry property chain in hot loop */
+     private registry: ParseletRegistry;
      private diagnosticPipeline: DiagnosticPipeline | undefined;
      private currentExpression: string = "";
      private localeCode: string;
@@ -17,7 +18,7 @@ export class Parser {
      private parenDelta = 0;
 
      constructor(parseletRegistry: ParseletRegistry, maxDepth = 50, localeCode = "en") {
-         this.parseletRegistry = parseletRegistry;
+         this.registry = parseletRegistry;
          this.maxDepth = maxDepth;
          this.localeCode = localeCode;
      }
@@ -58,7 +59,7 @@ load(tokens: Token[]): void {
       * Only called when parenDelta !== 0 after the fast-path count.
       */
      private balanceParens(tokens: Token[], openCount: number): Token[] {
-         const result = [...tokens];
+         const result = tokens.slice();
          if (openCount > 0) {
              // More opens than closes — append missing closing parens
              for (let i = 0; i < openCount; i++) {
@@ -110,7 +111,7 @@ load(tokens: Token[]): void {
             throw ErrorFactory.parsing("UNEXPECTED_END", "Unexpected end of expression");
         }
 
-        const prefixParselet = this.parseletRegistry.getPrefix(token.type);
+        const prefixParselet = this.registry.getPrefix(token.type);
         if (!prefixParselet) {
             this.depth--;
             throw ErrorFactory.parsing(
@@ -132,7 +133,7 @@ load(tokens: Token[]): void {
         // Infix parselet loop — hot path, cache references to avoid property lookups
         let idx = this.current;
         const len = tokens.length;
-        const registry = this.parseletRegistry;
+        const registry = this.registry;
         const hasDiag = this.diagnosticPipeline !== undefined;
 
         while (idx < len) {
