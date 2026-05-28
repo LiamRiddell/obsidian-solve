@@ -8,9 +8,7 @@ import { isKnownUnit } from "@solve-js/lexer/units";
 
 export class UomLiteralParselet implements InfixParselet {
 	readonly category = "UoM";
-	getBindingPower(): number {
-    return BindingPower.Postfix;
-  }
+	readonly bindingPower = BindingPower.Postfix;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
     const unit = token.value;

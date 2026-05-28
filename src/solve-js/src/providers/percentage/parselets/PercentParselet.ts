@@ -7,9 +7,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 
 export class PercentParselet implements InfixParselet {
 	readonly category = "Percentage";
-	getBindingPower(): number {
-    return BindingPower.Prefix;
-  }
+	readonly bindingPower = BindingPower.Prefix;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.PUSH_NUMBER);

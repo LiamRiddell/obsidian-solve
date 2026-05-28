@@ -41,7 +41,7 @@ this.registry.registerInfix(tokenType, {
          parser.parseExpression(bindingPower);
          builder.emitOpcode(op);
        },
-       getBindingPower(): number { return bindingPower; },
+       bindingPower,
      });
   }
 
@@ -60,7 +60,7 @@ this.registry.registerInfix(tokenType, {
        parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
          handler(builder, left, token, parser);
        },
-       getBindingPower(): number { return bindingPower; },
+       bindingPower,
      });
   }
 }

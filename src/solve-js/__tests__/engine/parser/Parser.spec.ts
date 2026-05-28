@@ -16,9 +16,7 @@ class NumberParselet implements PrefixParselet {
 
 class PlusParselet implements InfixParselet {
 	readonly category = "Test";
-	getBindingPower(): number {
-		return 30;
-	}
+	readonly bindingPower: number = 30;
 	parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
 		const rightToken = parser.consume();
 		builder.emitOpcode(OpCode.PUSH_NUMBER);

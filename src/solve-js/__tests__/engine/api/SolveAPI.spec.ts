@@ -36,7 +36,7 @@ it("supports registerPackage with prefix parselets", () => {
      const testParselet: InfixParselet = {
        category: "Test",
        parse(_parser: Parser, _left: Token, _token: Token, _builder: BytecodeBuilder): void {},
-       getBindingPower(): number { return 10; },
+       bindingPower: 10,
      };
     const pkg: ISolvePackage = {
       name: "test-package",

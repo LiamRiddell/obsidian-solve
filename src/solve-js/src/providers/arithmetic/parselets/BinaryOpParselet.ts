@@ -6,17 +6,16 @@ import { OpCode } from "@solve-js/parser/OpCode";
 
 export class BinaryOpParselet implements InfixParselet {
 	readonly category = "Arithmetic";
+	readonly bindingPower: number;
 	constructor(
-    private readonly bp: number,
+    bp: number,
     private readonly opcode: OpCode
-  ) {}
-
-  getBindingPower(): number {
-    return this.bp;
+  ) {
+    this.bindingPower = bp;
   }
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    parser.parseExpression(this.bp, builder);
+    parser.parseExpression(this.bindingPower, builder);
     builder.emitOpcode(this.opcode);
   }
 }

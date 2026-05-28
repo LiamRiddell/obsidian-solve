@@ -7,36 +7,30 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 
 export class VectorAddParselet implements InfixParselet {
 	readonly category = "Vector";
-	getBindingPower(): number {
-    return BindingPower.Sum;
-  }
+	readonly bindingPower = BindingPower.Sum;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    parser.parseExpression(this.getBindingPower(), builder);
+    parser.parseExpression(this.bindingPower, builder);
     builder.emitOpcode(OpCode.VEC_ADD);
   }
 }
 
 export class VectorSubParselet implements InfixParselet {
 	readonly category = "Vector";
-	getBindingPower(): number {
-    return BindingPower.Sum;
-  }
+	readonly bindingPower = BindingPower.Sum;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    parser.parseExpression(this.getBindingPower(), builder);
+    parser.parseExpression(this.bindingPower, builder);
     builder.emitOpcode(OpCode.VEC_SUB);
   }
 }
 
 export class VectorDotParselet implements InfixParselet {
 	readonly category = "Vector";
-	getBindingPower(): number {
-    return BindingPower.Product;
-  }
+	readonly bindingPower = BindingPower.Product;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    parser.parseExpression(this.getBindingPower(), builder);
+    parser.parseExpression(this.bindingPower, builder);
     builder.emitOpcode(OpCode.VEC_DOT);
   }
 }

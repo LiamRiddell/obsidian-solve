@@ -14,9 +14,7 @@ export class Parser {
      private diagnosticPipeline: DiagnosticPipeline | undefined;
      private currentExpression: string = "";
      private localeCode: string;
-     /** Track paren delta during load() — skip balanceParens if balanced */
-     private parenDelta = 0;
-
+ 
      constructor(parseletRegistry: ParseletRegistry, maxDepth = 50, localeCode = "en") {
          this.registry = parseletRegistry;
          this.maxDepth = maxDepth;
@@ -47,7 +45,6 @@ load(tokens: Token[]): void {
              if (tokens[i].type === "LPAREN") openCount++;
              else if (tokens[i].type === "RPAREN") openCount--;
          }
-         this.parenDelta = openCount;
          this.tokens = openCount === 0 ? tokens : this.balanceParens(tokens, openCount);
          this.current = 0;
          this.depth = 0;
@@ -142,12 +139,12 @@ load(tokens: Token[]): void {
 
             const infixParselet = registry.getInfix(nextToken.type);
             if (!infixParselet) break;
-            if (infixParselet.getBindingPower() <= bindingPower) break;
+            if (infixParselet.bindingPower <= bindingPower) break;
 
             this.current = ++idx; // advance past token
 
             if (hasDiag) {
-                this.fireParseletMatched(infixParselet, nextToken, false, infixParselet.getBindingPower());
+                this.fireParseletMatched(infixParselet, nextToken, false, infixParselet.bindingPower);
             }
 
             if (builder) {

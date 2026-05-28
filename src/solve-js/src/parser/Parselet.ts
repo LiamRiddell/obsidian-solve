@@ -11,6 +11,7 @@ export interface PrefixParselet {
 export interface InfixParselet {
 	/** Diagnostic category for this parselet (e.g. "Arithmetic", "UoM") */
 	readonly category: string;
+	/** Binding power (precedence) — property access avoids vtable dispatch in hot loop */
+	readonly bindingPower: number;
 	parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void;
-	getBindingPower(): number;
 }

@@ -7,9 +7,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 
 export class PercentageChangeParselet implements InfixParselet {
 	readonly category = "Percentage";
-	getBindingPower(): number {
-    return BindingPower.Conditional;
-  }
+	readonly bindingPower = BindingPower.Conditional;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
     // Check if the left operand is a UNIT token
@@ -22,7 +20,7 @@ export class PercentageChangeParselet implements InfixParselet {
     }
     
     // Parse the right operand (target value)
-    parser.parseExpression(this.getBindingPower(), builder);
+    parser.parseExpression(this.bindingPower, builder);
     
     // Calculate percentage change: right / left - 1
     // Stack before: [left, right]
