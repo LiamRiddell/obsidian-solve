@@ -610,11 +610,13 @@ export class ExpressionLexer {
         lineEnd++;
       }
 
-      const lineText = input.slice(lineStart, lineEnd);
       const lineNumber = this.line;
 
       // ── Classify the line ─────────────────────────────────────────
-      const classification = this.classifyLine(lineText);
+      // Uses classifyFromPositions() to read from this.input directly —
+      // avoids allocating a substring and keeps classification reads
+      // within the same memory region as tokenization.
+      const classification = this.classifyFromPositions(lineStart, lineEnd);
 
       // ── Tokenize non-skipped lines ────────────────────────────────
       let tokens: Token[] = [];
@@ -630,6 +632,12 @@ export class ExpressionLexer {
         this.len = savedLen;
         // this.pos is now at lineEnd — advance past newline below
       }
+
+      // ── Slice line text for result and inline solves ────────────
+      // Classification already happened via classifyFromPositions()
+      // which reads from this.input directly. The slice here is still
+      // needed for ScanLineResult.text and findInlineSolves().
+      const lineText = input.slice(lineStart, lineEnd);
 
       // ── Detect inline solves (only for lines that may have them) ─
       let inlineSolves: InlineSolveSpan[] = [];
@@ -1388,49 +1396,33 @@ export class ExpressionLexer {
   // ── Markdown line scanner (Phase B) ───────────────────────────────────
 
   /**
-   * Classify a single line of markdown text using character-by-character
-   * scanning. Determines whether the line is a markdown structural element
-   * (heading, list, blockquote, code fence, etc.) or an evaluable expression.
+   * Classify a line by its character positions within this.input.
    *
-   * Replaces the regex-based heuristics in `isEmptyLine()` with a single-pass
-   * state machine that classifies the line by examining the first non-whitespace
-   * characters. Also detects inline solve markers (`s`...``).
+   * Reads directly from this.input using start/end boundaries — avoids
+   * allocating a substring (input.slice(start, end)) for classification.
+   * Used by scanDocument() which already has the full document in
+   * this.input; this keeps both classification and tokenization reads
+   * within the same memory region for better CPU cache locality.
    *
-   * **Classification rules (in priority order):**
-   * 1. Empty/whitespace-only → empty
-   * 2. `#{1,6} ` → heading (always skip)
-   * 3. `#...` not matching heading → comment (always skip)
-   * 4. `> ` → blockquote (always skip)
-   * 5. ` ``` ` or `~~~` → code fence (always skip)
-   * 6. `$$` → math fence (always skip)
-   * 7. `---`, `***`, `___` (3+ same char, nothing else) → horizontal rule (skip)
-   * 8. `- `, `* `, `+ ` → unordered list item (always evaluate)
-   * 9. `\d+\. ` → ordered list item (always evaluate)
-   * 10. `|` → table row or table separator
-   * 11. `[[` or `![[` → wikilink/embed (standalone, skip)
-   * 12. `//` → comment (always skip)
-   * 13. Everything else → expression line
+   * DOES NOT modify this.pos — purely a read-only classifier.
    *
-   * **Skip rules:** Headings, blockquotes, comments, code/math fences, HRs,
-   * wikilinks/embeds, and table separators are always skipped. Lists (ordered
-   * and unordered) and expression lines are always evaluated.
-   *
-   * @param lineText The raw line text (without trailing newline).
-   * @returns A LineClassification indicating type, skip status, and inline solve presence.
+   * @param start Character offset of the line start within this.input.
+   * @param end Character offset of the line end (before newline).
    */
-  classifyLine(lineText: string): LineClassification {
-    const len = lineText.length;
+  private classifyFromPositions(start: number, end: number): LineClassification {
+    const len = end;
 
     // ── 0-length fast path ────────────────────────────────────────────
-    if (len === 0) {
+    if (start >= len) {
       return { type: 'empty', skip: true, hasInlineSolve: false };
     }
 
-    let pos = 0;
+    const input = this.input;
+    let pos = start;
 
     // ── Skip leading whitespace ─────────────────────────────────────────
     while (pos < len) {
-      const cc = lineText.charCodeAt(pos);
+      const cc = input.charCodeAt(pos);
       if (cc !== 32 && cc !== 9) break;
       pos++;
     }
@@ -1439,60 +1431,52 @@ export class ExpressionLexer {
       return { type: 'empty', skip: true, hasInlineSolve: false };
     }
 
-    const c0 = lineText.charCodeAt(pos);
+    const c0 = input.charCodeAt(pos);
     // hasInline is computed lazily — only for branch types that need it.
-    // Computing indexOf('s`') before early-return checks wastes ~15-20% of
-    // classifyLine time on heading/blockquote/HR-heavy documents.
+    // Uses input.indexOf() bounded by end to avoid scanning past the line.
     let hasInline: boolean | undefined;
 
     // ── Heading / Comment: #{1,6} ' ' or #... ─────────────────────
-    // Headings are always skipped — they're structural markdown, not expressions.
-    // Lines starting with # that don't match the heading pattern are comments.
     if (c0 === 35) {  // #
       let hashCount = 1;
-      while (pos + hashCount < len && lineText.charCodeAt(pos + hashCount) === 35) {
+      while (pos + hashCount < len && input.charCodeAt(pos + hashCount) === 35) {
         hashCount++;
       }
-      if (hashCount <= 6 && pos + hashCount < len && lineText.charCodeAt(pos + hashCount) === 32) {
-        // Standard heading marker #{1,6} ' ' — always skip
+      if (hashCount <= 6 && pos + hashCount < len && input.charCodeAt(pos + hashCount) === 32) {
         return { type: 'heading', skip: true, hasInlineSolve: false };
       }
-      // Not a heading pattern — treat as comment, always skip
       return { type: 'heading', skip: true, hasInlineSolve: false };
     }
 
     // ── Blockquote: > ' ' ────────────────────────────────────────────
-    // Blockquotes are always skipped — they're structural markdown.
-    // Line number tracking is handled by the caller (evaluateLines).
     if (c0 === 62) {  // >
-      if (pos + 1 < len && lineText.charCodeAt(pos + 1) === 32) {
+      if (pos + 1 < len && input.charCodeAt(pos + 1) === 32) {
         return { type: 'blockquote', skip: true, hasInlineSolve: false };
       }
     }
 
     // ── Code fence: ``` or ~~~ ────────────────────────────────────────
-    if (c0 === 96 && pos + 2 < len && lineText.charCodeAt(pos + 1) === 96 && lineText.charCodeAt(pos + 2) === 96) {
+    if (c0 === 96 && pos + 2 < len && input.charCodeAt(pos + 1) === 96 && input.charCodeAt(pos + 2) === 96) {
       return { type: 'code_fence', skip: true, hasInlineSolve: false };
     }
-    if (c0 === 126 && pos + 2 < len && lineText.charCodeAt(pos + 1) === 126 && lineText.charCodeAt(pos + 2) === 126) {
+    if (c0 === 126 && pos + 2 < len && input.charCodeAt(pos + 1) === 126 && input.charCodeAt(pos + 2) === 126) {
       return { type: 'code_fence', skip: true, hasInlineSolve: false };
     }
 
     // ── Math fence: $$ ────────────────────────────────────────────────
-    if (c0 === 36 && pos + 1 < len && lineText.charCodeAt(pos + 1) === 36) {
+    if (c0 === 36 && pos + 1 < len && input.charCodeAt(pos + 1) === 36) {
       return { type: 'math_fence', skip: true, hasInlineSolve: false };
     }
 
     // ── Horizontal rule: ---, ***, ___ (3+ same char, then only whitespace)
     if (c0 === 45 || c0 === 42 || c0 === 95) {  // -, *, _
       let count = 1;
-      while (pos + count < len && lineText.charCodeAt(pos + count) === c0) {
+      while (pos + count < len && input.charCodeAt(pos + count) === c0) {
         count++;
       }
       if (count >= 3) {
-        // Verify nothing but whitespace follows
         let trailPos = pos + count;
-        while (trailPos < len && (lineText.charCodeAt(trailPos) === 32 || lineText.charCodeAt(trailPos) === 9)) {
+        while (trailPos < len && (input.charCodeAt(trailPos) === 32 || input.charCodeAt(trailPos) === 9)) {
           trailPos++;
         }
         if (trailPos >= len) {
@@ -1502,23 +1486,26 @@ export class ExpressionLexer {
     }
 
     // ── Unordered list: - ' ', * ' ', + ' ' ──────────────────────────
-    // List items are always evaluated (even bare ones) — the content after
-    // the marker may contain expressions.
-    if ((c0 === 45 || c0 === 42 || c0 === 43) && pos + 1 < len && lineText.charCodeAt(pos + 1) === 32) {
-      if (hasInline === undefined) hasInline = lineText.indexOf('s`', pos) !== -1;
+    if ((c0 === 45 || c0 === 42 || c0 === 43) && pos + 1 < len && input.charCodeAt(pos + 1) === 32) {
+      if (hasInline === undefined) {
+        const idx = input.indexOf('s`', pos);
+        hasInline = idx !== -1 && idx < len;
+      }
       return { type: 'list', skip: false, hasInlineSolve: hasInline };
     }
 
     // ── Ordered list: \d+ '. ' ────────────────────────────────────────
-    // Ordered list items are always evaluated — the content may contain expressions.
     if (c0 >= 48 && c0 <= 57) {  // 0-9
       let digitPos = pos;
-      while (digitPos < len && lineText.charCodeAt(digitPos) >= 48 && lineText.charCodeAt(digitPos) <= 57) {
+      while (digitPos < len && input.charCodeAt(digitPos) >= 48 && input.charCodeAt(digitPos) <= 57) {
         digitPos++;
       }
-      if (digitPos < len && lineText.charCodeAt(digitPos) === 46) {  // .
-        if (digitPos + 1 < len && lineText.charCodeAt(digitPos + 1) === 32) {
-          if (hasInline === undefined) hasInline = lineText.indexOf('s`', pos) !== -1;
+      if (digitPos < len && input.charCodeAt(digitPos) === 46) {  // .
+        if (digitPos + 1 < len && input.charCodeAt(digitPos + 1) === 32) {
+          if (hasInline === undefined) {
+            const idx = input.indexOf('s`', pos);
+            hasInline = idx !== -1 && idx < len;
+          }
           return { type: 'list', skip: false, hasInlineSolve: hasInline };
         }
       }
@@ -1526,29 +1513,23 @@ export class ExpressionLexer {
 
     // ── Table / table separator: | ────────────────────────────────────
     if (c0 === 124) {  // |
-      // Detect table separator: |--| or |:--:| etc.
-      // Use character-by-character scan instead of regex to avoid
-      // intermediate string allocation (lineText.slice) and regex overhead.
       let tPos = pos + 1;
       while (tPos < len) {
-        const tc = lineText.charCodeAt(tPos);
+        const tc = input.charCodeAt(tPos);
         if (tc !== 45 && tc !== 58 && tc !== 124 && tc !== 32 && tc !== 9 && tc !== 13) break;
         tPos++;
       }
       if (tPos >= len) {
         return { type: 'table_separator', skip: true, hasInlineSolve: false };
       }
-      // Table data row — fall through to expression classification
     }
 
     // ── Wikilink / embed: [[ or ![[ ───────────────────────────────────
-    // Must verify the line is ONLY a wikilink (only whitespace follows `]]`).
-    // Lines like "[[page]] 1 + 2" are expression lines, not wikilinks.
-    if (c0 === 91 && pos + 1 < len && lineText.charCodeAt(pos + 1) === 91) {
-      const closePos = lineText.indexOf(']]', pos + 2);
-      if (closePos !== -1) {
+    if (c0 === 91 && pos + 1 < len && input.charCodeAt(pos + 1) === 91) {
+      const closePos = input.indexOf(']]', pos + 2);
+      if (closePos !== -1 && closePos < len) {
         let trailPos = closePos + 2;
-        while (trailPos < len && (lineText.charCodeAt(trailPos) === 32 || lineText.charCodeAt(trailPos) === 9)) {
+        while (trailPos < len && (input.charCodeAt(trailPos) === 32 || input.charCodeAt(trailPos) === 9)) {
           trailPos++;
         }
         if (trailPos >= len) {
@@ -1556,11 +1537,11 @@ export class ExpressionLexer {
         }
       }
     }
-    if (c0 === 33 && pos + 2 < len && lineText.charCodeAt(pos + 1) === 91 && lineText.charCodeAt(pos + 2) === 91) {
-      const closePos = lineText.indexOf(']]', pos + 3);
-      if (closePos !== -1) {
+    if (c0 === 33 && pos + 2 < len && input.charCodeAt(pos + 1) === 91 && input.charCodeAt(pos + 2) === 91) {
+      const closePos = input.indexOf(']]', pos + 3);
+      if (closePos !== -1 && closePos < len) {
         let trailPos = closePos + 2;
-        while (trailPos < len && (lineText.charCodeAt(trailPos) === 32 || lineText.charCodeAt(trailPos) === 9)) {
+        while (trailPos < len && (input.charCodeAt(trailPos) === 32 || input.charCodeAt(trailPos) === 9)) {
           trailPos++;
         }
         if (trailPos >= len) {
@@ -1570,25 +1551,50 @@ export class ExpressionLexer {
     }
 
     // ── Comment: // ──────────────────────────────────────────────────
-    if (c0 === 47 && pos + 1 < len && lineText.charCodeAt(pos + 1) === 47) {
+    if (c0 === 47 && pos + 1 < len && input.charCodeAt(pos + 1) === 47) {
       return { type: 'comment', skip: true, hasInlineSolve: false };
     }
 
     // ── Default: expression line ──────────────────────────────────────
-    // Bare blockquote marker > (no space) — always skip
     if (c0 === 62) {  // > — bare blockquote without space
       let trail = pos + 1;
-      while (trail < len && (lineText.charCodeAt(trail) === 32 || lineText.charCodeAt(trail) === 9)) trail++;
+      while (trail < len && (input.charCodeAt(trail) === 32 || input.charCodeAt(trail) === 9)) trail++;
       if (trail >= len) return { type: 'blockquote', skip: true, hasInlineSolve: false };
     }
-    // Bare list markers - * + (no space) — always evaluate (they're valid operators)
     if (c0 === 45 || c0 === 42 || c0 === 43) {  // - * +
       let trail = pos + 1;
-      while (trail < len && (lineText.charCodeAt(trail) === 32 || lineText.charCodeAt(trail) === 9)) trail++;
+      while (trail < len && (input.charCodeAt(trail) === 32 || input.charCodeAt(trail) === 9)) trail++;
       if (trail >= len) return { type: 'list', skip: false, hasInlineSolve: false };
     }
-    if (hasInline === undefined) hasInline = lineText.indexOf('s`', pos) !== -1;
+    if (hasInline === undefined) {
+      const idx = input.indexOf('s`', pos);
+      hasInline = idx !== -1 && idx < len;
+    }
     return { type: 'expression', skip: false, hasInlineSolve: hasInline };
+  }
+
+  /**
+   * Classify a single line of markdown text.
+   *
+   * Thin wrapper around classifyFromPositions() for external callers that
+   * have a standalone line string. Internal callers (scanDocument) should
+   * use classifyFromPositions() directly to avoid string allocation and
+   * keep classification + tokenization reads within the same memory region.
+   *
+   * @param lineText The raw line text (without trailing newline).
+   */
+  classifyLine(lineText: string): LineClassification {
+    const savedInput = this.input;
+    const savedLen = this.len;
+    const savedPos = this.pos;
+    this.input = lineText;
+    this.len = lineText.length;
+    this.pos = 0;
+    const result = this.classifyFromPositions(0, lineText.length);
+    this.input = savedInput;
+    this.len = savedLen;
+    this.pos = savedPos;
+    return result;
   }
 
   /**
