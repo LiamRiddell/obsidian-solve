@@ -2,6 +2,7 @@ import { describe, expect, test, jest } from "@jest/globals";
 import { PluginManager, ProviderPackage } from "@solve-js/plugins/PluginSystem";
 import { PluginRegistry } from "@solve-js/plugins/PluginSystem";
 import type { SolvePlugin } from "@solve-js/plugins/PluginSystem";
+import { sharedLexer } from "@solve-js/lexer/Lexer";
 
 describe("PluginManager", () => {
   test("register adds a plugin", () => {
@@ -125,6 +126,106 @@ describe("PluginManager", () => {
     manager.registerPackage({ name: "test-pkg", version: "1.0.0", plugins: [p1, p2] });
     expect(manager.hasPlugin("pkg:a")).toBe(true);
     expect(manager.hasPlugin("pkg:b")).toBe(true);
+  });
+
+  test("register with lexerPlugin registers keywords on sharedLexer", () => {
+    const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
+    const manager = new PluginManager(registry);
+
+    const plugin: SolvePlugin = {
+      name: "lexer-plugin-test",
+      version: "1.0.0",
+      lexerPlugin: {
+        keywords: { "__test_plugin_ns__": "PLUGIN_TEST" },
+      },
+      register: jest.fn(),
+    };
+
+    manager.register(plugin);
+    expect(plugin.register).toHaveBeenCalledWith(registry);
+
+    // Verify the keyword was registered on sharedLexer
+    sharedLexer.reset("__test_plugin_ns__");
+    const tokens = Array.from(sharedLexer);
+    expect(tokens.length).toBeGreaterThanOrEqual(1);
+    expect(tokens[0].type).toBe("PLUGIN_TEST");
+    expect(tokens[0].value).toBe("__test_plugin_ns__");
+  });
+
+  test("register with lexerPlugin registers operators on sharedLexer", () => {
+    const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
+    const manager = new PluginManager(registry);
+
+    const plugin: SolvePlugin = {
+      name: "lexer-op-plugin-test",
+      version: "1.0.0",
+      lexerPlugin: {
+        operators: { "~>": "PIPE_FWD" },
+      },
+      register: jest.fn(),
+    };
+
+    manager.register(plugin);
+    expect(plugin.register).toHaveBeenCalledWith(registry);
+
+    sharedLexer.reset("a~>b");
+    const tokens = Array.from(sharedLexer);
+    const pipeFwdToken = tokens.find(t => t.type === "PIPE_FWD");
+    expect(pipeFwdToken).toBeDefined();
+    expect(pipeFwdToken!.value).toBe("~>");
+  });
+
+  test("unregister removes lexerPlugin from sharedLexer", () => {
+    const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
+    const manager = new PluginManager(registry);
+
+    const plugin: SolvePlugin = {
+      name: "lexer-unreg-test",
+      version: "1.0.0",
+      lexerPlugin: {
+        keywords: { "__test_unreg__": "TEST_UNREG" },
+      },
+      register: jest.fn(),
+    };
+
+    manager.register(plugin);
+
+    // Verify keyword is registered
+    sharedLexer.reset("__test_unreg__");
+    expect(Array.from(sharedLexer)[0].type).toBe("TEST_UNREG");
+
+    manager.unregister("lexer-unreg-test");
+
+    // Verify keyword is removed
+    sharedLexer.reset("__test_unreg__");
+    expect(Array.from(sharedLexer)[0].type).toBe("IDENT");
+  });
+
+  test("clear removes lexerPlugins from sharedLexer", () => {
+    const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
+    const manager = new PluginManager(registry);
+
+    const plugin: SolvePlugin = {
+      name: "lexer-clear-test",
+      version: "1.0.0",
+      lexerPlugin: {
+        keywords: { "__test_clear__": "TEST_CLEAR" },
+      },
+      register: jest.fn(),
+    };
+
+    manager.register(plugin);
+
+    // Verify keyword is registered
+    sharedLexer.reset("__test_clear__");
+    expect(Array.from(sharedLexer)[0].type).toBe("TEST_CLEAR");
+
+    manager.clear();
+
+    // Verify keyword is removed
+    sharedLexer.reset("__test_clear__");
+    const tokens = Array.from(sharedLexer);
+    expect(tokens[0].type).toBe("IDENT");
   });
 
   test("clear unregisters all plugins", () => {

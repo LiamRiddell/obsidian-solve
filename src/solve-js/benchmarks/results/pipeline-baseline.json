@@ -1,14 +1,14 @@
 {
-  "timestamp": "2026-05-25T22:30:02.252Z",
+  "timestamp": "2026-05-28T13:15:17.295Z",
   "results": {
-    "single_eval_cold": 0.9059205799999992,
-    "single_eval_warm": 0.001295261999999293,
-    "50_line_doc": 0.8971100000000343,
-    "200_line_doc": 1.7081659999999284,
-    "variable_chain": 0.7133816399999922,
-    "20_inline_solves": 0.7958533500000186,
-    "re_eval_dirty": 0.609527329999997,
-    "mixed_complex": 0.6392590900000094,
-    "function_plus_literal": 0.5913902450000204
+    "single_eval_cold": 0.0201894399999981,
+    "single_eval_warm": 0.0011147519999999895,
+    "50_line_doc": 0.360598,
+    "200_line_doc": 0.880942,
+    "variable_chain": 0.02998783999999987,
+    "20_inline_solves": 0.08710305000000153,
+    "re_eval_dirty": 0.024539859999999476,
+    "mixed_complex": 0.0466300299999988,
+    "function_plus_literal": 0.01737393000000177
   }
 }

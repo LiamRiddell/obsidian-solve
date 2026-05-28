@@ -14,3 +14,13 @@
 14. Units of Measurement parslet doesn't handle all of the original providers functionality to be honest none of the providers you migrated do. Everything needs checking for regression. You'll need to use git comamnds for that.
 
 For this work reasearch everything on the web, write test, ask questions for clarity. Commit in blocks.
+
+--- 28/05/2026
+
+1. plugins - add functionality to prevent and error when overriding of existing keywords, operators, phrases, uniuts , etc and then add tests
+2. lexer - The markdown and expression lexer could be combined for faster speed?
+3. parser - Optmisations
+4. packages - The engine should use the package system for internal shipped packages e.g. arithmetic, etc..
+
+Tests = https://stackoverflow.com/questions/62885390/my-jests-tests-are-leaking-memory-how-can-i-fix-this
+https://stackoverflow.com/questions/62885390/my-jests-tests-are-leaking-memory-how-can-i-fix-this#comment138853764_78207777

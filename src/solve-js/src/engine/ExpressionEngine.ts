@@ -10,16 +10,9 @@ import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, numberValue } from "@solve-js/vm/Value";
 import { PluginManager } from "@solve-js/plugins/PluginSystem";
-import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
-import { registerPercentageParselets } from "@solve-js/providers/percentage/parselets/index";
-import { registerFunctionParselets } from "@solve-js/providers/function/parselets/index";
-import { registerDatetimeParselets } from "@solve-js/providers/datetime/parselets/index";
-import { registerDiceParselets } from "@solve-js/providers/dice/parselets/index";
-import { registerVariableParselets } from "@solve-js/providers/variables/parselets/index";
-import { registerUomParselets } from "@solve-js/providers/uom/parselets/index";
-import { registerVectorParselets } from "@solve-js/providers/vector/parselets/index";
-import { registerBigIntParselets } from "@solve-js/providers/biginteger/parselets/index";
+import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { Solve } from "@solve-js/api/SolveAPI";
 import {
     ParsingResult,
     ParsedLine,
@@ -99,16 +92,13 @@ export class ExpressionEngine {
              // Production: no collectors — pipeline length-check exits immediately with zero overhead
          }
 
-        // Register built-in providers (can be extended via registerPlugin/unregisterPlugin)
-        registerArithmeticParselets(this.registry);
-        registerPercentageParselets(this.registry);
-        registerFunctionParselets(this.registry);
-        registerDatetimeParselets(this.registry);
-        registerDiceParselets(this.registry);
-        registerVariableParselets(this.registry);
-        registerUomParselets(this.registry);
-        registerVectorParselets(this.registry);
-        registerBigIntParselets(this.registry);
+        // Register built-in providers via the ISolvePackage system.
+        // Uses the same API as external plugins — enables introspection,
+        // selective disable, and replacement of built-in providers.
+        const solve = new Solve();
+        for (const pkg of BUILTIN_PACKAGES) {
+            solve.registerPackage(pkg);
+        }
         this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth, localeCode);
         this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
     }

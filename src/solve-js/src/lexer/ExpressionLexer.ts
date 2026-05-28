@@ -1,6 +1,7 @@
 import { Token } from '@solve-js/lexer/Token';
 import { knownUnits } from '@solve-js/lexer/units';
 import { getLocale, type ILocale } from '@solve-js/constants/locales';
+import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
 
 // ── Markdown line classification (Phase B) ──────────────────────────────
 
@@ -176,14 +177,55 @@ const OP_MAP: Record<number, string> = {
   126: 'BIT_NOT', // ~
 };
 
-// ── Phrase map — multi-word token patterns ────────────────────────────────
-// Phrases like "to the power of", "increase by" are matched greedily
-// during identifier tokenization.
-interface PhraseEntry {
+// ── Phrase entry — multi-word token pattern ──────────────────────────────
+export interface PhraseEntry {
   /** The full phrase as a lowercase string */
   phrase: string;
   /** The token type to emit when matched */
   type: string;
+}
+
+/**
+ * Plugin interface for extending the ExpressionLexer with custom tokens.
+ *
+ * Plugins can register:
+ * - `keywords`: Map identifier strings to custom token types (checked after locale keywords).
+ * - `operators`: Map multi-character operator sequences to custom token types.
+ * - `phrases`: Map multi-word patterns (e.g., "price of") to custom token types.
+ * - `units`: Register additional unit identifiers (checked alongside built-in units).
+ *
+ * All registrations are additive — built-in patterns still work.
+ */
+export interface LexerPlugin {
+  /**
+   * Keyword → tokenType mappings. Each key is a lowercase identifier that,
+   * when encountered, will emit the specified token type instead of IDENT.
+   * These are checked AFTER the locale's built-in keywordMap, so locale
+   * keywords take priority.
+   */
+  keywords?: Record<string, string>;
+
+  /**
+   * Multi-character operator → tokenType mappings. Each key is the exact
+   * character sequence (e.g., "::", "->", "=>") and the value is the token
+   * type to emit. Two-character operators take priority during matching.
+   * Built-in operators (==, !=, >=, <=, <<, >>) always take priority.
+   */
+  operators?: Record<string, string>;
+
+  /**
+   * Multi-word phrase patterns. Each entry is a { phrase, type } pair where
+   * `phrase` is the lowercase multi-word phrase (e.g., "price of") and
+   * `type` is the token type to emit when matched. Greedy matching:
+   * the longest matching phrase wins. Built-in phrases take priority.
+   */
+  phrases?: PhraseEntry[];
+
+  /**
+   * Additional unit identifiers to recognize (e.g., "gp", "osrs", "tile").
+   * These are checked alongside the built-in `knownUnits` set.
+   */
+  units?: string[];
 }
 
 // Pre-compute phrase list — these are the multi-word expressions that
@@ -217,6 +259,18 @@ export class ExpressionLexer {
   // Keyword map: lowercase identifier → token type
   private keywordMap: Map<string, string>;
 
+  // Plugin-extensible keyword map (merged with locale keywordMap)
+  private pluginKeywordMap: Map<string, string> = new Map();
+
+  // Plugin-extensible two-char operators: firstChar → (secondChar → tokenType)
+  private pluginOperators: Map<number, Map<number, string>> = new Map();
+
+  // Plugin-extensible phrases (merged with built-in PHRASES)
+  private pluginPhrases: PhraseEntry[] = [];
+
+  // Plugin-extensible units (merged with knownUnits)
+  private pluginUnits: Set<string> = new Set();
+
   // Locale for function-identifier lookups
   private localeCode: string;
   private locale: ILocale;
@@ -227,6 +281,184 @@ export class ExpressionLexer {
     this.keywordMap = new Map<string, string>();
     for (const [k, v] of Object.entries(this.locale.keywordMap)) {
       this.keywordMap.set(k.toLowerCase(), v);
+    }
+  }
+
+  /**
+   * Register a plugin to extend the lexer with custom tokens.
+   *
+   * All registrations are additive — built-in patterns still work.
+   * Keywords, operators, phrases, and units from the plugin are merged
+   * with existing ones. Calling multiple times adds more entries.
+   *
+   * Built-in tokens CANNOT be overridden. Throws a SolveError if the
+   * plugin attempts to register a keyword, operator, phrase, or unit
+   * that conflicts with a built-in one.
+   */
+  registerPlugin(plugin: LexerPlugin): void {
+    if (plugin.keywords) {
+      for (const [keyword, tokenType] of Object.entries(plugin.keywords)) {
+        const lower = keyword.toLowerCase();
+        // Guard: prevent overriding built-in locale keywords
+        if (this.keywordMap.has(lower)) {
+          throw ErrorFactory.config(
+            'PLUGIN_KEYWORD_COLLISION',
+            `Plugin keyword "${keyword}" conflicts with built-in keyword ` +
+            `(type: ${this.keywordMap.get(lower)}). Built-in keywords cannot be overridden.`,
+            { keyword, builtinType: this.keywordMap.get(lower) }
+          );
+        }
+        this.pluginKeywordMap.set(lower, tokenType);
+      }
+    }
+
+    if (plugin.operators) {
+      for (const [chars, tokenType] of Object.entries(plugin.operators)) {
+        // Only support 2-char operators for the fast path
+        if (chars.length === 2) {
+          const first = chars.charCodeAt(0);
+          const second = chars.charCodeAt(1);
+
+          // Guard: prevent overriding built-in two-char operators (==, !=, >=, <=)
+          const builtInSecondMap = TWO_CHAR_OPS[first];
+          if (builtInSecondMap && builtInSecondMap[second] !== undefined) {
+            throw ErrorFactory.config(
+              'PLUGIN_OPERATOR_COLLISION',
+              `Plugin operator "${chars}" conflicts with built-in operator ` +
+              `(type: ${builtInSecondMap[second]}). Built-in operators cannot be overridden.`,
+              { operator: chars, builtinType: builtInSecondMap[second] }
+            );
+          }
+          // Guard: prevent overriding LSHIFT (<<) and RSHIFT (>>)
+          if (first === 60 && second === 60) {
+            throw ErrorFactory.config(
+              'PLUGIN_OPERATOR_COLLISION',
+              `Plugin operator "${chars}" conflicts with built-in operator ` +
+              `(type: LSHIFT). Built-in operators cannot be overridden.`,
+              { operator: chars, builtinType: 'LSHIFT' }
+            );
+          }
+          if (first === 62 && second === 62) {
+            throw ErrorFactory.config(
+              'PLUGIN_OPERATOR_COLLISION',
+              `Plugin operator "${chars}" conflicts with built-in operator ` +
+              `(type: RSHIFT). Built-in operators cannot be overridden.`,
+              { operator: chars, builtinType: 'RSHIFT' }
+            );
+          }
+          // Guard: prevent overriding comment sequences (//)
+          // In expression mode, // goes through tokenizeOperator() (since /
+          // is CharClass.OPERATOR). In markdown mode, classifyLine() skips
+          // lines starting with //. Allowing plugins to override // would
+          // break comment handling in both modes.
+          if (first === 47 && second === 47) {
+            throw ErrorFactory.config(
+              'PLUGIN_OPERATOR_COLLISION',
+              `Plugin operator "${chars}" conflicts with built-in comment sequence. ` +
+              `Comment sequences cannot be overridden.`,
+              { operator: chars, builtinType: 'COMMENT' }
+            );
+          }
+
+          let inner = this.pluginOperators.get(first);
+          if (!inner) {
+            inner = new Map();
+            this.pluginOperators.set(first, inner);
+          }
+          inner.set(second, tokenType);
+        }
+        // Note: >2 char operators could be supported in future via
+        // a separate trie-based lookup if needed.
+      }
+    }
+
+    if (plugin.phrases) {
+      for (const entry of plugin.phrases) {
+        const lowerPhrase = entry.phrase.toLowerCase();
+        // Guard: prevent overriding built-in phrases
+        for (let i = 0; i < ExpressionLexer.PHRASES.length; i++) {
+          if (ExpressionLexer.PHRASES[i].phrase === lowerPhrase) {
+            throw ErrorFactory.config(
+              'PLUGIN_PHRASE_COLLISION',
+              `Plugin phrase "${entry.phrase}" conflicts with built-in phrase ` +
+              `(type: ${ExpressionLexer.PHRASES[i].type}). Built-in phrases cannot be overridden.`,
+              { phrase: entry.phrase, builtinType: ExpressionLexer.PHRASES[i].type }
+            );
+          }
+        }
+        this.pluginPhrases.push({
+          phrase: lowerPhrase,
+          type: entry.type,
+        });
+      }
+    }
+
+    if (plugin.units) {
+      for (const unit of plugin.units) {
+        // Guard: prevent overriding built-in units
+        if (knownUnits.has(unit)) {
+          throw ErrorFactory.config(
+            'PLUGIN_UNIT_COLLISION',
+            `Plugin unit "${unit}" conflicts with a built-in unit. ` +
+            `Built-in units cannot be overridden.`,
+            { unit }
+          );
+        }
+        this.pluginUnits.add(unit);
+      }
+    }
+  }
+
+  /**
+   * Unregister a plugin, removing its custom tokens from the lexer.
+   *
+   * This is the inverse of registerPlugin(). All keywords, operators,
+   * phrases, and units registered by the plugin are removed. After
+   * unregistration, those tokens will revert to their default behavior
+   * (e.g., keywords become IDENT, operators become ERROR).
+   *
+   * Calling unregisterPlugin with a plugin that was never registered
+   * is safe — it simply has no effect.
+   *
+   * @param plugin - The same plugin object passed to registerPlugin().
+   */
+  unregisterPlugin(plugin: LexerPlugin): void {
+    if (plugin.keywords) {
+      for (const keyword of Object.keys(plugin.keywords)) {
+        this.pluginKeywordMap.delete(keyword.toLowerCase());
+      }
+    }
+
+    if (plugin.operators) {
+      for (const chars of Object.keys(plugin.operators)) {
+        if (chars.length === 2) {
+          const first = chars.charCodeAt(0);
+          const second = chars.charCodeAt(1);
+          const inner = this.pluginOperators.get(first);
+          if (inner) {
+            inner.delete(second);
+            if (inner.size === 0) {
+              this.pluginOperators.delete(first);
+            }
+          }
+        }
+      }
+    }
+
+    if (plugin.phrases) {
+      for (const entry of plugin.phrases) {
+        const lowerPhrase = entry.phrase.toLowerCase();
+        const idx = this.pluginPhrases.findIndex(p => p.phrase === lowerPhrase);
+        if (idx !== -1) {
+          this.pluginPhrases.splice(idx, 1);
+        }
+      }
+    }
+
+    if (plugin.units) {
+      for (const unit of plugin.units) {
+        this.pluginUnits.delete(unit);
+      }
     }
   }
 
@@ -267,7 +499,8 @@ export class ExpressionLexer {
         const input = this.input;
         const identLower = input.toLowerCase();
         // Unit lookup (case-sensitive, takes priority over keywords)
-        if (knownUnits.has(input)) {
+        // Check both built-in units and plugin-registered units
+        if (knownUnits.has(input) || this.pluginUnits.has(input)) {
           result.push(new LexerToken('UNIT', input, input, 0, 0, 1, 1));
         }
         // Inline solve check: lone 's' without backtick is not inline solve
@@ -275,7 +508,13 @@ export class ExpressionLexer {
         // input can't have a backtick, so this is always IDENT/UNIT/keyword)
         else {
           const kwType = this.keywordMap.get(identLower);
-          result.push(new LexerToken(kwType || 'IDENT', input, input, 0, 0, 1, 1));
+          if (kwType) {
+            result.push(new LexerToken(kwType, input, input, 0, 0, 1, 1));
+          } else {
+            // Check plugin keywords (not checked by the locale keywordMap lookup)
+            const pluginKwType = this.pluginKeywordMap.get(identLower);
+            result.push(new LexerToken(pluginKwType || 'IDENT', input, input, 0, 0, 1, 1));
+          }
         }
       } else if (c0 === 36) {
         result.push(new LexerToken('DOLLAR', '$', '$', 0, 0, 1, 1));
@@ -580,7 +819,13 @@ export class ExpressionLexer {
     }
 
     // ── Unit lookup (case-sensitive, takes priority over phrases/keywords)
+    // 1) Built-in units
     if (knownUnits.has(identText)) {
+      this.pos = pos;
+      return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
+    }
+    // 2) Plugin-registered units
+    if (this.pluginUnits.has(identText)) {
       this.pos = pos;
       return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
     }
@@ -604,10 +849,19 @@ export class ExpressionLexer {
     }
 
     // ── Keyword lookup (case-insensitive) ─────────────────────────────
-    const kwType = this.keywordMap.get(identLower);
-    if (kwType) {
+    // 1) Built-in locale keywords take highest priority
+    const localeKwType = this.keywordMap.get(identLower);
+    if (localeKwType) {
       this.pos = pos;
-      return new LexerToken(kwType, identText, identText, start, 0, this.line, startCol);
+      return new LexerToken(localeKwType, identText, identText, start, 0, this.line, startCol);
+    }
+
+    // 2) Plugin-registered keywords (checked after locale) — a plugin's
+    //    keyword can override the default IDENT behavior.
+    const pluginKwType = this.pluginKeywordMap.get(identLower);
+    if (pluginKwType) {
+      this.pos = pos;
+      return new LexerToken(pluginKwType, identText, identText, start, 0, this.line, startCol);
     }
 
     this.pos = pos;
@@ -665,10 +919,10 @@ export class ExpressionLexer {
       // Build candidate and check against phrase list
       const candidate = wordsLower.join(' ');
 
+      // Check built-in phrases first (take priority)
       for (let i = 0; i < ExpressionLexer.PHRASES.length; i++) {
         const phrase = ExpressionLexer.PHRASES[i];
         if (phrase.phrase === candidate) {
-          // Exact match!
           return {
             type: phrase.type,
             text: wordsOriginal.join(' '),
@@ -677,12 +931,34 @@ export class ExpressionLexer {
         }
       }
 
-      // Check if this prefix can still lead to any phrase
+      // Check plugin-registered phrases
+      for (let i = 0; i < this.pluginPhrases.length; i++) {
+        const phrase = this.pluginPhrases[i];
+        if (phrase.phrase === candidate) {
+          return {
+            type: phrase.type,
+            text: wordsOriginal.join(' '),
+            endPos: scanPos,
+          };
+        }
+      }
+
+      // Check if this prefix can still lead to any built-in phrase
       let viablePrefix = false;
       for (let i = 0; i < ExpressionLexer.PHRASES.length; i++) {
         if (ExpressionLexer.PHRASES[i].phrase.startsWith(candidate + ' ')) {
           viablePrefix = true;
           break;
+        }
+      }
+
+      // Also check plugin phrases for viable prefix
+      if (!viablePrefix) {
+        for (let i = 0; i < this.pluginPhrases.length; i++) {
+          if (this.pluginPhrases[i].phrase.startsWith(candidate + ' ')) {
+            viablePrefix = true;
+            break;
+          }
         }
       }
 
@@ -732,6 +1008,18 @@ export class ExpressionLexer {
         this.pos = pos + 2;
         const text = '>>';
         return new LexerToken('RSHIFT', text, text, pos, 0, this.line, col);
+      }
+
+      // ── Plugin-registered two-char operators ──────────────────────
+      // Checked after built-in operators so built-ins take priority.
+      const pluginInner = this.pluginOperators.get(c0);
+      if (pluginInner) {
+        const pluginType = pluginInner.get(c1);
+        if (pluginType) {
+          const text = input.slice(pos, pos + 2);
+          this.pos = pos + 2;
+          return new LexerToken(pluginType, text, text, pos, 0, this.line, col);
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-import { ExpressionLexer, LineClassification } from "./ExpressionLexer";
+import { ExpressionLexer, LineClassification, LexerPlugin } from "./ExpressionLexer";
 import { Token } from "@solve-js/lexer/Token";
 import { LexerState } from "@solve-js/lexer/LexerState";
 import { getTokenHighlightClass } from "@solve-js/lexer/TokenHighlightMap";
@@ -84,6 +84,24 @@ export class Lexer {
 
   [Symbol.iterator](): Iterator<Token> {
     return this.tokens[Symbol.iterator]();
+  }
+
+  /**
+   * Register a plugin to extend the lexer with custom tokens.
+   * Delegates to the underlying ExpressionLexer.
+   *
+   * @see LexerPlugin for the supported extension points.
+   */
+  registerPlugin(plugin: LexerPlugin): void {
+    this.expressionLexer.registerPlugin(plugin);
+  }
+
+  /**
+   * Unregister a plugin, removing its custom tokens from the lexer.
+   * Delegates to the underlying ExpressionLexer.
+   */
+  unregisterPlugin(plugin: LexerPlugin): void {
+    this.expressionLexer.unregisterPlugin(plugin);
   }
 
   getState(): LexerState {

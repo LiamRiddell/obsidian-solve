@@ -8,6 +8,7 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { Token } from "@solve-js/lexer/Token";
 import { createGrammarDSL, GrammarDSL } from "@solve-js/compiler/GrammarDSL";
+import { sharedLexer } from "@solve-js/lexer/Lexer";
 
 describe("Solve ISolvePackage", () => {
   it("exports ISolve interface", () => {
@@ -72,6 +73,97 @@ it("supports registerPackage with prefix parselets", () => {
   it("handles empty package gracefully", () => {
     const pkg: ISolvePackage = { name: "empty-package" };
     expect(() => solve.registerPackage(pkg)).not.toThrow();
+  });
+
+  it("supports registerPackage with lexerPlugin keywords", () => {
+    const testKeyword = "__test_custom_ns__";
+    const pkg: ISolvePackage = {
+      name: "test-lexer-package",
+      lexerPlugin: {
+        keywords: { [testKeyword]: "TEST_CUSTOM_NS" },
+      },
+    };
+
+    expect(() => solve.registerPackage(pkg)).not.toThrow();
+
+    sharedLexer.reset(testKeyword);
+    const tokens = Array.from(sharedLexer);
+    expect(tokens.length).toBeGreaterThanOrEqual(1);
+    expect(tokens[0].type).toBe("TEST_CUSTOM_NS");
+    expect(tokens[0].value).toBe(testKeyword);
+  });
+
+  it("supports registerPackage with lexerPlugin two-char operators", () => {
+    const pkg: ISolvePackage = {
+      name: "test-lexer-op-package",
+      lexerPlugin: {
+        operators: { "::": "DOUBLE_COLON" },
+      },
+    };
+
+    expect(() => solve.registerPackage(pkg)).not.toThrow();
+
+    sharedLexer.reset("a::b");
+    const tokens = Array.from(sharedLexer);
+    const doubleColonToken = tokens.find(t => t.type === "DOUBLE_COLON");
+    expect(doubleColonToken).toBeDefined();
+    expect(doubleColonToken!.value).toBe("::");
+  });
+
+  it("supports registerPackage with lexerPlugin units", () => {
+    const pkg: ISolvePackage = {
+      name: "test-lexer-unit-package",
+      lexerPlugin: {
+        units: ["tile"],
+      },
+    };
+
+    expect(() => solve.registerPackage(pkg)).not.toThrow();
+
+    sharedLexer.reset("tile");
+    const tokens = Array.from(sharedLexer);
+    expect(tokens.length).toBeGreaterThanOrEqual(1);
+    expect(tokens[0].type).toBe("UNIT");
+    expect(tokens[0].value).toBe("tile");
+  });
+
+  it("supports registerPackage with lexerPlugin phrases", () => {
+    const pkg: ISolvePackage = {
+      name: "test-lexer-phrase-package",
+      lexerPlugin: {
+        phrases: [{ phrase: "price of", type: "PRICE_OF" }],
+      },
+    };
+
+    expect(() => solve.registerPackage(pkg)).not.toThrow();
+
+    sharedLexer.reset("price of iron");
+    const tokens = Array.from(sharedLexer);
+    const priceOfToken = tokens.find(t => t.type === "PRICE_OF");
+    expect(priceOfToken).toBeDefined();
+    expect(priceOfToken!.value).toBe("price of");
+  });
+
+  it("combines lexerPlugin with prefix parselets in one package", () => {
+    const testKeyword = "__test_combined__";
+    const testParselet: PrefixParselet = {
+      category: "Test",
+      parse(_parser: Parser, _token: Token, _builder: BytecodeBuilder): void {},
+    };
+    const pkg: ISolvePackage = {
+      name: "test-combined-package",
+      lexerPlugin: {
+        keywords: { [testKeyword]: "COMBINED_TEST" },
+      },
+      prefixParselets: [{ tokenType: "COMBINED_TEST", parselet: testParselet }],
+    };
+
+    expect(() => solve.registerPackage(pkg)).not.toThrow();
+
+    // Verify lexer plugin took effect
+    sharedLexer.reset(testKeyword);
+    const tokens = Array.from(sharedLexer);
+    expect(tokens[0].type).toBe("COMBINED_TEST");
   });
 });
 

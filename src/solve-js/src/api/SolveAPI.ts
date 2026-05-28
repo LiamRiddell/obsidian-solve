@@ -5,6 +5,8 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { Value } from "@solve-js/vm/Value";
 import { IVariableSource } from "@solve-js/variables/IVariableSource";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
+import { sharedLexer } from "@solve-js/lexer/Lexer";
+import type { LexerPlugin } from "@solve-js/lexer/ExpressionLexer";
 
 export interface ISolve {
   registerPrefixParselet(tokenType: string, parselet: PrefixParselet): void;
@@ -18,6 +20,7 @@ export interface ISolve {
 
 export interface ISolvePackage {
   name: string;
+  lexerPlugin?: LexerPlugin;
   prefixParselets?: Array<{ tokenType: string; parselet: PrefixParselet }>;
   infixParselets?: Array<{ tokenType: string; parselet: InfixParselet }>;
   opcodeHandlers?: IOpcodeHandlerRegistration[];
@@ -44,6 +47,9 @@ export class Solve implements ISolve {
   }
 
   registerPackage(pkg: ISolvePackage): void {
+    if (pkg.lexerPlugin) {
+      sharedLexer.registerPlugin(pkg.lexerPlugin);
+    }
     if (pkg.prefixParselets) {
       for (const pp of pkg.prefixParselets) {
         this.registerPrefixParselet(pp.tokenType, pp.parselet);

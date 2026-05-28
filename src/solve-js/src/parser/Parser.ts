@@ -13,6 +13,8 @@ export class Parser {
      private diagnosticPipeline: DiagnosticPipeline | undefined;
      private currentExpression: string = "";
      private localeCode: string;
+     /** Track paren delta during load() — skip balanceParens if balanced */
+     private parenDelta = 0;
 
      constructor(parseletRegistry: ParseletRegistry, maxDepth = 50, localeCode = "en") {
          this.parseletRegistry = parseletRegistry;
@@ -37,7 +39,15 @@ export class Parser {
     }
 
 load(tokens: Token[]): void {
-         this.tokens = this.balanceParens(tokens);
+         // Fast path: count paren balance to skip array copy for balanced expressions.
+         // ~95%+ of expressions are balanced, saving an O(n) copy per parse.
+         let openCount = 0;
+         for (let i = 0; i < tokens.length; i++) {
+             if (tokens[i].type === "LPAREN") openCount++;
+             else if (tokens[i].type === "RPAREN") openCount--;
+         }
+         this.parenDelta = openCount;
+         this.tokens = openCount === 0 ? tokens : this.balanceParens(tokens, openCount);
          this.current = 0;
          this.depth = 0;
      }
@@ -45,14 +55,9 @@ load(tokens: Token[]): void {
      /**
       * Auto-balance unmatched parentheses: append missing closing parens
       * or prepend missing opening parens to make expressions parseable.
+      * Only called when parenDelta !== 0 after the fast-path count.
       */
-     private balanceParens(tokens: Token[]): Token[] {
-         let openCount = 0;
-         for (const t of tokens) {
-             if (t.type === "LPAREN") openCount++;
-             else if (t.type === "RPAREN") openCount--;
-         }
-
+     private balanceParens(tokens: Token[], openCount: number): Token[] {
          const result = [...tokens];
          if (openCount > 0) {
              // More opens than closes — append missing closing parens
@@ -98,6 +103,7 @@ load(tokens: Token[]): void {
         }
 
         const token = this.consume();
+        const tokens = this.tokens; // cache reference for hot path
 
         if (!token) {
             this.depth--;
@@ -123,18 +129,23 @@ load(tokens: Token[]): void {
             prefixParselet.parse(this, token, builder);
         }
 
-        while (this.current < this.tokens.length) {
-            const nextToken = this.peek();
+        // Infix parselet loop — hot path, cache references to avoid property lookups
+        let idx = this.current;
+        const len = tokens.length;
+        const registry = this.parseletRegistry;
+        const hasDiag = this.diagnosticPipeline !== undefined;
+
+        while (idx < len) {
+            const nextToken = tokens[idx];
             if (!nextToken) break;
 
-            const infixParselet = this.parseletRegistry.getInfix(nextToken.type);
+            const infixParselet = registry.getInfix(nextToken.type);
             if (!infixParselet) break;
             if (infixParselet.getBindingPower() <= bindingPower) break;
 
-            this.advance();
+            this.current = ++idx; // advance past token
 
-            // Fire parselet matched event for infix
-            if (this.diagnosticPipeline) {
+            if (hasDiag) {
                 this.fireParseletMatched(infixParselet, nextToken, false, infixParselet.getBindingPower());
             }
 
@@ -143,6 +154,7 @@ load(tokens: Token[]): void {
             }
         }
 
+        this.current = idx;
         this.depth--;
     }
 
@@ -156,8 +168,7 @@ load(tokens: Token[]): void {
         isPrefix: boolean,
         bindingPower?: number
     ): void {
-        if (!this.diagnosticPipeline?.hasCollectors) return;
-
+        // Caller already checks diagnosticPipeline !== undefined
         const event: DiagnosticEvent & { type: "parselet_matched" } = {
             type: DiagnosticEventType.ParseletMatched,
             elapsedNs: 0,

@@ -1,323 +1,232 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
 
-import { MarkdownLexer } from "@solve-js/lexer/MarkdownLexer";
+import { ExpressionLexer } from "@solve-js/lexer/ExpressionLexer";
+import { Lexer } from "@solve-js/lexer/Lexer";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { SolveHighlightProvider } from "@app/codemirror/SolveHighlightProvider";
 
 describe("Markdown Elements and Multi-line Documents", () => {
   describe("Single-line Markdown Elements", () => {
     test("heading marker is filtered out", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("# Heading");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      // Should have MD_HEADING_MARKER
-      expect(tokens).toContain("MD_HEADING_MARKER");
-      // The heading content "Heading" is tokenized as IDENT, which is expected
-      // We just want to ensure the heading marker itself is present
+      const lexer = new Lexer("en");
+      const classification = lexer.classifyLine("# Heading");
+      expect(classification.type).toBe("heading");
+      expect(classification.skip).toBe(true);
     });
 
-    test("list marker is filtered out", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("- Item");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      expect(tokens).toContain("MD_LIST_MARKER");
+    test("list marker is not skipped (evaluated)", () => {
+      const lexer = new Lexer("en");
+      const classification = lexer.classifyLine("- Item");
+      expect(classification.type).toBe("list");
+      expect(classification.skip).toBe(false);
     });
 
-    test("ordered list marker is filtered out", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("1. Item");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      expect(tokens).toContain("MD_ORDERED_LIST_MARKER");
+    test("ordered list marker is not skipped (evaluated)", () => {
+      const lexer = new Lexer("en");
+      const classification = lexer.classifyLine("1. Item");
+      expect(classification.type).toBe("list");
+      expect(classification.skip).toBe(false);
     });
 
     test("blockquote marker is filtered out", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("> Quote");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      expect(tokens).toContain("MD_BLOCKQUOTE_MARKER");
+      const lexer = new Lexer("en");
+      const classification = lexer.classifyLine("> Quote");
+      expect(classification.type).toBe("blockquote");
+      expect(classification.skip).toBe(true);
     });
 
-    test("inline code is handled", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("`code`");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      expect(tokens).toContain("BACKTICK_OPEN");
-      expect(tokens).toContain("BACKTICK_CLOSE");
+    test("inline code with backticks is tokenized", () => {
+      const exprLexer = new ExpressionLexer("en");
+      exprLexer.reset("`code`");
+      const tokens = exprLexer.tokenizeAll("expression");
+      const types = tokens.map(t => t.type);
+      expect(types).toContain("BACKTICK_OPEN");
+      // After backtick, the content "code" is tokenized as IDENT
+      expect(types).toContain("IDENT");
     });
 
     test("inline solve expression is tokenized", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("s`1 + 2`");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      expect(tokens).toContain("INLINE_SOLVE_START");
-      expect(tokens).toContain("BACKTICK_CLOSE");
-      // Should also have expression tokens
-      const expressionTokens = tokens.filter(t => !t.startsWith("MD_") && t !== "INLINE_SOLVE_START" && t !== "BACKTICK_CLOSE");
-      expect(expressionTokens.length).toBeGreaterThan(0);
+      const exprLexer = new ExpressionLexer("en");
+      exprLexer.reset("s`1 + 2`");
+      const tokens = exprLexer.tokenizeAll("expression");
+      const types = tokens.map(t => t.type);
+      expect(types).toContain("INLINE_SOLVE_START");
+      expect(types).toContain("PLUS");
+      expect(types.filter(t => t === "NUMBER").length).toBeGreaterThanOrEqual(2);
     });
 
-    test("code block is handled", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("```code```");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      expect(tokens).toContain("MD_CODE_BLOCK");
+    test("code fence is classified correctly", () => {
+      const lexer = new Lexer("en");
+      const classification = lexer.classifyLine("```code```");
+      expect(classification.type).toBe("code_fence");
+      expect(classification.skip).toBe(true);
     });
 
-    test("MathJax block is handled", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("$$x^2$$");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      expect(tokens).toContain("MD_MATH_BLOCK");
+    test("MathJax fence is classified correctly", () => {
+      const lexer = new Lexer("en");
+      const classification = lexer.classifyLine("$$x^2$$");
+      expect(classification.type).toBe("math_fence");
+      expect(classification.skip).toBe(true);
     });
 
     test("expression without markdown is tokenized correctly", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      lexer.reset("1 + 2");
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      expect(tokens).toContain("NUMBER");
-      expect(tokens).toContain("PLUS");
-      expect(tokens.filter(t => t.startsWith("MD_"))).toHaveLength(0);
+      const exprLexer = new ExpressionLexer("en");
+      exprLexer.reset("1 + 2");
+      const tokens = exprLexer.tokenizeAll("expression");
+      const types = tokens.map(t => t.type);
+      expect(types).toContain("NUMBER");
+      expect(types).toContain("PLUS");
     });
   });
 
   describe("Multi-line Documents", () => {
-    test("handles mixed markdown and expressions", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      const document = `# Heading
-- Item 1
-- Item 2
-1 + 2
-> Quote
-3 * 4`;
-      lexer.reset(document);
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      // Should have markdown markers
-      expect(tokens).toContain("MD_HEADING_MARKER");
-      expect(tokens).toContain("MD_LIST_MARKER");
-      expect(tokens).toContain("MD_BLOCKQUOTE_MARKER");
-      // Should also have expression tokens
-      expect(tokens).toContain("NUMBER");
-      expect(tokens).toContain("PLUS");
-      expect(tokens).toContain("STAR");
+    test("handles mixed markdown and expressions via line classification", () => {
+      const lexer = new Lexer("en");
+      const lines = ["# Heading", "- Item 1", "- Item 2", "1 + 2", "> Quote", "3 * 4"];
+
+      const results = lines.map(l => lexer.classifyLine(l));
+
+      expect(results[0].type).toBe("heading");
+      expect(results[0].skip).toBe(true);
+      expect(results[1].type).toBe("list");
+      expect(results[1].skip).toBe(false);
+      expect(results[3].type).toBe("expression");
+      expect(results[3].skip).toBe(false);
+      expect(results[4].type).toBe("blockquote");
+      expect(results[4].skip).toBe(true);
+      expect(results[5].type).toBe("expression");
+      expect(results[5].skip).toBe(false);
     });
 
     test("handles nested list items", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      const document = `- Item 1
-  - Nested item
-  - Another nested item
-- Item 2`;
-      lexer.reset(document);
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
+      const lexer = new Lexer("en");
+      const lines = ["- Item 1", "  - Nested item", "  - Another nested item", "- Item 2"];
+
+      for (const line of lines) {
+        const classification = lexer.classifyLine(line);
+        expect(classification.type).toBe("list");
+        expect(classification.skip).toBe(false);
       }
-      // Should have multiple list markers
-      const listMarkers = tokens.filter(t => t === "MD_LIST_MARKER");
-      expect(listMarkers.length).toBeGreaterThanOrEqual(3);
     });
 
-    test("handles multi-line code block", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      const document = `Here is some code:
-\`\`\`
-function test() {
-  return 1 + 2;
-}
-\`\`\`
-And more text`;
-      lexer.reset(document);
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      // Should have code block token
-      expect(tokens).toContain("MD_CODE_BLOCK");
+    test("handles multi-line code block via line classification", () => {
+      const lexer = new Lexer("en");
+      const lines = [
+        "Here is some code:",
+        "```",
+        "function test() {",
+        "  return 1 + 2;",
+        "}",
+        "```",
+        "And more text",
+      ];
+
+      const results = lines.map(l => lexer.classifyLine(l));
+      expect(results[1].type).toBe("code_fence");
+      expect(results[1].skip).toBe(true);
+      expect(results[5].type).toBe("code_fence");
+      expect(results[5].skip).toBe(true);
+      // Expression lines between fences still classify as expression
+      // (the caller manages fence state to skip lines inside fences)
     });
 
-    test("handles multi-line MathJax block", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      const document = `Equation:
-$$
-x^2 + y^2 = z^2
-$$
-More text`;
-      lexer.reset(document);
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      // Should have math block token
-      expect(tokens).toContain("MD_MATH_BLOCK");
+    test("handles multi-line MathJax block via line classification", () => {
+      const lexer = new Lexer("en");
+      const lines = ["Equation:", "$$", "x^2 + y^2 = z^2", "$$", "More text"];
+
+      const results = lines.map(l => lexer.classifyLine(l));
+      expect(results[1].type).toBe("math_fence");
+      expect(results[1].skip).toBe(true);
+      expect(results[3].type).toBe("math_fence");
+      expect(results[3].skip).toBe(true);
     });
 
     test("handles multiple inline solves in document", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      const document = `First: s\`1 + 2\`
-Second: s\`3 * 4\`
-Third: s\`5 - 6\``;
-      lexer.reset(document);
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
+      const lexer = new Lexer("en");
+      const lines = ["First: s`1 + 2`", "Second: s`3 * 4`", "Third: s`5 - 6`"];
+
+      for (const line of lines) {
+        const spans = lexer.findInlineSolves(line);
+        expect(spans.length).toBe(1);
+        expect(spans[0].expression).toBeTruthy();
       }
-      // Should have multiple inline solve starts
-      const inlineSolveStarts = tokens.filter(t => t === "INLINE_SOLVE_START");
-      expect(inlineSolveStarts.length).toBe(3);
     });
 
-    test("handles document with all markdown elements", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      const document = `# Main Heading
-## Sub Heading
-> Blockquote
-- List item 1
-- List item 2
-1. First ordered
-2. Second ordered
-Inline code: \`code\`
-Inline solve: s\`1 + 2\`
-Expression: 3 * 4
-Code block:
-\`\`\`
-const x = 1;
-\`\`\`
-MathJax:
-$$
-x^2
-$$`;
-      lexer.reset(document);
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
-      }
-      // Should have all markdown markers
-      expect(tokens).toContain("MD_HEADING_MARKER");
-      expect(tokens).toContain("MD_BLOCKQUOTE_MARKER");
-      expect(tokens).toContain("MD_LIST_MARKER");
-      expect(tokens).toContain("MD_ORDERED_LIST_MARKER");
-      expect(tokens).toContain("MD_CODE_BLOCK");
-      expect(tokens).toContain("MD_MATH_BLOCK");
-      expect(tokens).toContain("INLINE_SOLVE_START");
-      // Should also have expression tokens
-      expect(tokens).toContain("NUMBER");
-      expect(tokens).toContain("PLUS");
-      expect(tokens).toContain("STAR");
+    test("handles document with all markdown elements via line classification", () => {
+      const lexer = new Lexer("en");
+      const lines = [
+        "# Main Heading",
+        "## Sub Heading",
+        "> Blockquote",
+        "- List item 1",
+        "- List item 2",
+        "1. First ordered",
+        "2. Second ordered",
+        "Inline code: `code`",
+        "Inline solve: s`1 + 2`",
+        "Expression: 3 * 4",
+        "```",
+        "const x = 1;",
+        "```",
+        "$$",
+        "x^2",
+        "$$",
+      ];
+
+      const results = lines.map(l => lexer.classifyLine(l));
+      expect(results[0].type).toBe("heading");
+      expect(results[2].type).toBe("blockquote");
+      expect(results[3].type).toBe("list");
+      expect(results[5].type).toBe("list");
+      expect(results[9].type).toBe("expression");
+      expect(results[10].type).toBe("code_fence");
+      expect(results[13].type).toBe("math_fence");
     });
 
-    test("handles large document with many lines", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      let document = "";
+    test("handles large document with many lines efficiently", () => {
+      const lexer = new Lexer("en");
+      const exprLexer = new ExpressionLexer("en");
+      let totalNumberTokens = 0;
+
       for (let i = 0; i < 100; i++) {
-        document += `Line ${i}: ${i} + ${i}\n`;
-      }
-      lexer.reset(document);
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
+        const line = `Line ${i}: ${i} + ${i}`;
+        const classification = lexer.classifyLine(line);
+        if (!classification.skip) {
+          exprLexer.reset(line);
+          const tokens = exprLexer.tokenizeAll("expression");
+          totalNumberTokens += tokens.filter(t => t.type === "NUMBER").length;
         }
       }
-      // Should have many number tokens
-      const numberTokens = tokens.filter(t => t === "NUMBER");
-      expect(numberTokens.length).toBeGreaterThanOrEqual(200); // 2 numbers per line * 100 lines
+      // 2 numbers per line * 100 lines = 200
+      expect(totalNumberTokens).toBeGreaterThanOrEqual(200);
     });
 
     test("handles document with mixed markdown and expressions efficiently", () => {
-      const lexer = new MarkdownLexer("en", "main");
-      let document = "# Document\n";
+      const lexer = new Lexer("en");
+
+      let lines: string[] = ["# Document"];
       for (let i = 0; i < 50; i++) {
-        document += `- Item ${i}: ${i} + ${i}\n`;
+        lines.push(`- Item ${i}: ${i} + ${i}`);
       }
-      document += "Expression: 1 + 2 + 3 + 4\n";
+      lines.push("Expression: 1 + 2 + 3 + 4");
       for (let i = 0; i < 50; i++) {
-        document += `## Subsection ${i}\n`;
-        document += `> Quote ${i}\n`;
-        document += `${i} * ${i}\n`;
+        lines.push(`## Subsection ${i}`);
+        lines.push(`> Quote ${i}`);
+        lines.push(`${i} * ${i}`);
       }
-      
+
       const startTime = Date.now();
-      lexer.reset(document);
-      const tokens: string[] = [];
-      for (const t of lexer) {
-        if (t.type !== "WS" && t.type !== "NEWLINE") {
-          tokens.push(t.type);
-        }
+      let expressionCount = 0;
+      for (const line of lines) {
+        const classification = lexer.classifyLine(line);
+        if (!classification.skip) expressionCount++;
       }
       const endTime = Date.now();
       const duration = endTime - startTime;
-      
-      // Should process within reasonable time (e.g., < 1000ms for 100 lines)
-      expect(duration).toBeLessThan(1000);
-      
-      // Should have markdown markers
-      expect(tokens).toContain("MD_HEADING_MARKER");
-      expect(tokens).toContain("MD_LIST_MARKER");
-      expect(tokens).toContain("MD_BLOCKQUOTE_MARKER");
-      // Should also have expression tokens
-      expect(tokens).toContain("NUMBER");
-      expect(tokens).toContain("PLUS");
-      expect(tokens).toContain("STAR");
+
+      // Should process within reasonable time
+      expect(duration).toBeLessThan(100);
+      expect(expressionCount).toBeGreaterThan(100);
     });
   });
 
@@ -346,7 +255,6 @@ $$`;
 
     test("does not highlight heading content", () => {
       const ranges = provider.getLineHighlights("# Heading");
-      // Heading content should not be highlighted as expression
       expect(ranges).toHaveLength(0);
     });
 
@@ -361,8 +269,7 @@ $$`;
 
     test("handles multiple expressions in same line", () => {
       const ranges = provider.getLineHighlights("1 + 2 and 3 * 4");
-      // Should highlight both expressions
-      expect(ranges.length).toBeGreaterThanOrEqual(6); // 2 numbers + 1 operator + 2 numbers + 1 operator
+      expect(ranges.length).toBeGreaterThanOrEqual(6);
     });
 
     test("handles complex expression with functions", () => {

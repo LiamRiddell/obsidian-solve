@@ -8,6 +8,8 @@
 
 import { ParseletRegistry } from '@solve-js/parser/registry/ParseletRegistry';
 import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
+import { sharedLexer } from '@solve-js/lexer/Lexer';
+import type { LexerPlugin } from '@solve-js/lexer/ExpressionLexer';
 
 /**
  * Interface for solve-js plugins
@@ -33,6 +35,14 @@ export interface SolvePlugin {
   version: string;
   /** Plugin description (optional) */
   description?: string;
+
+  /**
+   * Optional lexer extensions to register with the engine's lexer.
+   * Plugins can register custom keywords, operators, phrases, and units.
+   * These are registered before `register()` is called so parselets
+   * can depend on the custom token types being available.
+   */
+  lexerPlugin?: LexerPlugin;
   
   /**
    * Register plugin functionality with the engine
@@ -90,6 +100,12 @@ export class PluginManager {
       );
     }
 
+    // Register lexer extensions first so custom token types are
+    // available when the plugin's register() call registers parselets.
+    if (plugin.lexerPlugin) {
+      sharedLexer.registerPlugin(plugin.lexerPlugin);
+    }
+
     try {
       plugin.register(this.registry);
       this.plugins.set(plugin.name, plugin);
@@ -119,6 +135,11 @@ export class PluginManager {
 
     if (plugin.unregister) {
       plugin.unregister(this.registry);
+    }
+
+    // Unregister lexer extensions if the plugin registered any
+    if (plugin.lexerPlugin) {
+      sharedLexer.unregisterPlugin(plugin.lexerPlugin);
     }
 
     this.plugins.delete(pluginName);
@@ -161,6 +182,10 @@ export class PluginManager {
     for (const [name, plugin] of this.plugins.entries()) {
       if (plugin.unregister) {
         plugin.unregister(this.registry);
+      }
+      // Unregister lexer extensions if the plugin registered any
+      if (plugin.lexerPlugin) {
+        sharedLexer.unregisterPlugin(plugin.lexerPlugin);
       }
       this.plugins.delete(name);
     }
