@@ -12,7 +12,6 @@ import { Value, numberValue } from "@solve-js/vm/Value";
 import { PluginManager } from "@solve-js/plugins/PluginSystem";
 import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { Solve } from "@solve-js/api/SolveAPI";
 import {
     ParsingResult,
     ParsedLine,
@@ -20,7 +19,7 @@ import {
     UnifiedParsingOptions,
 } from "@solve-js/types/ParsingResult";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
-import type { Token } from "@solve-js/lexer/Token";
+import type { Token, ScanLineResult } from "@solve-js/lexer";
 import { DEFAULT_CONFIG, type EngineConfig } from "@solve-js/constants/Configuration";
 import {
     DiagnosticPipeline,
@@ -34,8 +33,6 @@ import {
     checkExpressionLength,
     checkExpressionComplexity,
     extractReadsAndWrites,
-    isEmptyLine,
-    findInlineSolvesInLine,
 } from "@solve-js/engine/ExpressionEngineSafety";
 
 
@@ -92,12 +89,21 @@ export class ExpressionEngine {
              // Production: no collectors — pipeline length-check exits immediately with zero overhead
          }
 
-        // Register built-in providers via the ISolvePackage system.
-        // Uses the same API as external plugins — enables introspection,
-        // selective disable, and replacement of built-in providers.
-        const solve = new Solve();
+        // Register built-in providers via ISolvePackage data.
+        // Uses the same package structure as external plugins but registers
+        // directly into the engine's isolated registry (not sharedParseletRegistry).
+        // Enables: introspection, selective disable, and replacement of built-in providers.
         for (const pkg of BUILTIN_PACKAGES) {
-            solve.registerPackage(pkg);
+            if (pkg.prefixParselets) {
+                for (const pp of pkg.prefixParselets) {
+                    this.registry.registerPrefix(pp.tokenType, pp.parselet);
+                }
+            }
+            if (pkg.infixParselets) {
+                for (const ip of pkg.infixParselets) {
+                    this.registry.registerInfix(ip.tokenType, ip.parselet);
+                }
+            }
         }
         this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth, localeCode);
         this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
@@ -140,12 +146,16 @@ export class ExpressionEngine {
      * with precise coordinate mapping for inline solves.
      */
     parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
-        const lines = input.split('\n');
-        const processedLines = this.evaluateLines(lines);
+        // Scan the entire document in a single pass — bypasses the old
+        // split('\n') → evaluateLines() → join('\n') → scanDocument()
+        // roundtrip. scanDocument() classifies and tokenizes all lines
+        // character-by-character with a single Lexer.reset().
+        const scanResults = this.lexer.scanDocument(input);
+        const processedLines = this.processScanResults(scanResults);
 
         const result: ParsingResult = {
             lines: processedLines,
-            totalLines: lines.length,
+            totalLines: processedLines.length,
             errors: [],
         };
 
@@ -174,23 +184,54 @@ export class ExpressionEngine {
 
     /**
      * Batch-evaluate an array of lines in a single pass.
-     * Shares lexer state, bytecode cache, and VM across all lines for maximum efficiency.
-     * This avoids the per-line overhead of parseDocument() when processing visible lines
-     * in the frontend — one call instead of N.
+     *
+     * Uses scanDocument() to classify and tokenize all lines in a single
+     * character-by-character walk through the re-joined document text.
+     * This eliminates the per-line Lexer.reset() + classifyLine() +
+     * findInlineSolvesInLine() overhead from the old three-pass approach.
+     *
+     * Tokenization results from scanDocument() are passed directly to the
+     * parser via evaluateLineWithPreTokenized(), skipping re-lexing.
+     */
+    /**
+     * Batch-evaluate an array of lines in a single pass.
+     *
+     * Primarily used by tests. For production, prefer parseDocument()
+     * which calls scanDocument() directly on the raw document string,
+     * bypassing the split→join roundtrip that this method performs.
      */
     evaluateLines(lines: string[]): ParsedLine[] {
+        // Rejoin lines and scan in a single pass — scanDocument() handles
+        // classification + tokenization for all lines in one character walk.
+        const documentText = lines.join('\n');
+        const scanResults = this.lexer.scanDocument(documentText);
+        return this.processScanResults(scanResults);
+    }
+
+    /**
+     * Process pre-scanned line results into ParsedLine objects.
+     *
+     * Shared by parseDocument() (which scanDocuments the raw input) and
+     * evaluateLines() (which scanDocuments joined line arrays). Handles
+     * inline solve extraction, variable assignment detection, and
+     * expression evaluation for each non-skipped line.
+     */
+    private processScanResults(scanResults: ScanLineResult[]): ParsedLine[] {
         const result: ParsedLine[] = [];
-        let currentPosition = 0;
 
-        for (let i = 0; i < lines.length; i++) {
-            const lineText = lines[i];
-            const lineNumber = i + 1;
-            const startPosition = currentPosition;
-            const endPosition = startPosition + lineText.length;
-            currentPosition = endPosition + 1;
-
-            const isEmpty = this.isEmptyLine(lineText);
-            const inlineSolves = this.findInlineSolvesInLine(lineText, lineNumber);
+        for (const scanResult of scanResults) {
+            const lineText = scanResult.text;
+            const lineNumber = scanResult.lineNumber;
+            const startPosition = scanResult.startOffset;
+            const endPosition = scanResult.endOffset;
+            const isEmpty = scanResult.classification.skip;
+            const inlineSolves: InlineSolvePosition[] = scanResult.inlineSolves.map(s => ({
+                start: s.start,
+                end: s.end,
+                expression: s.expression,
+                lineNumber,
+                columnNumber: s.columnNumber,
+            }));
             const hasInlineSolves = inlineSolves.length > 0;
 
             const parsedLine: ParsedLine = {
@@ -207,7 +248,7 @@ export class ExpressionEngine {
             };
 
             if (!isEmpty) {
-                const isVariableAssignment = lineText.trim().startsWith(":");
+                const isVariableAssignment = lineText.trim().startsWith(':');
 
                 if (hasInlineSolves && !isVariableAssignment) {
                     for (const solve of inlineSolves) {
@@ -222,8 +263,13 @@ export class ExpressionEngine {
                 } else {
                     const expression = lineText.trim();
                     if (expression) {
+                        // Pass pre-tokenized tokens from scanDocument to avoid re-lexing
                         try {
-                            const value = this.evaluateLine(lineNumber, expression);
+                            const value = this.evaluateLineWithPreTokenized(
+                                lineNumber,
+                                expression,
+                                scanResult.tokens
+                            );
                             parsedLine.expression = expression;
                             parsedLine.result = value;
                         } catch (error) {
@@ -241,17 +287,124 @@ export class ExpressionEngine {
     }
 
     /**
-     * Check if a line is effectively empty (whitespace only or only markdown syntax).
+     * Evaluate a line using pre-tokenized tokens from scanDocument().
+     *
+     * Skips the lexing step entirely — the tokens are already available
+     * from the document-level scan. Only parsing, compilation, and
+     * execution are performed.
+     *
+     * This is the production fast path for evaluateLines(). Note: this
+     * path intentionally bypasses the diagnostic pipeline. For diagnostic
+     * events, use evaluateExpressionWithDiagnostic() directly.
      */
-    private isEmptyLine(lineText: string): boolean {
-        return isEmptyLine(lineText);
+    private evaluateLineWithPreTokenized(
+        lineNumber: number,
+        expression: string,
+        preTokenized: Token[]
+    ): Value {
+        // Filter markdown tokens as a defensive safety net.
+        // ExpressionLexer never produces MD_* tokens, but this guard
+        // prevents accidental breakage if the lexer mode changes.
+        const tokens: Token[] = [];
+        for (const t of preTokenized) {
+            if (this.markdownTokenTypes.has(t.type)) continue;
+            tokens.push(t);
+        }
+
+        // Directly invoke evaluateWithTokens — no lexing needed
+        return this.evaluateWithTokens(lineNumber, expression, tokens);
     }
 
     /**
-     * Find all inline solves in a line with precise coordinate mapping.
+     * Evaluate an expression using already-lexed tokens.
+     *
+     * This is the shared core of both evaluateLine() (which lexes via
+     * resetExpression) and evaluateLineWithPreTokenized() (which uses
+     * tokens from scanDocument). It handles safety checks, bytecode
+     * caching, parsing, and VM execution.
      */
-    private findInlineSolvesInLine(lineText: string, lineNumber: number): InlineSolvePosition[] {
-        return findInlineSolvesInLine(lineText, lineNumber);
+    private evaluateWithTokens(
+        lineNumber: number,
+        expression: string,
+        tokens: Token[]
+    ): Value {
+        // ══ SAFETY CHECK 1: Expression length limit ══
+        const lengthCheck = checkExpressionLength(expression, this.config.validation);
+        if (!lengthCheck.passed) {
+            throw ErrorFactory.execution(
+                'EVALUATION_ERROR',
+                lengthCheck.error!.error,
+                { lineNumber }
+            );
+        }
+
+        if (tokens.length === 0) {
+            const v = numberValue(0);
+            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, [], null), expression);
+            return v;
+        }
+
+        // ══ SAFETY CHECK 2: Complexity scoring ══
+        const complexityCheck = checkExpressionComplexity(tokens, this.config.validation);
+        if (!complexityCheck.passed) {
+            throw ErrorFactory.execution(
+                'EVALUATION_ERROR',
+                complexityCheck.errorMessage!,
+                { lineNumber }
+            );
+        }
+
+        const { reads, writes } = extractReadsAndWrites(tokens);
+
+        let program: BytecodeProgram;
+        const cachedProgram = this.bytecodeCache.get(expression);
+        if (cachedProgram) {
+            program = cachedProgram;
+        } else {
+            const builder = new BytecodeBuilder();
+            this.parser.load(tokens);
+            try {
+                this.parser.parseExpression(0, builder);
+            } catch (e) {
+                const errorMessage = e instanceof Error ? e.message : String(e);
+                throw ErrorFactory.execution(
+                    'EVALUATION_ERROR',
+                    errorMessage,
+                    { lineNumber }
+                );
+            }
+
+            const poolProgram = builder.buildInto(this.bufferPool);
+            program = {
+                opcodes: new Uint8Array(poolProgram.opcodes),
+                numbers: new Float64Array(poolProgram.numbers),
+                strings: poolProgram.strings,
+                constants: poolProgram.constants,
+            };
+            this.bytecodeCache.set(expression, program);
+        }
+
+        const stackBefore = this.vm.getStack().length;
+        const result = executeBytecode(program, this.vm);
+        while (this.vm.getStack().length > stackBefore) {
+            this.vm.pop();
+        }
+
+        if (result) {
+            this.dag.registerLine(lineNumber, reads, writes);
+            this.lineCache.set(lineNumber, new LineCacheEntry(
+                result,
+                program,
+                reads,
+                writes.length > 0 ? writes[0] : null
+            ), expression);
+        }
+
+        if (!result) {
+            throw ErrorFactory.execution('EVALUATION_ERROR', 'No result from evaluation', { lineNumber });
+        }
+
+        return result;
     }
 
     evaluateLine(
@@ -321,8 +474,9 @@ export class ExpressionEngine {
              });
         }
 
-        // Lexing with token emission events
-        this.lexer.reset(expression);
+        // Lexing with token emission events — use resetExpression to skip
+        // redundant classifyLine (caller already knows this is an expression).
+        this.lexer.resetExpression(expression);
         let tokenIndex = 0;
         for (const t of this.lexer) {
             if (this.markdownTokenTypes.has(t.type)) continue;
@@ -628,9 +782,9 @@ if (hasCollectors) {
 			throw ErrorFactory.validation("EXPRESSION_TOO_LONG", lengthCheck.error!.error);
 		}
 
-		// Lexing
+		// Lexing — skip classifyLine overhead since caller knows this is an expression.
 		const tokens: Token[] = [];
-		this.lexer.reset(expression);
+		this.lexer.resetExpression(expression);
 		for (const t of this.lexer) {
 			if (this.markdownTokenTypes.has(t.type)) continue;
 			tokens.push(t);

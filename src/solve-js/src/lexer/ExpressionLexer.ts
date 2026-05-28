@@ -40,6 +40,29 @@ export interface InlineSolveSpan {
   columnNumber: number;
 }
 
+/**
+ * Result from a single line processed by scanDocument().
+ * Combines line classification, tokenized tokens, and inline solve spans
+ * into a single structure — eliminating the need for separate classifyLine(),
+ * findInlineSolves(), and per-line Lexer.reset() calls.
+ */
+export interface ScanLineResult {
+  /** The raw line text (without trailing newline). */
+  text: string;
+  /** 1-based line number within the document. */
+  lineNumber: number;
+  /** Character offset of the line start within the document. */
+  startOffset: number;
+  /** Character offset of the line end (before newline). */
+  endOffset: number;
+  /** The line classification. */
+  classification: LineClassification;
+  /** Tokenized tokens (empty array if line is skipped). */
+  tokens: Token[];
+  /** Inline solve spans found in this line (empty if none). */
+  inlineSolves: InlineSolveSpan[];
+}
+
 // ── Character class constants ─────────────────────────────────────────────
 // Used as the result of the CHAR_CLASS lookup table. V8 compiles the
 // outer switch on these small integer constants into a jump table.
@@ -122,6 +145,7 @@ function buildCharClassTable(): Uint8Array {
 // initialized in the constructor and never added/removed afterwards.
 // This enables fast property access (inline cache hits) and allows
 // allocation in V8's nursery (cheap GC).
+// ── Monomorphic Token class ───────────────────────────────────────────────
 export class LexerToken implements Token {
   constructor(
     public type: string,
@@ -185,6 +209,15 @@ export interface PhraseEntry {
   type: string;
 }
 
+// ── Phrase Trie ────────────────────────────────────────────────────────
+// Each node in the trie represents a word boundary. The root's children
+// are the first words of all phrases. A `type` field indicates a complete
+// phrase. Traversal is O(word-count) instead of O(phrases×words).
+interface PhraseTrieNode {
+  type?: string;
+  children: Map<string, PhraseTrieNode>;
+}
+
 /**
  * Plugin interface for extending the ExpressionLexer with custom tokens.
  *
@@ -228,8 +261,8 @@ export interface LexerPlugin {
   units?: string[];
 }
 
-// Pre-compute phrase list — these are the multi-word expressions that
-// the existing MarkdownLexer handles as compound tokens.
+// Pre-compute phrase list — these are the multi-word expressions
+// handled as compound tokens (e.g., "to the power of", "increase by").
 function buildPhraseList(): PhraseEntry[] {
   return [
     { phrase: 'to the power of', type: 'CARET' }, // 5 words: to the power of
@@ -271,6 +304,18 @@ export class ExpressionLexer {
   // Plugin-extensible units (merged with knownUnits)
   private pluginUnits: Set<string> = new Set();
 
+  // Fast-path guards: skip plugin lookups entirely when no plugins registered
+  // V8 can predict these as always-false in the no-plugin case, eliminating
+  // the branch and associated hash-map access from the hot path.
+  private hasPluginUnits = false;
+  private hasPluginKeywords = false;
+  private hasPluginOps = false;
+  private hasPluginPhrases = false;
+
+  // Phrase trie: O(word-count) lookup vs O(phrases×words) linear scan.
+  // Merges built-in PHRASES with pluginPhrases. Rebuilt on register/unregister.
+  private phraseTrie: PhraseTrieNode;
+
   // Locale for function-identifier lookups
   private localeCode: string;
   private locale: ILocale;
@@ -282,6 +327,42 @@ export class ExpressionLexer {
     for (const [k, v] of Object.entries(this.locale.keywordMap)) {
       this.keywordMap.set(k.toLowerCase(), v);
     }
+    this.phraseTrie = ExpressionLexer.buildPhraseTrie(ExpressionLexer.PHRASES, []);
+  }
+
+  /**
+   * Build a word-level trie from built-in + plugin phrases.
+   * O(total-words) construction. Used at init and on plugin register/unregister.
+   *
+   * NOTE: Uses const + narrowing (existing) instead of let child: PhraseTrieNode | undefined
+   * because TypeScript's control flow analysis cannot properly track recursive types
+   * through mutable variable reassignment.
+   */
+  private static buildPhraseTrie(
+    builtins: PhraseEntry[],
+    plugins: PhraseEntry[],
+  ): PhraseTrieNode {
+    const root: PhraseTrieNode = { children: new Map() };
+    const all = builtins.concat(plugins);
+    for (const entry of all) {
+      const words = entry.phrase.split(' ');
+      let node: PhraseTrieNode = root;
+      for (const word of words) {
+        const existing = node.children.get(word);
+        if (existing) {
+          node = existing;
+        } else {
+          const newNode: PhraseTrieNode = { children: new Map() };
+          node.children.set(word, newNode);
+          node = newNode;
+        }
+      }
+      // Only set type if not already set — built-ins (processed first) take priority
+      if (!node.type) {
+        node.type = entry.type;
+      }
+    }
+    return root;
   }
 
   /**
@@ -297,6 +378,7 @@ export class ExpressionLexer {
    */
   registerPlugin(plugin: LexerPlugin): void {
     if (plugin.keywords) {
+      this.hasPluginKeywords = true;
       for (const [keyword, tokenType] of Object.entries(plugin.keywords)) {
         const lower = keyword.toLowerCase();
         // Guard: prevent overriding built-in locale keywords
@@ -313,6 +395,7 @@ export class ExpressionLexer {
     }
 
     if (plugin.operators) {
+      this.hasPluginOps = true;
       for (const [chars, tokenType] of Object.entries(plugin.operators)) {
         // Only support 2-char operators for the fast path
         if (chars.length === 2) {
@@ -373,6 +456,7 @@ export class ExpressionLexer {
     }
 
     if (plugin.phrases) {
+      this.hasPluginPhrases = true;
       for (const entry of plugin.phrases) {
         const lowerPhrase = entry.phrase.toLowerCase();
         // Guard: prevent overriding built-in phrases
@@ -391,9 +475,12 @@ export class ExpressionLexer {
           type: entry.type,
         });
       }
+      // Rebuild phrase trie to include new plugin phrases
+      this.phraseTrie = ExpressionLexer.buildPhraseTrie(ExpressionLexer.PHRASES, this.pluginPhrases);
     }
 
     if (plugin.units) {
+      this.hasPluginUnits = true;
       for (const unit of plugin.units) {
         // Guard: prevent overriding built-in units
         if (knownUnits.has(unit)) {
@@ -427,6 +514,7 @@ export class ExpressionLexer {
       for (const keyword of Object.keys(plugin.keywords)) {
         this.pluginKeywordMap.delete(keyword.toLowerCase());
       }
+      this.hasPluginKeywords = this.pluginKeywordMap.size > 0;
     }
 
     if (plugin.operators) {
@@ -443,6 +531,7 @@ export class ExpressionLexer {
           }
         }
       }
+      this.hasPluginOps = this.pluginOperators.size > 0;
     }
 
     if (plugin.phrases) {
@@ -453,12 +542,16 @@ export class ExpressionLexer {
           this.pluginPhrases.splice(idx, 1);
         }
       }
+      this.hasPluginPhrases = this.pluginPhrases.length > 0;
+      // Rebuild phrase trie without the removed plugin phrases
+      this.phraseTrie = ExpressionLexer.buildPhraseTrie(ExpressionLexer.PHRASES, this.pluginPhrases);
     }
 
     if (plugin.units) {
       for (const unit of plugin.units) {
         this.pluginUnits.delete(unit);
       }
+      this.hasPluginUnits = this.pluginUnits.size > 0;
     }
   }
 
@@ -471,7 +564,115 @@ export class ExpressionLexer {
   }
 
   /**
+   * Scan a full document text in a single pass, classifying each line and
+   * tokenizing non-skipped lines.
+   *
+   * Replaces the separate classifyLine() + findInlineSolves() + per-line
+   * reset() + tokenizeAll() pattern with a single character-by-character
+   * walk through the entire document. Key benefits:
+   *
+   * - **Single reset()**: `this.pos`, `this.len`, `this.line`, and
+   *   `this.lineStartPos` are set once for the whole document, not per-line.
+   * - **Single classification**: classifyLine() runs once per line inline;
+   *   skipped lines are jumped over without tokenization.
+   * - **Shared tokenization**: Non-skipped lines are tokenized using the
+   *   existing state machine, yielding Token[] without per-line reset().
+   * - **Inline solve detection**: findInlineSolves() is called only for
+   *   lines that classifyLine() marks as having inline solves.
+   *
+   * Tokenization is scoped to each line by temporarily restricting
+   * `this.len` to the line end position, so the [Symbol.iterator]
+   * generator naturally stops at the line boundary. After tokenization,
+   * `this.len` is restored and `this.pos` advances past the newline.
+   *
+   * @param text The full document text (with newlines).
+   * @returns Array of ScanLineResult, one per line, in document order.
+   */
+  scanDocument(text: string): ScanLineResult[] {
+    this.input = text;
+    this.pos = 0;
+    this.len = text.length;
+    this.line = 1;
+    this.lineStartPos = 0;
+
+    const results: ScanLineResult[] = [];
+    const input = this.input;
+    const docLen = this.len;
+
+    while (this.pos < docLen) {
+      const lineStart = this.pos;
+
+      // ── Find end of current line (newline boundary) ───────────────
+      let lineEnd = this.pos;
+      while (lineEnd < docLen) {
+        const cc = input.charCodeAt(lineEnd);
+        if (cc === 10 || cc === 13) break;  // \n or \r
+        lineEnd++;
+      }
+
+      const lineText = input.slice(lineStart, lineEnd);
+      const lineNumber = this.line;
+
+      // ── Classify the line ─────────────────────────────────────────
+      const classification = this.classifyLine(lineText);
+
+      // ── Tokenize non-skipped lines ────────────────────────────────
+      let tokens: Token[] = [];
+      if (!classification.skip) {
+        // Scope tokenization to just this line by temporarily restricting len.
+        // The [Symbol.iterator]() generator captures `this.len` at call time,
+        // so creating the iterator AFTER setting this.len = lineEnd ensures
+        // tokenization stops at the line boundary. After tokenization,
+        // this.pos will be at lineEnd (the newline position).
+        const savedLen = this.len;
+        this.len = lineEnd;
+        tokens = Array.from(this);
+        this.len = savedLen;
+        // this.pos is now at lineEnd — advance past newline below
+      }
+
+      // ── Detect inline solves (only for lines that may have them) ─
+      let inlineSolves: InlineSolveSpan[] = [];
+      if (classification.hasInlineSolve) {
+        inlineSolves = this.findInlineSolves(lineText);
+      }
+
+      results.push({
+        text: lineText,
+        lineNumber,
+        startOffset: lineStart,
+        endOffset: lineEnd,
+        classification,
+        tokens,
+        inlineSolves,
+      });
+
+      // ── Advance past newline ─────────────────────────────────────
+      this.pos = lineEnd;
+      if (this.pos < docLen) {
+        const nlChar = input.charCodeAt(this.pos);
+        if (nlChar === 13) {  // \r
+          this.pos++;
+          if (this.pos < docLen && input.charCodeAt(this.pos) === 10) {
+            this.pos++;  // skip \n in \r\n
+          }
+        } else if (nlChar === 10) {  // \n
+          this.pos++;
+        }
+      }
+      this.line++;
+      this.lineStartPos = this.pos;
+    }
+
+    return results;
+  }
+
+  /**
    * Tokenize an expression string into an array of Tokens.
+   *
+   * Delegates to the lazy [Symbol.iterator]() generator and collects all
+   * yielded tokens via Array.from(). For memory-sensitive use cases, prefer
+   * iterating the lexer directly with for...of to avoid array allocation.
    *
    * Optimizations:
    *  - CHAR_CLASS jump table (Uint8Array) → switch on small integers
@@ -481,53 +682,115 @@ export class ExpressionLexer {
    *  - Whitespace eliminated in-lexer (never emitted)
    *  - 0-char and 1-char fast paths
    */
-  tokenizeAll(mode: 'expression' | 'markdown' = 'expression'): Token[] {
+  tokenizeAll(): Token[] {
+    return Array.from(this);
+  }
+
+  // ── Lazy iterator ─────────────────────────────────────────────────────
+  /**
+   * Lazy token-by-token generator. Yields each token without allocating an
+   * intermediate Token[] array. Supports for...of and spread usage.
+   *
+   * Usage:
+   *   for (const t of lexer) { ... }  // lazy, no array allocation
+   *   const tokens = [...lexer];       // materializes via spread
+   *   const tokens = lexer.tokenizeAll(); // materializes via Array.from()
+   *
+   * IMPORTANT: This generator captures `this.len` ONCE at creation time
+   * (const len = this.len). `scanDocument()` relies on this behavior to
+   * scope tokenization to a single line by temporarily restricting
+   * `this.len` to the line end position before creating the iterator.
+   * Do NOT refactor to re-read `this.len` mid-loop without also updating
+   * `scanDocument()`.
+   */
+  *[Symbol.iterator](): Generator<Token, void, undefined> {
     const len = this.len;
 
     // ── 0-char fast path ────────────────────────────────────────────────
-    if (len === 0) return [];
+    if (len === 0) return;
 
     // ── 1-char fast path ────────────────────────────────────────────────
     if (len === 1) {
-      const result: Token[] = [];
       const c0 = this.input.charCodeAt(0);
       const cc = ExpressionLexer.CHAR_CLASS[c0] ?? CharClass.SKIP;
 
-      if (cc === CharClass.DIGIT || cc === CharClass.DOT) {
-        result.push(new LexerToken('NUMBER', this.input, this.input, 0, 0, 1, 1));
-      } else if (cc === CharClass.ALPHA) {
-        const input = this.input;
-        const identLower = input.toLowerCase();
-        // Unit lookup (case-sensitive, takes priority over keywords)
-        // Check both built-in units and plugin-registered units
-        if (knownUnits.has(input) || this.pluginUnits.has(input)) {
-          result.push(new LexerToken('UNIT', input, input, 0, 0, 1, 1));
-        }
-        // Inline solve check: lone 's' without backtick is not inline solve
-        // (only 's`' with backtick triggers INLINE_SOLVE_START, but 1-char
-        // input can't have a backtick, so this is always IDENT/UNIT/keyword)
-        else {
-          const kwType = this.keywordMap.get(identLower);
-          if (kwType) {
-            result.push(new LexerToken(kwType, input, input, 0, 0, 1, 1));
+      switch (cc) {
+        case CharClass.DIGIT:
+        case CharClass.DOT:
+          yield new LexerToken('NUMBER', this.input, this.input, 0, 0, 1, 1);
+          break;
+
+        case CharClass.ALPHA: {
+          const input = this.input;
+          const identLower = input.toLowerCase();
+          if (knownUnits.has(input) || (this.hasPluginUnits && this.pluginUnits.has(input))) {
+            yield new LexerToken('UNIT', input, input, 0, 0, 1, 1);
           } else {
-            // Check plugin keywords (not checked by the locale keywordMap lookup)
-            const pluginKwType = this.pluginKeywordMap.get(identLower);
-            result.push(new LexerToken(pluginKwType || 'IDENT', input, input, 0, 0, 1, 1));
+            const kwType = this.keywordMap.get(identLower);
+            if (kwType) {
+              yield new LexerToken(kwType, input, input, 0, 0, 1, 1);
+            } else if (this.hasPluginKeywords) {
+              const pluginKwType = this.pluginKeywordMap.get(identLower);
+              yield new LexerToken(pluginKwType || 'IDENT', input, input, 0, 0, 1, 1);
+            } else {
+              yield new LexerToken('IDENT', input, input, 0, 0, 1, 1);
+            }
           }
+          break;
         }
-      } else if (c0 === 36) {
-        result.push(new LexerToken('DOLLAR', '$', '$', 0, 0, 1, 1));
-      } else {
-        const opType = OP_MAP[c0];
-        if (opType) {
-          result.push(new LexerToken(opType, this.input, this.input, 0, 0, 1, 1));
+
+        case CharClass.OPERATOR: {
+          const opType = OP_MAP[c0];
+          if (opType) {
+            yield new LexerToken(opType, this.input, this.input, 0, 0, 1, 1);
+          }
+          break;
+        }
+
+        case CharClass.QUOTE:
+          // Delegate to tokenizeString for correctness (handles unterminated)
+          this.pos = 0;
+          yield this.tokenizeString();
+          break;
+
+        case CharClass.HASH:
+          // Delegate to tokenizeComment for correctness
+          this.pos = 0;
+          yield this.tokenizeComment();
+          break;
+
+        case CharClass.DOLLAR:
+          yield new LexerToken('DOLLAR', '$', '$', 0, 0, 1, 1);
+          break;
+
+        case CharClass.BACKTICK:
+          yield new LexerToken('BACKTICK_OPEN', '`', '`', 0, 0, 1, 1);
+          break;
+
+        default: {
+          // CharClass.SKIP — includes non-ASCII characters (code >= 128)
+          if (c0 === 0x00D7) {  // × → STAR
+            yield new LexerToken('STAR', '\u00D7', '\u00D7', 0, 0, 1, 1);
+          } else if (c0 === 0x00F7) {  // ÷ → SLASH
+            yield new LexerToken('SLASH', '\u00F7', '\u00F7', 0, 0, 1, 1);
+          } else if (c0 === 0x2260) {  // ≠ → NEQ
+            yield new LexerToken('NEQ', '\u2260', '\u2260', 0, 0, 1, 1);
+          } else if (c0 === 0x00A3) {  // £
+            yield new LexerToken('POUND', '\u00A3', '\u00A3', 0, 0, 1, 1);
+          } else if (c0 === 0x20AC) {  // €
+            yield new LexerToken('EURO', '\u20AC', '\u20AC', 0, 0, 1, 1);
+          } else if (c0 >= 128) {
+            // Unknown unicode — treat as IDENT for forward compatibility
+            // (future: Greek letters for math, accented variable names)
+            yield new LexerToken('IDENT', this.input, this.input, 0, 0, 1, 1);
+          }
+          // Unknown ASCII (< 128, SKIP) — silently skipped (same as main loop)
+          break;
         }
       }
-      return result;
+      return;
     }
 
-    const result: Token[] = [];
     const input = this.input;
 
     // ── Main tokenization loop ──────────────────────────────────────────
@@ -553,12 +816,12 @@ export class ExpressionLexer {
 
         // ── Digit — inline number tokenizer ───────────────────────────
         case CharClass.DIGIT:
-          result.push(this.tokenizeNumber());
+          yield this.tokenizeNumber();
           break;
 
         // ── Alpha / underscore — identifier or keyword ────────────────
         case CharClass.ALPHA:
-          result.push(this.tokenizeIdentifier());
+          yield this.tokenizeIdentifier();
           break;
 
         // ── Dot — could be decimal (.5) or DOT token ─────────────────
@@ -566,38 +829,38 @@ export class ExpressionLexer {
           if (this.pos + 1 < len) {
             const nextCc = ExpressionLexer.CHAR_CLASS[input.charCodeAt(this.pos + 1)] ?? CharClass.SKIP;
             if (nextCc === CharClass.DIGIT) {
-              result.push(this.tokenizeNumber());
+              yield this.tokenizeNumber();
             } else {
               const col = this.pos - this.lineStartPos + 1;
-              result.push(new LexerToken('DOT', '.', '.', this.pos, 0, this.line, col));
+              yield new LexerToken('DOT', '.', '.', this.pos, 0, this.line, col);
               this.pos++;
             }
           } else {
             const col = this.pos - this.lineStartPos + 1;
-            result.push(new LexerToken('DOT', '.', '.', this.pos, 0, this.line, col));
+            yield new LexerToken('DOT', '.', '.', this.pos, 0, this.line, col);
             this.pos++;
           }
           break;
 
         // ── Operator / punctuation ────────────────────────────────────
         case CharClass.OPERATOR:
-          result.push(this.tokenizeOperator());
+          yield this.tokenizeOperator();
           break;
 
         // ── String literal ────────────────────────────────────────────
         case CharClass.QUOTE:
-          result.push(this.tokenizeString());
+          yield this.tokenizeString();
           break;
 
         // ── Comment (# or //) ─────────────────────────────────────────
         case CharClass.HASH:
-          result.push(this.tokenizeComment());
+          yield this.tokenizeComment();
           break;
 
         // ── Dollar sign $ ─────────────────────────────────────────────
         case CharClass.DOLLAR: {
           const col = this.pos - this.lineStartPos + 1;
-          result.push(new LexerToken('DOLLAR', '$', '$', this.pos, 0, this.line, col));
+          yield new LexerToken('DOLLAR', '$', '$', this.pos, 0, this.line, col);
           this.pos++;
           break;
         }
@@ -605,7 +868,7 @@ export class ExpressionLexer {
         // ── Backtick ` ───────────────────────────────────────────────
         case CharClass.BACKTICK: {
           const col = this.pos - this.lineStartPos + 1;
-          result.push(new LexerToken('BACKTICK_OPEN', '`', '`', this.pos, 0, this.line, col));
+          yield new LexerToken('BACKTICK_OPEN', '`', '`', this.pos, 0, this.line, col);
           this.pos++;
           break;
         }
@@ -614,19 +877,24 @@ export class ExpressionLexer {
         default: {
           const col = this.pos - this.lineStartPos + 1;
           if (c0 === 0x00D7) {  // × → STAR
-            result.push(new LexerToken('STAR', '\u00D7', '\u00D7', this.pos, 0, this.line, col));
+            yield new LexerToken('STAR', '\u00D7', '\u00D7', this.pos, 0, this.line, col);
+            this.pos++;
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
-            result.push(new LexerToken('SLASH', '\u00F7', '\u00F7', this.pos, 0, this.line, col));
+            yield new LexerToken('SLASH', '\u00F7', '\u00F7', this.pos, 0, this.line, col);
+            this.pos++;
           } else if (c0 === 0x2260) {  // ≠ → NEQ
-            result.push(new LexerToken('NEQ', '\u2260', '\u2260', this.pos, 0, this.line, col));
+            yield new LexerToken('NEQ', '\u2260', '\u2260', this.pos, 0, this.line, col);
+            this.pos++;
           } else if (c0 === 0x00A3) {  // £
-            result.push(new LexerToken('POUND', '\u00A3', '\u00A3', this.pos, 0, this.line, col));
+            yield new LexerToken('POUND', '\u00A3', '\u00A3', this.pos, 0, this.line, col);
+            this.pos++;
           } else if (c0 === 0x20AC) {  // €
-            result.push(new LexerToken('EURO', '\u20AC', '\u20AC', this.pos, 0, this.line, col));
+            yield new LexerToken('EURO', '\u20AC', '\u20AC', this.pos, 0, this.line, col);
+            this.pos++;
           } else if (c0 >= 128) {
             // Unknown unicode — treat as IDENT for forward compatibility
             // (future: Greek letters for math, accented variable names)
-            result.push(this.tokenizeIdentifier());
+            yield this.tokenizeIdentifier();
           } else {
             // Unknown ASCII — silently skip
             this.pos++;
@@ -635,14 +903,6 @@ export class ExpressionLexer {
         }
       }
     }
-
-    return result;
-  }
-
-  // ── Iterator protocol ──────────────────────────────────────────────────
-  // Supports for...of usage: `for (const t of lexer)`
-  [Symbol.iterator](): Iterator<Token> {
-    return this.tokenizeAll()[Symbol.iterator]();
   }
 
   // ── Inline number tokenizer ────────────────────────────────────────────
@@ -824,8 +1084,8 @@ export class ExpressionLexer {
       this.pos = pos;
       return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
     }
-    // 2) Plugin-registered units
-    if (this.pluginUnits.has(identText)) {
+    // 2) Plugin-registered units (skipped when hasPluginUnits=false)
+    if (this.hasPluginUnits && this.pluginUnits.has(identText)) {
       this.pos = pos;
       return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
     }
@@ -858,22 +1118,31 @@ export class ExpressionLexer {
 
     // 2) Plugin-registered keywords (checked after locale) — a plugin's
     //    keyword can override the default IDENT behavior.
-    const pluginKwType = this.pluginKeywordMap.get(identLower);
-    if (pluginKwType) {
-      this.pos = pos;
-      return new LexerToken(pluginKwType, identText, identText, start, 0, this.line, startCol);
+    //    Guarded by hasPluginKeywords: in the no-plugin case, V8 predicts
+    //    this branch as never-taken and skips the Map lookup entirely.
+    if (this.hasPluginKeywords) {
+      const pluginKwType = this.pluginKeywordMap.get(identLower);
+      if (pluginKwType) {
+        this.pos = pos;
+        return new LexerToken(pluginKwType, identText, identText, start, 0, this.line, startCol);
+      }
     }
 
     this.pos = pos;
     return new LexerToken('IDENT', identText, identText, start, 0, this.line, startCol);
   }
 
-  // ── Phrase matcher ────────────────────────────────────────────────────
+  // ── Phrase matcher (trie-based) ───────────────────────────────────────
   /**
    * After reading a first identifier, try to match a multi-word phrase
    * like "to the power of" or "increase by".
    *
-   * Returns the matched phrase info if successful, null otherwise.
+   * Uses a word-level trie for O(word-count) lookup instead of the previous
+   * O(phrases×words) linear scan. The trie merges built-in and plugin
+   * phrases and is rebuilt on register/unregister.
+   *
+   * Built-in phrases take priority: if both a built-in and plugin phrase
+   * share the same trie path, the built-in type (set first) wins.
    *
    * @param firstWordLower - The first word already read (lowercased)
    * @param firstWordOriginal - The first word in original case
@@ -886,12 +1155,23 @@ export class ExpressionLexer {
   ): { type: string; text: string; endPos: number } | null {
     const len = this.len;
 
-    // Collect candidate words
-    const wordsLower: string[] = [firstWordLower];
+    // Start at the first word's trie node
+    const startNode: PhraseTrieNode | undefined = this.phraseTrie.children.get(firstWordLower);
+    if (!startNode) return null;
+
+    // Check if the first word alone is a complete phrase (single-word phrase)
+    // This handles the edge case where a plugin registers a one-word phrase.
+    // Must check children.size to avoid matching a prefix of a longer phrase
+    // (e.g., matching "power" when "power of" also exists).
+    if (startNode.type && startNode.children.size === 0) {
+      return { type: startNode.type, text: firstWordOriginal, endPos: pos };
+    }
+
     const wordsOriginal: string[] = [firstWordOriginal];
     let scanPos = pos;
+    let current: PhraseTrieNode = startNode;
 
-    // Read additional words separated by single spaces
+    // Read additional words separated by single spaces, traversing the trie
     while (scanPos < len) {
       // Must be exactly one space between words
       if (input.charCodeAt(scanPos) !== 32) break;
@@ -912,57 +1192,26 @@ export class ExpressionLexer {
 
       if (scanPos === wordStart) break;  // no word found
 
+      // Lowercase the word for trie lookup (original case preserved for text)
       const word = input.slice(wordStart, scanPos);
-      wordsLower.push(word.toLowerCase());
+      const wordLower = word.toLowerCase();
+
+      const next: PhraseTrieNode | undefined = current.children.get(wordLower);
+      if (!next) break;  // No phrase continues with this word
+
       wordsOriginal.push(word);
+      current = next;
 
-      // Build candidate and check against phrase list
-      const candidate = wordsLower.join(' ');
-
-      // Check built-in phrases first (take priority)
-      for (let i = 0; i < ExpressionLexer.PHRASES.length; i++) {
-        const phrase = ExpressionLexer.PHRASES[i];
-        if (phrase.phrase === candidate) {
-          return {
-            type: phrase.type,
-            text: wordsOriginal.join(' '),
-            endPos: scanPos,
-          };
-        }
+      // If this node is a complete phrase, we have a match
+      // Return immediately — built-in phrases are ordered first in the trie
+      // so they take priority over plugin phrases at the same path.
+      if (current.type) {
+        return {
+          type: current.type,
+          text: wordsOriginal.join(' '),
+          endPos: scanPos,
+        };
       }
-
-      // Check plugin-registered phrases
-      for (let i = 0; i < this.pluginPhrases.length; i++) {
-        const phrase = this.pluginPhrases[i];
-        if (phrase.phrase === candidate) {
-          return {
-            type: phrase.type,
-            text: wordsOriginal.join(' '),
-            endPos: scanPos,
-          };
-        }
-      }
-
-      // Check if this prefix can still lead to any built-in phrase
-      let viablePrefix = false;
-      for (let i = 0; i < ExpressionLexer.PHRASES.length; i++) {
-        if (ExpressionLexer.PHRASES[i].phrase.startsWith(candidate + ' ')) {
-          viablePrefix = true;
-          break;
-        }
-      }
-
-      // Also check plugin phrases for viable prefix
-      if (!viablePrefix) {
-        for (let i = 0; i < this.pluginPhrases.length; i++) {
-          if (this.pluginPhrases[i].phrase.startsWith(candidate + ' ')) {
-            viablePrefix = true;
-            break;
-          }
-        }
-      }
-
-      if (!viablePrefix) break;
     }
 
     return null;
@@ -998,6 +1247,23 @@ export class ExpressionLexer {
         }
       }
 
+      // // comment — consume both slashes and read to end of line.
+      // This must be checked BEFORE << (LSHIFT) and >> (RSHIFT) because
+      // the second slash is not an operator, it's part of a comment sequence.
+      // Handled inline (not via tokenizeComment) because tokenizeComment
+      // unconditionally skips one more character for #-style comments.
+      if (c0 === 47 && c1 === 47) {  // //
+        let commentPos = pos + 2;
+        while (commentPos < len) {
+          const cc = input.charCodeAt(commentPos);
+          if (cc === 10 || cc === 13) break;
+          commentPos++;
+        }
+        const text = input.slice(pos, commentPos);
+        this.pos = commentPos;
+        return new LexerToken('COMMENT', text, text, pos, 0, this.line, col);
+      }
+
       // << (LSHIFT) and >> (RSHIFT) — first char matches LTE/GTE first char
       if (c0 === 60 && c1 === 60) {  // <<
         this.pos = pos + 2;
@@ -1012,13 +1278,16 @@ export class ExpressionLexer {
 
       // ── Plugin-registered two-char operators ──────────────────────
       // Checked after built-in operators so built-ins take priority.
-      const pluginInner = this.pluginOperators.get(c0);
-      if (pluginInner) {
-        const pluginType = pluginInner.get(c1);
-        if (pluginType) {
-          const text = input.slice(pos, pos + 2);
-          this.pos = pos + 2;
-          return new LexerToken(pluginType, text, text, pos, 0, this.line, col);
+      // Guarded by hasPluginOps: skips Map lookups entirely when no plugins.
+      if (this.hasPluginOps) {
+        const pluginInner = this.pluginOperators.get(c0);
+        if (pluginInner) {
+          const pluginType = pluginInner.get(c1);
+          if (pluginType) {
+            const text = input.slice(pos, pos + 2);
+            this.pos = pos + 2;
+            return new LexerToken(pluginType, text, text, pos, 0, this.line, col);
+          }
         }
       }
     }

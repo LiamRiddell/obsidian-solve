@@ -1,5 +1,5 @@
 export { Lexer, sharedLexer, LexerState } from "./lexer";
-export type { Token, LexerPlugin, PhraseEntry } from "./lexer";
+export type { Token, LexerPlugin, PhraseEntry, ScanLineResult } from "./lexer";
 export { TokenTypes, type TokenType } from "./lexer";
 export { TokenRegistry, sharedTokenRegistry } from "./lexer/registry/TokenRegistry";
 

@@ -46,7 +46,7 @@ The user writes natural markdown text — `10 + 2`, `£100 in GBP`, `Now + 20 da
 
 | Directory | Module | Responsibility | Dependencies |
 |-----------|--------|---------------|-------------|
-| `lexer/` | `Lexer`, `MarkdownLexer` | Tokenise markdown + expressions | None (self-contained) |
+| `lexer/` | `Lexer`, `ExpressionLexer` | Tokenise markdown + expressions | None (self-contained) |
 | `lexer/registry/` | `TokenRegistry` | Token type definitions | None |
 | `parser/` | `Parser` | Pratt parsing → AST | `ParseletRegistry` |
 | `parser/` | `BytecodeBuilder` | AST → bytecode | `OpCode` |

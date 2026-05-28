@@ -927,12 +927,16 @@ describe("LexerPlugin Fuzz — edge cases and boundary conditions", () => {
   test("many sequential plugin registrations don't degrade", () => {
     const lexer = new ExpressionLexer("en");
 
+    // Phrase matching requires alphabetic words (A-Z, a-z) — digits are not
+    // valid phrase words. Use alphabetic word suffixes.
+    const wordSuffixes = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+
     // Register 10 plugins sequentially
     for (let i = 0; i < 10; i++) {
       lexer.registerPlugin({
         keywords: { [`plugin_${i}`]: `PLUGIN_${i}` },
         operators: { [`->`]: "ARROW" },  // same operator repeatedly — no-op after first
-        phrases: [{ phrase: `custom ${i}`, type: `CUSTOM_${i}` }],
+        phrases: [{ phrase: `custom ${wordSuffixes[i]}`, type: `CUSTOM_${i}` }],
         units: [`unit_${i}`],
       });
     }
@@ -945,7 +949,7 @@ describe("LexerPlugin Fuzz — edge cases and boundary conditions", () => {
 
     // All 10 plugin phrases should be recognized
     for (let i = 0; i < 10; i++) {
-      lexer.reset(`custom ${i}`);
+      lexer.reset(`custom ${wordSuffixes[i]}`);
       expect([...lexer][0].type).toBe(`CUSTOM_${i}`);
     }
 
@@ -1071,15 +1075,18 @@ describe("LexerPlugin Fuzz — unregisterPlugin", () => {
 
     lexer.unregisterPlugin(plugin);
 
-    // Operators should revert to default behavior (ERROR for unknown op chars)
+    // Operators should revert to default behavior.
+    // ':' (charCode 58) maps to COLON via OP_MAP, so '::' becomes COLON + COLON.
     lexer.reset("a::b");
-    const colonTokens = [...lexer].filter(t => t.type === "ERROR");
-    expect(colonTokens.length).toBeGreaterThanOrEqual(1);
+    const colonTokens = [...lexer].filter(t => t.type === "COLON");
+    expect(colonTokens.length).toBe(2);
 
     lexer.reset("a->b");
     const dashArrowTokens = [...lexer];
-    // -> breaks into MINUS + ERROR (single > has no OP_MAP entry)
+    // '-' maps to MINUS via OP_MAP; '>' maps to ERROR (no single-char OP_MAP entry).
+    // So '->' becomes MINUS + ERROR.
     expect(dashArrowTokens.some(t => t.type === "MINUS")).toBe(true);
+    expect(dashArrowTokens.some(t => t.type === "ERROR")).toBe(true);
 
     // Built-in operators still work
     lexer.reset("a<=b");

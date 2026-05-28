@@ -198,9 +198,10 @@ s\`3 + 4\`
     test("handles empty document", () => {
       const result = engine.parseDocument("", { inputType: 'markdown' });
       
-      expect(result.lines).toHaveLength(1);
-      expect(result.lines[0].isEmpty).toBe(true);
-      expect(result.totalLines).toBe(1);
+      // An empty document has 0 lines — scanDocument('') returns [],
+      // not [empty line] (unlike the old split('\n') which produced ['']).
+      expect(result.lines).toHaveLength(0);
+      expect(result.totalLines).toBe(0);
     });
 
     test("handles document with only whitespace", () => {

@@ -152,6 +152,10 @@ load(tokens: Token[]): void {
             if (builder) {
                 infixParselet.parse(this, token, nextToken, builder);
             }
+
+            // Sync idx after recursive parsing: inner parseExpression() calls
+            // advance this.current past the RHS, so idx needs to catch up.
+            idx = this.current;
         }
 
         this.current = idx;
@@ -169,6 +173,7 @@ load(tokens: Token[]): void {
         bindingPower?: number
     ): void {
         // Caller already checks diagnosticPipeline !== undefined
+        const pipeline = this.diagnosticPipeline!;
         const event: DiagnosticEvent & { type: "parselet_matched" } = {
             type: DiagnosticEventType.ParseletMatched,
             elapsedNs: 0,
@@ -181,7 +186,7 @@ load(tokens: Token[]): void {
             bindingPower,
             tokenOffset: token.offset || 0,
         };
-        this.diagnosticPipeline.fireParseletMatched(event);
+        pipeline.fireParseletMatched(event);
     }
 
     consume(expectedType?: string): Token {

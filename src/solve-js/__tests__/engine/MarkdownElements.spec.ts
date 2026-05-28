@@ -38,7 +38,7 @@ describe("Markdown Elements and Multi-line Documents", () => {
     test("inline code with backticks is tokenized", () => {
       const exprLexer = new ExpressionLexer("en");
       exprLexer.reset("`code`");
-      const tokens = exprLexer.tokenizeAll("expression");
+      const tokens = exprLexer.tokenizeAll();
       const types = tokens.map(t => t.type);
       expect(types).toContain("BACKTICK_OPEN");
       // After backtick, the content "code" is tokenized as IDENT
@@ -48,7 +48,7 @@ describe("Markdown Elements and Multi-line Documents", () => {
     test("inline solve expression is tokenized", () => {
       const exprLexer = new ExpressionLexer("en");
       exprLexer.reset("s`1 + 2`");
-      const tokens = exprLexer.tokenizeAll("expression");
+      const tokens = exprLexer.tokenizeAll();
       const types = tokens.map(t => t.type);
       expect(types).toContain("INLINE_SOLVE_START");
       expect(types).toContain("PLUS");
@@ -72,7 +72,7 @@ describe("Markdown Elements and Multi-line Documents", () => {
     test("expression without markdown is tokenized correctly", () => {
       const exprLexer = new ExpressionLexer("en");
       exprLexer.reset("1 + 2");
-      const tokens = exprLexer.tokenizeAll("expression");
+      const tokens = exprLexer.tokenizeAll();
       const types = tokens.map(t => t.type);
       expect(types).toContain("NUMBER");
       expect(types).toContain("PLUS");
@@ -193,7 +193,7 @@ describe("Markdown Elements and Multi-line Documents", () => {
         const classification = lexer.classifyLine(line);
         if (!classification.skip) {
           exprLexer.reset(line);
-          const tokens = exprLexer.tokenizeAll("expression");
+          const tokens = exprLexer.tokenizeAll();
           totalNumberTokens += tokens.filter(t => t.type === "NUMBER").length;
         }
       }
@@ -248,9 +248,14 @@ describe("Markdown Elements and Multi-line Documents", () => {
       expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
     });
 
-    test("does not highlight expression in blockquote (always skipped)", () => {
+    test("highlights expression inside blockquote (strips > prefix)", () => {
       const ranges = provider.getLineHighlights("> 1 + 2");
-      expect(ranges).toHaveLength(0);
+      // The lexer now strips the "> " prefix and highlights the expression content.
+      expect(ranges.length).toBeGreaterThanOrEqual(3);
+      const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
+      const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
+      expect(numberRanges.length).toBeGreaterThanOrEqual(2);
+      expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
     });
 
     test("does not highlight heading content", () => {

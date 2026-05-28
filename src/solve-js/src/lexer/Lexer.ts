@@ -1,4 +1,4 @@
-import { ExpressionLexer, LineClassification, LexerPlugin } from "./ExpressionLexer";
+import { ExpressionLexer, LineClassification, LexerPlugin, type ScanLineResult } from "./ExpressionLexer";
 import { Token } from "@solve-js/lexer/Token";
 import { LexerState } from "@solve-js/lexer/LexerState";
 import { getTokenHighlightClass } from "@solve-js/lexer/TokenHighlightMap";
@@ -37,12 +37,12 @@ export class Lexer {
       }
       // Expression line or markdown line with inline solves — tokenize.
       this.expressionLexer.reset(input);
-      this.tokens = this.expressionLexer.tokenizeAll('expression');
+      this.tokens = this.expressionLexer.tokenizeAll();
       this.tokenIdx = 0;
     } else {
       // Non-main states (Inline, String) — expression tokenization.
       this.expressionLexer.reset(input);
-      this.tokens = this.expressionLexer.tokenizeAll('expression');
+      this.tokens = this.expressionLexer.tokenizeAll();
       this.tokenIdx = 0;
     }
   }
@@ -104,6 +104,30 @@ export class Lexer {
     this.expressionLexer.unregisterPlugin(plugin);
   }
 
+  /**
+   * Reset the lexer for expression-only text — skips the classifyLine()
+   * overhead in reset() for callers that already know the input is an
+   * evaluable expression (e.g., after isEmptyLine() confirmed non-skip).
+   */
+  resetExpression(input: string): void {
+    this.currentState = LexerState.Main;
+    this.hasPeeked = false;
+    this.peekedToken = undefined;
+    this.expressionLexer.reset(input);
+    this.tokens = this.expressionLexer.tokenizeAll();
+    this.tokenIdx = 0;
+  }
+
+  /**
+   * Scan a full document in one pass, classifying each line and
+   * tokenizing non-skipped lines. Delegates to ExpressionLexer.
+   *
+   * @returns ScanLineResult[] — one per line, with classification + tokens.
+   */
+  scanDocument(text: string): ScanLineResult[] {
+    return this.expressionLexer.scanDocument(text);
+  }
+
   getState(): LexerState {
     return this.currentState;
   }
@@ -113,7 +137,24 @@ export class Lexer {
   }
 
   getHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] {
-    this.reset(lineText);
+    const classification = this.expressionLexer.classifyLine(lineText);
+
+    // For blockquote lines, strip the "> " prefix and tokenize the expression content.
+    // This lets expressions inside blockquotes (e.g., "> 1 + 2") get syntax highlighted
+    // while pure structural lines (headings, code fences) remain unhighlighted.
+    if (classification.skip && lineText.startsWith("> ")) {
+      return this.collectHighlightTokens(lineText.slice(2));
+    }
+
+    if (classification.skip) {
+      return [];
+    }
+
+    return this.collectHighlightTokens(lineText);
+  }
+
+  private collectHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] {
+    this.resetExpression(lineText);
     const result: {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] = [];
     for (const token of this) {
       if (token.type === "WS" || token.type === "NEWLINE") continue;
