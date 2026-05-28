@@ -117,6 +117,7 @@ export const VARIABLES_PACKAGE: ISolvePackage = {
 import { UomLiteralParselet } from "./uom/parselets/UomLiteralParselet";
 import { ConvertParselet } from "./uom/parselets/ConvertParselet";
 import { CurrencySymbolParselet } from "./uom/parselets/CurrencySymbolParselet";
+import { InParselet } from "./uom/parselets/InParselet";
 
 export const UOM_PACKAGE: ISolvePackage = {
   name: "solve-uom",
@@ -128,6 +129,7 @@ export const UOM_PACKAGE: ISolvePackage = {
   ],
   infixParselets: [
     { tokenType: "UNIT", parselet: new UomLiteralParselet() },
+    { tokenType: "IN", parselet: new InParselet() },
   ],
 };
 

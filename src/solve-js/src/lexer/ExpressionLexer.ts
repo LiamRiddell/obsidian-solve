@@ -145,7 +145,6 @@ function buildCharClassTable(): Uint8Array {
 // initialized in the constructor and never added/removed afterwards.
 // This enables fast property access (inline cache hits) and allows
 // allocation in V8's nursery (cheap GC).
-// ── Monomorphic Token class ───────────────────────────────────────────────
 export class LexerToken implements Token {
   constructor(
     public type: string,

@@ -408,6 +408,39 @@ function initDispatchTable(): void {
     return ip;
   };
 
+  // UOM_CONVERT_IN: handles postfix `expr in unit` syntax.
+  // The left expression may be a uomValue (already tagged with a unit) or a
+  // plain number. Pops: toUnit (string), leftVal (Value). Pushes: converted
+  // uomValue or original leftVal if conversion is not possible.
+  opHandlers[OpCode.UOM_CONVERT_IN] = (ctx, ip) => {
+    const toUnit = (ctx.stack.pop()!.value as string);
+    const left = ctx.stack.pop()!;
+
+    if (left.type === ValueType.Uom) {
+      const fromUnit = left.unit!;
+      const val = left.toNumber();
+      const measure = getMeasure(fromUnit);
+      const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
+      if (measure && getMeasure(toUnit) === measure) {
+        const converted = convertUnit(val, fromUnit, toUnit);
+        ctx.stack.push(uomValue(converted, toUnit));
+      } else if (isCurrency) {
+        const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
+        if (converted !== null) {
+          ctx.stack.push(uomValue(converted, toUnit));
+        } else {
+          ctx.stack.push(left);
+        }
+      } else {
+        ctx.stack.push(left);
+      }
+    } else {
+      // Plain number: just wrap with the target unit (no conversion needed).
+      ctx.stack.push(uomValue(left.toNumber(), toUnit));
+    }
+    return ip;
+  };
+
   opHandlers[OpCode.UOM_GET_VALUE] = (ctx, ip) => {
     const v = ctx.stack.pop()!;
     ctx.stack.push(numberValue(v.toNumber()));

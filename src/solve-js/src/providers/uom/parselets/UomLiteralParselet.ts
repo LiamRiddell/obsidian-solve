@@ -19,7 +19,9 @@ export class UomLiteralParselet implements InfixParselet {
     if (parser.peek()?.type === "TO" || parser.peek()?.type === "IN") {
       parser.consume(); // consume TO or IN
       const targetToken = parser.peek();
-      if (targetToken?.type === "UNIT") {
+      // Accept UNIT or IN (for cases like "3 ft in in" where
+      // the target unit name collides with the IN keyword).
+      if (targetToken?.type === "UNIT" || targetToken?.type === "IN") {
         parser.consume();
         builder.emitOpcode(OpCode.PUSH_STRING);
         builder.emitString(targetToken.value);

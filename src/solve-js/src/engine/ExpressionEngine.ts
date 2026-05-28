@@ -60,13 +60,6 @@ export class ExpressionEngine {
         opcodes: new Uint8Array(512),
         numbers: new Float64Array(128),
     };
-    // O(1) lookup for markdown token types to skip during lexing
-    private markdownTokenTypes = new Set([
-        "MD_H1", "MD_H2", "MD_H3", "MD_H4", "MD_H5", "MD_H6",
-        "MD_BOLD", "MD_ITALIC", "MD_CODE", "MD_LINK", "MD_IMAGE",
-        "MD_LIST_ITEM", "MD_BLOCKQUOTE", "MD_HR", "MD_TABLE",
-        "MD_NEWLINE", "WS"
-    ]);
 
     constructor(
         localeCode = "en",
@@ -348,13 +341,14 @@ export class ExpressionEngine {
         // ExpressionLexer never produces MD_* tokens, but this guard
         // prevents accidental breakage if the lexer mode changes.
         const tokens: Token[] = [];
+        let hasParens = false;
         for (const t of preTokenized) {
-            if (this.markdownTokenTypes.has(t.type)) continue;
+            if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
             tokens.push(t);
         }
 
         // Directly invoke evaluateWithTokens — no lexing needed
-        return this.evaluateWithTokens(lineNumber, expression, tokens);
+        return this.evaluateWithTokens(lineNumber, expression, tokens, hasParens);
     }
 
     /**
@@ -368,7 +362,8 @@ export class ExpressionEngine {
     private evaluateWithTokens(
         lineNumber: number,
         expression: string,
-        tokens: Token[]
+        tokens: Token[],
+        hasParens?: boolean
     ): Value {
         // ══ SAFETY CHECK 1: Expression length limit ══
         const lengthCheck = checkExpressionLength(expression, this.config.validation);
@@ -404,7 +399,7 @@ export class ExpressionEngine {
             program = cachedProgram;
         } else {
             const builder = new BytecodeBuilder();
-            this.parser.load(tokens);
+            this.parser.load(tokens, hasParens);
             try {
                 this.parser.parseExpression(0, builder);
             } catch (e) {
@@ -520,8 +515,9 @@ export class ExpressionEngine {
         // redundant classifyLine (caller already knows this is an expression).
         this.lexer.resetExpression(expression);
         let tokenIndex = 0;
+        let hasParens = false;
         for (const t of this.lexer) {
-            if (this.markdownTokenTypes.has(t.type)) continue;
+            if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
             tokens.push(t);
 
             if (hasCollectors) {
@@ -626,7 +622,7 @@ export class ExpressionEngine {
             }
 
             const builder = new BytecodeBuilder();
-            this.parser.load(tokens);
+            this.parser.load(tokens, hasParens);
             try {
                 this.parser.parseExpression(0, builder);
             } catch (e) {
@@ -826,9 +822,10 @@ if (hasCollectors) {
 
 		// Lexing — skip classifyLine overhead since caller knows this is an expression.
 		const tokens: Token[] = [];
+		let hasParens = false;
 		this.lexer.resetExpression(expression);
 		for (const t of this.lexer) {
-			if (this.markdownTokenTypes.has(t.type)) continue;
+			if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
 			tokens.push(t);
 		}
 
@@ -857,7 +854,7 @@ if (hasCollectors) {
 
 		// Parse and compile
 		const builder = new BytecodeBuilder();
-		this.parser.load(tokens);
+		this.parser.load(tokens, hasParens);
 		try {
 			this.parser.parseExpression(0, builder);
 		} catch (e) {

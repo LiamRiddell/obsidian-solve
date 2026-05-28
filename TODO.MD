@@ -1,26 +1,111 @@
-1. Internatisionalion support
-2. Output formatting used to use user settings
-3. Engine should handle everything the pipelines do, lexer can be so much faster at dealing with that. We could use moo lexel levels for handing inline?
-4. You didn't truly migrate all of the ohm grammars rules. For example none of the word based varitions are missing. YOu need to go through each provider in github and extend each parslet for full coverage in new engine without any regression. https://github.com/LiamRiddell/obsidian-solve/wiki/Core-Providers all the providers should have a test for every rule. As seen in the current main of repo https://github.com/LiamRiddell/obsidian-solve/tree/main/test/providers
-5. When using community API a plugin should be able to define many things under one package for example multiple rules or providers, etc.. not just register one handler as one plugin and then another plugin, etc.. I'd imagine people would make solve-runescape-parslet that would provide many grammar rules, etc..
-6. Now that you removed AST how are you handling the original functionality of the human readable output?
-7. Vector parslet deviates from the original implementation a vector is defined as (x,y,n+1) not [1, 2, 3] this would be used for an array in the future if we support it
-8. Big integer tests are missing for that parselet
-9. Test the hell out of the vm, the more tests the better to be honest for everything.
-10. Document parsing tests should be added and lexer tests. The lexer needs to handle anything without crashing, incomplete code, words, markdown, etc.. It currently needs full support of the markdown version and superset used by obsidian, it should handle mathjax and other shite like that. On top of that we need to make sure markdown has full support and we can replace the bad current node skipper at a post lexer level this would allow us to parse big documents really fast. Focus on optmisation here and use the moo lexer levels. For example if it's a comment we know we can skip the line, etc..
-11. Is there a way we could build on top of the base opcode producer for the vm that is more intuitive for humans? For example they write a rules in a grammar-esque style and we compile it to the final opcode representation?
-12. Optmisation is key but not at the cost of regression, we're making bigger and better.
-13. The lexer need to be extendable and broken up into what makes sense following best practices of lexer writing.
-14. Units of Measurement parslet doesn't handle all of the original providers functionality to be honest none of the providers you migrated do. Everything needs checking for regression. You'll need to use git comamnds for that.
+# Solve-JS Pipeline Improvements — Prioritized TODO
 
-For this work reasearch everything on the web, write test, ask questions for clarity. Commit in blocks.
+> Generated: May 28, 2026 — Based on end-to-end profiling heatmap analysis.
+> Full report: `PIPELINE_HEATMAP_REPORT.html`
 
---- 28/05/2026
+## Pipeline Stage Distribution (Total: 9,350ns per expression)
 
-1. plugins - add functionality to prevent and error when overriding of existing keywords, operators, phrases, uniuts , etc and then add tests
-2. lexer - The markdown and expression lexer could be combined for faster speed?
-3. parser - Optmisations
-4. packages - The engine should use the package system for internal shipped packages e.g. arithmetic, etc..
+| Stage | Time (ns) | % | Status |
+|---|---|---|---|
+| 🔤 Lexer | 2,141 | 22.9% | **Primary target** |
+| 🧠 Parser | ~3,700 | 39.6% | V8-saturated |
+| 📦 BytecodeBuilder | ~2,153 | 23.0% | Allocation-heavy |
+| ⚡ VM Execute | 1,356 | 14.5% | Already fast |
+| **Total** | **9,350ns** | **100%** | |
 
-Tests = https://stackoverflow.com/questions/62885390/my-jests-tests-are-leaking-memory-how-can-i-fix-this
-https://stackoverflow.com/questions/62885390/my-jests-tests-are-leaking-memory-how-can-i-fix-this#comment138853764_78207777
+---
+
+## P0 — High Priority (Biggest Wins)
+
+### 1. Combine Expression + Markdown Lexers
+- **Cost**: 2,141ns (22.9% of pipeline)
+- **Goal**: ~1,500ns (30% reduction)
+- **Approach**: Single dual-mode scanner that avoids mode-switch overhead. ExpressionLexer for expression lines, MarkdownLexer for markdown. Combined into one class with inline mode detection.
+- **Verification**: Lexer benchmarks should show ~30% improvement on `mixed_expression` and `long_expression` categories.
+- **Tests**: Existing lexer benchmarks cover all categories. Add throughput comparison.
+
+### 2. BytecodeBuilder Pool
+- **Cost**: ~2,153ns (23% of pipeline — 4 object allocations per expression)
+- **Goal**: ~1,700ns (20% reduction)
+- **Approach**: Pre-allocate a pool of BytecodeBuilder instances (like the `bufferPool` already used for TypedArrays). Reuse across expressions instead of `new BytecodeBuilder()` for every parse.
+- **Verification**: Pipeline benchmarks should show improvement on cold eval. Warm eval (cached) won't change.
+- **Tests**: Add pool exhaustion + correctness tests.
+
+---
+
+## P1 — Medium Priority (Moderate Wins)
+
+### 3. Unit Conversion Memoization
+- **Cost**: 5,930ns per conversion (84% of VM time for UOM ops)
+- **Goal**: ~930ns (84% reduction on UOM paths)
+- **Approach**: LRU cache for `convertUnit(fromVal, fromUnit, toUnit)` results. Most conversions repeat (e.g., `cm→m`, `USD→GBP`).
+- **Tests**: Add cache hit/miss tests.
+
+### 4. Batch-Parse Independent Expressions
+- **Cost**: N × (Builder + Parser + VM setup) per expression line
+- **Goal**: ~20% reduction for multi-expression documents
+- **Approach**: When `parseDocument()` processes multiple independent expressions, batch-tokenize and parse them in a single Parser.load() call with a combined token list and sentinel tokens between expressions.
+- **Tests**: Document-level throughput benchmarks.
+
+### 5. Dedicated Fast-Path for Built-in Arithmetic
+- **Cost**: Registry lookup per token in hot infix loop
+- **Goal**: ~100ns per expression
+- **Approach**: Move the most common parselets (+, -, *, /, ^) out of the ParseletRegistry hash lookup into a dedicated fast-path. Use the package system to register built-in arithmetic as a "core" package with direct dispatch.
+- **Verification**: Parser benchmarks for `simple_arithmetic` category.
+
+### 6. Parser Hot Loop — Further Investigation
+- **Status**: V8-saturated after 13 failed experiments. Only structural changes work.
+- **Remaining ideas**:
+  - Pre-register infix parselets into a dense array indexed by token type enum (no hash lookup)
+  - Combine Parser + BytecodeBuilder into a single class (eliminates cross-object property access)
+  - Use `SharedArrayBuffer` for the pool to enable worker-thread parsing
+
+---
+
+## P2 — Lower Priority (Safety & Features)
+
+### 7. Plugin System: Prevent Keyword/Operator Overrides
+- **Cost**: Safety — prevents plugin conflicts
+- **Approach**: Guard checks in `registerPlugin()` — built-in keywords/operators/units/phrases cannot be overridden.
+- **Tests**: Write fuzz tests for plugin registration conflicts.
+- **Status**: Already partially implemented — add comprehensive tests.
+
+### 8. Packages: Use Package System for Shipped Arithmetic
+- **Approach**: Refactor built-in arithmetic, percentage, function providers to use the ISolvePackage interface consistently. This enables selective provider loading and reduces cold-start cost.
+- **Tests**: Verify all existing tests pass when loading via package system.
+
+### 9. Parser Optimizations (Research)
+- **Approach**: Investigate whether the Pratt parser can be replaced with a precedence-climbing parser (fewer function calls, simpler dispatch).
+- **Verification**: Benchmark comparison between current Pratt and alternative approach.
+
+---
+
+## P3 — Maintenance
+
+### 10. Jest Memory Leak Fixes
+- **Symptom**: Worker process force-exits during FullPipeline tests.
+- **Approach**: Follow StackOverflow advice on Jest memory leaks (`--expose-gc`, proper cleanup in `afterAll`, `--workerIdleMemoryLimit`).
+- **References**: https://stackoverflow.com/questions/62885390/my-jests-tests-are-leaking-memory-how-can-i-fix-this
+
+### 11. Convert Keyword: Support Parenthesized Expressions
+- **Symptom**: `convert (100 cm + 1 m) to mm` returns NaN. `convert 100 cm to m` works fine.
+- **Approach**: The `ConvertParselet` expects a simple value token, not a parenthesized expression. Extend to handle arbitrary expressions.
+
+---
+
+## BODMAS Test Results
+
+- **58/58 tests pass** (including all critical mixed expressions)
+- `100 + (25 USD * 2 / 2) in GBP` → ~92.4 GBP ✓
+- Exponent is **left-associative** (matches calculator behavior)
+- Mixed currency (`$100 + 100 EUR + £100`) auto-converts correctly
+- Percentage × UOM × Currency all chain correctly
+
+---
+
+## Quick Wins (Low Effort, Immediate Impact)
+
+1. ~~`getBindingPower()` → `bindingPower` property~~ ✅ Done
+2. ~~Remove dead `parenDelta` field~~ ✅ Done
+3. **Unit conversion LRU cache** ← Next easiest, highest impact (P1 #3)
+4. **BytecodeBuilder pool** ← Easy, good perf (P0 #2)

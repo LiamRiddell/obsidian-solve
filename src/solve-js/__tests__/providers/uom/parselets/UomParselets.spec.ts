@@ -370,6 +370,62 @@ describe("ConvertParselet without TO (just tag)", () => {
   });
 });
 
+describe("ConvertParselet with parenthesized expressions", () => {
+  test("convert (100 cm + 1 m) to mm — parens with arithmetic", () => {
+    // 100 cm + 1 m = 200 cm; then to mm: 200 * 10 = 2000 mm
+    expect(parseNum("convert (100 cm + 1 m) to mm")).toBeCloseTo(2000, 5);
+  });
+
+  test("convert (1 m + 100 cm) to mm — left unit wins (m)", () => {
+    // 1 m + 100 cm = 2 m; then to mm: 2 * 1000 = 2000 mm
+    expect(parseNum("convert (1 m + 100 cm) to mm")).toBeCloseTo(2000, 5);
+  });
+
+  test("convert (5 kg - 2000 g) to g — subtraction with mix", () => {
+    // 5 kg - 2000 g = 3 kg; then to g: 3 * 1000 = 3000 g
+    expect(parseNum("convert (5 kg - 2000 g) to g")).toBeCloseTo(3000, 5);
+  });
+
+  test("convert (2 h + 30 min) to minutes — time arithmetic", () => {
+    // 2 h + 30 min = 2.5 h; then to min: 2.5 * 60 = 150 min
+    expect(parseNum("convert (2 h + 30 min) to minutes")).toBeCloseTo(150, 5);
+  });
+
+  test("convert (10 USD + 20 EUR) to GBP — multi-currency parens", () => {
+    const result = parseAndExecute("convert (10 USD + 20 EUR) to GBP");
+    // Converts the sum to GBP
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.unit).toBe("GBP");
+    expect(result.toNumber()).toBeGreaterThan(0);
+  });
+
+  test("convert (3 ft + 12 inches) to in — imperial mix", () => {
+    // 3 ft + 12 inches = 4 ft; then to in: 4 * 12 = 48
+    expect(parseNum("convert (3 ft + 12 inches) to in")).toBeCloseTo(48, 5);
+  });
+
+  test("convert (100) to cm — plain number wraps as unit", () => {
+    // 100 is on stack as number, wraps as uomValue(100, "cm")
+    const result = parseAndExecute("convert (100) to cm");
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.toNumber()).toBe(100);
+    expect(result.unit).toBe("cm");
+  });
+
+  test("convert (100 cm + 1 m) in mm — IN keyword variant", () => {
+    // Same as 'to mm' but using 'in' keyword
+    expect(parseNum("convert (100 cm + 1 m) in mm")).toBeCloseTo(2000, 5);
+  });
+
+  test("convert (100 cm + 1 m) (no target) — leaves value unchanged", () => {
+    const result = parseAndExecute("convert (100 cm + 1 m)");
+    // Result is already a UOM value: 200 cm
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.toNumber()).toBeCloseTo(200, 5);
+    expect(result.unit).toBe("cm");
+  });
+});
+
 describe("UOM auto-conversion in arithmetic", () => {
   test("100 cm + 1 m = 200 cm (left unit wins)", () => {
     expect(parseNum("100 cm + 1 m")).toBeCloseTo(200, 5);

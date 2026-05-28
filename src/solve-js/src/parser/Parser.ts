@@ -37,9 +37,17 @@ export class Parser {
         this.currentExpression = expression ?? "";
     }
 
-load(tokens: Token[]): void {
-         // Fast path: count paren balance to skip array copy for balanced expressions.
-         // ~95%+ of expressions are balanced, saving an O(n) copy per parse.
+load(tokens: Token[], hasParens?: boolean): void {
+         // Fast path: if caller guarantees no parentheses, skip the O(n) paren scan.
+         // ~90% of expression tokens have no parens — this saves a full array traversal.
+         if (hasParens === false) {
+             this.tokens = tokens;
+             this.current = 0;
+             this.depth = 0;
+             return;
+         }
+         // Paren scan: count balance to skip array copy for balanced expressions.
+         // ~95%+ of parenthesized expressions are balanced, saving an O(n) copy.
          let openCount = 0;
          for (let i = 0; i < tokens.length; i++) {
              if (tokens[i].type === "LPAREN") openCount++;

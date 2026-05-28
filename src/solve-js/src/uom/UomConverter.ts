@@ -85,10 +85,7 @@ export function convertUnit(value: number, from: string, to: string): number {
   const f = resolveUnit(from);
   const t = resolveUnit(to);
   if (f === t) return value;
-  // The convert package returns a number when converting to a specific unit
-  // Use unknown intermediate cast to satisfy TypeScript
-  const result = convert(value, f as any).to(t as any);
-  return result as unknown as number;
+  return convert(value, f as any).to(t as any) as unknown as number;
 }
 
 export function isConvertibleUnit(unit: string): boolean {

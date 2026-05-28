@@ -9,11 +9,13 @@ export class ConvertParselet implements PrefixParselet {
 	readonly category = "UoM";
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(BindingPower.Postfix, builder);
-    const unitToken = parser.peek();
-    if (unitToken && unitToken.type === "UNIT") {
+    const nextToken = parser.peek();
+
+    // Case 1: convert <number> <unit> [to <target>] — explicit unit after value
+    if (nextToken && nextToken.type === "UNIT") {
       parser.consume();
       builder.emitOpcode(OpCode.PUSH_STRING);
-      builder.emitString(unitToken.value);
+      builder.emitString(nextToken.value);
 
       if (parser.peek()?.type === "TO") {
         parser.consume("TO");
@@ -28,6 +30,29 @@ export class ConvertParselet implements PrefixParselet {
       } else {
         builder.emitOpcode(OpCode.UOM_CONVERT);
       }
+      return;
     }
+
+    // Case 2: convert (<expression>) to <target> — parenthesized or complex
+    // expression where the expression result already has units on the stack.
+    if (nextToken && (nextToken.type === "TO" || nextToken.type === "IN")) {
+      parser.consume(); // consume TO or IN
+      const targetToken = parser.peek();
+      if (targetToken?.type === "UNIT" || targetToken?.type === "IN" ||
+          targetToken?.type === "DOLLAR" || targetToken?.type === "POUND" ||
+          targetToken?.type === "EURO" || targetToken?.type === "IDENT") {
+        parser.consume();
+        builder.emitOpcode(OpCode.PUSH_STRING);
+        builder.emitString(targetToken.value);
+        builder.emitOpcode(OpCode.UOM_CONVERT_IN);
+      } else if (targetToken?.type === "BEST") {
+        parser.consume();
+        builder.emitOpcode(OpCode.UOM_BEST);
+      }
+      return;
+    }
+
+    // Case 3: convert <expression> (no target) — value is already on the stack
+    // as a UOM value. Nothing more to emit.
   }
 }
