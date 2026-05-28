@@ -11,6 +11,8 @@ import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, numberValue } from "@solve-js/vm/Value";
 import { PluginManager } from "@solve-js/plugins/PluginSystem";
 import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
+import type { ISolvePackage } from "@solve-js/api/SolveAPI";
+import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import {
     ParsingResult,
@@ -90,23 +92,58 @@ export class ExpressionEngine {
          }
 
         // Register built-in providers via ISolvePackage data.
-        // Uses the same package structure as external plugins but registers
-        // directly into the engine's isolated registry (not sharedParseletRegistry).
-        // Enables: introspection, selective disable, and replacement of built-in providers.
+        // Uses the same package structure as external user packages —
+        // each package's parselets go into the engine's isolated registry
+        // (not sharedParseletRegistry), lexer plugins into the engine's
+        // isolated lexer, and opcode/variable handlers into shared registries.
         for (const pkg of BUILTIN_PACKAGES) {
-            if (pkg.prefixParselets) {
-                for (const pp of pkg.prefixParselets) {
-                    this.registry.registerPrefix(pp.tokenType, pp.parselet);
-                }
-            }
-            if (pkg.infixParselets) {
-                for (const ip of pkg.infixParselets) {
-                    this.registry.registerInfix(ip.tokenType, ip.parselet);
-                }
-            }
+            this.registerPackage(pkg);
         }
         this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth, localeCode);
         this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
+    }
+
+    /**
+     * Register a package with the engine's isolated registries.
+     *
+     * Handles all ISolvePackage fields:
+     * - `lexerPlugin` → engine's isolated lexer (via this.lexer.registerPlugin)
+     * - `prefixParselets` → engine's isolated ParseletRegistry
+     * - `infixParselets` → engine's isolated ParseletRegistry
+     * - `opcodeHandlers` → sharedOpRegistry (shared across all engine instances)
+     * - `variableSources` → sharedVariableResolver (shared across all engine instances)
+     *
+     * Built-in packages (ARITHMETIC, FUNCTION, UOM, etc.) are registered
+     * via this method during construction. External user packages can also
+     * use this method for data-driven registration without creating a
+     * SolvePlugin with a register() callback.
+     *
+     * @param pkg - The package to register.
+     */
+    registerPackage(pkg: ISolvePackage): void {
+        if (pkg.lexerPlugin) {
+            this.lexer.registerPlugin(pkg.lexerPlugin);
+        }
+        if (pkg.prefixParselets) {
+            for (const pp of pkg.prefixParselets) {
+                this.registry.registerPrefix(pp.tokenType, pp.parselet);
+            }
+        }
+        if (pkg.infixParselets) {
+            for (const ip of pkg.infixParselets) {
+                this.registry.registerInfix(ip.tokenType, ip.parselet);
+            }
+        }
+        if (pkg.opcodeHandlers) {
+            for (const oh of pkg.opcodeHandlers) {
+                sharedOpRegistry.register(oh);
+            }
+        }
+        if (pkg.variableSources) {
+            for (const vs of pkg.variableSources) {
+                sharedVariableResolver.registerSource(vs);
+            }
+        }
     }
 
     /**

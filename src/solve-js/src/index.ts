@@ -25,6 +25,23 @@ export type { ValidationConfig, SafetyCheckResult } from "./engine/ExpressionEng
 export { Solve, solve } from "./api/SolveAPI";
 export type { ISolve, ISolvePackage } from "./api/SolveAPI";
 
+// ── Built-in provider packages ─────────────────────────────────────────
+// Individual packages can be imported for selective engine configuration.
+// Example: new ExpressionEngine() defaults to all packages; omit some via
+// a custom engine that only calls registerPackage() for desired ones.
+export {
+  BUILTIN_PACKAGES,
+  ARITHMETIC_PACKAGE,
+  PERCENTAGE_PACKAGE,
+  FUNCTION_PACKAGE,
+  DATETIME_PACKAGE,
+  DICE_PACKAGE,
+  VARIABLES_PACKAGE,
+  UOM_PACKAGE,
+  VECTOR_PACKAGE,
+  BIGINT_PACKAGE,
+} from "./providers/builtins";
+
 export { GrammarDSL, createGrammarDSL } from "./compiler/GrammarDSL";
 
 export { LineCache, LineCacheEntry } from "./cache/LineCache";
