@@ -1079,15 +1079,33 @@ export class ExpressionLexer {
     }
 
     // ── Unit lookup (case-sensitive, takes priority over phrases/keywords)
+    //
+    // Contextual LPAREN lookahead: when a known unit is followed by '('
+    // (possibly with whitespace), treat it as a potential function call
+    // instead of a unit. This resolves conflicts where an identifier is
+    // both a unit (e.g., "min" = minute) and a function (min(3,7) = Math.min).
+    // Without this lookahead, min(3,7) tokens as UNIT + LPAREN + ... and
+    // the function parselet (registered for FUNC) never matches.
+    //
+    // IMPORTANT: peek past whitespace only; do NOT consume characters.
+    // this.pos must remain at the identifier boundary so the caller's
+    // token stream stays in sync.
+    //
     // 1) Built-in units
     if (knownUnits.has(identText)) {
-      this.pos = pos;
-      return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
+      if (!this.isFollowedByLParen(pos)) {
+        this.pos = pos;
+        return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
+      }
+      // Fall through: unit followed by '(' → treat as keyword/IDENT
     }
     // 2) Plugin-registered units (skipped when hasPluginUnits=false)
     if (this.hasPluginUnits && this.pluginUnits.has(identText)) {
-      this.pos = pos;
-      return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
+      if (!this.isFollowedByLParen(pos)) {
+        this.pos = pos;
+        return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
+      }
+      // Fall through: unit followed by '(' → treat as keyword/IDENT
     }
 
     // ── Phrase matching — multi-word patterns (before keyword lookup)
@@ -1130,6 +1148,35 @@ export class ExpressionLexer {
 
     this.pos = pos;
     return new LexerToken('IDENT', identText, identText, start, 0, this.line, startCol);
+  }
+
+  /**
+   * Peek past in-expression whitespace (space, tab) from `pos` to check
+   * if the next significant character is '('. Used by tokenizeIdentifier()
+   * for contextual UNIT-vs-FUNC disambiguation (e.g., "min" is a unit but
+   * "min(3,7)" is a function call).
+   *
+   * Only spaces (32) and tabs (9) are skipped — newlines/CR are
+   * intentionally NOT skipped since expressions don't span lines in Solve.
+   *
+   * Does NOT consume characters — purely a lookahead. Returns false
+   * if any non-whitespace, non-'(' character appears before '('.
+   *
+   * NOTE: The 1-char fast path in [Symbol.iterator]() (around line ~726)
+   * has its own unit check WITHOUT this lookahead. Currently harmless
+   * since no single-char units conflict with function names, but future
+   * single-char unit+function additions would need lookahead there too.
+   */
+  private isFollowedByLParen(pos: number): boolean {
+    const len = this.len;
+    let lookPos = pos;
+    while (lookPos < len) {
+      const cc = this.input.charCodeAt(lookPos);
+      if (cc === 40) return true;         // '('
+      if (cc !== 32 && cc !== 9) break;   // not whitespace
+      lookPos++;
+    }
+    return false;
   }
 
   // ── Phrase matcher (trie-based) ───────────────────────────────────────
