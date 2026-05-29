@@ -7,7 +7,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions } from "@solve-js/vm/VMBuiltins";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, addNumbers, subNumbers, mulNumbers } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 
 export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructions = 50000): VM {
     const stack: Value[] = [];
@@ -55,38 +55,9 @@ export interface Bytecode {
     strings: string[];
 }
 
-// ── Computed-goto dispatch table ─────────────────────────────────────────
-// Replaces the `switch` statement with an O(1) function table indexed by
-// opcode value. For sparse OpCode values (0–200 with ~55 used entries), V8
-// cannot use a dense jump table — the switch compiles to a binary-search tree
-// of ~logN comparisons per dispatch. The function table gives O(1) array load
-// + handler call, and TurboFan can inline the small handler functions (~1–5
-// ops each) directly at the call site.
-//
-// The array is pre-filled with a no-op handler for ALL slots 0–200 so V8
-// keeps it in fast packed-elements mode (not dictionary mode). HALT is handled
-// inline in the dispatch loop because it needs to return from executeBytecode().
-
-interface DispatchContext {
-    stack: Value[];
-    opcodes: Uint8Array;
-    numbers: Float64Array;
-    strings: string[];
-    vm: VM;
-    hasArena: boolean;
-}
-
-/**
- * Handler function for a single opcode.
- * Receives the dispatch context and current ip (pointing to first operand byte).
- * Returns the new ip for the next instruction.
- */
-type OpHandler = (ctx: DispatchContext, ip: number) => number;
-
-/** Default handler for undefined/unknown opcodes — no-op, ip unchanged. */
-const NO_OP_HANDLER: OpHandler = (_ctx, ip) => ip;
-
-// ── Shared helpers (extracted from dispatch table to eliminate duplication) ──
+// ── Shared helpers ─────────────────────────────────────────────────────
+// Kept as module-level functions so V8 can inline them at the switch case
+// call sites. Cost: zero when inlined by TurboFan.
 
 /** Extract milliseconds from a duration Value (UoM time unit or plain number).
  *  Used by ADD/SUB datetime fast paths and DATE_ADD/DATE_SUB opcodes. */
@@ -101,401 +72,14 @@ function extractDurationMs(value: Value): number {
     return value.toNumber();
 }
 
-const MAX_OPCODE = OpCode.PLUGIN_CUSTOM; // 200
-const opHandlers: OpHandler[] = [];
-
-/** Populate the dispatch table once at module load time. */
-function initDispatchTable(): void {
-  // Pre-fill all slots with the no-op default so the array stays in fast
-  // packed-elements mode (not dictionary mode for sparse arrays).
-  for (let i = 0; i <= MAX_OPCODE; i++) {
-    opHandlers[i] = NO_OP_HANDLER;
-  }
-
-  // ── Stack operations ──────────────────────────────────────────────────
-  // NOP already has NO_OP_HANDLER from pre-fill.
-
-  opHandlers[OpCode.DUP] = (ctx, ip) => {
-    ctx.stack.push(ctx.stack[ctx.stack.length - 1]);
-    return ip;
-  };
-
-  opHandlers[OpCode.SWAP] = (ctx, ip) => {
-    const a = ctx.stack.pop()!;
-    const b = ctx.stack.pop()!;
-    ctx.stack.push(a);
-    ctx.stack.push(b);
-    return ip;
-  };
-
-  // ── Push literals ─────────────────────────────────────────────────────
-  opHandlers[OpCode.PUSH_NUMBER] = (ctx, ip) => {
-    ctx.stack.push(numberValue(ctx.numbers[ctx.opcodes[ip]]));
-    return ip + 1;
-  };
-
-  opHandlers[OpCode.PUSH_BIGINT] = (ctx, ip) => {
-    ctx.stack.push(bigIntValue(BigInt(ctx.numbers[ctx.opcodes[ip]])));
-    return ip + 1;
-  };
-
-  opHandlers[OpCode.PUSH_HEX] = (ctx, ip) => {
-    ctx.stack.push(hexValue(ctx.numbers[ctx.opcodes[ip]]));
-    return ip + 1;
-  };
-
-  opHandlers[OpCode.PUSH_STRING] = (ctx, ip) => {
-    ctx.stack.push(stringValue(ctx.strings[ctx.opcodes[ip]]));
-    return ip + 1;
-  };
-
-  opHandlers[OpCode.PUSH_BOOLEAN] = (ctx, ip) => {
-    ctx.stack.push(boolValue(ctx.opcodes[ip] === 1));
-    return ip + 1;
-  };
-
-  // ── Arithmetic (with inlined numeric fast paths) ──────────────────────
-
-  opHandlers[OpCode.ADD] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.Number && r.type === ValueType.Number) {
-      ctx.stack.push(addNumbers(l, r));
-    } else if (l.type === ValueType.Datetime) {
-      ctx.stack.push(datetimeValue(l.toNumber() + extractDurationMs(r)));
-    } else {
-      ctx.stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.SUB] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.Number && r.type === ValueType.Number) {
-      ctx.stack.push(subNumbers(l, r));
-    } else if (l.type === ValueType.Datetime) {
-      ctx.stack.push(datetimeValue(l.toNumber() - extractDurationMs(r)));
-    } else {
-      ctx.stack.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.MUL] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.Number && r.type === ValueType.Number) {
-      ctx.stack.push(mulNumbers(l, r));
-    } else {
-      ctx.stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.DIV] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-      const { lv, rv, sameMeasure } = unifyUom(l, r);
-      if (sameMeasure) {
-        ctx.stack.push(numberValue(lv / rv));
-      } else {
-        ctx.stack.push(uomValue(lv / rv, l.unit!));
-      }
-    } else {
-      ctx.stack.push(binaryOp(l, r, (a, b) => a / b, (a, b) => a / b));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.MOD] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    ctx.stack.push(binaryOp(l, r, (a, b) => a % b, (a, b) => a % b));
-    return ip;
-  };
-
-  opHandlers[OpCode.EXP] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    ctx.stack.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
-    return ip;
-  };
-
-  // ── Unary operators ───────────────────────────────────────────────────
-
-  opHandlers[OpCode.NEG] = (ctx, ip) => {
-    const v = ctx.stack.pop()!;
-    if (v.type === ValueType.BigInt) ctx.stack.push(bigIntValue(-(v.value as bigint)));
-    else if (v.type === ValueType.Uom) ctx.stack.push(uomValue(-v.toNumber(), v.unit!));
-    else ctx.stack.push(numberValue(-v.toNumber()));
-    return ip;
-  };
-
-  opHandlers[OpCode.POS] = (ctx, ip) => {
-    const v = ctx.stack.pop()!;
-    if (v.type === ValueType.Uom) ctx.stack.push(uomValue(v.toNumber(), v.unit!));
-    else ctx.stack.push(numberValue(v.toNumber()));
-    return ip;
-  };
-
-  // ── Type conversions ──────────────────────────────────────────────────
-
-  opHandlers[OpCode.TO_NUMBER] = (ctx, ip) => {
-    const v = ctx.stack.pop()!;
-    ctx.stack.push(numberValue(v.toNumber()));
-    return ip;
-  };
-
-  opHandlers[OpCode.TO_HEX] = (ctx, ip) => {
-    const v = ctx.stack.pop()!;
-    ctx.stack.push(hexValue(v.toNumber()));
-    return ip;
-  };
-
-  opHandlers[OpCode.TO_PERCENTAGE] = (ctx, ip) => {
-    const v = ctx.stack.pop()!;
-    ctx.stack.push(percentageValue(v.toNumber()));
-    return ip;
-  };
-
-  // ── Bitwise operations ────────────────────────────────────────────────
-
-  opHandlers[OpCode.LSHIFT] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-      ctx.stack.push(bigIntValue(BigInt(l.toNumber()) << BigInt(r.toNumber())));
-    } else {
-      ctx.stack.push(numberValue(l.toNumber() << r.toNumber()));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.RSHIFT] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-      ctx.stack.push(bigIntValue(BigInt(l.toNumber()) >> BigInt(r.toNumber())));
-    } else {
-      ctx.stack.push(numberValue(l.toNumber() >> r.toNumber()));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.BIT_AND] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-      ctx.stack.push(bigIntValue(BigInt(l.toNumber()) & BigInt(r.toNumber())));
-    } else {
-      ctx.stack.push(numberValue(l.toNumber() & r.toNumber()));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.BIT_OR] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-      ctx.stack.push(bigIntValue(BigInt(l.toNumber()) | BigInt(r.toNumber())));
-    } else {
-      ctx.stack.push(numberValue(l.toNumber() | r.toNumber()));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.BIT_XOR] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-      ctx.stack.push(bigIntValue(BigInt(l.toNumber()) ^ BigInt(r.toNumber())));
-    } else {
-      ctx.stack.push(numberValue(l.toNumber() ^ r.toNumber()));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.BIT_NOT] = (ctx, ip) => {
-    const v = ctx.stack.pop()!;
-    if (v.type === ValueType.BigInt) ctx.stack.push(bigIntValue(~(v.value as bigint)));
-    else ctx.stack.push(numberValue(~v.toNumber()));
-    return ip;
-  };
-
-  // ── Variables ─────────────────────────────────────────────────────────
-
-  opHandlers[OpCode.LOAD_VAR] = (ctx, ip) => {
-    const varIdx = ctx.opcodes[ip];
-    const varName = ctx.strings[varIdx];
-    const val = ctx.vm.getVar(varName);
-    if (val !== undefined) ctx.stack.push(val);
-    else ctx.stack.push(numberValue(0));
-    return ip + 1;
-  };
-
-  opHandlers[OpCode.STORE_VAR] = (ctx, ip) => {
-    const val = ctx.stack.pop()!;
-    const varIdx = ctx.opcodes[ip];
-    const varName = ctx.strings[varIdx];
-    ctx.vm.setVar(varName, ctx.hasArena ? persistentValue(val) : val);
-    ctx.stack.push(val);
-    return ip + 1;
-  };
-
-  // ── Datetime ──────────────────────────────────────────────────────────
-
-  opHandlers[OpCode.DATE_NOW] = (ctx, ip) => {
-    ctx.stack.push(datetimeValue(Date.now()));
-    return ip;
-  };
-
-  opHandlers[OpCode.DATE_ADD] = (ctx, ip) => {
-    const durValue = ctx.stack.pop()!;
-    const dtValue = ctx.stack.pop()!;
-    ctx.stack.push(datetimeValue(dtValue.toNumber() + extractDurationMs(durValue)));
-    return ip;
-  };
-
-  opHandlers[OpCode.DATE_SUB] = (ctx, ip) => {
-    const durValue = ctx.stack.pop()!;
-    const dtValue = ctx.stack.pop()!;
-    ctx.stack.push(datetimeValue(dtValue.toNumber() - extractDurationMs(durValue)));
-    return ip;
-  };
-
-  // ── UoM ───────────────────────────────────────────────────────────────
-
-  opHandlers[OpCode.UOM_CONVERT] = (ctx, ip) => {
-    const unit = (ctx.stack.pop()!.value as string);
-    const val = ctx.stack.pop()!.toNumber();
-    ctx.stack.push(uomValue(val, unit));
-    return ip;
-  };
-
-  opHandlers[OpCode.UOM_CONVERT_TO] = (ctx, ip) => {
-    const toUnit = (ctx.stack.pop()!.value as string);
-    const fromUnit = (ctx.stack.pop()!.value as string);
-    const val = ctx.stack.pop()!.toNumber();
-    const measure = getMeasure(fromUnit);
-    const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
-    if (measure && getMeasure(toUnit) === measure) {
-      const converted = convertUnit(val, fromUnit, toUnit);
-      ctx.stack.push(uomValue(converted, toUnit));
-    } else if (isCurrency) {
-      const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
-      if (converted !== null) {
-        ctx.stack.push(uomValue(converted, toUnit));
-      } else {
-        ctx.stack.push(uomValue(val, fromUnit));
-      }
-    } else {
-      ctx.stack.push(uomValue(val, fromUnit));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.UOM_BEST] = (ctx, ip) => {
-    const unit = (ctx.stack.pop()!.value as string);
-    const val = ctx.stack.pop()!.toNumber();
-    const { value, unit: bestUnit } = getBestUnit(val, unit);
-    ctx.stack.push(uomValue(value, bestUnit));
-    return ip;
-  };
-
-  // UOM_CONVERT_IN: handles postfix `expr in unit` syntax.
-  // The left expression may be a uomValue (already tagged with a unit) or a
-  // plain number. Pops: toUnit (string), leftVal (Value). Pushes: converted
-  // uomValue or original leftVal if conversion is not possible.
-  opHandlers[OpCode.UOM_CONVERT_IN] = (ctx, ip) => {
-    const toUnit = (ctx.stack.pop()!.value as string);
-    const left = ctx.stack.pop()!;
-
-    if (left.type === ValueType.Uom) {
-      const fromUnit = left.unit!;
-      const val = left.toNumber();
-      const measure = getMeasure(fromUnit);
-      const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
-      if (measure && getMeasure(toUnit) === measure) {
-        const converted = convertUnit(val, fromUnit, toUnit);
-        ctx.stack.push(uomValue(converted, toUnit));
-      } else if (isCurrency) {
-        const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
-        if (converted !== null) {
-          ctx.stack.push(uomValue(converted, toUnit));
-        } else {
-          ctx.stack.push(left);
-        }
-      } else {
-        ctx.stack.push(left);
-      }
-    } else {
-      // Plain number: just wrap with the target unit (no conversion needed).
-      ctx.stack.push(uomValue(left.toNumber(), toUnit));
-    }
-    return ip;
-  };
-
-  opHandlers[OpCode.UOM_GET_VALUE] = (ctx, ip) => {
-    const v = ctx.stack.pop()!;
-    ctx.stack.push(numberValue(v.toNumber()));
-    return ip;
-  };
-
-  // ── Vector operations ─────────────────────────────────────────────────
-
-  opHandlers[OpCode.VEC_NEW] = (ctx, ip) => {
-    const count = ctx.opcodes[ip];
-    const components: number[] = [];
-    for (let i = 0; i < count; i++) components.unshift(ctx.stack.pop()!.toNumber());
-    ctx.stack.push(vectorValue(components));
-    return ip + 1;
-  };
-
-  opHandlers[OpCode.VEC_ADD] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    ctx.stack.push(binaryOp(l, r, (a, b) => a + b));
-    return ip;
-  };
-
-  opHandlers[OpCode.VEC_SUB] = (ctx, ip) => {
-    const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
-    ctx.stack.push(binaryOp(l, r, (a, b) => a - b));
-    return ip;
-  };
-
-  // ── Dice roll ─────────────────────────────────────────────────────────
-
-  opHandlers[OpCode.DICE_ROLL] = (ctx, ip) => {
-    const to = ctx.stack.pop()!.toNumber();
-    const from = ctx.stack.pop()!.toNumber();
-    ctx.stack.push(numberValue(Math.floor(Math.random() * (to - from + 1)) + from));
-    return ip;
-  };
-
-  // ── Call builtin ──────────────────────────────────────────────────────
-
-  opHandlers[OpCode.CALL_BUILTIN] = (ctx, ip) => {
-    const fnIdx = ctx.opcodes[ip];
-    const argCount = ctx.opcodes[ip + 1];
-    const args: Value[] = [];
-    for (let i = 0; i < argCount; i++) args.push(ctx.stack.pop()!);
-    const fn = builtinFunctions[fnIdx];
-    if (fn) ctx.stack.push(fn(args.reverse()));
-    return ip + 2;
-  };
-
-  // ── Plugin custom opcode ──────────────────────────────────────────────
-
-  opHandlers[OpCode.PLUGIN_CUSTOM] = (ctx, ip) => {
-    const handler = ctx.vm.registry.get(OpCode.PLUGIN_CUSTOM);
-    if (handler) {
-      return handler(ctx.vm, ctx.opcodes, ip, ctx.numbers, ctx.strings);
-    }
-    return ip;
-  };
-}
-
-initDispatchTable();
-
 /**
  * Execute bytecode with optional diagnostic pipeline integration.
  *
  * Performance notes:
- * - Uses a computed-goto dispatch table (opHandlers[]) indexed by opcode
- *   value instead of a switch statement. For sparse OpCode values (0–200
- *   with gaps), V8 can't use a dense jump table for the switch — the
- *   dispatch table gives O(1) array load + inlinable function call.
+ * - Uses a `switch(op)` statement for dispatch. V8 compiles dense integer
+ *   switches (OpCode values 0–200) into a jump table with O(1) dispatch.
+ *   All handler code is inlined directly in the switch cases, allowing
+ *   TurboFan to optimize across opcode boundaries.
  * - ADD/SUB/MUL have an inlined numeric fast path that skips the `binaryOp()`
  *   function call + closure allocation when both operands are plain numbers
  *   (>90% of arithmetic ops).
@@ -534,11 +118,6 @@ export function executeBytecode(
 
     if (opcodes.length === 0) return undefined;
 
-    // Build the dispatch context once before the loop — V8 eliminates the
-    // allocation via escape analysis, but hoisting guarantees it's a single
-    // object slot reused for every dispatch rather than 50k+ allocations.
-    const ctx: DispatchContext = { stack, opcodes, numbers, strings, vm, hasArena };
-
     while (ip < opcodes.length) {
       // Tighten instruction limit check: combined increment + guard.
       // V8 optimises `++localInstructionCount > maxInstructions` into a
@@ -563,24 +142,340 @@ export function executeBytecode(
         });
       }
 
-      // HALT is handled inline — the return statement must exit the entire
-      // executeBytecode() function, which a handler function cannot do.
-      if (op === OpCode.HALT) {
-        const result = stack.pop()!;
-        return hasArena ? persistentValue(result) : result;
-      }
-
-      // Dispatch via computed-goto table: reuse the pre-built context object.
-      // For opcodes 0–200, all slots are pre-filled (packed-elements array).
-      // Opcodes > 200 fall through to registry.
-      const handler = op <= MAX_OPCODE ? opHandlers[op] : undefined;
-      if (handler) {
-        ip = handler(ctx, ip);
-      } else if (op >= OpCode.PLUGIN_CUSTOM) {
-        const pluginHandler = reg.get(op as OpCode);
-        if (pluginHandler) {
-          ip = pluginHandler(vm, opcodes, ip, numbers, strings);
+      // ── switch dispatch: V8 compiles to jump table for dense opcodes ──
+      switch (op) {
+        // ── Stack operations ────────────────────────────────────────────
+        case OpCode.NOP:
+          break;
+        case OpCode.DUP:
+          stack.push(stack[stack.length - 1]);
+          break;
+        case OpCode.SWAP: {
+          const a = stack.pop()!, b = stack.pop()!;
+          stack.push(a);
+          stack.push(b);
+          break;
         }
+
+        // ── Push literals ───────────────────────────────────────────────
+        case OpCode.PUSH_NUMBER:
+          stack.push(numberValue(numbers[opcodes[ip++]]));
+          break;
+        case OpCode.PUSH_BIGINT:
+          stack.push(bigIntValue(BigInt(numbers[opcodes[ip++]])));
+          break;
+        case OpCode.PUSH_HEX:
+          stack.push(hexValue(numbers[opcodes[ip++]]));
+          break;
+        case OpCode.PUSH_STRING:
+          stack.push(stringValue(strings[opcodes[ip++]]));
+          break;
+        case OpCode.PUSH_BOOLEAN:
+          stack.push(boolValue(opcodes[ip++] === 1));
+          break;
+
+        // ── Arithmetic (inlined numeric fast paths) ────────────────────
+        case OpCode.ADD: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(numberValue((l.value as number) + (r.value as number)));
+          } else if (l.type === ValueType.Datetime) {
+            stack.push(datetimeValue(l.toNumber() + extractDurationMs(r)));
+          } else {
+            stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
+          }
+          break;
+        }
+        case OpCode.SUB: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(numberValue((l.value as number) - (r.value as number)));
+          } else if (l.type === ValueType.Datetime) {
+            stack.push(datetimeValue(l.toNumber() - extractDurationMs(r)));
+          } else {
+            stack.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
+          }
+          break;
+        }
+        case OpCode.MUL: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(numberValue((l.value as number) * (r.value as number)));
+          } else {
+            stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b));
+          }
+          break;
+        }
+        case OpCode.DIV: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
+            const { lv, rv, sameMeasure } = unifyUom(l, r);
+            if (sameMeasure) {
+              stack.push(numberValue(lv / rv));
+            } else {
+              stack.push(uomValue(lv / rv, l.unit!));
+            }
+          } else {
+            stack.push(binaryOp(l, r, (a, b) => a / b, (a, b) => a / b));
+          }
+          break;
+        }
+        case OpCode.MOD: {
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a % b, (a, b) => a % b));
+          break;
+        }
+        case OpCode.EXP: {
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
+          break;
+        }
+
+        // ── Unary operators ─────────────────────────────────────────────
+        case OpCode.NEG: {
+          const v = stack.pop()!;
+          if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
+          else if (v.type === ValueType.Uom) stack.push(uomValue(-v.toNumber(), v.unit!));
+          else stack.push(numberValue(-v.toNumber()));
+          break;
+        }
+        case OpCode.POS: {
+          const v = stack.pop()!;
+          if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
+          else stack.push(numberValue(v.toNumber()));
+          break;
+        }
+
+        // ── Type conversions ────────────────────────────────────────────
+        case OpCode.TO_NUMBER: {
+          const v = stack.pop()!;
+          stack.push(numberValue(v.toNumber()));
+          break;
+        }
+        case OpCode.TO_HEX: {
+          const v = stack.pop()!;
+          stack.push(hexValue(v.toNumber()));
+          break;
+        }
+        case OpCode.TO_PERCENTAGE: {
+          const v = stack.pop()!;
+          stack.push(percentageValue(v.toNumber()));
+          break;
+        }
+
+        // ── Bitwise operations ──────────────────────────────────────────
+        case OpCode.LSHIFT: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+            stack.push(bigIntValue(BigInt(l.toNumber()) << BigInt(r.toNumber())));
+          } else {
+            stack.push(numberValue(l.toNumber() << r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.RSHIFT: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+            stack.push(bigIntValue(BigInt(l.toNumber()) >> BigInt(r.toNumber())));
+          } else {
+            stack.push(numberValue(l.toNumber() >> r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.BIT_AND: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+            stack.push(bigIntValue(BigInt(l.toNumber()) & BigInt(r.toNumber())));
+          } else {
+            stack.push(numberValue(l.toNumber() & r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.BIT_OR: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+            stack.push(bigIntValue(BigInt(l.toNumber()) | BigInt(r.toNumber())));
+          } else {
+            stack.push(numberValue(l.toNumber() | r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.BIT_XOR: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+            stack.push(bigIntValue(BigInt(l.toNumber()) ^ BigInt(r.toNumber())));
+          } else {
+            stack.push(numberValue(l.toNumber() ^ r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.BIT_NOT: {
+          const v = stack.pop()!;
+          if (v.type === ValueType.BigInt) stack.push(bigIntValue(~(v.value as bigint)));
+          else stack.push(numberValue(~v.toNumber()));
+          break;
+        }
+
+        // ── Variables ───────────────────────────────────────────────────
+        case OpCode.LOAD_VAR: {
+          const varName = strings[opcodes[ip++]];
+          const val = vm.getVar(varName);
+          if (val !== undefined) stack.push(val);
+          else stack.push(numberValue(0));
+          break;
+        }
+        case OpCode.STORE_VAR: {
+          const val = stack.pop()!;
+          const varName = strings[opcodes[ip++]];
+          vm.setVar(varName, hasArena ? persistentValue(val) : val);
+          stack.push(val);
+          break;
+        }
+
+        // ── Datetime ────────────────────────────────────────────────────
+        case OpCode.DATE_NOW:
+          stack.push(datetimeValue(Date.now()));
+          break;
+        case OpCode.DATE_ADD: {
+          const durValue = stack.pop()!, dtValue = stack.pop()!;
+          stack.push(datetimeValue(dtValue.toNumber() + extractDurationMs(durValue)));
+          break;
+        }
+        case OpCode.DATE_SUB: {
+          const durValue = stack.pop()!, dtValue = stack.pop()!;
+          stack.push(datetimeValue(dtValue.toNumber() - extractDurationMs(durValue)));
+          break;
+        }
+
+        // ── UoM ─────────────────────────────────────────────────────────
+        case OpCode.UOM_CONVERT: {
+          const unit = (stack.pop()!.value as string);
+          const val = stack.pop()!.toNumber();
+          stack.push(uomValue(val, unit));
+          break;
+        }
+        case OpCode.UOM_CONVERT_TO: {
+          const toUnit = (stack.pop()!.value as string);
+          const fromUnit = (stack.pop()!.value as string);
+          const val = stack.pop()!.toNumber();
+          const measure = getMeasure(fromUnit);
+          const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
+          if (measure && getMeasure(toUnit) === measure) {
+            stack.push(uomValue(convertUnit(val, fromUnit, toUnit), toUnit));
+          } else if (isCurrency) {
+            const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
+            if (converted !== null) {
+              stack.push(uomValue(converted, toUnit));
+            } else {
+              stack.push(uomValue(val, fromUnit));
+            }
+          } else {
+            stack.push(uomValue(val, fromUnit));
+          }
+          break;
+        }
+        case OpCode.UOM_BEST: {
+          const unit = (stack.pop()!.value as string);
+          const val = stack.pop()!.toNumber();
+          const { value, unit: bestUnit } = getBestUnit(val, unit);
+          stack.push(uomValue(value, bestUnit));
+          break;
+        }
+        case OpCode.UOM_CONVERT_IN: {
+          const toUnit = (stack.pop()!.value as string);
+          const left = stack.pop()!;
+          if (left.type === ValueType.Uom) {
+            const fromUnit = left.unit!;
+            const val = left.toNumber();
+            const measure = getMeasure(fromUnit);
+            const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
+            if (measure && getMeasure(toUnit) === measure) {
+              stack.push(uomValue(convertUnit(val, fromUnit, toUnit), toUnit));
+            } else if (isCurrency) {
+              const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
+              if (converted !== null) {
+                stack.push(uomValue(converted, toUnit));
+              } else {
+                stack.push(left);
+              }
+            } else {
+              stack.push(left);
+            }
+          } else {
+            stack.push(uomValue(left.toNumber(), toUnit));
+          }
+          break;
+        }
+        case OpCode.UOM_GET_VALUE: {
+          const v = stack.pop()!;
+          stack.push(numberValue(v.toNumber()));
+          break;
+        }
+
+        // ── Vector operations ───────────────────────────────────────────
+        case OpCode.VEC_NEW: {
+          const count = opcodes[ip++];
+          const components: number[] = [];
+          for (let i = 0; i < count; i++) components.unshift(stack.pop()!.toNumber());
+          stack.push(vectorValue(components));
+          break;
+        }
+        case OpCode.VEC_ADD: {
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a + b));
+          break;
+        }
+        case OpCode.VEC_SUB: {
+          const r = stack.pop()!, l = stack.pop()!;
+          stack.push(binaryOp(l, r, (a, b) => a - b));
+          break;
+        }
+
+        // ── Dice roll ───────────────────────────────────────────────────
+        case OpCode.DICE_ROLL: {
+          const to = stack.pop()!.toNumber();
+          const from = stack.pop()!.toNumber();
+          stack.push(numberValue(Math.floor(Math.random() * (to - from + 1)) + from));
+          break;
+        }
+
+        // ── Call builtin ────────────────────────────────────────────────
+        case OpCode.CALL_BUILTIN: {
+          const fnIdx = opcodes[ip++];
+          const argCount = opcodes[ip++];
+          const args: Value[] = [];
+          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
+          const fn = builtinFunctions[fnIdx];
+          if (fn) stack.push(fn(args.reverse()));
+          break;
+        }
+
+        // ── Plugin custom opcode ────────────────────────────────────────
+        case OpCode.PLUGIN_CUSTOM: {
+          const handler = reg.get(OpCode.PLUGIN_CUSTOM);
+          if (handler) {
+            ip = handler(vm, opcodes, ip, numbers, strings);
+            continue; // plugin handler advances ip itself
+          }
+          break;
+        }
+
+        // ── HALT: return result ─────────────────────────────────────────
+        case OpCode.HALT: {
+          const result = stack.pop()!;
+          return hasArena ? persistentValue(result) : result;
+        }
+
+        // ── Unknown/plugin opcodes > PLUGIN_CUSTOM ──────────────────────
+        default:
+          if (op >= OpCode.PLUGIN_CUSTOM) {
+            const pluginHandler = reg.get(op as OpCode);
+            if (pluginHandler) {
+              ip = pluginHandler(vm, opcodes, ip, numbers, strings);
+              continue; // plugin handler advances ip itself
+            }
+          }
+          break;
       }
     }
 

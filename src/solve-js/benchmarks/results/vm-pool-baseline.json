@@ -1,106 +1,106 @@
 {
-  "timestamp": "2026-05-29T21:08:49.672Z",
+  "timestamp": "2026-05-29T21:29:48.021Z",
   "summary": {
-    "meanDeltaNs": 407.2916666666668,
-    "meanPercentImprovement": 4.423301500040676,
-    "estimatedAllocCostNs": 407.2916666666668
+    "meanDeltaNs": 101.35699999999993,
+    "meanPercentImprovement": 15.001712457417703,
+    "estimatedAllocCostNs": 101.35699999999993
   },
   "details": [
     {
       "name": "simple_add",
       "withoutPool": {
-        "meanNs": 2512.442,
-        "p95Ns": 600,
-        "medianNs": 400
-      },
-      "withPool": {
-        "meanNs": 3270.496,
+        "meanNs": 408.752,
         "p95Ns": 400,
         "medianNs": 300
       },
-      "deltaNs": -758.0540000000001,
-      "speedupRatio": 1.3017199999044755,
-      "percentImprovement": -30.171999990447546
+      "withPool": {
+        "meanNs": 275.094,
+        "p95Ns": 300,
+        "medianNs": 300
+      },
+      "deltaNs": 133.65800000000002,
+      "speedupRatio": 0.6730095510236035,
+      "percentImprovement": 32.699044897639645
     },
     {
       "name": "variable_access",
       "withoutPool": {
-        "meanNs": 3219.686,
+        "meanNs": 438.11,
         "p95Ns": 500,
         "medianNs": 400
       },
       "withPool": {
-        "meanNs": 1173.558,
+        "meanNs": 319.562,
         "p95Ns": 400,
         "medianNs": 300
       },
-      "deltaNs": 2046.1280000000002,
-      "speedupRatio": 0.36449455008966714,
-      "percentImprovement": 63.550544991033284
+      "deltaNs": 118.548,
+      "speedupRatio": 0.729410422040127,
+      "percentImprovement": 27.05895779598731
     },
     {
       "name": "vector_creation",
       "withoutPool": {
-        "meanNs": 1643.862,
+        "meanNs": 515.924,
         "p95Ns": 600,
         "medianNs": 500
       },
       "withPool": {
-        "meanNs": 2260.732,
-        "p95Ns": 500,
+        "meanNs": 514.544,
+        "p95Ns": 400,
         "medianNs": 400
       },
-      "deltaNs": -616.8699999999999,
-      "speedupRatio": 1.3752565604655378,
-      "percentImprovement": -37.52565604655378
+      "deltaNs": 1.3799999999999955,
+      "speedupRatio": 0.9973251874307069,
+      "percentImprovement": 0.2674812569293143
     },
     {
       "name": "unit_conversion",
       "withoutPool": {
-        "meanNs": 15934.056,
-        "p95Ns": 5200,
+        "meanNs": 4243.468,
+        "p95Ns": 4300,
         "medianNs": 4000
       },
       "withPool": {
-        "meanNs": 14791.614,
-        "p95Ns": 4800,
+        "meanNs": 4067.88,
+        "p95Ns": 4100,
         "medianNs": 3900
       },
-      "deltaNs": 1142.442000000001,
-      "speedupRatio": 0.9283018711619941,
-      "percentImprovement": 7.16981288380059
+      "deltaNs": 175.58799999999974,
+      "speedupRatio": 0.9586215802734933,
+      "percentImprovement": 4.137841972650666
     },
     {
       "name": "dice_roll",
       "withoutPool": {
-        "meanNs": 2622.49,
-        "p95Ns": 700,
+        "meanNs": 668.9,
+        "p95Ns": 900,
         "medianNs": 600
       },
       "withPool": {
-        "meanNs": 2164.974,
+        "meanNs": 589.416,
         "p95Ns": 600,
         "medianNs": 600
       },
-      "deltaNs": 457.5159999999996,
-      "speedupRatio": 0.8255413748002853,
-      "percentImprovement": 17.445862519971463
+      "deltaNs": 79.48399999999992,
+      "speedupRatio": 0.8811720735535956,
+      "percentImprovement": 11.882792644640443
     },
     {
       "name": "percentage",
       "withoutPool": {
-        "meanNs": 2842.712,
-        "p95Ns": 800,
+        "meanNs": 712.424,
+        "p95Ns": 900,
         "medianNs": 600
       },
       "withPool": {
-        "meanNs": 2670.124,
+        "meanNs": 612.94,
         "p95Ns": 700,
         "medianNs": 600
       },
-      "deltaNs": 172.5880000000002,
-      "speedupRatio": 0.9392875535755996,
-      "percentImprovement": 6.071244642440043
+      "deltaNs": 99.48399999999992,
+      "speedupRatio": 0.8603584382334116,
+      "percentImprovement": 13.964156176658834
     }
   ],
   "metadata": {
