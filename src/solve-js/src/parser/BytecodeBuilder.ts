@@ -99,9 +99,12 @@ export class BytecodeBuilder {
 	}
 
 	reset(): void {
-		this.opcodes = [];
-		this.numbers = [];
-		this.strings = [];
+		// Retain backing stores with .length = 0 to avoid reallocation on growth.
+		// = [] discards the ArrayBuffer, forcing V8 to reallocate on every push()
+		// threshold (4→8→16→32...). For a 50-opcode expression, that's 3-4 copies.
+		this.opcodes.length = 0;
+		this.numbers.length = 0;
+		this.strings.length = 0;
 		this.stringIndex.clear();
 	}
 }
