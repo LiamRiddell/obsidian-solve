@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The project is in **production-ready shape** — 88 test suites, 1,966 tests passing (0 failures, 2 skipped). Phases 1–5 are complete including the full Lexer rewrite. Remaining work: 2 code-hygiene items, 6 deferred parse+compile optimizations, and npm package extraction.
+The project is in **production-ready shape** — 88 test suites, 1,966 tests passing (0 failures, 2 skipped). Phases 1–5 are complete including the full Lexer rewrite. Remaining work: 1 code-hygiene item, 6 deferred parse+compile optimizations, and npm package extraction.
 
 ### Quick Stats
 
@@ -24,7 +24,7 @@ The project is in **production-ready shape** — 88 test suites, 1,966 tests pas
 | Lexer rewrite (§5.4) | Custom lexer replaces moo, monomorphic Token, L0/L1/L2 tiered scanning | ✅ |
 | Document Engine (1.2a-h) | All 8 phases (SegmentTree, ThreeTier, Checkpoints, Viewport, applyTransaction, PageManager, Worker) | ✅ |
 | VM hot loop (5.1) | Dispatch table, numeric fast path, ValueArena, builder pool | ✅ |
-| Code hygiene | 2 items remain (ADD/SUB/MUL helpers, initDispatchTable split) | 🟡 |
+| Code hygiene | 1 item remains (split initDispatchTable) | 🟡 |
 | Parse+Compile optimization (§5.5) | 6 deferred items | ⏸️ |
 | npm package extraction (§3.3) | 6 items | ⏸️ |
 
@@ -553,7 +553,7 @@ Per `TESTING_GUIDELINES.md` targets:
 - [x] Re-benchmark after each optimization — VM benchmarks (6 suites) vs pre-session baseline (0.64µs simple_add → 0.21µs after all Phase 5 optimisations)
 - [x] **Add end-to-end pipeline throughput benchmarks** — Full-pipeline (lex → parse → compile → execute) for small (~10 expressions), medium (~200), large (~2,000), and massive (20,000+) files. Track per-stage breakdown and warm-vs-cold latency. See §6.3.5.
 - [x] **Dispatch loop optimization (5 commits, 9 changes)** — Reviewed and approved (see `plans/REVIEW_DISPATCH_LOOP_OPTIMIZATIONS.md`). Results: 67% reduction in `simple_add` (0.64 → 0.21 µs), 63% reduction in `variable_access` (0.60 → 0.22 µs). All 1,711 tests pass, 0 TS errors.
-- [ ] **Extract shared inline helpers for ADD/SUB/MUL** — The inlined numeric fast paths in VM.ts duplicate `binaryOp()`'s first 5 lines. Extract into a module-level `addNumbers()`, `subNumbers()`, `mulNumbers()` helper to eliminate duplication while keeping the hot-path speed. Risk: 🟡 Low (code hygiene only — no behaviour change).
+- [x] **Extract shared inline helpers for ADD/SUB/MUL** — Extracted `addNumbers()`, `subNumbers()`, `mulNumbers()` into `VMConversion.ts` (3-5 line helpers, V8/TurboFan inlines). Extracted `extractDurationMs()` in VM.ts (shared by ADD, SUB, DATE_ADD, DATE_SUB datetime fast paths). Commit `c4134e5`. All 1,966 tests pass, typecheck clean.
 - [ ] **Split `initDispatchTable()`** — Currently ~380 lines (exceeds 50-line soft limit from CODING_STANDARDS.md). Accepted exception (data structure init, not branching logic), but could be split by opcode category (`initStackHandlers()`, `initArithmeticHandlers()`, `initConversionHandlers()`, etc.) for readability.
 
 **Parse+Compile Optimization (5.5 — 46.7% of pipeline, deferred until after Lexer Rewrite):**
