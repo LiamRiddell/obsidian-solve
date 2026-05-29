@@ -1,106 +1,106 @@
 {
-  "timestamp": "2026-05-29T23:10:37.925Z",
+  "timestamp": "2026-05-29T23:16:43.437Z",
   "summary": {
-    "meanDeltaNs": 88.93933333333338,
-    "meanPercentImprovement": 17.214611076602097,
-    "estimatedAllocCostNs": 88.93933333333338
+    "meanDeltaNs": 123.58099999999997,
+    "meanPercentImprovement": 19.707739653446698,
+    "estimatedAllocCostNs": 123.58099999999997
   },
   "details": [
     {
       "name": "simple_add",
       "withoutPool": {
-        "meanNs": 392.426,
-        "p95Ns": 400,
+        "meanNs": 386.26,
+        "p95Ns": 500,
         "medianNs": 300
       },
       "withPool": {
-        "meanNs": 267.216,
+        "meanNs": 253.472,
         "p95Ns": 300,
-        "medianNs": 300
+        "medianNs": 200
       },
-      "deltaNs": 125.20999999999998,
-      "speedupRatio": 0.6809334753558633,
-      "percentImprovement": 31.90665246441367
+      "deltaNs": 132.78799999999998,
+      "speedupRatio": 0.6562211981566821,
+      "percentImprovement": 34.377880184331794
     },
     {
       "name": "variable_access",
       "withoutPool": {
-        "meanNs": 420.552,
+        "meanNs": 405.532,
         "p95Ns": 500,
         "medianNs": 400
       },
       "withPool": {
-        "meanNs": 313.052,
+        "meanNs": 305.302,
         "p95Ns": 400,
         "medianNs": 300
       },
-      "deltaNs": 107.5,
-      "speedupRatio": 0.7443835720671879,
-      "percentImprovement": 25.56164279328121
+      "deltaNs": 100.22999999999996,
+      "speedupRatio": 0.7528431788366887,
+      "percentImprovement": 24.71568211633113
     },
     {
       "name": "vector_creation",
       "withoutPool": {
-        "meanNs": 502.012,
-        "p95Ns": 500,
+        "meanNs": 494.536,
+        "p95Ns": 700,
         "medianNs": 500
       },
       "withPool": {
-        "meanNs": 398.558,
-        "p95Ns": 500,
+        "meanNs": 396.54,
+        "p95Ns": 400,
         "medianNs": 400
       },
-      "deltaNs": 103.45400000000001,
-      "speedupRatio": 0.7939212608463543,
-      "percentImprovement": 20.607873915364575
+      "deltaNs": 97.99599999999998,
+      "speedupRatio": 0.8018425352249382,
+      "percentImprovement": 19.81574647750618
     },
     {
       "name": "unit_conversion",
       "withoutPool": {
-        "meanNs": 4065.442,
+        "meanNs": 4056.162,
         "p95Ns": 4100,
         "medianNs": 3900
       },
       "withPool": {
-        "meanNs": 4030.41,
-        "p95Ns": 4100,
-        "medianNs": 3900
+        "meanNs": 3888.258,
+        "p95Ns": 4000,
+        "medianNs": 3800
       },
-      "deltaNs": 35.03200000000015,
-      "speedupRatio": 0.9913829787757394,
-      "percentImprovement": 0.8617021224260524
+      "deltaNs": 167.904,
+      "speedupRatio": 0.9586052036383163,
+      "percentImprovement": 4.139479636168378
     },
     {
       "name": "dice_roll",
       "withoutPool": {
-        "meanNs": 659.1,
-        "p95Ns": 700,
+        "meanNs": 656.292,
+        "p95Ns": 800,
         "medianNs": 600
       },
       "withPool": {
-        "meanNs": 553.084,
+        "meanNs": 548.024,
         "p95Ns": 600,
         "medianNs": 500
       },
-      "deltaNs": 106.01600000000008,
-      "speedupRatio": 0.8391503565468061,
-      "percentImprovement": 16.084964345319385
+      "deltaNs": 108.26800000000003,
+      "speedupRatio": 0.835030748508286,
+      "percentImprovement": 16.49692514917141
     },
     {
       "name": "percentage",
       "withoutPool": {
-        "meanNs": 682.7,
-        "p95Ns": 700,
-        "medianNs": 600
-      },
-      "withPool": {
-        "meanNs": 626.276,
+        "meanNs": 718.154,
         "p95Ns": 900,
         "medianNs": 600
       },
-      "deltaNs": 56.42400000000009,
-      "speedupRatio": 0.9173516918119231,
-      "percentImprovement": 8.264830818807688
+      "withPool": {
+        "meanNs": 583.854,
+        "p95Ns": 600,
+        "medianNs": 600
+      },
+      "deltaNs": 134.29999999999995,
+      "speedupRatio": 0.8129927564282871,
+      "percentImprovement": 18.700724357171296
     }
   ],
   "metadata": {

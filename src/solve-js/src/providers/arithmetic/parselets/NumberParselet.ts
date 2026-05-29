@@ -12,7 +12,7 @@ export class NumberParselet implements PrefixParselet {
 		let v: number;
 		const raw = token.value;
 		if (raw.startsWith("0x") || raw.startsWith("0X")) {
-			v = parseInt(raw.slice(2), 16);
+			v = parseInt(raw, 16);
 		} else if (raw.startsWith("0b") || raw.startsWith("0B")) {
 			v = parseInt(raw.slice(2), 2);
 		} else {
