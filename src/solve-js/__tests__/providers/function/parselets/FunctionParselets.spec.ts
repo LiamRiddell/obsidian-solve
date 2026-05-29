@@ -1,6 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
-import { TokenTypes } from "@solve-js/lexer/Token";
+import { TokenTypes, tokenTypeId } from "@solve-js/lexer/Token";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
@@ -233,10 +233,10 @@ describe("Function Parselets", () => {
     const parser = new Parser(registry);
     const builder = new BytecodeBuilder();
     const tokens = [
-      { type: "IDENT", value: "unknownFunc", text: "unknownFunc", offset: 0, lineBreaks: 0, line: 1, col: 1 },
-      { type: "LPAREN", value: "(", text: "(", offset: 11, lineBreaks: 0, line: 1, col: 12 },
-      { type: "NUMBER", value: "42", text: "42", offset: 12, lineBreaks: 0, line: 1, col: 13 },
-      { type: "RPAREN", value: ")", text: ")", offset: 14, lineBreaks: 0, line: 1, col: 15 },
+      { type: "IDENT", typeId: tokenTypeId("IDENT"), value: "unknownFunc", text: "unknownFunc", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "LPAREN", typeId: tokenTypeId("LPAREN"), value: "(", text: "(", offset: 11, lineBreaks: 0, line: 1, col: 12 },
+      { type: "NUMBER", typeId: tokenTypeId("NUMBER"), value: "42", text: "42", offset: 12, lineBreaks: 0, line: 1, col: 13 },
+      { type: "RPAREN", typeId: tokenTypeId("RPAREN"), value: ")", text: ")", offset: 14, lineBreaks: 0, line: 1, col: 15 },
     ];
     parser.load(tokens);
     expect(() => {

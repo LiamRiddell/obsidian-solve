@@ -251,7 +251,7 @@ describe("ExpressionLexer — iterator protocol", () => {
 
 describe("LexerToken", () => {
   test("constructs with all properties", () => {
-    const t = new LexerToken("NUMBER", "42", "42", 0, 0, 1, 1);
+    const t = new LexerToken("NUMBER", 1, "42", "42", 0, 0, 1, 1);
     expect(t.type).toBe("NUMBER");
     expect(t.value).toBe("42");
     expect(t.text).toBe("42");

@@ -1,5 +1,9 @@
 export interface Token {
+	/** String token type (e.g., "NUMBER", "PLUS", "IDENT"). Used by ParseletRegistry string-keyed maps and error messages. */
 	type: string;
+	/** Integer token type ID for fast comparison in Parser hot path.
+	 * Populated by the Lexer via registerTokenType(). Use tokenTypeId(type) to get a type's ID. */
+	typeId: number;
 	value: string;
 	text: string;
 	offset: number;
@@ -36,6 +40,7 @@ export const TokenTypes = {
   POUND: "POUND",
   EURO: "EURO",
   QUESTION: "QUESTION",
+  BANG: "BANG",
   BIT_AND: "BIT_AND",
   BIT_OR: "BIT_OR",
   BIT_NOT: "BIT_NOT",
@@ -83,6 +88,71 @@ export const TokenTypes = {
   DIVIDE_BY: "DIVIDE_BY",
   NEQ: "NEQ",
   IN: "IN",
+  BIT_XOR: "BIT_XOR",
+  EQUALITY: "EQUALITY",
+  GTE: "GTE",
+  LTE: "LTE",
+  BACKTICK_OPEN: "BACKTICK_OPEN",
+  INLINE_SOLVE_START: "INLINE_SOLVE_START",
+  // Vector types (referenced in locale keywordMap as vec2→VEC2, etc.)
+  VEC2: "VEC2",
+  VEC3: "VEC3",
+  VEC4: "VEC4",
+  FLOAT: "FLOAT",
 } as const;
 
 export type TokenType = (typeof TokenTypes)[keyof typeof TokenTypes];
+
+// ── Integer Token Type ID System ──────────────────────────────────────────────
+// Enables O(1) integer comparison in Parser hot path instead of string hashing.
+
+/** Auto-incrementing integer ID for each token type. */
+let _nextTokenTypeId = 0;
+
+/** String → integer ID lookup. Populated lazily via registerTokenType(). */
+const _tokenTypeNameToId = new Map<string, number>();
+
+/** Integer ID → string lookup. For debug/error messages. */
+const _tokenTypeIdToName = new Map<number, string>();
+
+/**
+ * Register a token type name and get back its integer ID.
+ * Idempotent — returns existing ID if already registered.
+ * Call once per token type at module initialization time.
+ */
+export function registerTokenType(name: string): number {
+	const existing = _tokenTypeNameToId.get(name);
+	if (existing !== undefined) return existing;
+	const id = _nextTokenTypeId++;
+	_tokenTypeNameToId.set(name, id);
+	_tokenTypeIdToName.set(id, name);
+	return id;
+}
+
+/**
+ * Get the integer ID for a token type name.
+ * Lazily registers unknown token types on first access — enabling plugin providers
+ * to define custom token types (VEC2, VEC3, etc.) without pre-registration.
+ * All built-in TokenTypes are pre-registered via registerAllTokenTypes().
+ */
+export function tokenTypeId(name: string): number {
+	return registerTokenType(name);  // registerTokenType is idempotent
+}
+
+/**
+ * Get the string name for a token type ID (for error messages and debugging).
+ * Returns `UNKNOWN_${id}` if the ID is not registered.
+ */
+export function tokenTypeName(id: number): string {
+	return _tokenTypeIdToName.get(id) ?? `UNKNOWN_${id}`;
+}
+
+/**
+ * Bootstrap all known token types from TokenTypes at module load.
+ * Call this once after TokenTypes is defined.
+ */
+export function registerAllTokenTypes(): void {
+	for (const name of Object.values(TokenTypes)) {
+		registerTokenType(name);
+	}
+}

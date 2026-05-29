@@ -1,12 +1,17 @@
-import { Token } from '@solve-js/lexer/Token';
+import { Token, registerTokenType, tokenTypeId, registerAllTokenTypes } from '@solve-js/lexer/Token';
 import { knownUnits } from '@solve-js/lexer/units';
 import { getLocale, type ILocale } from '@solve-js/constants/locales';
 import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
+import type { TokenLookup, PhraseNode as RegistryPhraseNode } from '@solve-js/lexer/TokenClassRegistry';
+
+// Bootstrap all token types at module load
+registerAllTokenTypes();
 
 // ── Markdown line classification (Phase B) ──────────────────────────────
 
 export type MarkdownLineType =
   | 'expression'
+  | 'prose'
   | 'heading'
   | 'blockquote'
   | 'list'
@@ -140,14 +145,42 @@ function buildCharClassTable(): Uint8Array {
   return table;
 }
 
+// ── Pre-computed operator token type IDs ──────────────────────────────────
+// Cached at module load for the hot path — avoids Map.get() per operator token.
+const OP_TYPE_IDS: Record<string, number> = {
+  '+': tokenTypeId('PLUS'),     '-': tokenTypeId('MINUS'),
+  '*': tokenTypeId('STAR'),     '/': tokenTypeId('SLASH'),
+  '^': tokenTypeId('CARET'),    '%': tokenTypeId('PERCENT'),
+  '(': tokenTypeId('LPAREN'),   ')': tokenTypeId('RPAREN'),
+  '[': tokenTypeId('LBRACKET'), ']': tokenTypeId('RBRACKET'),
+  '{': tokenTypeId('LBRACE'),   '}': tokenTypeId('RBRACE'),
+  ',': tokenTypeId('COMMA'),    '=': tokenTypeId('EQUALS'),
+  ':': tokenTypeId('COLON'),    ';': tokenTypeId('SEMICOLON'),
+  '?': tokenTypeId('QUESTION'), '!': tokenTypeId('BANG'),
+  '&': tokenTypeId('BIT_AND'),  '|': tokenTypeId('BIT_OR'),
+  '~': tokenTypeId('BIT_NOT'),
+};
+
+// Pre-computed two-char operator type IDs
+const TWO_CHAR_OP_IDS: Record<string, { typeId: number; text: string }> = {
+  '==': { typeId: tokenTypeId('EQUALITY'), text: '==' },
+  '!=': { typeId: tokenTypeId('NEQ'), text: '!=' },
+  '>=': { typeId: tokenTypeId('GTE'), text: '>=' },
+  '<=': { typeId: tokenTypeId('LTE'), text: '<=' },
+  '<<': { typeId: tokenTypeId('LSHIFT'), text: '<<' },
+  '>>': { typeId: tokenTypeId('RSHIFT'), text: '>>' },
+};
+
 // ── Monomorphic Token class ───────────────────────────────────────────────
 // V8 assigns a single stable HiddenClass because all properties are
 // initialized in the constructor and never added/removed afterwards.
 // This enables fast property access (inline cache hits) and allows
 // allocation in V8's nursery (cheap GC).
+// All 9 fields are always set — no optional fields, no different shapes.
 export class LexerToken implements Token {
   constructor(
     public type: string,
+    public typeId: number,
     public value: string,
     public text: string,
     public offset: number,
@@ -274,10 +307,65 @@ function buildPhraseList(): PhraseEntry[] {
   ];
 }
 
+// ── Phrase start words set (built once) ──────────────────────────────────
+// Used by tokenizeIdentifier() to detect words that start phrases.
+// When such a word is seen, we emit IDENT and let the phrase matcher
+// combine it with following words into a phrase token. This prevents
+// single-word phrase starts (e.g., "to", "power") from being swallowed
+// by keyword lookup.
+const PHRASE_START_WORDS = new Set<string>(
+  buildPhraseList().map(p => p.phrase.split(' ')[0])
+);
+
+// ── Expression gating (L1) ──────────────────────────────────────────────
+// Pre-computed Set of character codes that indicate an expression might
+// be present. Used by hasExpressionIndicators() to gate prose lines
+// before full tokenization.
+//
+// NOTE: Currently unused — L1 prose gating was removed from classifyFromPositions()
+// because it incorrectly skipped keyword-only lines ("pi"), single identifiers
+// ("hello"), and short alpha lines. Retained for future re-implementation with
+// keyword-awareness and proper test coverage.
+const EXPRESSION_INDICATOR_CODES = (() => {
+  const set = new Set<number>();
+  // Digits 0-9
+  for (let i = 48; i <= 57; i++) set.add(i);
+  // Operators / punctuation
+  // Note: colon (58) is intentionally excluded — it's common in prose
+  // (e.g., "Subject: Hello world") and would cause false-positive
+  // expression classification. Variable assignment lines like
+  // ":myVar = 5" are still caught by '=' and digit indicators.
+  const opCodes = [43, 45, 42, 47, 94, 37, 40, 41, 91, 93, 123, 125, 61, 60, 62, 33, 38, 124, 126, 59, 63];
+  for (const c of opCodes) set.add(c);
+  // Currency
+  set.add(36);   // $
+  set.add(0x00A3); // £
+  set.add(0x20AC); // €
+  // Backtick (inline solve)
+  set.add(96);   // `
+  // Dot (could be decimal)
+  set.add(46);   // .
+  // Hash (comment — still an expression indicator)
+  set.add(35);   // #
+  return set;
+})();
+
 // ── ExpressionLexer ───────────────────────────────────────────────────────
 export class ExpressionLexer {
   private static readonly CHAR_CLASS = buildCharClassTable();
   private static readonly PHRASES = buildPhraseList();
+
+  /**
+   * Configured TokenLookup from TokenClassRegistry. When set, replaces
+   * the internal keyword map, unit set, phrase trie, and phraseStartWords
+   * with registry-built equivalents. Enables data-driven keyword/unit/phrase
+   * registration across locale keywords, provider keywords, and plugins.
+   *
+   * Set at construction time via the constructor parameter. Plugin-registered
+   * keywords/units/phrases (via registerPlugin()) are checked alongside
+   * the configuredLookup — neither source is bypassed.
+   */
+  private configuredLookup: TokenLookup | null = null;
 
   // Instance state
   private input: string = '';
@@ -311,6 +399,10 @@ export class ExpressionLexer {
   private hasPluginOps = false;
   private hasPluginPhrases = false;
 
+  // Combined phraseStartWords: built-in + plugin phrase first words.
+  // Used to detect IDENT tokens that may start a phrase.
+  private phraseStartWords: Set<string> = new Set(PHRASE_START_WORDS);
+
   // Phrase trie: O(word-count) lookup vs O(phrases×words) linear scan.
   // Merges built-in PHRASES with pluginPhrases. Rebuilt on register/unregister.
   private phraseTrie: PhraseTrieNode;
@@ -319,9 +411,10 @@ export class ExpressionLexer {
   private localeCode: string;
   private locale: ILocale;
 
-  constructor(localeCode = 'en') {
+  constructor(localeCode = 'en', lookup?: TokenLookup) {
     this.localeCode = localeCode;
     this.locale = getLocale(localeCode);
+    this.configuredLookup = lookup ?? null;
     this.keywordMap = new Map<string, string>();
     for (const [k, v] of Object.entries(this.locale.keywordMap)) {
       this.keywordMap.set(k.toLowerCase(), v);
@@ -429,10 +522,6 @@ export class ExpressionLexer {
             );
           }
           // Guard: prevent overriding comment sequences (//)
-          // In expression mode, // goes through tokenizeOperator() (since /
-          // is CharClass.OPERATOR). In markdown mode, classifyLine() skips
-          // lines starting with //. Allowing plugins to override // would
-          // break comment handling in both modes.
           if (first === 47 && second === 47) {
             throw ErrorFactory.config(
               'PLUGIN_OPERATOR_COLLISION',
@@ -449,8 +538,6 @@ export class ExpressionLexer {
           }
           inner.set(second, tokenType);
         }
-        // Note: >2 char operators could be supported in future via
-        // a separate trie-based lookup if needed.
       }
     }
 
@@ -473,6 +560,8 @@ export class ExpressionLexer {
           phrase: lowerPhrase,
           type: entry.type,
         });
+        // Track the first word of the phrase for phraseStartWords
+        this.phraseStartWords.add(lowerPhrase.split(' ')[0]);
       }
       // Rebuild phrase trie to include new plugin phrases
       this.phraseTrie = ExpressionLexer.buildPhraseTrie(ExpressionLexer.PHRASES, this.pluginPhrases);
@@ -505,8 +594,6 @@ export class ExpressionLexer {
    *
    * Calling unregisterPlugin with a plugin that was never registered
    * is safe — it simply has no effect.
-   *
-   * @param plugin - The same plugin object passed to registerPlugin().
    */
   unregisterPlugin(plugin: LexerPlugin): void {
     if (plugin.keywords) {
@@ -539,6 +626,11 @@ export class ExpressionLexer {
         const idx = this.pluginPhrases.findIndex(p => p.phrase === lowerPhrase);
         if (idx !== -1) {
           this.pluginPhrases.splice(idx, 1);
+        }
+        // Rebuild phraseStartWords from scratch
+        this.phraseStartWords = new Set(PHRASE_START_WORDS);
+        for (const p of this.pluginPhrases) {
+          this.phraseStartWords.add(p.phrase.split(' ')[0]);
         }
       }
       this.hasPluginPhrases = this.pluginPhrases.length > 0;
@@ -724,23 +816,33 @@ export class ExpressionLexer {
       switch (cc) {
         case CharClass.DIGIT:
         case CharClass.DOT:
-          yield new LexerToken('NUMBER', this.input, this.input, 0, 0, 1, 1);
+          yield new LexerToken('NUMBER', tokenTypeId('NUMBER'), this.input, this.input, 0, 0, 1, 1);
           break;
 
         case CharClass.ALPHA: {
           const input = this.input;
           const identLower = input.toLowerCase();
-          if (knownUnits.has(input) || (this.hasPluginUnits && this.pluginUnits.has(input))) {
-            yield new LexerToken('UNIT', input, input, 0, 0, 1, 1);
+          const configuredLookup = this.configuredLookup;
+          const unitNames = configuredLookup?.unitNames;
+          const isKnownUnit = unitNames ? unitNames.has(input) : knownUnits.has(input);
+          const isPluginUnit = this.hasPluginUnits && this.pluginUnits.has(input);
+          if (isKnownUnit || isPluginUnit) {
+            yield new LexerToken('UNIT', tokenTypeId('UNIT'), input, input, 0, 0, 1, 1);
           } else {
-            const kwType = this.keywordMap.get(identLower);
+            const kwType = configuredLookup?.keywordToType
+              ? configuredLookup.keywordToType.get(identLower)
+              : this.keywordMap.get(identLower);
             if (kwType) {
-              yield new LexerToken(kwType, input, input, 0, 0, 1, 1);
+              yield new LexerToken(kwType, tokenTypeId(kwType), input, input, 0, 0, 1, 1);
             } else if (this.hasPluginKeywords) {
               const pluginKwType = this.pluginKeywordMap.get(identLower);
-              yield new LexerToken(pluginKwType || 'IDENT', input, input, 0, 0, 1, 1);
+              if (pluginKwType) {
+                yield new LexerToken(pluginKwType, tokenTypeId(pluginKwType), input, input, 0, 0, 1, 1);
+              } else {
+                yield new LexerToken('IDENT', tokenTypeId('IDENT'), input, input, 0, 0, 1, 1);
+              }
             } else {
-              yield new LexerToken('IDENT', input, input, 0, 0, 1, 1);
+              yield new LexerToken('IDENT', tokenTypeId('IDENT'), input, input, 0, 0, 1, 1);
             }
           }
           break;
@@ -749,7 +851,7 @@ export class ExpressionLexer {
         case CharClass.OPERATOR: {
           const opType = OP_MAP[c0];
           if (opType) {
-            yield new LexerToken(opType, this.input, this.input, 0, 0, 1, 1);
+            yield new LexerToken(opType, tokenTypeId(opType), this.input, this.input, 0, 0, 1, 1);
           }
           break;
         }
@@ -767,31 +869,29 @@ export class ExpressionLexer {
           break;
 
         case CharClass.DOLLAR:
-          yield new LexerToken('DOLLAR', '$', '$', 0, 0, 1, 1);
+          yield new LexerToken('DOLLAR', tokenTypeId('DOLLAR'), '$', '$', 0, 0, 1, 1);
           break;
 
         case CharClass.BACKTICK:
-          yield new LexerToken('BACKTICK_OPEN', '`', '`', 0, 0, 1, 1);
+          yield new LexerToken('BACKTICK_OPEN', tokenTypeId('BACKTICK_OPEN'), '`', '`', 0, 0, 1, 1);
           break;
 
         default: {
           // CharClass.SKIP — includes non-ASCII characters (code >= 128)
           if (c0 === 0x00D7) {  // × → STAR
-            yield new LexerToken('STAR', '\u00D7', '\u00D7', 0, 0, 1, 1);
+            yield new LexerToken('STAR', tokenTypeId('STAR'), '\u00D7', '\u00D7', 0, 0, 1, 1);
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
-            yield new LexerToken('SLASH', '\u00F7', '\u00F7', 0, 0, 1, 1);
+            yield new LexerToken('SLASH', tokenTypeId('SLASH'), '\u00F7', '\u00F7', 0, 0, 1, 1);
           } else if (c0 === 0x2260) {  // ≠ → NEQ
-            yield new LexerToken('NEQ', '\u2260', '\u2260', 0, 0, 1, 1);
+            yield new LexerToken('NEQ', tokenTypeId('NEQ'), '\u2260', '\u2260', 0, 0, 1, 1);
           } else if (c0 === 0x00A3) {  // £
-            yield new LexerToken('POUND', '\u00A3', '\u00A3', 0, 0, 1, 1);
+            yield new LexerToken('POUND', tokenTypeId('POUND'), '\u00A3', '\u00A3', 0, 0, 1, 1);
           } else if (c0 === 0x20AC) {  // €
-            yield new LexerToken('EURO', '\u20AC', '\u20AC', 0, 0, 1, 1);
+            yield new LexerToken('EURO', tokenTypeId('EURO'), '\u20AC', '\u20AC', 0, 0, 1, 1);
           } else if (c0 >= 128) {
             // Unknown unicode — treat as IDENT for forward compatibility
-            // (future: Greek letters for math, accented variable names)
-            yield new LexerToken('IDENT', this.input, this.input, 0, 0, 1, 1);
+            yield new LexerToken('IDENT', tokenTypeId('IDENT'), this.input, this.input, 0, 0, 1, 1);
           }
-          // Unknown ASCII (< 128, SKIP) — silently skipped (same as main loop)
           break;
         }
       }
@@ -839,12 +939,12 @@ export class ExpressionLexer {
               yield this.tokenizeNumber();
             } else {
               const col = this.pos - this.lineStartPos + 1;
-              yield new LexerToken('DOT', '.', '.', this.pos, 0, this.line, col);
+              yield new LexerToken('DOT', tokenTypeId('DOT'), '.', '.', this.pos, 0, this.line, col);
               this.pos++;
             }
           } else {
             const col = this.pos - this.lineStartPos + 1;
-            yield new LexerToken('DOT', '.', '.', this.pos, 0, this.line, col);
+            yield new LexerToken('DOT', tokenTypeId('DOT'), '.', '.', this.pos, 0, this.line, col);
             this.pos++;
           }
           break;
@@ -867,7 +967,7 @@ export class ExpressionLexer {
         // ── Dollar sign $ ─────────────────────────────────────────────
         case CharClass.DOLLAR: {
           const col = this.pos - this.lineStartPos + 1;
-          yield new LexerToken('DOLLAR', '$', '$', this.pos, 0, this.line, col);
+          yield new LexerToken('DOLLAR', tokenTypeId('DOLLAR'), '$', '$', this.pos, 0, this.line, col);
           this.pos++;
           break;
         }
@@ -875,7 +975,7 @@ export class ExpressionLexer {
         // ── Backtick ` ───────────────────────────────────────────────
         case CharClass.BACKTICK: {
           const col = this.pos - this.lineStartPos + 1;
-          yield new LexerToken('BACKTICK_OPEN', '`', '`', this.pos, 0, this.line, col);
+          yield new LexerToken('BACKTICK_OPEN', tokenTypeId('BACKTICK_OPEN'), '`', '`', this.pos, 0, this.line, col);
           this.pos++;
           break;
         }
@@ -884,23 +984,22 @@ export class ExpressionLexer {
         default: {
           const col = this.pos - this.lineStartPos + 1;
           if (c0 === 0x00D7) {  // × → STAR
-            yield new LexerToken('STAR', '\u00D7', '\u00D7', this.pos, 0, this.line, col);
+            yield new LexerToken('STAR', tokenTypeId('STAR'), '\u00D7', '\u00D7', this.pos, 0, this.line, col);
             this.pos++;
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
-            yield new LexerToken('SLASH', '\u00F7', '\u00F7', this.pos, 0, this.line, col);
+            yield new LexerToken('SLASH', tokenTypeId('SLASH'), '\u00F7', '\u00F7', this.pos, 0, this.line, col);
             this.pos++;
           } else if (c0 === 0x2260) {  // ≠ → NEQ
-            yield new LexerToken('NEQ', '\u2260', '\u2260', this.pos, 0, this.line, col);
+            yield new LexerToken('NEQ', tokenTypeId('NEQ'), '\u2260', '\u2260', this.pos, 0, this.line, col);
             this.pos++;
           } else if (c0 === 0x00A3) {  // £
-            yield new LexerToken('POUND', '\u00A3', '\u00A3', this.pos, 0, this.line, col);
+            yield new LexerToken('POUND', tokenTypeId('POUND'), '\u00A3', '\u00A3', this.pos, 0, this.line, col);
             this.pos++;
           } else if (c0 === 0x20AC) {  // €
-            yield new LexerToken('EURO', '\u20AC', '\u20AC', this.pos, 0, this.line, col);
+            yield new LexerToken('EURO', tokenTypeId('EURO'), '\u20AC', '\u20AC', this.pos, 0, this.line, col);
             this.pos++;
           } else if (c0 >= 128) {
             // Unknown unicode — treat as IDENT for forward compatibility
-            // (future: Greek letters for math, accented variable names)
             yield this.tokenizeIdentifier();
           } else {
             // Unknown ASCII — silently skip
@@ -944,7 +1043,7 @@ export class ExpressionLexer {
         }
         const text = input.slice(start, pos);
         this.pos = pos;
-        return new LexerToken('NUMBER', text, text, start, 0, this.line, startCol);
+        return new LexerToken('NUMBER', tokenTypeId('NUMBER'), text, text, start, 0, this.line, startCol);
       }
       // ── Binary literal: 0b / 0B ─────────────────────────────────────
       if (next === 0x62 || next === 0x42) {  // 'b' or 'B'
@@ -954,7 +1053,7 @@ export class ExpressionLexer {
         }
         const text = input.slice(start, pos);
         this.pos = pos;
-        return new LexerToken('NUMBER', text, text, start, 0, this.line, startCol);
+        return new LexerToken('NUMBER', tokenTypeId('NUMBER'), text, text, start, 0, this.line, startCol);
       }
     }
 
@@ -967,11 +1066,7 @@ export class ExpressionLexer {
     }
 
     // ── Thousands separators — coalesce with digits ────────────────────
-    // Pattern: \d{1,3}(?:[.,]\d{3})+  e.g., "1,234" or "1.234.567"
-    // Gated on hasIntPart: prevents leading-dot floats (.1234) from being
-    // incorrectly consumed as thousands separators.
     while (hasIntPart && pos < len && (input.charCodeAt(pos) === 44 || input.charCodeAt(pos) === 46)) {
-      // Verify 3 digits follow
       if (pos + 4 <= len) {
         const d1 = input.charCodeAt(pos + 1);
         const d2 = input.charCodeAt(pos + 2);
@@ -981,12 +1076,12 @@ export class ExpressionLexer {
           d2 >= 48 && d2 <= 57 &&
           d3 >= 48 && d3 <= 57
         ) {
-          pos += 4;  // skip separator + 3 digits
+          pos += 4;
           hasIntPart = true;
           continue;
         }
       }
-      break;  // not a thousands separator — break out
+      break;
     }
 
     // ── Decimal part (.xxx) ───────────────────────────────────────────
@@ -996,7 +1091,7 @@ export class ExpressionLexer {
         const nextCc = input.charCodeAt(pos + 1);
         if (nextCc >= 48 && nextCc <= 57) {
           hasDecimal = true;
-          pos++;  // skip dot
+          pos++;
           while (pos < len && ((cc = input.charCodeAt(pos)), cc >= 48 && cc <= 57)) {
             pos++;
           }
@@ -1004,7 +1099,7 @@ export class ExpressionLexer {
       }
     }
 
-    // ── Exponent (e / E [+-]? \d+) ────────────────────────────────────
+    // ── Exponent (e / E [+-]? \n+) ────────────────────────────────────
     let hasExponent = false;
     if (pos < len) {
       const ec = input.charCodeAt(pos);
@@ -1016,8 +1111,8 @@ export class ExpressionLexer {
             next === 43 || next === 45  // + or -
           ) {
             hasExponent = true;
-            pos++;  // skip e/E
-            if (next === 43 || next === 45) pos++;  // skip sign
+            pos++;
+            if (next === 43 || next === 45) pos++;
             while (pos < len && ((cc = input.charCodeAt(pos)), cc >= 48 && cc <= 57)) {
               pos++;
             }
@@ -1027,20 +1122,19 @@ export class ExpressionLexer {
     }
 
     // ── BigInt suffix check ────────────────────────────────────────────
-    // Only applies to integer literals (no decimal, no exponent).
     if (pos < len && input.charCodeAt(pos) === 110) {  // 'n'
       if (hasIntPart && !hasDecimal && !hasExponent) {
         pos++;
         const text = input.slice(start, pos);
         this.pos = pos;
-        return new LexerToken('BIGINT', text, text, start, 0, this.line, startCol);
+        return new LexerToken('BIGINT', tokenTypeId('BIGINT'), text, text, start, 0, this.line, startCol);
       }
     }
 
     // ── Emit NUMBER token ──────────────────────────────────────────────
     const text = input.slice(start, pos);
     this.pos = pos;
-    return new LexerToken('NUMBER', text, text, start, 0, this.line, startCol);
+    return new LexerToken('NUMBER', tokenTypeId('NUMBER'), text, text, start, 0, this.line, startCol);
   }
 
   // ── Inline identifier / keyword tokenizer ──────────────────────────────
@@ -1077,53 +1171,38 @@ export class ExpressionLexer {
     const identLower = identText.toLowerCase();
 
     // ── Inline solve marker: s` (lowercase 's' followed by backtick) ──
-    // Matches the moo rule INLINE_SOLVE_START: { match: /s`/, push: "inline_solve" }
     if (identLower === 's' && pos < len && input.charCodeAt(pos) === 96) {
-      pos++;  // consume backtick
+      pos++;
       this.pos = pos;
-      const fullText = input.slice(start, pos);  // "s`"
-      return new LexerToken('INLINE_SOLVE_START', fullText, fullText, start, 0, this.line, startCol);
+      const fullText = input.slice(start, pos);
+      return new LexerToken('INLINE_SOLVE_START', tokenTypeId('INLINE_SOLVE_START'), fullText, fullText, start, 0, this.line, startCol);
     }
 
     // ── Unit lookup (case-sensitive, takes priority over phrases/keywords)
-    //
-    // Contextual LPAREN lookahead: when a known unit is followed by '('
-    // (possibly with whitespace), treat it as a potential function call
-    // instead of a unit. This resolves conflicts where an identifier is
-    // both a unit (e.g., "min" = minute) and a function (min(3,7) = Math.min).
-    // Without this lookahead, min(3,7) tokens as UNIT + LPAREN + ... and
-    // the function parselet (registered for FUNC) never matches.
-    //
-    // IMPORTANT: peek past whitespace only; do NOT consume characters.
-    // this.pos must remain at the identifier boundary so the caller's
-    // token stream stays in sync.
-    //
-    // 1) Built-in units
-    if (knownUnits.has(identText)) {
+    // Check configuredLookup.unitNames first, fall back to knownUnits, then pluginUnits.
+    // All three sources are checked — configuredLookup does NOT bypass plugin units.
+    const configuredLookup = this.configuredLookup;
+    const unitNames = configuredLookup?.unitNames;
+    const isKnownUnit = unitNames ? unitNames.has(identText) : knownUnits.has(identText);
+    const isPluginUnit = this.hasPluginUnits && this.pluginUnits.has(identText);
+    if (isKnownUnit || isPluginUnit) {
       if (!this.isFollowedByLParen(pos)) {
         this.pos = pos;
-        return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
+        return new LexerToken('UNIT', tokenTypeId('UNIT'), identText, identText, start, 0, this.line, startCol);
       }
-      // Fall through: unit followed by '(' → treat as keyword/IDENT
-    }
-    // 2) Plugin-registered units (skipped when hasPluginUnits=false)
-    if (this.hasPluginUnits && this.pluginUnits.has(identText)) {
-      if (!this.isFollowedByLParen(pos)) {
-        this.pos = pos;
-        return new LexerToken('UNIT', identText, identText, start, 0, this.line, startCol);
-      }
-      // Fall through: unit followed by '(' → treat as keyword/IDENT
     }
 
     // ── Phrase matching — multi-word patterns (before keyword lookup)
-    // This must run before keyword lookup, otherwise phrases like
-    // "increase by", "divide by", "to the power of" are unreachable
-    // because the first word is always caught as a keyword.
-    const phraseResult = this.tryMatchPhrase(input, pos, identLower, identText);
+    // Use configuredLookup.phraseTrie when available (cast — structurally identical).
+    // Falls back to instance phraseTrie (includes plugin phrases) when the
+    // registry-built trie doesn't match — plugin phrases aren't in the lookup.
+    const phraseTrieOverride = (configuredLookup?.phraseTrie ?? null) as unknown as PhraseTrieNode | undefined;
+    const phraseResult = this.tryMatchPhrase(input, pos, identLower, identText, phraseTrieOverride);
     if (phraseResult) {
       this.pos = phraseResult.endPos;
       return new LexerToken(
         phraseResult.type,
+        tokenTypeId(phraseResult.type),
         phraseResult.text,
         phraseResult.text,
         start,
@@ -1132,55 +1211,77 @@ export class ExpressionLexer {
         startCol,
       );
     }
-
-    // ── Keyword lookup (case-insensitive) ─────────────────────────────
-    // 1) Built-in locale keywords take highest priority
-    const localeKwType = this.keywordMap.get(identLower);
-    if (localeKwType) {
-      this.pos = pos;
-      return new LexerToken(localeKwType, identText, identText, start, 0, this.line, startCol);
+    // Fall back to instance phraseTrie (includes plugin phrases) when configuredLookup
+    // trie didn't match. Plugin phrases registered via registerPlugin() aren't in
+    // the registry-built lookup.
+    if (phraseTrieOverride && this.hasPluginPhrases) {
+      const fallbackResult = this.tryMatchPhrase(input, pos, identLower, identText);
+      if (fallbackResult) {
+        this.pos = fallbackResult.endPos;
+        return new LexerToken(
+          fallbackResult.type,
+          tokenTypeId(fallbackResult.type),
+          fallbackResult.text,
+          fallbackResult.text,
+          start,
+          0,
+          this.line,
+          startCol,
+        );
+      }
     }
 
-    // 2) Plugin-registered keywords (checked after locale) — a plugin's
-    //    keyword can override the default IDENT behavior.
-    //    Guarded by hasPluginKeywords: in the no-plugin case, V8 predicts
-    //    this branch as never-taken and skips the Map lookup entirely.
+    // ── Keyword lookup (case-insensitive) — takes priority over phraseStartWords
+    // Keywords must be recognized even if they happen to start phrases, so that
+    // "to the" → TO + IDENT (not IDENT + IDENT when "to" is a keyword).
+    // Use configuredLookup.keywordToType when available, fall back to locale keywordMap.
+    const keywordToType = configuredLookup?.keywordToType;
+    const localeKwType = keywordToType
+      ? keywordToType.get(identLower)
+      : this.keywordMap.get(identLower);
+    if (localeKwType) {
+      this.pos = pos;
+      return new LexerToken(localeKwType, tokenTypeId(localeKwType), identText, identText, start, 0, this.line, startCol);
+    }
+
+    // Plugin keywords are checked AFTER locale/configuredLookup keywords.
+    // The `!keywordToType` guard is removed — plugin keywords must be
+    // checked even when configuredLookup is set, because plugin keywords
+    // are registered at runtime and aren't in the registry-built lookup.
     if (this.hasPluginKeywords) {
       const pluginKwType = this.pluginKeywordMap.get(identLower);
       if (pluginKwType) {
         this.pos = pos;
-        return new LexerToken(pluginKwType, identText, identText, start, 0, this.line, startCol);
+        return new LexerToken(pluginKwType, tokenTypeId(pluginKwType), identText, identText, start, 0, this.line, startCol);
       }
     }
 
+    // ── phraseStartWords optimization ─────────────────────────────────
+    // Only applies to non-keyword identifiers. Prevents single-word phrase starts
+    // (e.g., "power" when "power of" is a phrase) from being swallowed by keyword
+    // registration, while still allowing standalone "to" to become a keyword via
+    // locale keywordMap above.
+    const phraseStartWords = configuredLookup?.phraseStartWords ?? this.phraseStartWords;
+    if (phraseStartWords.has(identLower)) {
+      this.pos = pos;
+      return new LexerToken('IDENT', tokenTypeId('IDENT'), identText, identText, start, 0, this.line, startCol);
+    }
+
     this.pos = pos;
-    return new LexerToken('IDENT', identText, identText, start, 0, this.line, startCol);
+    return new LexerToken('IDENT', tokenTypeId('IDENT'), identText, identText, start, 0, this.line, startCol);
   }
 
   /**
    * Peek past in-expression whitespace (space, tab) from `pos` to check
-   * if the next significant character is '('. Used by tokenizeIdentifier()
-   * for contextual UNIT-vs-FUNC disambiguation (e.g., "min" is a unit but
-   * "min(3,7)" is a function call).
-   *
-   * Only spaces (32) and tabs (9) are skipped — newlines/CR are
-   * intentionally NOT skipped since expressions don't span lines in Solve.
-   *
-   * Does NOT consume characters — purely a lookahead. Returns false
-   * if any non-whitespace, non-'(' character appears before '('.
-   *
-   * NOTE: The 1-char fast path in [Symbol.iterator]() (around line ~726)
-   * has its own unit check WITHOUT this lookahead. Currently harmless
-   * since no single-char units conflict with function names, but future
-   * single-char unit+function additions would need lookahead there too.
+   * if the next significant character is '('.
    */
   private isFollowedByLParen(pos: number): boolean {
     const len = this.len;
     let lookPos = pos;
     while (lookPos < len) {
       const cc = this.input.charCodeAt(lookPos);
-      if (cc === 40) return true;         // '('
-      if (cc !== 32 && cc !== 9) break;   // not whitespace
+      if (cc === 40) return true;
+      if (cc !== 32 && cc !== 9) break;
       lookPos++;
     }
     return false;
@@ -1191,32 +1292,23 @@ export class ExpressionLexer {
    * After reading a first identifier, try to match a multi-word phrase
    * like "to the power of" or "increase by".
    *
-   * Uses a word-level trie for O(word-count) lookup instead of the previous
-   * O(phrases×words) linear scan. The trie merges built-in and plugin
-   * phrases and is rebuilt on register/unregister.
-   *
-   * Built-in phrases take priority: if both a built-in and plugin phrase
-   * share the same trie path, the built-in type (set first) wins.
-   *
-   * @param firstWordLower - The first word already read (lowercased)
-   * @param firstWordOriginal - The first word in original case
+   * @param rootOverride - Optional trie root from TokenLookup.phraseTrie.
+   *   When provided, uses the registry-built trie (cast to PhraseTrieNode —
+   *   structurally identical to TokenClassRegistry's PhraseNode).
    */
   private tryMatchPhrase(
     input: string,
     pos: number,
     firstWordLower: string,
     firstWordOriginal: string,
+    rootOverride?: PhraseTrieNode,
   ): { type: string; text: string; endPos: number } | null {
     const len = this.len;
+    const root = rootOverride ?? this.phraseTrie;
 
-    // Start at the first word's trie node
-    const startNode: PhraseTrieNode | undefined = this.phraseTrie.children.get(firstWordLower);
+    const startNode: PhraseTrieNode | undefined = root.children.get(firstWordLower);
     if (!startNode) return null;
 
-    // Check if the first word alone is a complete phrase (single-word phrase)
-    // This handles the edge case where a plugin registers a one-word phrase.
-    // Must check children.size to avoid matching a prefix of a longer phrase
-    // (e.g., matching "power" when "power of" also exists).
     if (startNode.type && startNode.children.size === 0) {
       return { type: startNode.type, text: firstWordOriginal, endPos: pos };
     }
@@ -1225,40 +1317,33 @@ export class ExpressionLexer {
     let scanPos = pos;
     let current: PhraseTrieNode = startNode;
 
-    // Read additional words separated by single spaces, traversing the trie
     while (scanPos < len) {
-      // Must be exactly one space between words
       if (input.charCodeAt(scanPos) !== 32) break;
       scanPos++;
       if (scanPos >= len) break;
 
-      // Read the next word (letters only for phrases)
       const wordStart = scanPos;
       let cc: number;
       while (
         scanPos < len &&
         ((cc = input.charCodeAt(scanPos)),
-          (cc >= 65 && cc <= 90) ||   // A-Z
-          (cc >= 97 && cc <= 122))    // a-z
+          (cc >= 65 && cc <= 90) ||
+          (cc >= 97 && cc <= 122))
       ) {
         scanPos++;
       }
 
-      if (scanPos === wordStart) break;  // no word found
+      if (scanPos === wordStart) break;
 
-      // Lowercase the word for trie lookup (original case preserved for text)
       const word = input.slice(wordStart, scanPos);
       const wordLower = word.toLowerCase();
 
       const next: PhraseTrieNode | undefined = current.children.get(wordLower);
-      if (!next) break;  // No phrase continues with this word
+      if (!next) break;
 
       wordsOriginal.push(word);
       current = next;
 
-      // If this node is a complete phrase, we have a match
-      // Return immediately — built-in phrases are ordered first in the trie
-      // so they take priority over plugin phrases at the same path.
       if (current.type) {
         return {
           type: current.type,
@@ -1275,9 +1360,7 @@ export class ExpressionLexer {
   /**
    * Reads an operator/punctuation token.
    * Handles two-char operators (==, !=, >=, <=, **) and the special
-   * cases << (LSHIFT) and >> (RSHIFT) which share first-char with LTE/GTE.
-   *
-   * Advances `this.pos` past the operator.
+   * cases << (LSHIFT) and >> (RSHIFT).
    */
   private tokenizeOperator(): Token {
     const input = this.input;
@@ -1290,23 +1373,19 @@ export class ExpressionLexer {
     if (pos + 1 < len) {
       const c1 = input.charCodeAt(pos + 1);
 
-      // ==, !=, >=, <=, ** — exact two-char lookup
+      // ==, !=, >=, <=
       const secondMap = TWO_CHAR_OPS[c0];
       if (secondMap) {
         const twoCharType = secondMap[c1];
         if (twoCharType) {
           const text = input.slice(pos, pos + 2);
           this.pos = pos + 2;
-          return new LexerToken(twoCharType, text, text, pos, 0, this.line, col);
+          return new LexerToken(twoCharType, tokenTypeId(twoCharType), text, text, pos, 0, this.line, col);
         }
       }
 
-      // // comment — consume both slashes and read to end of line.
-      // This must be checked BEFORE << (LSHIFT) and >> (RSHIFT) because
-      // the second slash is not an operator, it's part of a comment sequence.
-      // Handled inline (not via tokenizeComment) because tokenizeComment
-      // unconditionally skips one more character for #-style comments.
-      if (c0 === 47 && c1 === 47) {  // //
+      // // comment
+      if (c0 === 47 && c1 === 47) {
         let commentPos = pos + 2;
         while (commentPos < len) {
           const cc = input.charCodeAt(commentPos);
@@ -1315,24 +1394,20 @@ export class ExpressionLexer {
         }
         const text = input.slice(pos, commentPos);
         this.pos = commentPos;
-        return new LexerToken('COMMENT', text, text, pos, 0, this.line, col);
+        return new LexerToken('COMMENT', tokenTypeId('COMMENT'), text, text, pos, 0, this.line, col);
       }
 
-      // << (LSHIFT) and >> (RSHIFT) — first char matches LTE/GTE first char
-      if (c0 === 60 && c1 === 60) {  // <<
+      // << (LSHIFT) and >> (RSHIFT)
+      if (c0 === 60 && c1 === 60) {
         this.pos = pos + 2;
-        const text = '<<';
-        return new LexerToken('LSHIFT', text, text, pos, 0, this.line, col);
+        return new LexerToken('LSHIFT', tokenTypeId('LSHIFT'), '<<', '<<', pos, 0, this.line, col);
       }
-      if (c0 === 62 && c1 === 62) {  // >>
+      if (c0 === 62 && c1 === 62) {
         this.pos = pos + 2;
-        const text = '>>';
-        return new LexerToken('RSHIFT', text, text, pos, 0, this.line, col);
+        return new LexerToken('RSHIFT', tokenTypeId('RSHIFT'), '>>', '>>', pos, 0, this.line, col);
       }
 
       // ── Plugin-registered two-char operators ──────────────────────
-      // Checked after built-in operators so built-ins take priority.
-      // Guarded by hasPluginOps: skips Map lookups entirely when no plugins.
       if (this.hasPluginOps) {
         const pluginInner = this.pluginOperators.get(c0);
         if (pluginInner) {
@@ -1340,7 +1415,7 @@ export class ExpressionLexer {
           if (pluginType) {
             const text = input.slice(pos, pos + 2);
             this.pos = pos + 2;
-            return new LexerToken(pluginType, text, text, pos, 0, this.line, col);
+            return new LexerToken(pluginType, tokenTypeId(pluginType), text, text, pos, 0, this.line, col);
           }
         }
       }
@@ -1350,35 +1425,34 @@ export class ExpressionLexer {
     this.pos = pos + 1;
     const opType = OP_MAP[c0];
     const text = input.charAt(pos);
-    return new LexerToken(opType || 'ERROR', text, text, pos, 0, this.line, col);
+    return new LexerToken(opType || 'ERROR', tokenTypeId(opType || 'ERROR'), text, text, pos, 0, this.line, col);
   }
 
   // ── String literal tokenizer ──────────────────────────────────────────
   /**
    * Reads a double-quoted string literal. Supports backslash escapes.
-   * Advances `this.pos` past the closing quote.
    */
   private tokenizeString(): Token {
     const input = this.input;
     const len = this.len;
     const start = this.pos;
     const startCol = start - this.lineStartPos + 1;
-    let pos = start + 1;  // skip opening "
+    let pos = start + 1;
     let lineBreaks = 0;
 
     while (pos < len) {
       const c0 = input.charCodeAt(pos);
-      if (c0 === 34) {  // closing "
+      if (c0 === 34) {
         pos++;
         const text = input.slice(start, pos);
         this.pos = pos;
-        return new LexerToken('STRING', text, text, start, lineBreaks, this.line, startCol);
+        return new LexerToken('STRING', tokenTypeId('STRING'), text, text, start, lineBreaks, this.line, startCol);
       }
-      if (c0 === 92 && pos + 1 < len) {  // backslash escape
-        pos += 2;  // skip \ + escaped char
+      if (c0 === 92 && pos + 1 < len) {
+        pos += 2;
         continue;
       }
-      if (c0 === 10) {  // \n
+      if (c0 === 10) {
         this.line++;
         this.lineStartPos = pos + 1;
         lineBreaks++;
@@ -1386,32 +1460,50 @@ export class ExpressionLexer {
       pos++;
     }
 
-    // Unterminated string — emit what we have
     const text = input.slice(start, pos);
     this.pos = pos;
-    return new LexerToken('STRING', text, text, start, lineBreaks, this.line, startCol);
+    return new LexerToken('STRING', tokenTypeId('STRING'), text, text, start, lineBreaks, this.line, startCol);
   }
 
   // ── Markdown line scanner (Phase B) ───────────────────────────────────
 
   /**
+   * L1 expression gating: quickly determine if a line contains any
+   * characters that indicate an expression (digits, operators, currency,
+   * backticks, parentheses, etc.).
+   *
+   * Pure prose lines (e.g., "The quick brown fox jumps over the lazy dog")
+   * return false and can be skipped without full tokenization (L2).
+   *
+   * This is a fast character-by-character scan that stops at the first
+   * expression indicator. Called once per line in classifyFromPositions().
+   */
+  static hasExpressionIndicators(input: string, start: number, end: number): boolean {
+    const indicatorCodes = EXPRESSION_INDICATOR_CODES;
+    for (let i = start; i < end; i++) {
+      const cc = input.charCodeAt(i);
+      // Check digits and operators via pre-computed Set (O(1) lookup)
+      if (indicatorCodes.has(cc)) return true;
+      // Unicode math/currency symbols (≥ 128, not in the 128-byte table)
+      if (cc >= 128) {
+        // ×, ÷, ≠, £, € — common expression symbols
+        if (cc === 0x00D7 || cc === 0x00F7 || cc === 0x2260 ||
+            cc === 0x00A3 || cc === 0x20AC) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * Classify a line by its character positions within this.input.
-   *
-   * Reads directly from this.input using start/end boundaries — avoids
-   * allocating a substring (input.slice(start, end)) for classification.
-   * Used by scanDocument() which already has the full document in
-   * this.input; this keeps both classification and tokenization reads
-   * within the same memory region for better CPU cache locality.
-   *
+   * Reads directly from this.input using start/end boundaries.
    * DOES NOT modify this.pos — purely a read-only classifier.
-   *
-   * @param start Character offset of the line start within this.input.
-   * @param end Character offset of the line end (before newline).
    */
   private classifyFromPositions(start: number, end: number): LineClassification {
     const len = end;
 
-    // ── 0-length fast path ────────────────────────────────────────────
     if (start >= len) {
       return { type: 'empty', skip: true, hasInlineSolve: false };
     }
@@ -1419,7 +1511,6 @@ export class ExpressionLexer {
     const input = this.input;
     let pos = start;
 
-    // ── Skip leading whitespace ─────────────────────────────────────────
     while (pos < len) {
       const cc = input.charCodeAt(pos);
       if (cc !== 32 && cc !== 9) break;
@@ -1431,12 +1522,10 @@ export class ExpressionLexer {
     }
 
     const c0 = input.charCodeAt(pos);
-    // hasInline is computed lazily — only for branch types that need it.
-    // Uses input.indexOf() bounded by end to avoid scanning past the line.
     let hasInline: boolean | undefined;
 
-    // ── Heading / Comment: #{1,6} ' ' or #... ─────────────────────
-    if (c0 === 35) {  // #
+    // ── Heading: #{1,6} ' ' ──────────────────────────────────────────
+    if (c0 === 35) {
       let hashCount = 1;
       while (pos + hashCount < len && input.charCodeAt(pos + hashCount) === 35) {
         hashCount++;
@@ -1448,7 +1537,7 @@ export class ExpressionLexer {
     }
 
     // ── Blockquote: > ' ' ────────────────────────────────────────────
-    if (c0 === 62) {  // >
+    if (c0 === 62) {
       if (pos + 1 < len && input.charCodeAt(pos + 1) === 32) {
         return { type: 'blockquote', skip: true, hasInlineSolve: false };
       }
@@ -1468,7 +1557,7 @@ export class ExpressionLexer {
     }
 
     // ── Horizontal rule: ---, ***, ___ (3+ same char, then only whitespace)
-    if (c0 === 45 || c0 === 42 || c0 === 95) {  // -, *, _
+    if (c0 === 45 || c0 === 42 || c0 === 95) {
       let count = 1;
       while (pos + count < len && input.charCodeAt(pos + count) === c0) {
         count++;
@@ -1493,13 +1582,13 @@ export class ExpressionLexer {
       return { type: 'list', skip: false, hasInlineSolve: hasInline };
     }
 
-    // ── Ordered list: \d+ '. ' ────────────────────────────────────────
-    if (c0 >= 48 && c0 <= 57) {  // 0-9
+    // ── Ordered list: \n+ '. ' ────────────────────────────────────────
+    if (c0 >= 48 && c0 <= 57) {
       let digitPos = pos;
       while (digitPos < len && input.charCodeAt(digitPos) >= 48 && input.charCodeAt(digitPos) <= 57) {
         digitPos++;
       }
-      if (digitPos < len && input.charCodeAt(digitPos) === 46) {  // .
+      if (digitPos < len && input.charCodeAt(digitPos) === 46) {
         if (digitPos + 1 < len && input.charCodeAt(digitPos + 1) === 32) {
           if (hasInline === undefined) {
             const idx = input.indexOf('s`', pos);
@@ -1511,7 +1600,7 @@ export class ExpressionLexer {
     }
 
     // ── Table / table separator: | ────────────────────────────────────
-    if (c0 === 124) {  // |
+    if (c0 === 124) {
       let tPos = pos + 1;
       while (tPos < len) {
         const tc = input.charCodeAt(tPos);
@@ -1554,13 +1643,13 @@ export class ExpressionLexer {
       return { type: 'comment', skip: true, hasInlineSolve: false };
     }
 
-    // ── Default: expression line ──────────────────────────────────────
-    if (c0 === 62) {  // > — bare blockquote without space
+    // ── Default: expression or prose line ─────────────────────────────
+    if (c0 === 62) {
       let trail = pos + 1;
       while (trail < len && (input.charCodeAt(trail) === 32 || input.charCodeAt(trail) === 9)) trail++;
       if (trail >= len) return { type: 'blockquote', skip: true, hasInlineSolve: false };
     }
-    if (c0 === 45 || c0 === 42 || c0 === 43) {  // - * +
+    if (c0 === 45 || c0 === 42 || c0 === 43) {
       let trail = pos + 1;
       while (trail < len && (input.charCodeAt(trail) === 32 || input.charCodeAt(trail) === 9)) trail++;
       if (trail >= len) return { type: 'list', skip: false, hasInlineSolve: false };
@@ -1569,18 +1658,17 @@ export class ExpressionLexer {
       const idx = input.indexOf('s`', pos);
       hasInline = idx !== -1 && idx < len;
     }
+
+    // Return expression — all non-markdown-structure lines are tokenized.
+    // (L1 prose gating removed: it incorrectly skipped keyword-only lines
+    // like "pi", single identifiers like "hello", and any line without
+    // digits/operators/currency. Can be re-added with keyword-awareness
+    // and proper test coverage.)
     return { type: 'expression', skip: false, hasInlineSolve: hasInline };
   }
 
   /**
    * Classify a single line of markdown text.
-   *
-   * Thin wrapper around classifyFromPositions() for external callers that
-   * have a standalone line string. Internal callers (scanDocument) should
-   * use classifyFromPositions() directly to avoid string allocation and
-   * keep classification + tokenization reads within the same memory region.
-   *
-   * @param lineText The raw line text (without trailing newline).
    */
   classifyLine(lineText: string): LineClassification {
     const savedInput = this.input;
@@ -1598,17 +1686,6 @@ export class ExpressionLexer {
 
   /**
    * Find all inline solve markers in a line with precise coordinate mapping.
-   *
-   * Scans character-by-character for the pattern `s`...`` (lowercase 's'
-   * followed by backtick, expression content, closing backtick). Supports
-   * escaped backticks within the expression via backslash escapes.
-   *
-   * Replaces the regex-based `findInlineSolvesInLine()` with a single-pass
-   * scanner that is ~2-3× faster for typical lines (no regex compilation,
-   * no backtracking).
-   *
-   * @param lineText The raw line text.
-   * @returns Array of inline solve spans with expression text and coordinates.
    */
   findInlineSolves(lineText: string): InlineSolveSpan[] {
     const results: InlineSolveSpan[] = [];
@@ -1616,33 +1693,28 @@ export class ExpressionLexer {
     let pos = 0;
 
     while (pos < len) {
-      // Look for lowercase 's' followed by backtick
       const sPos = lineText.indexOf('s`', pos);
       if (sPos === -1) break;
 
-      const exprStart = sPos + 2;  // past 's`'
+      const exprStart = sPos + 2;
 
-      // Scan for closing backtick, handling escaped backticks
       let exprEnd = exprStart;
       while (exprEnd < len) {
         const cc = lineText.charCodeAt(exprEnd);
-        if (cc === 92 && exprEnd + 1 < len) {  // backslash escape
-          exprEnd += 2;  // skip \ + escaped char
+        if (cc === 92 && exprEnd + 1 < len) {
+          exprEnd += 2;
           continue;
         }
-        if (cc === 96) {  // closing backtick
-          break;
-        }
+        if (cc === 96) break;
         exprEnd++;
       }
 
       if (exprEnd >= len) {
-        // Unterminated inline solve — include rest of line as expression
         exprEnd = len;
       }
 
       const expression = lineText.slice(exprStart, exprEnd);
-      const end = exprEnd < len ? exprEnd + 1 : exprEnd;  // include closing backtick if present
+      const end = exprEnd < len ? exprEnd + 1 : exprEnd;
 
       results.push({
         start: sPos,
@@ -1660,7 +1732,6 @@ export class ExpressionLexer {
   // ── Comment tokenizer ─────────────────────────────────────────────────
   /**
    * Reads a comment: # to end of line, or // to end of line.
-   * Advances `this.pos` to the newline (or end of input).
    */
   private tokenizeComment(): Token {
     const input = this.input;
@@ -1669,14 +1740,12 @@ export class ExpressionLexer {
     const startCol = start - this.lineStartPos + 1;
     let pos = this.pos;
 
-    // Check for // comment
     if (pos + 1 < len && input.charCodeAt(pos + 1) === 47) {
-      pos += 2;  // skip //
+      pos += 2;
     } else {
-      pos++;  // skip # (single-line comment)
+      pos++;
     }
 
-    // Read to end of line
     while (pos < len) {
       const c0 = input.charCodeAt(pos);
       if (c0 === 10 || c0 === 13) break;
@@ -1685,6 +1754,6 @@ export class ExpressionLexer {
 
     const text = input.slice(start, pos);
     this.pos = pos;
-    return new LexerToken('COMMENT', text, text, start, 0, this.line, startCol);
+    return new LexerToken('COMMENT', tokenTypeId('COMMENT'), text, text, start, 0, this.line, startCol);
   }
 }

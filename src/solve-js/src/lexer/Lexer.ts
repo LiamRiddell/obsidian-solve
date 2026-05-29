@@ -2,6 +2,7 @@ import { ExpressionLexer, LineClassification, LexerPlugin, type ScanLineResult }
 import { Token } from "@solve-js/lexer/Token";
 import { LexerState } from "@solve-js/lexer/LexerState";
 import { getTokenHighlightClass } from "@solve-js/lexer/TokenHighlightMap";
+import type { TokenLookup } from "@solve-js/lexer/TokenClassRegistry";
 
 export class Lexer {
   /** Expression-mode lexer (Phase A: V8-optimized, replaces moo) */
@@ -15,8 +16,17 @@ export class Lexer {
   private tokens: Token[] = [];
   private tokenIdx: number = 0;
 
-  constructor(localeCode = "en") {
-    this.expressionLexer = new ExpressionLexer(localeCode);
+  /**
+   * @param localeCode - Locale code (e.g., "en", "de"). Defaults to "en".
+   * @param tokenLookup - Optional TokenLookup from TokenClassRegistry.
+   *   When provided, configures ExpressionLexer to use registry-built
+   *   keyword/unit/phrase lookups instead of internal instance maps.
+   */
+  constructor(localeCode = "en", tokenLookup?: TokenLookup) {
+    // Pass the lookup directly to ExpressionLexer's constructor — it's an
+    // instance field now, not a static. Each Lexer instance gets its own
+    // isolated lookup, preventing cross-instance corruption.
+    this.expressionLexer = new ExpressionLexer(localeCode, tokenLookup);
   }
 
   reset(input: string, state?: LexerState): void {
@@ -173,4 +183,4 @@ export class Lexer {
   }
 }
 
-export const sharedLexer = new Lexer("en");
+export const sharedLexer = new Lexer("en", undefined);

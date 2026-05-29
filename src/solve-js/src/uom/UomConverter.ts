@@ -12,6 +12,16 @@ import { LFUCache } from "@solve-js/cache";
 // Cache for valid units to avoid repeated conversion attempts
 const validUnitsCache = new LFUCache<string>(1000);
 
+// Cache for unit-to-unit conversion rates.
+// Key: "from|to"  Value: conversion factor (convert(1, from, to)).
+// Since unit conversion is linear (value × factor), caching the factor
+// avoids calling the `convert` package on every UOM operation. For
+// temperature conversions (which use offset-based formulas like C→F),
+// the cache is bypassed — factor-based multiplication doesn't apply.
+// Size 500 covers typical Obsidian vault usage (a few dozen unique
+// unit pairs across all notes).
+const conversionRateCache = new LFUCache<number>(500);
+
 export function resolveUnit(unit: string): string {
   // Check cache first for performance
   const cached = validUnitsCache.get(unit);
@@ -85,7 +95,29 @@ export function convertUnit(value: number, from: string, to: string): number {
   const f = resolveUnit(from);
   const t = resolveUnit(to);
   if (f === t) return value;
-  return convert(value, f as any).to(t as any) as unknown as number;
+
+  // Check the conversion-rate cache for this unit pair.
+  // On cache hit: result = value × factor — one multiplication instead of a
+  // full convert() call. Temperature pairs never enter the cache (see below),
+  // so a cache hit is always safe for multiplicative conversion.
+  const cacheKey = `${f}|${t}`;
+  const cachedRate = conversionRateCache.get(cacheKey);
+  if (cachedRate !== null) {
+    return value * cachedRate;
+  }
+
+  // Temperature conversions use offset-based formulas (e.g. C→F: °F = °C × 9/5 + 32)
+  // and cannot be reduced to a simple multiplicative factor. Bypass the cache.
+  // Only checked on cache miss — the hot path skips this getMeasure() call.
+  if (getMeasure(f) === 'temperature') {
+    return convert(value, f as any).to(t as any) as unknown as number;
+  }
+
+  // Cache miss: compute the conversion factor from a reference value of 1,
+  // store it, and apply to the requested value.
+  const rate = convert(1, f as any).to(t as any) as unknown as number;
+  conversionRateCache.put(cacheKey, rate);
+  return value * rate;
 }
 
 export function isConvertibleUnit(unit: string): boolean {

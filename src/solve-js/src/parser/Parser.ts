@@ -1,5 +1,5 @@
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
-import { Token } from "@solve-js/lexer/Token";
+import { Token, tokenTypeId } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@solve-js/diagnostics";
@@ -35,9 +35,7 @@ export class Parser {
     setDiagnosticPipeline(pipeline: DiagnosticPipeline | undefined, expression: string): void {
         this.diagnosticPipeline = pipeline;
         this.currentExpression = expression ?? "";
-    }
-
-load(tokens: Token[], hasParens?: boolean): void {
+    }    load(tokens: Token[], hasParens?: boolean): void {
          // Fast path: if caller guarantees no parentheses, skip the O(n) paren scan.
          // ~90% of expression tokens have no parens — this saves a full array traversal.
          if (hasParens === false) {
@@ -48,10 +46,13 @@ load(tokens: Token[], hasParens?: boolean): void {
          }
          // Paren scan: count balance to skip array copy for balanced expressions.
          // ~95%+ of parenthesized expressions are balanced, saving an O(n) copy.
+         // Uses typeId for faster comparison (integer vs string).
+         const LPAREN_ID = tokenTypeId('LPAREN');
+         const RPAREN_ID = tokenTypeId('RPAREN');
          let openCount = 0;
          for (let i = 0; i < tokens.length; i++) {
-             if (tokens[i].type === "LPAREN") openCount++;
-             else if (tokens[i].type === "RPAREN") openCount--;
+             if (tokens[i].typeId === LPAREN_ID) openCount++;
+             else if (tokens[i].typeId === RPAREN_ID) openCount--;
          }
          this.tokens = openCount === 0 ? tokens : this.balanceParens(tokens, openCount);
          this.current = 0;
@@ -61,16 +62,18 @@ load(tokens: Token[], hasParens?: boolean): void {
      /**
       * Auto-balance unmatched parentheses: append missing closing parens
       * or prepend missing opening parens to make expressions parseable.
-      * Only called when parenDelta !== 0 after the fast-path count.
+      * Only called when openCount !== 0 after the fast-path count.
       */
      private balanceParens(tokens: Token[], openCount: number): Token[] {
          const result = tokens.slice();
          if (openCount > 0) {
              // More opens than closes — append missing closing parens
+             const RPAREN_ID = tokenTypeId('RPAREN');
              for (let i = 0; i < openCount; i++) {
                  const lastToken = tokens[tokens.length - 1];
                  result.push({
                      type: "RPAREN",
+                     typeId: RPAREN_ID,
                      value: ")",
                      text: ")",
                      offset: lastToken ? lastToken.offset + lastToken.text.length : 0,
@@ -81,9 +84,11 @@ load(tokens: Token[], hasParens?: boolean): void {
              }
          } else if (openCount < 0) {
              // More closes than opens — prepend missing opening parens
+             const LPAREN_ID = tokenTypeId('LPAREN');
              for (let i = 0; i < -openCount; i++) {
                  result.unshift({
                      type: "LPAREN",
+                     typeId: LPAREN_ID,
                      value: "(",
                      text: "(",
                      offset: 0,
@@ -116,7 +121,7 @@ load(tokens: Token[], hasParens?: boolean): void {
             throw ErrorFactory.parsing("UNEXPECTED_END", "Unexpected end of expression");
         }
 
-        const prefixParselet = this.registry.getPrefix(token.type);
+        const prefixParselet = this.registry.getPrefix(token.typeId);
         if (!prefixParselet) {
             this.depth--;
             throw ErrorFactory.parsing(
@@ -145,7 +150,7 @@ load(tokens: Token[], hasParens?: boolean): void {
             const nextToken = tokens[idx];
             if (!nextToken) break;
 
-            const infixParselet = registry.getInfix(nextToken.type);
+            const infixParselet = registry.getInfix(nextToken.typeId);
             if (!infixParselet) break;
             if (infixParselet.bindingPower <= bindingPower) break;
 
@@ -203,12 +208,17 @@ load(tokens: Token[], hasParens?: boolean): void {
                 "Unexpected end of input"
             );
         }
-        if (expectedType !== undefined && token.type !== expectedType) {
-            throw ErrorFactory.parsing(
-                "UNEXPECTED_TOKEN_TYPE",
-                `Expected token type "${expectedType}" but got "${token.type}" ("${token.value}")`,
-                { expectedType, actualType: token.type, actualValue: token.value }
-            );
+        if (expectedType !== undefined) {
+            // Fast path: integer comparison (hot path)
+            const expectedId = tokenTypeId(expectedType);
+            if (token.typeId !== expectedId) {
+                // Slow path: string comparison for error message detail
+                throw ErrorFactory.parsing(
+                    "UNEXPECTED_TOKEN_TYPE",
+                    `Expected token type "${expectedType}" but got "${token.type}" ("${token.value}")`,
+                    { expectedType, actualType: token.type, actualValue: token.value }
+                );
+            }
         }
         this.current++;
         return token;
@@ -216,7 +226,7 @@ load(tokens: Token[], hasParens?: boolean): void {
 
     match(expectedType: string): boolean {
         const token = this.peek();
-        if (token && token.type === expectedType) {
+        if (token && token.typeId === tokenTypeId(expectedType)) {
             this.advance();
             return true;
         }

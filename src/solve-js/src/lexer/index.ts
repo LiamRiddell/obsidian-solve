@@ -6,3 +6,4 @@ export { knownUnits } from "./units";
 export type { Token } from "./Token";
 export { TokenTypes, type TokenType } from "./Token";
 export { TokenRegistry, sharedTokenRegistry } from "./registry/TokenRegistry";
+export { buildTokenLookup } from "./tokenRegistration";

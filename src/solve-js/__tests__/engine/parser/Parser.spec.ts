@@ -1,7 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { Parser } from "@solve-js/parser/Parser";
-import { Token } from "@solve-js/lexer/Token";
+import { Token, tokenTypeId } from "@solve-js/lexer/Token";
 import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
@@ -69,7 +69,7 @@ describe("Parser", () => {
     const parser = new Parser(registry);
     const builder = new BytecodeBuilder();
     const tokens: Token[] = [
-      { type: "NUMBER", value: "42", text: "42", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "NUMBER", typeId: tokenTypeId("NUMBER"), value: "42", text: "42", offset: 0, lineBreaks: 0, line: 1, col: 1 },
     ];
     parser.load(tokens);
     parser.parseExpression(0, builder);
@@ -85,9 +85,9 @@ describe("Parser", () => {
     const parser = new Parser(registry);
     const builder = new BytecodeBuilder();
     const tokens: Token[] = [
-      { type: "NUMBER", value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
-      { type: "PLUS", value: "+", text: "+", offset: 2, lineBreaks: 0, line: 1, col: 3 },
-      { type: "NUMBER", value: "2", text: "2", offset: 4, lineBreaks: 0, line: 1, col: 5 },
+      { type: "NUMBER", typeId: tokenTypeId("NUMBER"), value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "PLUS", typeId: tokenTypeId("PLUS"), value: "+", text: "+", offset: 2, lineBreaks: 0, line: 1, col: 3 },
+      { type: "NUMBER", typeId: tokenTypeId("NUMBER"), value: "2", text: "2", offset: 4, lineBreaks: 0, line: 1, col: 5 },
     ];
     parser.load(tokens);
     parser.parseExpression(0, builder);
@@ -101,7 +101,7 @@ describe("Parser", () => {
     const parser = new Parser(registry);
     const builder = new BytecodeBuilder();
     const tokens: Token[] = [
-      { type: "UNKNOWN", value: "?", text: "?", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "UNKNOWN", typeId: 0, value: "?", text: "?", offset: 0, lineBreaks: 0, line: 1, col: 1 },
     ];
     parser.load(tokens);
     expect(() => parser.parseExpression(0, builder)).toThrow();
@@ -111,7 +111,7 @@ describe("Parser", () => {
     const registry = new ParseletRegistry();
     const parser = new Parser(registry);
     const tokens: Token[] = [
-      { type: "NUMBER", value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "NUMBER", typeId: tokenTypeId("NUMBER"), value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
     ];
     parser.load(tokens);
     const token = parser.consume("NUMBER");
@@ -122,7 +122,7 @@ describe("Parser", () => {
     const registry = new ParseletRegistry();
     const parser = new Parser(registry);
     const tokens: Token[] = [
-      { type: "NUMBER", value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "NUMBER", typeId: tokenTypeId("NUMBER"), value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
     ];
     parser.load(tokens);
     expect(() => parser.consume("PLUS")).toThrow();
@@ -132,7 +132,7 @@ describe("Parser", () => {
     const registry = new ParseletRegistry();
     const parser = new Parser(registry);
     const tokens: Token[] = [
-      { type: "PLUS", value: "+", text: "+", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "PLUS", typeId: tokenTypeId("PLUS"), value: "+", text: "+", offset: 0, lineBreaks: 0, line: 1, col: 1 },
     ];
     parser.load(tokens);
     expect(parser.match("PLUS")).toBe(true);
@@ -143,7 +143,7 @@ describe("Parser", () => {
     const registry = new ParseletRegistry();
     const parser = new Parser(registry);
     const tokens: Token[] = [
-      { type: "NUMBER", value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "NUMBER", typeId: tokenTypeId("NUMBER"), value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
     ];
     parser.load(tokens);
     expect(parser.match("PLUS")).toBe(false);
@@ -154,8 +154,8 @@ describe("Parser", () => {
     const registry = new ParseletRegistry();
     const parser = new Parser(registry);
     const tokens: Token[] = [
-      { type: "NUMBER", value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
-      { type: "PLUS", value: "+", text: "+", offset: 2, lineBreaks: 0, line: 1, col: 3 },
+      { type: "NUMBER", typeId: tokenTypeId("NUMBER"), value: "1", text: "1", offset: 0, lineBreaks: 0, line: 1, col: 1 },
+      { type: "PLUS", typeId: tokenTypeId("PLUS"), value: "+", text: "+", offset: 2, lineBreaks: 0, line: 1, col: 3 },
     ];
     parser.load(tokens);
     parser.consume("NUMBER");

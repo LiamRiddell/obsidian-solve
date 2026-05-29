@@ -36,6 +36,7 @@ import {
     checkExpressionComplexity,
     extractReadsAndWrites,
 } from "@solve-js/engine/ExpressionEngineSafety";
+import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
 
 
 
@@ -60,6 +61,19 @@ export class ExpressionEngine {
         opcodes: new Uint8Array(512),
         numbers: new Float64Array(128),
     };
+    // Pre-allocated BytecodeBuilder pool — avoids 4 heap allocations per
+    // expression (opcode array, number array, string array, stringIndex Map).
+    // Pool size of 4 handles concurrent evaluation paths. Builders are
+    // reset() and returned to the pool after use rather than discarded.
+    private builderPool: BytecodeBuilder[] = [
+        new BytecodeBuilder(),
+        new BytecodeBuilder(),
+        new BytecodeBuilder(),
+        new BytecodeBuilder(),
+    ];
+    // Index into the builder pool — incremented modulo pool size.
+    // Not thread-safe, but ExpressionEngine is single-threaded.
+    private builderPoolIndex = 0;
 
     constructor(
         localeCode = "en",
@@ -70,7 +84,7 @@ export class ExpressionEngine {
     ) {
         this.localeCode = localeCode;
         this.config = { ...DEFAULT_CONFIG, ...config };
-        this.lexer = new Lexer(localeCode);
+        this.lexer = new Lexer(localeCode, buildTokenLookup(localeCode));
         this.registry = new ParseletRegistry();
         this.pluginManager = new PluginManager(this.registry);
 
@@ -398,7 +412,9 @@ export class ExpressionEngine {
         if (cachedProgram) {
             program = cachedProgram;
         } else {
-            const builder = new BytecodeBuilder();
+            // Get a pooled builder — avoids 4 heap allocations per expression
+            const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
+            builder.reset();
             this.parser.load(tokens, hasParens);
             try {
                 this.parser.parseExpression(0, builder);
@@ -621,7 +637,9 @@ export class ExpressionEngine {
                 this.parser.setDiagnosticPipeline(pipeline, expression);
             }
 
-            const builder = new BytecodeBuilder();
+            // Get a pooled builder — avoids 4 heap allocations per expression
+            const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
+            builder.reset();
             this.parser.load(tokens, hasParens);
             try {
                 this.parser.parseExpression(0, builder);
@@ -852,8 +870,9 @@ if (hasCollectors) {
 			return { program: cachedProgram, tokens, reads, writes };
 		}
 
-		// Parse and compile
-		const builder = new BytecodeBuilder();
+		// Parse and compile — get a pooled builder to avoid heap allocations
+		const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
+		builder.reset();
 		this.parser.load(tokens, hasParens);
 		try {
 			this.parser.parseExpression(0, builder);
