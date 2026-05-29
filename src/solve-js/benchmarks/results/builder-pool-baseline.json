@@ -1,170 +1,170 @@
 {
-  "timestamp": "2026-05-29T23:16:41.657Z",
+  "timestamp": "2026-05-29T23:18:30.139Z",
   "summary": {
-    "meanDeltaNs": -8.167533333333381,
-    "meanPercentImprovement": -0.17522623865136694,
-    "estimatedAllocCostNs": -8.167533333333381
+    "meanDeltaNs": -78.79346666666675,
+    "meanPercentImprovement": -4.018123025074929,
+    "estimatedAllocCostNs": -78.79346666666675
   },
   "details": [
     {
       "name": "simple_literal",
       "withoutPool": {
-        "meanNs": 1989.049,
-        "p95Ns": 2500,
+        "meanNs": 2029.347,
+        "p95Ns": 2400,
         "medianNs": 1800
       },
       "withPool": {
-        "meanNs": 2010.898,
-        "p95Ns": 2100,
-        "medianNs": 1900
+        "meanNs": 2099.614,
+        "p95Ns": 2300,
+        "medianNs": 1800
       },
-      "deltaNs": -21.848999999999933,
-      "speedupRatio": 1.0109846464315357,
-      "percentImprovement": -1.098464643153584
+      "deltaNs": -70.26700000000005,
+      "speedupRatio": 1.0346254238432362,
+      "percentImprovement": -3.4625423843236294
     },
     {
       "name": "simple_add",
       "withoutPool": {
-        "meanNs": 2198.288,
-        "p95Ns": 2400,
-        "medianNs": 2000
-      },
-      "withPool": {
-        "meanNs": 2211.356,
+        "meanNs": 2324.556,
         "p95Ns": 2400,
         "medianNs": 2100
       },
-      "deltaNs": -13.068000000000211,
-      "speedupRatio": 1.005944625999869,
-      "percentImprovement": -0.5944625999869084
+      "withPool": {
+        "meanNs": 2328.802,
+        "p95Ns": 2400,
+        "medianNs": 2100
+      },
+      "deltaNs": -4.246000000000095,
+      "speedupRatio": 1.0018265853780248,
+      "percentImprovement": -0.18265853780249194
     },
     {
       "name": "arithmetic",
       "withoutPool": {
-        "meanNs": 3104.3,
-        "p95Ns": 3200,
-        "medianNs": 3000
-      },
-      "withPool": {
-        "meanNs": 3211.096666666667,
+        "meanNs": 3215.68,
         "p95Ns": 3300,
         "medianNs": 3000
       },
-      "deltaNs": -106.79666666666662,
-      "speedupRatio": 1.0344028175970965,
-      "percentImprovement": -3.4402817597096487
+      "withPool": {
+        "meanNs": 3213.3233333333333,
+        "p95Ns": 3300,
+        "medianNs": 3000
+      },
+      "deltaNs": 2.3566666666665697,
+      "speedupRatio": 0.9992671327163566,
+      "percentImprovement": 0.07328672836434502
     },
     {
       "name": "nested_parens",
       "withoutPool": {
-        "meanNs": 3066.29,
-        "p95Ns": 3200,
-        "medianNs": 2900
+        "meanNs": 3016.94,
+        "p95Ns": 3100,
+        "medianNs": 2800
       },
       "withPool": {
-        "meanNs": 3065.08,
-        "p95Ns": 3500,
+        "meanNs": 3080.866666666667,
+        "p95Ns": 3300,
         "medianNs": 2900
       },
-      "deltaNs": 1.2100000000000364,
-      "speedupRatio": 0.9996053863137537,
-      "percentImprovement": 0.03946136862462574
+      "deltaNs": -63.92666666666673,
+      "speedupRatio": 1.0211892403119276,
+      "percentImprovement": -2.1189240311927557
     },
     {
       "name": "function_call",
       "withoutPool": {
-        "meanNs": 2022.37,
-        "p95Ns": 2100,
-        "medianNs": 1900
-      },
-      "withPool": {
-        "meanNs": 2110.1866666666665,
-        "p95Ns": 2100,
+        "meanNs": 2158.1966666666667,
+        "p95Ns": 2900,
         "medianNs": 2000
       },
-      "deltaNs": -87.8166666666666,
-      "speedupRatio": 1.0434226509820985,
-      "percentImprovement": -4.342265098209854
+      "withPool": {
+        "meanNs": 2216.02,
+        "p95Ns": 2300,
+        "medianNs": 2000
+      },
+      "deltaNs": -57.82333333333327,
+      "speedupRatio": 1.026792430099821,
+      "percentImprovement": -2.679243009982096
     },
     {
       "name": "percentage",
       "withoutPool": {
-        "meanNs": 2275.89,
-        "p95Ns": 2400,
-        "medianNs": 2200
+        "meanNs": 2444.805,
+        "p95Ns": 2700,
+        "medianNs": 2300
       },
       "withPool": {
-        "meanNs": 2276.655,
-        "p95Ns": 2400,
-        "medianNs": 2200
+        "meanNs": 2382.56,
+        "p95Ns": 2500,
+        "medianNs": 2300
       },
-      "deltaNs": -0.7650000000003274,
-      "speedupRatio": 1.0003361322383773,
-      "percentImprovement": -0.033613223837721834
+      "deltaNs": 62.24499999999989,
+      "speedupRatio": 0.9745398917296063,
+      "percentImprovement": 2.546010827039371
     },
     {
       "name": "unit_conversion",
       "withoutPool": {
-        "meanNs": 2085.6,
-        "p95Ns": 2500,
-        "medianNs": 2000
-      },
-      "withPool": {
-        "meanNs": 2125.26,
+        "meanNs": 2040.305,
         "p95Ns": 2200,
         "medianNs": 2000
       },
-      "deltaNs": -39.66000000000031,
-      "speedupRatio": 1.0190161104718067,
-      "percentImprovement": -1.9016110471806822
+      "withPool": {
+        "meanNs": 2777.625,
+        "p95Ns": 2300,
+        "medianNs": 2000
+      },
+      "deltaNs": -737.3199999999999,
+      "speedupRatio": 1.361377343093312,
+      "percentImprovement": -36.1377343093312
     },
     {
       "name": "datetime",
       "withoutPool": {
-        "meanNs": 2146.693333333333,
+        "meanNs": 2251.5,
         "p95Ns": 2300,
-        "medianNs": 1900
+        "medianNs": 2000
       },
       "withPool": {
-        "meanNs": 1942.1,
-        "p95Ns": 2000,
-        "medianNs": 1900
+        "meanNs": 2196.84,
+        "p95Ns": 2800,
+        "medianNs": 2000
       },
-      "deltaNs": 204.59333333333325,
-      "speedupRatio": 0.9046937305126644,
-      "percentImprovement": 9.530626948733554
+      "deltaNs": 54.659999999999854,
+      "speedupRatio": 0.9757228514323785,
+      "percentImprovement": 2.4277148567621523
     },
     {
       "name": "variable_assign",
       "withoutPool": {
-        "meanNs": 2070.26,
-        "p95Ns": 2800,
-        "medianNs": 1900
-      },
-      "withPool": {
-        "meanNs": 2043.8633333333332,
+        "meanNs": 2012.12,
         "p95Ns": 2200,
         "medianNs": 2000
       },
-      "deltaNs": 26.396666666666988,
-      "speedupRatio": 0.9872495886184987,
-      "percentImprovement": 1.2750411381501352
+      "withPool": {
+        "meanNs": 2068.2833333333333,
+        "p95Ns": 2300,
+        "medianNs": 2000
+      },
+      "deltaNs": -56.16333333333341,
+      "speedupRatio": 1.0279125168147691,
+      "percentImprovement": -2.7912516814769206
     },
     {
       "name": "mixed_complex",
       "withoutPool": {
-        "meanNs": 3701.04,
-        "p95Ns": 3800,
-        "medianNs": 3600
+        "meanNs": 3850.08,
+        "p95Ns": 4300,
+        "medianNs": 3700
       },
       "withPool": {
-        "meanNs": 3744.96,
+        "meanNs": 3767.53,
         "p95Ns": 3900,
-        "medianNs": 3600
+        "medianNs": 3700
       },
-      "deltaNs": -43.92000000000007,
-      "speedupRatio": 1.0118669346994358,
-      "percentImprovement": -1.1866934699435854
+      "deltaNs": 82.54999999999973,
+      "speedupRatio": 0.9785588870880606,
+      "percentImprovement": 2.144111291193942
     }
   ],
   "metadata": {
