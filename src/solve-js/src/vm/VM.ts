@@ -7,7 +7,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions } from "@solve-js/vm/VMBuiltins";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, addNumbers, subNumbers, mulNumbers } from "@solve-js/vm/VMConversion";
 
 export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructions = 50000): VM {
     const stack: Value[] = [];
@@ -86,6 +86,21 @@ type OpHandler = (ctx: DispatchContext, ip: number) => number;
 /** Default handler for undefined/unknown opcodes — no-op, ip unchanged. */
 const NO_OP_HANDLER: OpHandler = (_ctx, ip) => ip;
 
+// ── Shared helpers (extracted from dispatch table to eliminate duplication) ──
+
+/** Extract milliseconds from a duration Value (UoM time unit or plain number).
+ *  Used by ADD/SUB datetime fast paths and DATE_ADD/DATE_SUB opcodes. */
+function extractDurationMs(value: Value): number {
+    if (value.type === ValueType.Uom) {
+        const unit = value.unit;
+        if (unit) {
+            try { return convertUnit(value.toNumber(), unit, "ms"); } catch { /* Ignore */ }
+        }
+        return 0;
+    }
+    return value.toNumber();
+}
+
 const MAX_OPCODE = OpCode.PLUGIN_CUSTOM; // 200
 const opHandlers: OpHandler[] = [];
 
@@ -144,16 +159,9 @@ function initDispatchTable(): void {
   opHandlers[OpCode.ADD] = (ctx, ip) => {
     const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
     if (l.type === ValueType.Number && r.type === ValueType.Number) {
-      ctx.stack.push(numberValue((l.value as number) + (r.value as number)));
+      ctx.stack.push(addNumbers(l, r));
     } else if (l.type === ValueType.Datetime) {
-      let durMs = 0;
-      if (r.type === ValueType.Uom) {
-        const unit = r.unit;
-        if (unit) { try { durMs = convertUnit(r.toNumber(), unit, "ms"); } catch { /* Ignore */ } }
-      } else {
-        durMs = r.toNumber();
-      }
-      ctx.stack.push(datetimeValue(l.toNumber() + durMs));
+      ctx.stack.push(datetimeValue(l.toNumber() + extractDurationMs(r)));
     } else {
       ctx.stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
     }
@@ -163,16 +171,9 @@ function initDispatchTable(): void {
   opHandlers[OpCode.SUB] = (ctx, ip) => {
     const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
     if (l.type === ValueType.Number && r.type === ValueType.Number) {
-      ctx.stack.push(numberValue((l.value as number) - (r.value as number)));
+      ctx.stack.push(subNumbers(l, r));
     } else if (l.type === ValueType.Datetime) {
-      let durMs = 0;
-      if (r.type === ValueType.Uom) {
-        const unit = r.unit;
-        if (unit) { try { durMs = convertUnit(r.toNumber(), unit, "ms"); } catch { /* Ignore */ } }
-      } else {
-        durMs = r.toNumber();
-      }
-      ctx.stack.push(datetimeValue(l.toNumber() - durMs));
+      ctx.stack.push(datetimeValue(l.toNumber() - extractDurationMs(r)));
     } else {
       ctx.stack.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
     }
@@ -182,7 +183,7 @@ function initDispatchTable(): void {
   opHandlers[OpCode.MUL] = (ctx, ip) => {
     const r = ctx.stack.pop()!, l = ctx.stack.pop()!;
     if (l.type === ValueType.Number && r.type === ValueType.Number) {
-      ctx.stack.push(numberValue((l.value as number) * (r.value as number)));
+      ctx.stack.push(mulNumbers(l, r));
     } else {
       ctx.stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b));
     }
@@ -342,30 +343,14 @@ function initDispatchTable(): void {
   opHandlers[OpCode.DATE_ADD] = (ctx, ip) => {
     const durValue = ctx.stack.pop()!;
     const dtValue = ctx.stack.pop()!;
-    const dt = dtValue.toNumber();
-    let durMs = 0;
-    if (durValue.type === ValueType.Uom) {
-      const unit = durValue.unit;
-      if (unit) { try { durMs = convertUnit(durValue.toNumber(), unit, "ms"); } catch { durMs = 0; } }
-    } else {
-      durMs = durValue.toNumber();
-    }
-    ctx.stack.push(datetimeValue(dt + durMs));
+    ctx.stack.push(datetimeValue(dtValue.toNumber() + extractDurationMs(durValue)));
     return ip;
   };
 
   opHandlers[OpCode.DATE_SUB] = (ctx, ip) => {
     const durValue = ctx.stack.pop()!;
     const dtValue = ctx.stack.pop()!;
-    const dt = dtValue.toNumber();
-    let durMs = 0;
-    if (durValue.type === ValueType.Uom) {
-      const unit = durValue.unit;
-      if (unit) { try { durMs = convertUnit(durValue.toNumber(), unit, "ms"); } catch { durMs = 0; } }
-    } else {
-      durMs = durValue.toNumber();
-    }
-    ctx.stack.push(datetimeValue(dt - durMs));
+    ctx.stack.push(datetimeValue(dtValue.toNumber() - extractDurationMs(durValue)));
     return ip;
   };
 

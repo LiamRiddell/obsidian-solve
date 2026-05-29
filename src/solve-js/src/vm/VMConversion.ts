@@ -36,6 +36,22 @@ export function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: st
     return { lv: l.toNumber(), rv: r.toNumber(), unit: undefined, sameMeasure: true };
 }
 
+// ── Inlined numeric fast-path helpers ──────────────────────────────────
+// Extracted from the VM dispatch table to eliminate code duplication
+// while keeping the hot-path speed. V8/TurboFan inlines these ~3-op
+// functions at the call site in the dispatch table, so there is zero
+// function-call overhead in the steady state.
+
+export function addNumbers(l: Value, r: Value): Value {
+    return numberValue((l.value as number) + (r.value as number));
+}
+export function subNumbers(l: Value, r: Value): Value {
+    return numberValue((l.value as number) - (r.value as number));
+}
+export function mulNumbers(l: Value, r: Value): Value {
+    return numberValue((l.value as number) * (r.value as number));
+}
+
 /**
  * Apply a numeric binary operation with type-aware dispatch.
  * Handles BigInt, UoM, Vector, and plain Number operands.
