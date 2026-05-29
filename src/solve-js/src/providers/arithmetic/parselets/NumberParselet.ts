@@ -22,10 +22,10 @@ export class NumberParselet implements PrefixParselet {
 			const thousandsSep = locale.display.thousandsSeparator;
 
 			let normalized = raw;
-			// Replace thousands separator with nothing
-			if (thousandsSep) {
-				normalized = normalized.replace(new RegExp("\\" + thousandsSep, "g"), "");
-			}
+		// Replace thousands separator with nothing (split+join avoids per-call RegExp compilation)
+		if (thousandsSep) {
+			normalized = normalized.split(thousandsSep).join("");
+		}
 			// Replace locale decimal separator with "." for JavaScript parsing
 			if (decimalSep && decimalSep !== ".") {
 				normalized = normalized.replace(decimalSep, ".");
