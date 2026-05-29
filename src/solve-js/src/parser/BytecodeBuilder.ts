@@ -53,7 +53,10 @@ export class BytecodeBuilder {
 		return {
 			opcodes: new Uint8Array(this.opcodes),
 			numbers: new Float64Array(this.numbers),
-			strings: this.strings,
+			// Defensive copy: .length = 0 in reset() would clear a shared reference.
+			// Strings are rare (only UoM/datetime parselets emit them), so the copy
+			// cost is negligible.
+			strings: [...this.strings],
 			constants: new Map(),
 		};
 	}
@@ -93,7 +96,7 @@ export class BytecodeBuilder {
 		return {
 			opcodes,
 			numbers,
-			strings: this.strings,
+			strings: [...this.strings],
 			constants: new Map(),
 		};
 	}

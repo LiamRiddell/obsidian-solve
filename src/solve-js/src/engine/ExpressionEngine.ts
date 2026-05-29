@@ -54,13 +54,6 @@ export class ExpressionEngine {
     private diagnosticPipeline: DiagnosticPipeline;
     // Bytecode cache — avoids re-parsing identical expressions
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
-    // Pre-allocated typed array buffers for zero-copy VM consumption.
-    // Sized for 95th-percentile expression complexity. Complex expressions
-    // (>512 opcodes / >128 numbers) fall back to fresh allocation in buildInto().
-    private bufferPool: { opcodes: Uint8Array; numbers: Float64Array } = {
-        opcodes: new Uint8Array(512),
-        numbers: new Float64Array(128),
-    };
     // Pre-allocated BytecodeBuilder pool — avoids 4 heap allocations per
     // expression (opcode array, number array, string array, stringIndex Map).
     // Pool size of 4 handles concurrent evaluation paths. Builders are
@@ -427,13 +420,10 @@ export class ExpressionEngine {
                 );
             }
 
-            const poolProgram = builder.buildInto(this.bufferPool);
-            program = {
-                opcodes: new Uint8Array(poolProgram.opcodes),
-                numbers: new Float64Array(poolProgram.numbers),
-                strings: poolProgram.strings,
-                constants: poolProgram.constants,
-            };
+            // Use build() which allocates TypedArrays directly from builder arrays.
+            // This is a single copy (builder → TypedArray) instead of the old
+            // double copy (builder → pool buffer → TypedArray for cache).
+            program = builder.build();
             this.bytecodeCache.set(expression, program);
         }
 
@@ -666,16 +656,10 @@ export class ExpressionEngine {
                 };
             }
 
-            // Build directly into pooled typed arrays for zero-copy VM consumption.
-            // buildInto() returns subarray views that share the pool's ArrayBuffer —
-            // copy before caching since the pool will be reused for the next expression.
-            const poolProgram = builder.buildInto(this.bufferPool);
-            program = {
-                opcodes: new Uint8Array(poolProgram.opcodes),
-                numbers: new Float64Array(poolProgram.numbers),
-                strings: poolProgram.strings,
-                constants: poolProgram.constants,
-            };
+            // Use build() which allocates TypedArrays directly from builder arrays.
+            // This is a single copy (builder → TypedArray) instead of the old
+            // double copy (builder → pool buffer → TypedArray for cache).
+            program = builder.build();
             this.bytecodeCache.set(expression, program);
 
             if (hasCollectors) {
@@ -884,14 +868,10 @@ if (hasCollectors) {
 			);
 		}
 
-		// Build into pooled buffers, then copy for caching (pool is reused)
-		const poolProgram = builder.buildInto(this.bufferPool);
-		const program: BytecodeProgram = {
-			opcodes: new Uint8Array(poolProgram.opcodes),
-			numbers: new Float64Array(poolProgram.numbers),
-			strings: poolProgram.strings,
-			constants: poolProgram.constants,
-		};
+		// Use build() which allocates TypedArrays directly from builder arrays.
+		// This is a single copy (builder → TypedArray) instead of the old
+		// double copy (builder → pool buffer → TypedArray for cache).
+		const program = builder.build();
 		this.bytecodeCache.set(expression, program);
 
 		return { program, tokens, reads, writes };
