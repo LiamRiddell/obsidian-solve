@@ -142,11 +142,19 @@ export function executeBytecode(
         });
       }
 
-      // ── switch dispatch: V8 compiles to jump table for dense opcodes ──
+      // ── switch dispatch: V8 compiles dense integer switches (OpCode 0–200)
+      //    into a jump table with O(1) dispatch. Sections mirror the OpCode
+      //    enum ordering for discoverability.
       switch (op) {
-        // ── Stack operations ────────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §1  Stack operations  (OpCode 0–3)
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.NOP:
           break;
+        case OpCode.HALT: {
+          const result = stack.pop()!;
+          return hasArena ? persistentValue(result) : result;
+        }
         case OpCode.DUP:
           stack.push(stack[stack.length - 1]);
           break;
@@ -157,7 +165,9 @@ export function executeBytecode(
           break;
         }
 
-        // ── Push literals ───────────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §2  Push literals  (OpCode 10–15)
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.PUSH_NUMBER:
           stack.push(numberValue(numbers[opcodes[ip++]]));
           break;
@@ -174,7 +184,11 @@ export function executeBytecode(
           stack.push(boolValue(opcodes[ip++] === 1));
           break;
 
-        // ── Arithmetic (inlined numeric fast paths) ────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §3  Arithmetic  (OpCode 20–27)
+        //     Binary ops (ADD/SUB/MUL/DIV/MOD/EXP) have inlined numeric
+        //     fast paths; unary ops (NEG/POS) handle BigInt and UoM.
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
@@ -230,8 +244,6 @@ export function executeBytecode(
           stack.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
           break;
         }
-
-        // ── Unary operators ─────────────────────────────────────────────
         case OpCode.NEG: {
           const v = stack.pop()!;
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
@@ -246,24 +258,9 @@ export function executeBytecode(
           break;
         }
 
-        // ── Type conversions ────────────────────────────────────────────
-        case OpCode.TO_NUMBER: {
-          const v = stack.pop()!;
-          stack.push(numberValue(v.toNumber()));
-          break;
-        }
-        case OpCode.TO_HEX: {
-          const v = stack.pop()!;
-          stack.push(hexValue(v.toNumber()));
-          break;
-        }
-        case OpCode.TO_PERCENTAGE: {
-          const v = stack.pop()!;
-          stack.push(percentageValue(v.toNumber()));
-          break;
-        }
-
-        // ── Bitwise operations ──────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §4  Bitwise  (OpCode 30–36)
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.LSHIFT: {
           const r = stack.pop()!, l = stack.pop()!;
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -316,7 +313,22 @@ export function executeBytecode(
           break;
         }
 
-        // ── Variables ───────────────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §5  Functions  (OpCode 50–52)
+        // ═══════════════════════════════════════════════════════════════
+        case OpCode.CALL_BUILTIN: {
+          const fnIdx = opcodes[ip++];
+          const argCount = opcodes[ip++];
+          const args: Value[] = [];
+          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
+          const fn = builtinFunctions[fnIdx];
+          if (fn) stack.push(fn(args.reverse()));
+          break;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // §6  Variables  (OpCode 60–62)
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.LOAD_VAR: {
           const varName = strings[opcodes[ip++]];
           const val = vm.getVar(varName);
@@ -332,22 +344,28 @@ export function executeBytecode(
           break;
         }
 
-        // ── Datetime ────────────────────────────────────────────────────
-        case OpCode.DATE_NOW:
-          stack.push(datetimeValue(Date.now()));
-          break;
-        case OpCode.DATE_ADD: {
-          const durValue = stack.pop()!, dtValue = stack.pop()!;
-          stack.push(datetimeValue(dtValue.toNumber() + extractDurationMs(durValue)));
+        // ═══════════════════════════════════════════════════════════════
+        // §7  Type conversions  (OpCode 70–74)
+        // ═══════════════════════════════════════════════════════════════
+        case OpCode.TO_NUMBER: {
+          const v = stack.pop()!;
+          stack.push(numberValue(v.toNumber()));
           break;
         }
-        case OpCode.DATE_SUB: {
-          const durValue = stack.pop()!, dtValue = stack.pop()!;
-          stack.push(datetimeValue(dtValue.toNumber() - extractDurationMs(durValue)));
+        case OpCode.TO_HEX: {
+          const v = stack.pop()!;
+          stack.push(hexValue(v.toNumber()));
+          break;
+        }
+        case OpCode.TO_PERCENTAGE: {
+          const v = stack.pop()!;
+          stack.push(percentageValue(v.toNumber()));
           break;
         }
 
-        // ── UoM ─────────────────────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §8  UoM  (OpCode 80–84)
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.UOM_CONVERT: {
           const unit = (stack.pop()!.value as string);
           const val = stack.pop()!.toNumber();
@@ -412,7 +430,26 @@ export function executeBytecode(
           break;
         }
 
-        // ── Vector operations ───────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §9  Datetime  (OpCode 90–93)
+        // ═══════════════════════════════════════════════════════════════
+        case OpCode.DATE_NOW:
+          stack.push(datetimeValue(Date.now()));
+          break;
+        case OpCode.DATE_ADD: {
+          const durValue = stack.pop()!, dtValue = stack.pop()!;
+          stack.push(datetimeValue(dtValue.toNumber() + extractDurationMs(durValue)));
+          break;
+        }
+        case OpCode.DATE_SUB: {
+          const durValue = stack.pop()!, dtValue = stack.pop()!;
+          stack.push(datetimeValue(dtValue.toNumber() - extractDurationMs(durValue)));
+          break;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // §10 Vector  (OpCode 100–105)
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.VEC_NEW: {
           const count = opcodes[ip++];
           const components: number[] = [];
@@ -431,7 +468,9 @@ export function executeBytecode(
           break;
         }
 
-        // ── Dice roll ───────────────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §11 Dice  (OpCode 110)
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.DICE_ROLL: {
           const to = stack.pop()!.toNumber();
           const from = stack.pop()!.toNumber();
@@ -439,18 +478,9 @@ export function executeBytecode(
           break;
         }
 
-        // ── Call builtin ────────────────────────────────────────────────
-        case OpCode.CALL_BUILTIN: {
-          const fnIdx = opcodes[ip++];
-          const argCount = opcodes[ip++];
-          const args: Value[] = [];
-          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
-          const fn = builtinFunctions[fnIdx];
-          if (fn) stack.push(fn(args.reverse()));
-          break;
-        }
-
-        // ── Plugin custom opcode ────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // §12 Plugin extensibility  (OpCode 200+)
+        // ═══════════════════════════════════════════════════════════════
         case OpCode.PLUGIN_CUSTOM: {
           const handler = reg.get(OpCode.PLUGIN_CUSTOM);
           if (handler) {
@@ -459,14 +489,6 @@ export function executeBytecode(
           }
           break;
         }
-
-        // ── HALT: return result ─────────────────────────────────────────
-        case OpCode.HALT: {
-          const result = stack.pop()!;
-          return hasArena ? persistentValue(result) : result;
-        }
-
-        // ── Unknown/plugin opcodes > PLUGIN_CUSTOM ──────────────────────
         default:
           if (op >= OpCode.PLUGIN_CUSTOM) {
             const pluginHandler = reg.get(op as OpCode);
