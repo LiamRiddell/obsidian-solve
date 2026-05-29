@@ -376,8 +376,15 @@ export class ExpressionLexer {
   private line: number = 1;
   private lineStartPos: number = 0;
 
-  // Keyword map: lowercase identifier → token type
+  // Keyword map: lowercase identifier → token type (locale keywords only)
   private keywordMap: Map<string, string>;
+
+  // ── Merged lookup collections (keywordMap + pluginKeywordMap, knownUnits + pluginUnits)
+  // Built once at construction and rebuilt on registerPlugin/unregisterPlugin.
+  // tokenizeIdentifier() uses these instead of checking multiple sources separately —
+  // reduces 4-6 Map/Set lookups per identifier to 1-2 for the common no-plugin case.
+  private mergedKeywords: Map<string, string>;
+  private mergedUnits: Set<string>;
 
   // Plugin-extensible keyword map (merged with locale keywordMap)
   private pluginKeywordMap: Map<string, string> = new Map();
@@ -419,7 +426,28 @@ export class ExpressionLexer {
     for (const [k, v] of Object.entries(this.locale.keywordMap)) {
       this.keywordMap.set(k.toLowerCase(), v);
     }
+    this.mergedKeywords = new Map(this.keywordMap);
+    this.mergedUnits = new Set(knownUnits);
     this.phraseTrie = ExpressionLexer.buildPhraseTrie(ExpressionLexer.PHRASES, []);
+  }
+
+  /**
+   * Rebuild mergedKeywords and mergedUnits from base collections + plugin collections.
+   * Called at construction and after registerPlugin/unregisterPlugin.
+   */
+  private rebuildMergedCollections(): void {
+    // Keywords: locale (base) + plugin
+    this.mergedKeywords = new Map(this.keywordMap);
+    for (const [k, v] of this.pluginKeywordMap) {
+      if (!this.mergedKeywords.has(k)) {
+        this.mergedKeywords.set(k, v);
+      }
+    }
+    // Units: knownUnits (base) + plugin
+    this.mergedUnits = new Set(knownUnits);
+    for (const u of this.pluginUnits) {
+      this.mergedUnits.add(u);
+    }
   }
 
   /**
@@ -484,6 +512,7 @@ export class ExpressionLexer {
         }
         this.pluginKeywordMap.set(lower, tokenType);
       }
+      this.rebuildMergedCollections();
     }
 
     if (plugin.operators) {
@@ -581,6 +610,7 @@ export class ExpressionLexer {
         }
         this.pluginUnits.add(unit);
       }
+      this.rebuildMergedCollections();
     }
   }
 
@@ -601,6 +631,7 @@ export class ExpressionLexer {
         this.pluginKeywordMap.delete(keyword.toLowerCase());
       }
       this.hasPluginKeywords = this.pluginKeywordMap.size > 0;
+      this.rebuildMergedCollections();
     }
 
     if (plugin.operators) {
@@ -643,6 +674,7 @@ export class ExpressionLexer {
         this.pluginUnits.delete(unit);
       }
       this.hasPluginUnits = this.pluginUnits.size > 0;
+      this.rebuildMergedCollections();
     }
   }
 
@@ -822,25 +854,13 @@ export class ExpressionLexer {
         case CharClass.ALPHA: {
           const input = this.input;
           const identLower = input.toLowerCase();
-          const configuredLookup = this.configuredLookup;
-          const unitNames = configuredLookup?.unitNames;
-          const isKnownUnit = unitNames ? unitNames.has(input) : knownUnits.has(input);
-          const isPluginUnit = this.hasPluginUnits && this.pluginUnits.has(input);
-          if (isKnownUnit || isPluginUnit) {
+          // Use pre-merged collections (built-in + plugin) — single lookup each
+          if (this.mergedUnits.has(input)) {
             yield new LexerToken('UNIT', tokenTypeId('UNIT'), input, input, 0, 0, 1, 1);
           } else {
-            const kwType = configuredLookup?.keywordToType
-              ? configuredLookup.keywordToType.get(identLower)
-              : this.keywordMap.get(identLower);
+            const kwType = this.mergedKeywords.get(identLower);
             if (kwType) {
               yield new LexerToken(kwType, tokenTypeId(kwType), input, input, 0, 0, 1, 1);
-            } else if (this.hasPluginKeywords) {
-              const pluginKwType = this.pluginKeywordMap.get(identLower);
-              if (pluginKwType) {
-                yield new LexerToken(pluginKwType, tokenTypeId(pluginKwType), input, input, 0, 0, 1, 1);
-              } else {
-                yield new LexerToken('IDENT', tokenTypeId('IDENT'), input, input, 0, 0, 1, 1);
-              }
             } else {
               yield new LexerToken('IDENT', tokenTypeId('IDENT'), input, input, 0, 0, 1, 1);
             }
@@ -1179,13 +1199,10 @@ export class ExpressionLexer {
     }
 
     // ── Unit lookup (case-sensitive, takes priority over phrases/keywords)
-    // Check configuredLookup.unitNames first, fall back to knownUnits, then pluginUnits.
-    // All three sources are checked — configuredLookup does NOT bypass plugin units.
-    const configuredLookup = this.configuredLookup;
-    const unitNames = configuredLookup?.unitNames;
-    const isKnownUnit = unitNames ? unitNames.has(identText) : knownUnits.has(identText);
-    const isPluginUnit = this.hasPluginUnits && this.pluginUnits.has(identText);
-    if (isKnownUnit || isPluginUnit) {
+    // Uses pre-merged mergedUnits (knownUnits + pluginUnits), avoiding
+    // a separate pluginUnits.has() lookup for every identifier.
+    const isKnownUnit = this.mergedUnits.has(identText);
+    if (isKnownUnit) {
       if (!this.isFollowedByLParen(pos)) {
         this.pos = pos;
         return new LexerToken('UNIT', tokenTypeId('UNIT'), identText, identText, start, 0, this.line, startCol);
@@ -1196,6 +1213,7 @@ export class ExpressionLexer {
     // Use configuredLookup.phraseTrie when available (cast — structurally identical).
     // Falls back to instance phraseTrie (includes plugin phrases) when the
     // registry-built trie doesn't match — plugin phrases aren't in the lookup.
+    const configuredLookup = this.configuredLookup;
     const phraseTrieOverride = (configuredLookup?.phraseTrie ?? null) as unknown as PhraseTrieNode | undefined;
     const phraseResult = this.tryMatchPhrase(input, pos, identLower, identText, phraseTrieOverride);
     if (phraseResult) {
@@ -1234,26 +1252,12 @@ export class ExpressionLexer {
     // ── Keyword lookup (case-insensitive) — takes priority over phraseStartWords
     // Keywords must be recognized even if they happen to start phrases, so that
     // "to the" → TO + IDENT (not IDENT + IDENT when "to" is a keyword).
-    // Use configuredLookup.keywordToType when available, fall back to locale keywordMap.
-    const keywordToType = configuredLookup?.keywordToType;
-    const localeKwType = keywordToType
-      ? keywordToType.get(identLower)
-      : this.keywordMap.get(identLower);
+    // Uses pre-merged mergedKeywords (keywordMap + pluginKeywordMap),
+    // avoiding a separate pluginKeywordMap.get() for every identifier.
+    const localeKwType = this.mergedKeywords.get(identLower);
     if (localeKwType) {
       this.pos = pos;
       return new LexerToken(localeKwType, tokenTypeId(localeKwType), identText, identText, start, 0, this.line, startCol);
-    }
-
-    // Plugin keywords are checked AFTER locale/configuredLookup keywords.
-    // The `!keywordToType` guard is removed — plugin keywords must be
-    // checked even when configuredLookup is set, because plugin keywords
-    // are registered at runtime and aren't in the registry-built lookup.
-    if (this.hasPluginKeywords) {
-      const pluginKwType = this.pluginKeywordMap.get(identLower);
-      if (pluginKwType) {
-        this.pos = pos;
-        return new LexerToken(pluginKwType, tokenTypeId(pluginKwType), identText, identText, start, 0, this.line, startCol);
-      }
     }
 
     // ── phraseStartWords optimization ─────────────────────────────────
