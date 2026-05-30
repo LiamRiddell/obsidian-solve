@@ -1,71 +1,71 @@
 {
-  "timestamp": "2026-05-30T16:49:04.268Z",
+  "timestamp": "2026-05-30T19:14:38.237Z",
   "tiers": {
     "small": {
       "cold": {
-        "meanMs": 2.110069999999996,
-        "opsPerSec": 473.9179268934215,
-        "linesPerSec": 47.391792689342154,
-        "exprsPerSec": 47.391792689342154
+        "meanMs": 0.4981449999999995,
+        "opsPerSec": 2007.4476307099358,
+        "linesPerSec": 200.74476307099357,
+        "exprsPerSec": 200.74476307099357
       },
       "warm": {
-        "meanMs": 0.2789717999999993,
-        "opsPerSec": 3584.591704251119,
-        "linesPerSec": 358.45917042511195,
-        "exprsPerSec": 358.45917042511195
+        "meanMs": 0.1781840000000002,
+        "opsPerSec": 5612.176177434556,
+        "linesPerSec": 561.2176177434555,
+        "exprsPerSec": 561.2176177434555
       }
     },
     "medium": {
       "cold": {
-        "meanMs": 4.955514999999991,
-        "opsPerSec": 201.79537343747356,
-        "linesPerSec": 201.79537343747356,
-        "exprsPerSec": 100.89768671873678
+        "meanMs": 3.643209999999999,
+        "opsPerSec": 274.4832167237135,
+        "linesPerSec": 274.4832167237135,
+        "exprsPerSec": 137.24160836185675
       },
       "warm": {
-        "meanMs": 3.741621999999998,
-        "opsPerSec": 267.26376956303994,
-        "linesPerSec": 267.26376956303994,
-        "exprsPerSec": 133.63188478151997
+        "meanMs": 2.5202639999999974,
+        "opsPerSec": 396.78382899569294,
+        "linesPerSec": 396.78382899569294,
+        "exprsPerSec": 198.39191449784647
       }
     },
     "large": {
       "cold": {
-        "meanMs": 108.05565499999997,
-        "opsPerSec": 9.25449019766712,
-        "linesPerSec": 92.54490197667121,
-        "exprsPerSec": 18.50898039533424
+        "meanMs": 85.005775,
+        "opsPerSec": 11.763906628696697,
+        "linesPerSec": 117.63906628696698,
+        "exprsPerSec": 23.527813257393394
       },
       "warm": {
-        "meanMs": 100.30021499999994,
-        "opsPerSec": 9.970068359275208,
-        "linesPerSec": 99.70068359275209,
-        "exprsPerSec": 19.940136718550416
+        "meanMs": 79.40031499999995,
+        "opsPerSec": 12.59440847306463,
+        "linesPerSec": 125.9440847306463,
+        "exprsPerSec": 25.18881694612926
       }
     },
     "massive": {
       "cold": {
-        "meanMs": 2008.59586,
-        "opsPerSec": 0.4978602315749073,
-        "linesPerSec": 24.893011578745366,
-        "exprsPerSec": 2.4893011578745363
+        "meanMs": 1511.38162,
+        "opsPerSec": 0.6616462624442925,
+        "linesPerSec": 33.08231312221462,
+        "exprsPerSec": 3.3082313122214626
       },
       "warm": {
-        "meanMs": 1893.8612999999998,
-        "opsPerSec": 0.5280217722385478,
-        "linesPerSec": 26.401088611927392,
-        "exprsPerSec": 2.640108861192739
+        "meanMs": 1465.3954800000006,
+        "opsPerSec": 0.6824096386594557,
+        "linesPerSec": 34.12048193297279,
+        "exprsPerSec": 3.412048193297278
       }
     }
   },
   "stageBreakdown": {
-    "lexNs": 2720.0800000026243,
-    "parseCompileNs": 13682.579999999389,
-    "executeNs": 1379.540000000377,
-    "totalNs": 17782.200000002387,
-    "lexPercent": 15.296644959579012,
-    "parseCompilePercent": 76.945372338617,
-    "executePercent": 7.757982701804004
+    "lexNs": 2388.2399999965874,
+    "parseCompileNs": 4107.17999999671,
+    "executeNs": 650.860000000665,
+    "totalNs": 7146.279999993962,
+    "lexPercent": 33.41934544964101,
+    "parseCompilePercent": 57.47297894849041,
+    "executePercent": 9.107675601868594
   },
   "metadata": {
     "nodeVersion": "v23.11.0",

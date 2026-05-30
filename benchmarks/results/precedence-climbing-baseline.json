@@ -1,0 +1,122 @@
+{
+  "phase": "Phase 0 — Precedence Climbing Baseline",
+  "branch": "feat/safety-limits",
+  "commit": "42de5ea",
+  "timestamp": "2026-05-30T19:14:38.237Z",
+  "summary": {
+    "totalSuites": 10,
+    "totalTests": 99,
+    "allPassed": true
+  },
+  "pipeline": {
+    "single_eval_cold_ms": 0.0334,
+    "single_eval_warm_ms": 0.0014,
+    "50_line_doc_ms": 0.2253,
+    "200_line_doc_ms": 0.7766,
+    "variable_chain_ms": 0.0390,
+    "20_inline_solves_ms": 0.1134,
+    "re_eval_dirty_ms": 0.0335,
+    "mixed_complex_ms": 0.0590,
+    "function_plus_literal_ms": 0.0253
+  },
+  "vm_isolated_us": {
+    "simple_add": 0.213,
+    "variable_access": 0.243,
+    "vector_creation": 0.285,
+    "unit_conversion": 3.830,
+    "dice_roll": 0.506,
+    "percentage": 0.566
+  },
+  "lexer_ms": {
+    "simple_arithmetic": 0.00111,
+    "unicode_math": 0.00109,
+    "keywords": 0.00122,
+    "mixed_expression": 0.00149,
+    "long_expression": 0.00968,
+    "inline_solve_in_text": 0.00151,
+    "full_markdown_line": 0.000299,
+    "empty_string": 0.000260,
+    "number_only": 0.000837,
+    "variable_ref": 0.000963,
+    "function_call": 0.00108,
+    "complex_unit": 0.00140,
+    "datetime": 0.00115,
+    "dice_roll": 0.00122,
+    "vector": 0.00130
+  },
+  "parser_ms": {
+    "simple_arithmetic": 0.00314,
+    "complex_expression": 0.00292,
+    "function_call": 0.00291,
+    "percentage": 0.00297,
+    "unit_conversion": 0.00294,
+    "datetime": 0.00294,
+    "dice": 0.00291,
+    "vector": 0.00297,
+    "variable": 0.00291,
+    "mixed": 0.00287
+  },
+  "parse_compile_us": {
+    "mean": 1.579,
+    "min": 1.054,
+    "max": 3.057,
+    "literal": 1.054,
+    "simple_add": 1.324,
+    "simple_mul": 1.306,
+    "three_ops": 1.814,
+    "four_ops": 2.320,
+    "nested_parens": 2.190,
+    "negation": 1.521,
+    "function_call": 1.285,
+    "function_two_args": 1.540,
+    "percentage": 1.550,
+    "percentage_change": 1.603,
+    "unit_conversion": 1.270,
+    "unit_in": 1.202,
+    "datetime": 1.213,
+    "dice": 1.530,
+    "vector": 1.959,
+    "variable_assign": 1.277,
+    "variable_ref": 1.292,
+    "mixed_complex": 3.057,
+    "bigint_hex": 1.278
+  },
+  "throughput_lines_per_sec": {
+    "small_100_cold": 200.7,
+    "small_100_warm": 561.2,
+    "medium_1000_cold": 274.5,
+    "medium_1000_warm": 396.8,
+    "large_10k_cold": 117.6,
+    "large_10k_warm": 125.9,
+    "massive_50k_cold": 33.1,
+    "massive_50k_warm": 34.1
+  },
+  "stage_breakdown_percent": {
+    "lex": 33.4,
+    "parse_compile": 57.5,
+    "execute_vm": 9.1
+  },
+  "pooling_improvements": {
+    "vm_pool_mean_improvement_pct": 20.4,
+    "vm_pool_mean_delta_ns": 151.0,
+    "builder_pool_mean_improvement_pct": 0.7,
+    "builder_pool_mean_delta_ns": 17.6
+  },
+  "pratt_vs_rd_us": {
+    "pratt_mean": 4.275,
+    "rd_mean": 4.110
+  },
+  "diagnostic_overhead_ms": {
+    "prod_single_eval_cold": 0.0346,
+    "prod_single_eval_warm": 0.0015,
+    "diag_single_eval_cold": 0.0370,
+    "diag_single_eval_warm": 0.5355,
+    "prod_50_line_doc": 0.2256,
+    "diag_50_line_doc": 0.2037
+  },
+  "metadata": {
+    "nodeVersion": "v23.11.0",
+    "platform": "win32",
+    "description": "Full Phase 0 baseline captured before implementing hybrid precedence climbing parser, Array/Object unification, CALL_PLUGIN/CALL_BUILTIN split, and 5-layer pipeline. This baseline serves as the regression reference for all Phase 2+ changes."
+  }
+}

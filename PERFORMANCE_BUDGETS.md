@@ -9,40 +9,104 @@
 
 ---
 
-## 2. Current Performance Baseline (Phase 0 → Phase 8)
+## 2. Current Performance Baseline (Phase 0 — feat/safety-limits @ 42de5ea)
+
+> Captured: 2026-05-30. 99/99 benchmarks passing. See `benchmarks/results/precedence-climbing-baseline.json` for full data.
 
 ### Pipeline Benchmarks (Full Stack)
 
 | Scenario | Mean (ms) | Ops/sec | Notes |
 |----------|-----------|---------|-------|
-| Single eval (cold) | ~0.60 | ~1,667 | New engine, no cache |
-| Single eval (warm) | **0.0022** | **~454,000** | Cached bytecode + shared VM |
-| 50-line doc | ~0.76 | ~1,316 | Mixed expressions |
-| 200-line doc | **1.21** | ~826 | Full doc parse + eval |
-| Variable chain (5 lines) | ~0.58 | ~1,724 | DAG-tracked deps |
-| 20 inline solves | ~0.63 | ~3,175 | Inline `s\`...\`` extraction |
-| Re-eval dirty line | ~0.57 | ~1,754 | Cached bytecode + VM reset |
-| Mixed complex ($ + % + units) | ~0.62 | ~1,613 | Cross-provider |
+| Single eval (cold) | **0.0334** | **~29,940** | New engine, no cache |
+| Single eval (warm) | **0.0014** | **~714,286** | Cached bytecode + shared VM |
+| 50-line doc | **0.2253** | **~4,439** | Mixed expressions |
+| 200-line doc | **0.7766** | **~1,288** | Full doc parse + eval |
+| Variable chain (5 lines) | **0.0390** | **~25,641** | DAG-tracked deps |
+| 20 inline solves | **0.1134** | **~8,818** | Inline `s\`...\`` extraction |
+| Re-eval dirty line | **0.0335** | **~29,851** | Cached bytecode + VM reset |
+| Mixed complex ($ + % + units) | **0.0590** | **~16,949** | Cross-provider |
+| Function + literal | **0.0253** | **~39,526** | Builtin function call |
+
+### Stage Breakdown
+
+| Stage | % of Pipeline | Notes |
+|-------|:-----:|-------|
+| Lex | 33.4% | Position-based line classification |
+| Parse + Compile | 57.5% | Heavy — primary optimisation target |
+| Execute (VM) | 9.1% | Already near-nanosecond |
 
 ### VM Isolated (Pre-Built Bytecode)
 
 | Operation | Mean (µs) | Ops/sec |
 |-----------|-----------|---------|
-| Simple add (PUSH+PUSH+ADD+HALT) | ~0.5 | ~2,000,000 |
-| Variable access (STORE+LOAD+ADD) | ~0.8 | ~1,250,000 |
-| Vector creation | ~0.6 | ~1,666,667 |
-| Unit conversion | ~4.0 | ~250,000 |
-| Dice roll | ~0.7 | ~1,428,571 |
-| Percentage | ~0.8 | ~1,250,000 |
+| Simple add (PUSH+PUSH+ADD+HALT) | **0.213** | **~4,694,836** |
+| Variable access (STORE+LOAD+ADD) | **0.243** | **~4,115,226** |
+| Vector creation | **0.285** | **~3,508,772** |
+| Unit conversion | **3.830** | **~261,097** |
+| Dice roll | **0.506** | **~1,976,285** |
+| Percentage | **0.566** | **~1,766,784** |
 
 ### Lexer Performance
 
 | Input | Mean (ms) | Ops/sec |
 |-------|-----------|---------|
-| Simple arithmetic | 0.0028 | ~357,000 |
-| Unicode math | 0.0036 | ~278,000 |
-| Long expression (50 tokens) | 0.0752 | ~13,300 |
-| Empty string | 0.0004 | ~2,631,000 |
+| Simple arithmetic | **0.00111** | **~900,901** |
+| Unicode math | **0.00109** | **~917,431** |
+| Keywords | **0.00122** | **~819,672** |
+| Mixed expression | **0.00149** | **~671,141** |
+| Long expression (50 tokens) | **0.00968** | **~103,306** |
+| Inline solve in text | **0.00151** | **~662,252** |
+| Full markdown line | **0.000299** | **~3,344,482** |
+| Empty string | **0.000260** | **~3,846,154** |
+| Number only | **0.000837** | **~1,194,743** |
+| Variable ref | **0.000963** | **~1,038,422** |
+| Function call | **0.00108** | **~925,926** |
+| Complex unit | **0.00140** | **~714,286** |
+| Datetime | **0.00115** | **~869,565** |
+| Dice roll | **0.00122** | **~819,672** |
+| Vector | **0.00130** | **~769,231** |
+
+### Parser + Compile Performance
+
+| Input | Mean (ms) | Ops/sec |
+|-------|-----------|---------|
+| Simple arithmetic | **0.00314** | **~318,471** |
+| Complex expression | **0.00292** | **~342,466** |
+| Function call | **0.00291** | **~343,643** |
+| Percentage | **0.00297** | **~336,700** |
+| Unit conversion | **0.00294** | **~340,136** |
+| Datetime | **0.00294** | **~340,136** |
+| Dice | **0.00291** | **~343,643** |
+| Vector | **0.00297** | **~336,700** |
+| Variable | **0.00291** | **~343,643** |
+| Mixed | **0.00287** | **~348,432** |
+| **Mean parse+compile** | **~0.00158** | **~632,911** |
+
+### Throughput (Lines/sec)
+
+| Scale | Cold | Warm |
+|-------|------|------|
+| 100 lines | 200.7 | 561.2 |
+| 1,000 lines | 274.5 | 396.8 |
+| 10,000 lines | 117.6 | 125.9 |
+| 50,000 lines | 33.1 | 34.1 |
+
+### Pooling Improvements
+
+| Pool | Mean ∆ | Notes |
+|------|--------|-------|
+| VM pool | **−151ns (−20.4%)** | Arena reuse avoids allocation |
+| Builder pool | **−17.6ns (−0.7%)** | Minor; builders are lightweight |
+
+### Diagnostic Overhead
+
+| Scenario | Production | Diagnostic | Overhead |
+|----------|------------|------------|----------|
+| Single eval cold | 0.0346 ms | 0.0370 ms | +6.9% |
+| Single eval warm | 0.0015 ms | 0.5355 ms | **+35,600%** ⚠️ |
+| 50-line doc | 0.2256 ms | 0.2037 ms | −9.7% |
+
+> ⚠️ Diagnostic warm eval is 357× slower — diagnostic mode must be off for benchmarks.
 
 ---
 
@@ -50,19 +114,21 @@
 
 If any benchmark exceeds these, the build fails. Period.
 
-| Benchmark | Max Allowed | Notes |
-|-----------|------------|-------|
-| `vm:simple_add` | 0.05 ms (50µs) | Single opcode execution |
-| `pipeline:single_eval_warm` | 0.05 ms (50µs) | Cached bytecode — should be sub-µs |
-| `pipeline:single_eval_cold` | 0.50 ms | Includes parse + compile |
-| `lexer:simple_arithmetic` | 0.01 ms (10µs) | Tokenisation only |
-| `lexer:long_expression` | 0.10 ms (100µs) | 50-token expressions |
-| `parser:simple_arithmetic` | 0.05 ms (50µs) | Parse + bytecode compile |
-| `pipeline:100_line_doc` | 5 ms | Bulk document |
-| `pipeline:variable_chain` | 0.10 ms (100µs) | DAG-driven re-eval |
-| **Global multiplier** | **2.0× baseline** | Tighter than before |
+| Benchmark | Max Allowed | Current | Headroom |
+|-----------|------------|---------|----------|
+| `vm:simple_add` | 0.5 µs | 0.213 µs | 2.3× |
+| `pipeline:single_eval_warm` | 0.01 ms (10µs) | 0.0014 ms | 7.1× |
+| `pipeline:single_eval_cold` | 0.10 ms (100µs) | 0.0334 ms | 3.0× |
+| `lexer:simple_arithmetic` | 0.005 ms (5µs) | 0.00111 ms | 4.5× |
+| `lexer:long_expression` | 0.05 ms (50µs) | 0.00968 ms | 5.2× |
+| `parser:simple_arithmetic` | 0.01 ms (10µs) | 0.00314 ms | 3.2× |
+| `pipeline:200_line_doc` | 2.0 ms | 0.7766 ms | 2.6× |
+| `pipeline:variable_chain` | 0.10 ms (100µs) | 0.0390 ms | 2.6× |
+| `pipeline:20_inline_solves` | 0.50 ms | 0.1134 ms | 4.4× |
+| `parse_compile:mean` | 0.005 ms (5µs) | 0.00158 ms | 3.2× |
+| **Global multiplier** | **2.0× baseline** | — | Tight |
 
-> **Note**: The global multiplier used to be 3.0×. We're tightening to 2.0× because our baselines are now fast enough that 3× is too generous.
+> **Note**: The global multiplier is 2.0× baseline — any regression beyond 2× the Phase 0 baseline fails CI.
 
 ---
 
@@ -104,24 +170,26 @@ Benchmarks always run with `diagnosticMode = false` unless specifically testing 
 
 ## 5. Targets — Where We Need to Go
 
-| Metric | Current | Target | Status |
+| Metric | Current (Phase 0) | Target | Status |
 |--------|---------|--------|--------|
-| Single expression eval (warm) | 0.0022 ms (2.2µs) | **< 0.0005 ms (500ns)** | 🔴 |
-| Single expression eval (cold) | 0.60 ms | **< 0.5 ms** | 🟡 |
-| Lexer: simple expression | 0.0028 ms | **< 0.01 ms** | ✅ |
-| Lexer: long expression (50 tokens) | 0.075 ms | **< 0.1 ms** | ✅ |
-| 200-line doc full pipeline | 1.21 ms | **< 1 ms** | 🟡 |
-| Variable chain re-eval | 0.58 ms | **< 0.1 ms** | 🔴 |
-| VM single add (pre-built bytecode) | 0.5 µs | **< 200ns** | 🔴 |
+| Single expression eval (warm) | 0.0014 ms (1.4µs) | **< 0.001 ms (1µs)** | 🟡 Near |
+| Single expression eval (cold) | 0.0334 ms | **< 0.01 ms** | 🔴 |
+| Lexer: simple expression | 0.00111 ms | **< 0.005 ms** | ✅ |
+| Lexer: long expression (50 tokens) | 0.00968 ms | **< 0.05 ms** | ✅ |
+| 200-line doc full pipeline | 0.777 ms | **< 0.5 ms** | 🟡 |
+| Variable chain re-eval | 0.039 ms | **< 0.01 ms** | 🔴 |
+| VM single add (pre-built bytecode) | 0.213 µs | **< 200ns** | 🔴 Near |
+| Parse + compile mean | 1.58 µs | **< 1 µs** | 🟡 Near |
 | `any` types in production | ~15 | 0 | 🔴 |
 | Test coverage (core modules) | ~70% | > 90% | 🟡 |
 
 ### How We Get There
-1. **Warm eval < 500ns**: Pool all TypedArrays, zero-copy bytecode → VM path, eliminate every remaining allocation
-2. **Cold eval < 500µs**: Pre-compiled bytecode at parse time, single shared VM instance, no re-allocation
-3. **Variable chain < 100µs**: DAG-driven incremental eval — only re-eval truly dirty lines
+1. **Warm eval < 1µs**: Pool all TypedArrays, zero-copy bytecode → VM path, eliminate every remaining allocation
+2. **Cold eval < 10µs**: Hybrid precedence-climbing parser, single shared VM instance, no re-allocation
+3. **Variable chain < 10µs**: DAG-driven incremental eval — only re-eval truly dirty lines
 4. **VM ops < 200ns**: Flat opcode dispatch (computed goto or lookup table), eliminate type checks in hot loop
-5. **Zero `any` types**: Full TypeScript strictness — the compiler is our co-pilot
+5. **Parse + compile < 1µs**: Precedence climbing eliminates recursive descent overhead
+6. **Zero `any` types**: Full TypeScript strictness — the compiler is our co-pilot
 
 ---
 
