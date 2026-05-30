@@ -111,6 +111,15 @@ export interface WorkerConfig {
   }
 
   /**
+   * Parser configuration.
+   * Controls which parser implementation is used and how it behaves.
+   */
+  export interface ParserConfig {
+    /** Use the recursive descent parser (experimental). When false, the Pratt parser is used. */
+    readonly useRecursiveDescent: boolean;
+  }
+
+  /**
    * Virtual Machine configuration.
    * Controls the internal bytecode VM that executes compiled expressions.
    */
@@ -148,6 +157,8 @@ export interface EngineConfig {
     readonly dice: DiceConfig;
     /** Performance budgets and cache sizing */
     readonly performance: PerformanceConfig;
+    /** Parser implementation selection */
+    readonly parser: ParserConfig;
     /** Safety limits for expression complexity */
     readonly validation: ValidationConfig;
     /** Internal bytecode VM configuration */
@@ -179,6 +190,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
      maxDocumentLines: 10000,
      parseTimeoutMs: 5000,
      executionTimeoutMs: 10000
+   },
+   parser: {
+     useRecursiveDescent: false,
    },
    validation: {
 maxExpressionLength: 2000,
@@ -339,6 +353,7 @@ return {
         date: { ...base.date, ...override.date },
         dice: { ...base.dice, ...override.dice },
         performance: { ...base.performance, ...override.performance },
+        parser: { ...base.parser, ...override.parser },
         validation: { ...base.validation, ...override.validation },
         vm: { ...base.vm, ...override.vm },
         worker: { ...base.worker, ...override.worker },

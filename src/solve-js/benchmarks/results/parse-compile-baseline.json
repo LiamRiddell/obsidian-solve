@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-05-29T23:18:28.293Z",
+  "timestamp": "2026-05-30T16:48:16.146Z",
   "results": {
     "literal": {
-      "meanNs": 1068.949,
-      "p95Ns": 1200,
-      "meanUs": 1.0689490000000001,
-      "opsPerUs": 0.9354983259257457,
+      "meanNs": 2715.59,
+      "p95Ns": 1300,
+      "meanUs": 2.71559,
+      "opsPerUs": 0.3682441016501018,
       "opcodeCount": 2,
       "numbersCount": 1,
       "stringsCount": 0,
@@ -13,10 +13,10 @@
       "iterations": 200000
     },
     "simple_add": {
-      "meanNs": 1340.4,
-      "p95Ns": 1400,
-      "meanUs": 1.3404,
-      "opsPerUs": 0.7460459564309161,
+      "meanNs": 2367.382,
+      "p95Ns": 1600,
+      "meanUs": 2.367382,
+      "opsPerUs": 0.422407537102166,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -24,10 +24,10 @@
       "iterations": 100000
     },
     "simple_mul": {
-      "meanNs": 1332.389,
-      "p95Ns": 1400,
-      "meanUs": 1.3323889999999998,
-      "opsPerUs": 0.750531563980189,
+      "meanNs": 2544.725,
+      "p95Ns": 1500,
+      "meanUs": 2.544725,
+      "opsPerUs": 0.39296977080038115,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -35,10 +35,10 @@
       "iterations": 100000
     },
     "three_ops": {
-      "meanNs": 1811.655,
-      "p95Ns": 1900,
-      "meanUs": 1.811655,
-      "opsPerUs": 0.5519814755016822,
+      "meanNs": 3019.9175,
+      "p95Ns": 2000,
+      "meanUs": 3.0199175,
+      "opsPerUs": 0.3311348737175767,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -46,10 +46,10 @@
       "iterations": 80000
     },
     "four_ops": {
-      "meanNs": 2314.1916666666666,
-      "p95Ns": 2400,
-      "meanUs": 2.3141916666666664,
-      "opsPerUs": 0.4321163257148825,
+      "meanNs": 3652.93,
+      "p95Ns": 2800,
+      "meanUs": 3.65293,
+      "opsPerUs": 0.27375285045155534,
       "opcodeCount": 14,
       "numbersCount": 5,
       "stringsCount": 0,
@@ -57,10 +57,10 @@
       "iterations": 60000
     },
     "nested_parens": {
-      "meanNs": 2216.153333333333,
-      "p95Ns": 2400,
-      "meanUs": 2.216153333333333,
-      "opsPerUs": 0.45123231545350356,
+      "meanNs": 2960.8283333333334,
+      "p95Ns": 2500,
+      "meanUs": 2.960828333333333,
+      "opsPerUs": 0.3377433229552316,
       "opcodeCount": 11,
       "numbersCount": 4,
       "stringsCount": 0,
@@ -68,10 +68,10 @@
       "iterations": 60000
     },
     "negation": {
-      "meanNs": 1563.79,
-      "p95Ns": 1600,
-      "meanUs": 1.56379,
-      "opsPerUs": 0.6394720518739728,
+      "meanNs": 2415.635,
+      "p95Ns": 1700,
+      "meanUs": 2.4156350000000004,
+      "opsPerUs": 0.4139698257394018,
       "opcodeCount": 6,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -79,10 +79,10 @@
       "iterations": 80000
     },
     "function_call": {
-      "meanNs": 1291.5366666666666,
-      "p95Ns": 1400,
-      "meanUs": 1.2915366666666666,
-      "opsPerUs": 0.7742714750645873,
+      "meanNs": 2038.9466666666667,
+      "p95Ns": 1500,
+      "meanUs": 2.038946666666667,
+      "opsPerUs": 0.49044931696758454,
       "opcodeCount": 5,
       "numbersCount": 1,
       "stringsCount": 0,
@@ -90,10 +90,10 @@
       "iterations": 60000
     },
     "function_two_args": {
-      "meanNs": 1464.126,
-      "p95Ns": 1500,
-      "meanUs": 1.464126,
-      "opsPerUs": 0.6830013263885758,
+      "meanNs": 2291.434,
+      "p95Ns": 1700,
+      "meanUs": 2.291434,
+      "opsPerUs": 0.43640794367195385,
       "opcodeCount": 7,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -101,10 +101,10 @@
       "iterations": 50000
     },
     "percentage": {
-      "meanNs": 1561.726,
-      "p95Ns": 1600,
-      "meanUs": 1.5617260000000002,
-      "opsPerUs": 0.6403171875220108,
+      "meanNs": 2079.99,
+      "p95Ns": 1800,
+      "meanUs": 2.0799899999999996,
+      "opsPerUs": 0.4807715421708759,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -112,10 +112,10 @@
       "iterations": 50000
     },
     "percentage_change": {
-      "meanNs": 1598.155,
-      "p95Ns": 1700,
-      "meanUs": 1.598155,
-      "opsPerUs": 0.6257215351452143,
+      "meanNs": 2636.4375,
+      "p95Ns": 1900,
+      "meanUs": 2.6364375,
+      "opsPerUs": 0.37929971789583483,
       "opcodeCount": 11,
       "numbersCount": 4,
       "stringsCount": 0,
@@ -123,10 +123,10 @@
       "iterations": 40000
     },
     "unit_conversion": {
-      "meanNs": 1299.46,
-      "p95Ns": 1400,
-      "meanUs": 1.29946,
-      "opsPerUs": 0.7695504286395887,
+      "meanNs": 2013.8625,
+      "p95Ns": 1600,
+      "meanUs": 2.0138625,
+      "opsPerUs": 0.49655823076302374,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 2,
@@ -134,10 +134,10 @@
       "iterations": 40000
     },
     "unit_in": {
-      "meanNs": 1186.47,
-      "p95Ns": 1300,
-      "meanUs": 1.1864700000000001,
-      "opsPerUs": 0.8428363127596988,
+      "meanNs": 1827.3125,
+      "p95Ns": 1600,
+      "meanUs": 1.8273125,
+      "opsPerUs": 0.5472517700174436,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 2,
@@ -145,10 +145,10 @@
       "iterations": 40000
     },
     "datetime": {
-      "meanNs": 1239.6366666666668,
-      "p95Ns": 1300,
-      "meanUs": 1.2396366666666667,
-      "opsPerUs": 0.8066879811557687,
+      "meanNs": 1934.4766666666667,
+      "p95Ns": 1400,
+      "meanUs": 1.9344766666666666,
+      "opsPerUs": 0.5169356742478155,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -156,10 +156,10 @@
       "iterations": 30000
     },
     "dice": {
-      "meanNs": 1544.3133333333333,
-      "p95Ns": 1600,
-      "meanUs": 1.5443133333333332,
-      "opsPerUs": 0.6475369851541355,
+      "meanNs": 2043.74,
+      "p95Ns": 1800,
+      "meanUs": 2.04374,
+      "opsPerUs": 0.4892990302093221,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -167,10 +167,10 @@
       "iterations": 30000
     },
     "vector": {
-      "meanNs": 1955.5766666666666,
+      "meanNs": 2692.2166666666667,
       "p95Ns": 2200,
-      "meanUs": 1.9555766666666665,
-      "opsPerUs": 0.5113581160203384,
+      "meanUs": 2.6922166666666665,
+      "opsPerUs": 0.37144112967628906,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -178,10 +178,10 @@
       "iterations": 30000
     },
     "variable_assign": {
-      "meanNs": 1285.4516666666666,
-      "p95Ns": 1400,
-      "meanUs": 1.2854516666666667,
-      "opsPerUs": 0.7779366785474885,
+      "meanNs": 1937.98,
+      "p95Ns": 1500,
+      "meanUs": 1.93798,
+      "opsPerUs": 0.5160011971227774,
       "opcodeCount": 4,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -189,10 +189,10 @@
       "iterations": 60000
     },
     "variable_ref": {
-      "meanNs": 1293.51,
-      "p95Ns": 1400,
-      "meanUs": 1.29351,
-      "opsPerUs": 0.7730902737512659,
+      "meanNs": 1936.7033333333334,
+      "p95Ns": 1500,
+      "meanUs": 1.9367033333333334,
+      "opsPerUs": 0.5163413429349875,
       "opcodeCount": 5,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -200,10 +200,10 @@
       "iterations": 60000
     },
     "mixed_complex": {
-      "meanNs": 3009.045,
-      "p95Ns": 3100,
-      "meanUs": 3.009045,
-      "opsPerUs": 0.33233135430011845,
+      "meanNs": 4116.3,
+      "p95Ns": 3600,
+      "meanUs": 4.1163,
+      "opsPerUs": 0.2429366178364065,
       "opcodeCount": 23,
       "numbersCount": 7,
       "stringsCount": 0,
@@ -211,10 +211,10 @@
       "iterations": 20000
     },
     "bigint_hex": {
-      "meanNs": 1254.368,
-      "p95Ns": 1300,
-      "meanUs": 1.254368,
-      "opsPerUs": 0.7972142146483329,
+      "meanNs": 1754.35,
+      "p95Ns": 1500,
+      "meanUs": 1.7543499999999999,
+      "opsPerUs": 0.5700116852395475,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -223,9 +223,9 @@
     }
   },
   "summary": {
-    "meanUs": 1.5815451499999997,
-    "minUs": 1.0689490000000001,
-    "maxUs": 3.009045,
+    "meanUs": 2.4490378833333337,
+    "minUs": 1.7543499999999999,
+    "maxUs": 4.1163,
     "meanOpcodesPerExpr": 7.65
   },
   "metadata": {

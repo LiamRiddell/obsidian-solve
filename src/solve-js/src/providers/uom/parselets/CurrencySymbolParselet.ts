@@ -5,7 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
-const symbolToCurrency: Record<string, string> = {
+export const symbolToCurrency: Record<string, string> = {
   "$": "USD",
   "£": "GBP",
   "€": "EUR",

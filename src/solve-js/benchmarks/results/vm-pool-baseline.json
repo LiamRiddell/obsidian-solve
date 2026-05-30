@@ -1,106 +1,106 @@
 {
-  "timestamp": "2026-05-29T23:18:31.939Z",
+  "timestamp": "2026-05-30T16:48:13.996Z",
   "summary": {
-    "meanDeltaNs": 107.71899999999994,
-    "meanPercentImprovement": 19.018981063734916,
-    "estimatedAllocCostNs": 107.71899999999994
+    "meanDeltaNs": 330.4083333333333,
+    "meanPercentImprovement": 19.14302369771847,
+    "estimatedAllocCostNs": 330.4083333333333
   },
   "details": [
     {
       "name": "simple_add",
       "withoutPool": {
-        "meanNs": 385.006,
+        "meanNs": 597.996,
         "p95Ns": 500,
         "medianNs": 300
       },
       "withPool": {
-        "meanNs": 268.312,
+        "meanNs": 757.884,
         "p95Ns": 300,
         "medianNs": 200
       },
-      "deltaNs": 116.69399999999996,
-      "speedupRatio": 0.6969034248816902,
-      "percentImprovement": 30.309657511830977
+      "deltaNs": -159.88800000000003,
+      "speedupRatio": 1.267373025906528,
+      "percentImprovement": -26.73730259065279
     },
     {
       "name": "variable_access",
       "withoutPool": {
-        "meanNs": 423.52,
-        "p95Ns": 500,
+        "meanNs": 802.144,
+        "p95Ns": 1300,
         "medianNs": 400
       },
       "withPool": {
-        "meanNs": 307.822,
+        "meanNs": 377.766,
         "p95Ns": 400,
         "medianNs": 300
       },
-      "deltaNs": 115.69799999999998,
-      "speedupRatio": 0.726818095957688,
-      "percentImprovement": 27.318190404231203
+      "deltaNs": 424.378,
+      "speedupRatio": 0.4709453664179998,
+      "percentImprovement": 52.90546335820002
     },
     {
       "name": "vector_creation",
       "withoutPool": {
-        "meanNs": 507.732,
-        "p95Ns": 600,
+        "meanNs": 1103.822,
+        "p95Ns": 1500,
         "medianNs": 500
       },
       "withPool": {
-        "meanNs": 398.454,
+        "meanNs": 628.234,
         "p95Ns": 400,
         "medianNs": 400
       },
-      "deltaNs": 109.27800000000002,
-      "speedupRatio": 0.7847722814398147,
-      "percentImprovement": 21.522771856018533
+      "deltaNs": 475.58799999999985,
+      "speedupRatio": 0.569144300439745,
+      "percentImprovement": 43.08556995602551
     },
     {
       "name": "unit_conversion",
       "withoutPool": {
-        "meanNs": 4048.582,
-        "p95Ns": 4200,
-        "medianNs": 3900
+        "meanNs": 7600.25,
+        "p95Ns": 4600,
+        "medianNs": 4000
       },
       "withPool": {
-        "meanNs": 3963.936,
-        "p95Ns": 4000,
-        "medianNs": 3800
+        "meanNs": 6743.482,
+        "p95Ns": 4300,
+        "medianNs": 3900
       },
-      "deltaNs": 84.64599999999973,
-      "speedupRatio": 0.9790924328567385,
-      "percentImprovement": 2.090756714326145
+      "deltaNs": 856.768,
+      "speedupRatio": 0.887271076609322,
+      "percentImprovement": 11.272892339067795
     },
     {
       "name": "dice_roll",
       "withoutPool": {
-        "meanNs": 665.956,
-        "p95Ns": 700,
+        "meanNs": 1106.64,
+        "p95Ns": 1300,
         "medianNs": 600
       },
       "withPool": {
-        "meanNs": 564.576,
-        "p95Ns": 800,
+        "meanNs": 960.566,
+        "p95Ns": 600,
         "medianNs": 500
       },
-      "deltaNs": 101.38,
-      "speedupRatio": 0.8477677203899356,
-      "percentImprovement": 15.223227961006433
+      "deltaNs": 146.07400000000007,
+      "speedupRatio": 0.8680022410178558,
+      "percentImprovement": 13.199775898214419
     },
     {
       "name": "percentage",
       "withoutPool": {
-        "meanNs": 672.084,
-        "p95Ns": 700,
+        "meanNs": 1133.508,
+        "p95Ns": 1000,
         "medianNs": 600
       },
       "withPool": {
-        "meanNs": 553.466,
+        "meanNs": 893.978,
         "p95Ns": 600,
-        "medianNs": 500
+        "medianNs": 600
       },
-      "deltaNs": 118.61799999999994,
-      "speedupRatio": 0.8235071806500379,
-      "percentImprovement": 17.649281934996214
+      "deltaNs": 239.5300000000001,
+      "speedupRatio": 0.7886825677454415,
+      "percentImprovement": 21.13174322545585
     }
   ],
   "metadata": {

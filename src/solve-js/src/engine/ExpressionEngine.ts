@@ -4,6 +4,8 @@ import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { ScopeManager } from "@solve-js/vm/ScopeManager";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { Parser } from "@solve-js/parser/Parser";
+import { RecursiveDescentParser } from "@solve-js/parser/RecursiveDescentParser";
+import { registerAllHandlers } from "@solve-js/parser/RecursiveDescentBootstrap";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
@@ -47,6 +49,7 @@ export class ExpressionEngine {
     private lexer: Lexer;
     private registry: ParseletRegistry;
     private parser: Parser;
+    private rdParser: RecursiveDescentParser | undefined;
     private localeCode: string;
     private vm: VM;
     private config: typeof DEFAULT_CONFIG;
@@ -105,6 +108,13 @@ export class ExpressionEngine {
             this.registerPackage(pkg);
         }
         this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth, localeCode);
+        if (this.config.parser.useRecursiveDescent) {
+            this.rdParser = new RecursiveDescentParser(
+                this.config.validation.maxNestingDepth,
+                localeCode
+            );
+            registerAllHandlers(this.rdParser);
+        }
         this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
     }
 
@@ -359,6 +369,25 @@ export class ExpressionEngine {
     }
 
     /**
+     * Route parse+compile to the active parser (Pratt or Recursive Descent).
+     *
+     * Sets up the builder on the active parser, loads tokens, and calls
+     * parseExpression(). Abstracts the API difference between the two parsers:
+     * - Pratt:   parser.parseExpression(0, builder)
+     * - RD:      parser.builder = builder; parser.parseExpression(0)
+     */
+    private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean): void {
+        if (this.rdParser) {
+            this.rdParser.builder = builder;
+            this.rdParser.load(tokens, hasParens);
+            this.rdParser.parseExpression(0);
+        } else {
+            this.parser.load(tokens, hasParens);
+            this.parser.parseExpression(0, builder);
+        }
+    }
+
+    /**
      * Evaluate an expression using already-lexed tokens.
      *
      * This is the shared core of both evaluateLine() (which lexes via
@@ -408,9 +437,8 @@ export class ExpressionEngine {
             // Get a pooled builder — avoids 4 heap allocations per expression
             const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
             builder.reset();
-            this.parser.load(tokens, hasParens);
             try {
-                this.parser.parseExpression(0, builder);
+                this.parseExpression(builder, tokens, hasParens);
             } catch (e) {
                 const errorMessage = e instanceof Error ? e.message : String(e);
                 throw ErrorFactory.execution(
@@ -624,15 +652,18 @@ export class ExpressionEngine {
 
             // Parselet matching event: inject into parser via pipeline
             if (hasCollectors) {
-                this.parser.setDiagnosticPipeline(pipeline, expression);
+                if (this.rdParser) {
+                    this.rdParser.setDiagnosticPipeline(pipeline, expression);
+                } else {
+                    this.parser.setDiagnosticPipeline(pipeline, expression);
+                }
             }
 
             // Get a pooled builder — avoids 4 heap allocations per expression
             const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
             builder.reset();
-            this.parser.load(tokens, hasParens);
             try {
-                this.parser.parseExpression(0, builder);
+                this.parseExpression(builder, tokens, hasParens);
             } catch (e) {
                 const errorMessage = e instanceof Error ? e.message : String(e);
 
@@ -675,7 +706,11 @@ export class ExpressionEngine {
             }
 
             // Clear parser pipeline reference to avoid holding refs
-            this.parser.setDiagnosticPipeline(undefined, "");
+            if (this.rdParser) {
+                this.rdParser.setDiagnosticPipeline(undefined, "");
+            } else {
+                this.parser.setDiagnosticPipeline(undefined, "");
+            }
         }
 
         // Use the shared VM instance
@@ -857,9 +892,8 @@ if (hasCollectors) {
 		// Parse and compile — get a pooled builder to avoid heap allocations
 		const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
 		builder.reset();
-		this.parser.load(tokens, hasParens);
 		try {
-			this.parser.parseExpression(0, builder);
+			this.parseExpression(builder, tokens, hasParens);
 		} catch (e) {
 			const errorMessage = e instanceof Error ? e.message : String(e);
 			throw ErrorFactory.parsing(

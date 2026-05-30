@@ -26,7 +26,8 @@ The project is in **production-ready shape** — 88 test suites, 1,966 tests pas
 | VM hot loop (5.1) | Dispatch table, numeric fast path, ValueArena, builder pool | ✅ |
 | Code hygiene | 1 item remains (split initDispatchTable) | 🟡 |
 | Parse+Compile optimization (§5.5) | 6 deferred items | ⏸️ |
-| npm package extraction (§3.3) | 6 items | ⏸️ |
+| npm package extraction (§3.3) | → See PLAN_06 for detailed API design | ⏸️ |
+| Plugin system architecture | → PLAN_06: 4-tier API (Level 0 macros → Level 3 parselets), type system, coercion, resolvers, orchestration (plan only) | ⏸️ |
 
 ---
 
@@ -353,7 +354,11 @@ All three create an ExpressionEngine, handle EVAL/EVAL_DOC messages, and post ba
 2. **Own `package.json`** — With proper exports, types, and build config
 3. **Self-contained worker** — The Web Worker entry should be bundled within the package
 4. **External API stability** — `SolveAPI.ts`, `PluginSystem.ts`, `ExpressionEngine` public API
+   - ⏸️ **Detailed API design deferred to PLAN_06** — see `plans/PLAN_06_plugin_system_integration.md` for the four-tier plugin API (Level 0 macros `registerConstant()`/`registerMacro()`, Level 1 domain vocabulary `registerDomain()`, Level 2 operator/coercion customization, Level 3 parselet access), type/coercion/resolver registries, phrase normalization, orchestration layer, and namespace isolation.
 5. **Remove path aliases** — `@solve-js/*` and `@app/*` won't work for external consumers. Use proper relative imports or an exports map.
+6. **Plugin-extensible type system** — PLAN_06 §3.1: `ValueTypeRegistry` with dynamic type IDs ≥100, custom types alongside core `ValueType` enum
+7. **Plugin-extensible coercion** — PLAN_06 §3.2: `CoercionRegistry` for `item → number` via price lookup, `gp → number`, etc.
+8. **Async resolver layer** — PLAN_06 §3.3 + §5: `ResolverRegistry` + `Orchestrator` wrap the synchronous engine for async data fetching (OSRS prices, crypto rates, etc.) without touching the fast-path
 
 ---
 
@@ -475,6 +480,47 @@ Per `TESTING_GUIDELINES.md` targets:
    - **Massive** (~20,000+ expressions, ~100,000+ lines) — stress test, measure memory stability and GC pressure
    - Track breakdown: lex% + parse% + compile% + execute% of total time to identify pipeline bottlenecks
    - Separate cold-start (no cache, full pipeline) vs warm-start (cached bytecode, execute-only) measurements
+
+---
+
+## Category 7: Plugin System Architecture
+
+> ⏸️ **PLAN ONLY** — See `plans/PLAN_06_plugin_system_integration.md` for the full specification. This section summarizes the key architectural decisions and cross-references the detailed plan.
+
+### 7.1 Four-Tier Plugin API
+
+| Tier | API | Use Case |
+|------|-----|----------|
+| **Level 0** (60%) | `solve.registerConstant(name, value)` / `solve.registerMacro(pattern, resolver)` | One-liner keyword/value mapping ("Current time", "pi", "sqrt(16)") |
+| **Level 1** (30%) | `solve.registerDomain({ namespace, vocabulary, keywords, resolvers })` | Domain vocabulary + async data ("5 km in miles", "1 BTC in USD") |
+| **Level 2** (8%) | Same `registerDomain()` + `operators`/`coercions` fields | Custom arithmetic for domain types (date math, vector math) |
+| **Level 3** (2%) | Direct parselet/opcode/lexer plugin access (`ISolvePackage`, `SolvePlugin`) | Full control — custom syntax, new grammar rules |
+
+### 7.2 New Components (PLAN_06 §3)
+
+- **`ValueTypeRegistry`** — Dynamic type IDs ≥100, namespace-scoped, plugin-unload cleanup
+- **`CoercionRegistry`** — `from → to` conversion rules with priority ordering
+- **`ResolverRegistry`** — Named async resolvers, batch dispatch with dedup
+- **`PhraseNormalizer`** — Complements MASTER_PLAN §5.4.0's `PhraseMatcher`: the PhraseMatcher handles **grammar phrases** (`"to the power of"` → CARET), while PLAN_06's PhraseNormalizer handles **domain vocabulary** (`"Iron Axe"` → PHRASE item)
+
+### 7.3 Orchestration Layer (PLAN_06 §5)
+
+Async resolution wraps the synchronous engine without modifying it:
+
+```
+tokenize → normalize → parse → collect unresolved → resolve async → substitute → evaluate
+```
+
+The `Orchestrator` class is a separate wrapper — `engine.evaluateExpression()` fast path is untouched.
+
+### 7.4 What NOT to Do (PLAN_06 §10)
+
+- ❌ Don't make the engine async — async is strictly in the orchestrator
+- ❌ Don't replace the existing `Value` type system — plugin types are additive
+- ❌ Don't require plugins to write parselets for common patterns — auto-generate from declarations
+- ❌ Don't expose internal types (`OpCode`, `BytecodeBuilder`, `Parser`) in Level 0, 1, or 2 APIs — those are Level 3 escape-hatch only
+- ❌ Don't implement plugin discovery until Phase E — file-system scanning is non-essential for core architecture
+- ❌ Don't make `registerMacro()` do things `registerDomain()` can't — Level 0 is a convenience wrapper, not a separate code path
 
 ---
 
@@ -629,6 +675,8 @@ Per `TESTING_GUIDELINES.md` targets:
 #### 5.4.0 TokenClass API — Plugin-Extensible Keyword Registration
 
 > ⚠️ **ARCHITECTURE NOTE (May 2026):** The implementation code examples in this section reflect the original draft architecture (CHAR_CLASS, ring buffer). The underlying Lexer implementation has been revised — see **§5.4.3** for the current V8-optimized design. The TokenClass API, TokenLookup, and PhraseMatcher interfaces documented here remain valid and unchanged.
+>
+> 🔗 **PLAN_06 cross-reference:** This section's `PhraseMatcher` handles **grammar phrases** (e.g., `"to the power of"` → CARET token). PLAN_06's `PhraseNormalizer` (§3.4) handles a complementary concern: **domain vocabulary** merging (e.g., `"Iron Axe"` → PHRASE item). Both use the same trie infrastructure but serve different tokenization layers. See `plans/PLAN_06_plugin_system_integration.md`.
 
 **Problem:** The current moo lexer uses `ciKeywords()` and `phraseType()` closures that are rebuilt per-locale at `MarkdownLexer` construction time. These closures are opaque functions called once per IDENT token — ~2-3 µs overhead per expression for the function call + prototype chain lookup alone. The Lexer needs an **O(1) hash lookup** that is:
 
