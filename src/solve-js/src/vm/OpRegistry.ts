@@ -15,14 +15,27 @@ export interface IOpcodeHandlerRegistration {
 	pluginName: string;
 }
 
+/** Maximum safe opcode value for Uint8Array storage. */
+const MAX_OPCODE = 254;
+
 /**
  * Plugin-extensible opcode registry for the VM.
  *
  * Maps OpCode values → handler functions. Plugin custom opcodes (OpCode >= 200)
  * are registered here and dispatched by the VM's switch-default path.
+ *
+ * ## Dynamic opcode allocation
+ *
+ * Call {@link allocateOpcode} to get a unique opcode for your plugin.
+ * Allocations start at `PLUGIN_CUSTOM + 1` (201) and increment per call.
+ * The legacy `PLUGIN_CUSTOM` (200) remains as a shared fallback slot.
+ *
+ * Max 54 dynamic opcodes (201–254) — the Uint8Array bytecode format
+ * caps all opcodes at 255.
  */
 export class OpRegistry {
 	private handlers = new Map<OpCode, OpcodeHandler>();
+	private nextOpcode = OpCode.PLUGIN_CUSTOM + 1;
 
 	register(registration: IOpcodeHandlerRegistration): void {
 		this.handlers.set(registration.opcode, registration.handler);
@@ -35,6 +48,27 @@ export class OpRegistry {
 	has(opcode: OpCode): boolean {
 		return this.handlers.has(opcode);
 	}
+
+	/**
+	 * Allocate a unique opcode for a plugin's custom bytecode handler.
+	 *
+	 * Returns the next available opcode (starting at 201). Each call
+	 * returns a distinct value. Plugins should call this once during
+	 * registration and store the result.
+	 *
+	 * @throws If the dynamic opcode pool is exhausted (>254 allocations).
+	 * @returns A unique OpCode for the calling plugin.
+	 */
+	allocateOpcode(): OpCode {
+		if (this.nextOpcode > MAX_OPCODE) {
+			throw new Error(
+				`OpRegistry: dynamic opcode pool exhausted (max ${MAX_OPCODE - OpCode.PLUGIN_CUSTOM} allocations). ` +
+				`Consider using PLUGIN_CUSTOM (200) as a shared fallback.`
+			);
+		}
+		return this.nextOpcode++ as OpCode;
+	}
+
 }
 
 /**

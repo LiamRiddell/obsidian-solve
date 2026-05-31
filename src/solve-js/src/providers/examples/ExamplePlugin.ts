@@ -1,9 +1,8 @@
 import { solve } from "@solve-js/api/SolveAPI";
-import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType } from "@solve-js/vm/Value";
 
 export function registerExamplePlugin(): void {
-  const EXAMPLE_OPCODE = OpCode.PLUGIN_CUSTOM;
+  const EXAMPLE_OPCODE = solve.allocateOpcode();
 
   solve.registerOpcodeHandler({
     opcode: EXAMPLE_OPCODE,

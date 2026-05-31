@@ -77,6 +77,16 @@ export enum OpCode {
 	ARR_NORMALIZE = 107,
 
 	// Plugin extensibility
+	//
+	// PLUGIN_CUSTOM (200) is the legacy shared opcode — multiple plugins
+	// can register handlers for it, but the last registration wins.
+	//
+	// Prefer dynamic allocation: call OpRegistry.allocateOpcode() to
+	// receive a unique opcode in the 201–254 range.  This guarantees
+	// no collisions and is capped at 54 concurrent plugins.
+	//
+	// The VM dispatch uses a switch case for PLUGIN_CUSTOM (200) and
+	// a default branch that handles all opcodes >= 201 via the registry.
 	PLUGIN_CUSTOM = 200,
 }
 

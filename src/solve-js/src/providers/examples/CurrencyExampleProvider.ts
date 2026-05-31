@@ -1,9 +1,8 @@
 import { solve } from "@solve-js/api/SolveAPI";
-import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType } from "@solve-js/vm/Value";
 
 export function registerCurrencyPlugin(): void {
-  const CURRENCY_LOOKUP = OpCode.PLUGIN_CUSTOM;
+  const CURRENCY_LOOKUP = solve.allocateOpcode();
 
   solve.registerOpcodeHandler({
     opcode: CURRENCY_LOOKUP,

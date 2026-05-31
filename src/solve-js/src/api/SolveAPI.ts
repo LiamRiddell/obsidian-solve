@@ -13,6 +13,8 @@ export interface ISolve {
   registerPrefixParselet(tokenType: string, parselet: PrefixParselet): void;
   registerInfixParselet(tokenType: string, parselet: InfixParselet): void;
   registerOpcodeHandler(registration: IOpcodeHandlerRegistration): void;
+  /** Allocate a unique opcode for plugin custom bytecode. See {@link OpRegistry.allocateOpcode}. */
+  allocateOpcode(): OpCode;
   registerVariableSource(source: IVariableSource): void;
   registerPackage(pkg: ISolvePackage): void;
   getOpCode(): typeof OpCode;
@@ -48,6 +50,10 @@ export class Solve implements ISolve {
 
   registerOpcodeHandler(registration: IOpcodeHandlerRegistration): void {
     sharedOpRegistry.register(registration);
+  }
+
+  allocateOpcode(): OpCode {
+    return sharedOpRegistry.allocateOpcode();
   }
 
   registerVariableSource(source: IVariableSource): void {
