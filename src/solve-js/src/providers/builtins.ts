@@ -169,6 +169,9 @@ export const BIGINT_PACKAGE: ISolvePackage = {
   ],
 };
 
+// ── OSRS Grand Exchange (demo package) ────────────────────────────────────
+import { OSRS_GE_PACKAGE } from "./osrs/OsrsGePackage";
+
 // ── All built-in packages (registration order matters: arithmetic first) ──
 export const BUILTIN_PACKAGES: ISolvePackage[] = [
   ARITHMETIC_PACKAGE,
@@ -181,4 +184,5 @@ export const BUILTIN_PACKAGES: ISolvePackage[] = [
   CURRENCY_PACKAGE,
   VECTOR_PACKAGE,
   BIGINT_PACKAGE,
+  OSRS_GE_PACKAGE,
 ];
