@@ -390,7 +390,6 @@ export class AsyncResolutionBatcher {
 			// Reconstruct Value from serialized result.
 			const value = reconstructValue(wr);
 			entry.result = value;
-			this.lineCache.markClean(wr.lineNumber);
 			updatedLineNumbers.push(wr.lineNumber);
 		}
 
@@ -432,7 +431,6 @@ export class AsyncResolutionBatcher {
 
 			if (result.type === "value") {
 				entry.result = result.value;
-				this.lineCache.markClean(lineNumber);
 				updatedLineNumbers.push(lineNumber);
 			}
 			// If still pending, don't mark as updated — will be handled by the

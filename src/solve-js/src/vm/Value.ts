@@ -246,12 +246,7 @@ export function arrayValue(v: number[]): Value {
 	return new Value(ValueType.Array, v);
 }
 
-/**
- * @deprecated Use arrayValue() instead. Kept for backward compatibility.
- */
-export function vectorValue(v: number[]): Value {
-	return arrayValue(v);
-}
+
 
 /** Create a Boolean-typed Value. */
 export function boolValue(b: boolean): Value {

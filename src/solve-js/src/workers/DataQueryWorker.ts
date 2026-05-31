@@ -97,8 +97,6 @@ export class DataQueryWorker {
   }
 }
 
-/**
- * Re-export types for backward compatibility
- */
+// Re-export types used by DataQueryService
 export type { DataSourceType } from './DataSourceStrategy';
 export type { DataSourceConfig, FetchRequest, FetchResponse } from './DataSourceStrategy';

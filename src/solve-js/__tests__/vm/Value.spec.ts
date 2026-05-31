@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
-import { ValueType, numberValue, stringValue, bigIntValue, hexValue, vectorValue, uomValue } from "@solve-js/vm/Value";
+import { ValueType, numberValue, stringValue, bigIntValue, hexValue, arrayValue, uomValue } from "@solve-js/vm/Value";
 
 describe("Value", () => {
   test("numberValue creates number type", () => {
@@ -34,17 +34,17 @@ test("stringValue creates string type", () => {
     expect(v.toNumber()).toBe(9007199254740991);
   });
 
-  test("vectorValue creates array types", () => {
-    const v2 = vectorValue([1, 2]);
+  test("arrayValue creates array types", () => {
+    const v2 = arrayValue([1, 2]);
     expect(v2.type).toBe(ValueType.Array);
     expect(v2.isVector()).toBe(true);
     expect(v2.value).toEqual([1, 2]);
 
-    const v3 = vectorValue([1, 2, 3]);
+    const v3 = arrayValue([1, 2, 3]);
     expect(v3.type).toBe(ValueType.Array);
     expect(v3.isVector()).toBe(true);
 
-    const v4 = vectorValue([1, 2, 3, 4]);
+    const v4 = arrayValue([1, 2, 3, 4]);
     expect(v4.type).toBe(ValueType.Array);
     expect(v4.isVector()).toBe(true);
   });

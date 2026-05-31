@@ -188,15 +188,7 @@ export class DataQueryService {
   // PLUGIN MANAGEMENT
   // ------------------------------------------------------------------------
 
-  registerPlugin(plugin: unknown): void {
-    // Plugins are now handled natively in the worker
-    console.log("[DataQueryService] Plugin registration deprecated - using native worker handlers");
-  }
-
-  unregisterPlugin(pluginId: string): void {
-    // No-op: plugins are now handled natively in the worker
-  }
-
+ 
   // ------------------------------------------------------------------------
   // QUERY EXECUTION
   // ------------------------------------------------------------------------

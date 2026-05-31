@@ -189,6 +189,12 @@ export class PrecedenceParser {
    * @param _builder - accepted for parselet API compatibility; always uses `this.builder`.
    */
   parseExpression(minBp: number = 0, _builder?: BytecodeBuilder): void {
+    // Accept builder via parameter for backward compatibility with the old Parser API.
+    // The ExpressionEngine always calls setBuilder() before parseExpression(),
+    // but tests and parselets pass builder as a parameter.
+    if (_builder) {
+      this.builder = _builder;
+    }
     this.depth++;
     if (this.depth > this.maxDepth) {
       this.depth--;

@@ -204,8 +204,4 @@ export class CurrencyPollingService {
 
 export const sharedCurrencyPollingService = new CurrencyPollingService();
 
-// Export for backward compatibility
-export const sharedCurrencyExchange = sharedCurrencyPollingService;
-
-// Default export
 export default sharedCurrencyPollingService;

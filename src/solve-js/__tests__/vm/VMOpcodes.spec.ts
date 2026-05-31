@@ -2,7 +2,7 @@ import { describe, expect, test } from "@jest/globals";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry, OpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, enableValueArena, disableValueArena, numberValue, bigIntValue, uomValue, vectorValue, percentageValue, datetimeValue, stringValue } from "@solve-js/vm/Value";
+import { Value, ValueType, enableValueArena, disableValueArena, numberValue, bigIntValue, uomValue, arrayValue, percentageValue, datetimeValue, stringValue } from "@solve-js/vm/Value";
 import type { VM } from "@solve-js/vm/OpRegistry";
 
 function bc(
@@ -141,7 +141,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("ADD Number + Vector (vector scaling)", () => {
     const vm = freshVM();
-    pushValues(vm, numberValue(10), vectorValue([1, 2]));
+    pushValues(vm, numberValue(10), arrayValue([1, 2]));
     // Stack: [Number(10), Vector[1,2]]; ADD pops r=Vector, l=Number
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
     // binaryOp: l=Number, r=Vector → rv.map(v => op(lv, v)) → [10+1, 10+2]
@@ -151,7 +151,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("ADD Vector + Number (vector scaling)", () => {
     const vm = freshVM();
-    pushValues(vm, vectorValue([1, 2]), numberValue(10));
+    pushValues(vm, arrayValue([1, 2]), numberValue(10));
     // Stack: [Vector[1,2], Number(10)]; ADD pops r=Number, l=Vector
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
     // binaryOp: l=Vector, r=Number → lv.map(v => op(v, rv)) → [1+10, 2+10]
@@ -207,7 +207,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("SUB Vector - Number", () => {
     const vm = freshVM();
-    pushValues(vm, vectorValue([10, 20]), numberValue(3));
+    pushValues(vm, arrayValue([10, 20]), numberValue(3));
     const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
     expect(unwrapEvalResult(result).value).toEqual([7, 17]);
@@ -215,7 +215,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("SUB Number - Vector", () => {
     const vm = freshVM();
-    pushValues(vm, numberValue(10), vectorValue([1, 2]));
+    pushValues(vm, numberValue(10), arrayValue([1, 2]));
     const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
     expect(unwrapEvalResult(result).value).toEqual([9, 8]);
@@ -233,7 +233,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("MUL Vector * Number", () => {
     const vm = freshVM();
-    pushValues(vm, vectorValue([2, 3]), numberValue(4));
+    pushValues(vm, arrayValue([2, 3]), numberValue(4));
     const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
     expect(unwrapEvalResult(result).value).toEqual([8, 12]);
@@ -241,7 +241,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("MUL Number * Vector", () => {
     const vm = freshVM();
-    pushValues(vm, numberValue(4), vectorValue([2, 3]));
+    pushValues(vm, numberValue(4), arrayValue([2, 3]));
     const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
     expect(unwrapEvalResult(result).value).toEqual([8, 12]);
@@ -251,7 +251,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("DIV Vector / Number", () => {
     const vm = freshVM();
-    pushValues(vm, vectorValue([10, 20]), numberValue(2));
+    pushValues(vm, arrayValue([10, 20]), numberValue(2));
     const result = executeBytecode(bc([OpCode.DIV, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
     expect(unwrapEvalResult(result).value).toEqual([5, 10]);
@@ -269,7 +269,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("ARR_ADD Vector + Number", () => {
     const vm = freshVM();
-    pushValues(vm, vectorValue([5, 10]), numberValue(3));
+    pushValues(vm, arrayValue([5, 10]), numberValue(3));
     const result = executeBytecode(bc([OpCode.ARR_ADD, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
     expect(unwrapEvalResult(result).value).toEqual([8, 13]);
@@ -277,7 +277,7 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("ARR_SUB Vector - Number", () => {
     const vm = freshVM();
-    pushValues(vm, vectorValue([5, 10]), numberValue(3));
+    pushValues(vm, arrayValue([5, 10]), numberValue(3));
     const result = executeBytecode(bc([OpCode.ARR_SUB, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
     expect(unwrapEvalResult(result).value).toEqual([2, 7]);

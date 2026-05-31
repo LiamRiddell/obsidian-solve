@@ -5,7 +5,8 @@
  * - set/get/has/remove operations
  * - Entry metadata (readVariables, writeVariable, dependency tracking)
  * - Lifecycle: clear, removeAllForLine, overwrite-on-set
- * - Backward-compat no-ops: markDirty/markClean
+ * - Entry metadata (readVariables, writeVariable, dependency tracking)
+ * - Lifecycle: clear, removeAllForLine, overwrite-on-set
  */
 
 import { describe, expect, test } from "@jest/globals";
@@ -33,7 +34,7 @@ describe("LineCache", () => {
     expect(cache.get(1)!.result.toNumber()).toBe(42);
   });
 
-  test("markDirty and markClean are retained as no-ops (backward compat)", () => {
+  test("entry survives clear and reload", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(0),
@@ -42,11 +43,9 @@ describe("LineCache", () => {
       null
     );
     cache.set(1, entry);
-    cache.markDirty(1);
-    // markDirty is a no-op — dirty state tracked in DocumentModel
-    cache.markClean(1);
-    // markClean is a no-op — dirty state tracked in DocumentModel
+    // Dirty state is managed by DocumentModel, not LineCache
     expect(cache.has(1)).toBe(true);
+    expect(cache.get(1)!.result.toNumber()).toBe(0);
   });
 
   test("getEntryForLine finds entries by line prefix", () => {

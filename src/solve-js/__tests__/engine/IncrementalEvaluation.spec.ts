@@ -28,8 +28,8 @@ describe("Phase 6: Incremental Evaluation", () => {
       expect(lc).toBeDefined();
       expect(typeof lc.get).toBe("function");
       expect(typeof lc.has).toBe("function");
-      expect(typeof lc.markDirty).toBe("function");
-      expect(typeof lc.markClean).toBe("function");
+      expect(typeof lc.getEntryForLine).toBe("function");
+      expect(typeof lc.clear).toBe("function");
     });
   });
 

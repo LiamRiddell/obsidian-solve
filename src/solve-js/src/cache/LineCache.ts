@@ -43,27 +43,6 @@ get(line: number, expression?: string): LineCacheEntry | undefined {
     this.entries.set(this.getKey(line, expression), entry);
   }
 
-/**
-   * Mark a line's cache entries as stale.
-   *
-   * NOTE: Dirty-state tracking has been consolidated into DocumentModel.
-   * This method is retained for backward compatibility but is a no-op —
-   * the caller (DynamicValueResolver, markDirtyFromVariable) manages
-   * dirty state through DocumentModel.LineState.dirty instead.
-   */
-  markDirty(_line: number, _expression?: string): void {
-    // DocumentModel.LineState.dirty is the canonical dirty flag.
-  }
-
-  /**
-   * Mark a line's cache entries as clean.
-   *
-   * NOTE: See markDirty — dirty state is tracked in DocumentModel.
-   */
-  markClean(_line: number, _expression?: string): void {
-    // DocumentModel.LineState.dirty is the canonical dirty flag.
-  }
-
   has(line: number, expression?: string): boolean {
     return this.entries.has(this.getKey(line, expression));
   }

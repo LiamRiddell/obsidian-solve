@@ -1224,7 +1224,6 @@ if (hasCollectors) {
 
         const result = evalResult.value;
         entry.result = result;
-        this.lineCache.markClean(lineNumber, expression);
 
         return result;
     }
@@ -1536,7 +1535,6 @@ if (hasCollectors) {
             const result = evalResult.value;
             updated.set(lineNumber, result);
             entry.result = result;
-            this.lineCache.markClean(lineNumber);
         }
         return updated;
     }

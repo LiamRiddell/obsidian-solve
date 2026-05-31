@@ -140,8 +140,9 @@ export class AsyncResultCache {
 	}
 
 	/**
-	 * @deprecated Use clearPackage() for per-package cleanup or clearDomain() for domain-scoped cleanup.
-	 * Clear entries matching a prefix (legacy flat key space — does NOT use per-package scoping).
+	 * Clear cache entries matching a prefix across all packages.
+	 * Used during package unregistration and resolver cleanup to
+	 * invalidate all cached data for a given domain prefix.
 	 */
 	static clearPrefix(prefix: string): void {
 		for (const [, store] of this.stores) {

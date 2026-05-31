@@ -3,7 +3,7 @@ export type { Token, LexerPlugin, PhraseEntry, ScanLineResult } from "./lexer";
 export { TokenTypes, type TokenType } from "./lexer";
 export { TokenRegistry, sharedTokenRegistry } from "./lexer/registry/TokenRegistry";
 
-export { Parser } from "./parser";
+export { PrecedenceParser as Parser } from "./parser";
 export { BytecodeBuilder } from "./parser/BytecodeBuilder";
 export type { BytecodeProgram } from "./parser/BytecodeBuilder";
 export { OpCode, getOpCodeName } from "./parser/OpCode";
@@ -11,7 +11,7 @@ export { BindingPower } from "./parser/BindingPower";
 export { ParseletRegistry, sharedParseletRegistry } from "./parser/registry/ParseletRegistry";
 export type { PrefixParselet, InfixParselet } from "./parser/Parselet";
 
-export { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, vectorValue } from "./vm/Value";
+export { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, arrayValue } from "./vm/Value";
 export { createVM, executeBytecode } from "./vm/VM";
 export type { Bytecode } from "./vm/VM";
 export { builtinFunctions } from "./vm/VMBuiltins";
