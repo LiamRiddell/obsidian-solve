@@ -47,11 +47,13 @@ Execution limits enforced before any performance work. A nanosecond response tha
 
 ## 4. Current State
 
-- **48+ test suites, 1,164+ tests** — all passing
+- **2,000+ tests** across 86+ test suites — all passing
 - **9 built-in providers**: Arithmetic, Percentage, Function, Datetime, UoM, Vector, BigInteger, Dice, Variables
-- **254× warm-cache throughput improvement** from Phase 0 baseline
-- **Phase 0 (baselines) complete**. Phases 1-7 documented in `.opencode/plans/`
-- **Key gaps remaining**: safety limits not enforced, error framework unused, 3 overlapping caches, 15+ `any` types, OpCode enum not extensible
+- **Sub-microsecond VM execution** on pre-built bytecode; **~1µs warm pipeline** with cached bytecode
+- **Safety limits enforced** in Configuration.ts — length, complexity, nesting, instruction count, stack depth
+- **Precedence parser** (Pratt-style) with pluggable parselet registry for community extensions
+- **DAG-driven incremental re-evaluation** — changing one variable only re-executes dependent lines
+- **Async streaming** via EvalResult discriminated union — no throw-based control flow in VM hot path
 
 ---
 
@@ -74,9 +76,9 @@ The pipeline powering all of this: Raw text → Lexer → Pratt Parser → Bytec
 
 ## 7. How AI Agents Should Work Here
 
-1. **Read this file first**, then `CODING_STANDARDS.md`, then `SAFETY_AND_ERROR_HANDLING.md`
+1. **Read this file first**, then `CODING_STANDARDS.md`
 2. **Never change behaviour without a test** — existing tests are the contract
-3. **Never optimise without a benchmark** — see `PERFORMANCE_BUDGETS.md`
+3. **Never optimise without a benchmark** — benchmark specs live in `__tests__/benchmarks/`
 4. **Never add an `any` type** — if you can't type it, ask, don't punt
 5. **Never bypass the error framework** — `SolveError` / `Result<T, E>` everywhere
 6. **Keep it small** — one commit, one phase, one acceptance gate
@@ -85,5 +87,5 @@ The pipeline powering all of this: Raw text → Lexer → Pratt Parser → Bytec
 
 ---
 
-*Last updated: 2026-05-18*
-*Derived from: MASTER_PLAN.md, NANOSECOND_ETHOS_GAP_ANALYSIS.md, IMPLEMENTATION_CONCERNS.md*
+*Last updated: 2026-05-31*
+*This is the single source of truth for project direction and priorities.*
