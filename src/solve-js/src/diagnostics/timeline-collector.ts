@@ -4,6 +4,12 @@ import { DiagnosticEventType } from "./events";
 
 /**
  * Collects all pipeline events with high-resolution timestamps.
+ *
+ * Overrides the zero-filled `elapsedNs` on every incoming event with a
+ * real `performance.now()` delta from `onPipelineStart`. This enables
+ * per-stage timing extraction from the event timeline (lexer/parser/
+ * compiler/VM breakdown) rather than relying on a single total elapsed.
+ *
  * Produces a complete DiagnosticReport at the end of evaluation.
  */
 export class TimelineDiagnosticCollector extends DiagnosticCollector {
@@ -17,17 +23,25 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
     this.startNs = 0;
   }
 
+  /** Stamp the real wall-clock `elapsedNs` onto an event before storing it. */
+  private stamp<T extends DiagnosticEvent>(event: T): T {
+    const elapsedNs = this.startNs !== 0
+      ? performance.now() * 1e6 - this.startNs
+      : 0;
+    return { ...event, elapsedNs } as T;
+  }
+
   onPipelineStart(event: DiagnosticEvent & { type: "pipeline_start" }): void {
     this.startNs = performance.now() * 1e6;
-    this.events.push(event);
+    this.events.push(this.stamp(event));
   }
 
   onTokenEmitted(event: DiagnosticEvent & { type: "token_emitted" }): void {
-    this.events.push(event);
+    this.events.push(this.stamp(event));
   }
 
   onParseletMatched(event: DiagnosticEvent & { type: "parselet_matched" }): void {
-    this.events.push(event);
+    this.events.push(this.stamp(event));
 
     const entry = this.parseletEntries.get(event.parseletCategory);
     if (entry) {
@@ -41,27 +55,27 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
   }
 
   onBytecodeBuilt(event: DiagnosticEvent & { type: "bytecode_built" }): void {
-    this.events.push(event);
+    this.events.push(this.stamp(event));
   }
 
   onVmStep(event: DiagnosticEvent & { type: "vm_step" }): void {
-    this.events.push(event);
+    this.events.push(this.stamp(event));
   }
 
   onVmHalt(event: DiagnosticEvent & { type: "vm_halt" }): void {
-    this.events.push(event);
+    this.events.push(this.stamp(event));
   }
 
   onCacheHit(event: DiagnosticEvent & { type: "cache_hit" }): void {
-    this.events.push(event);
+    this.events.push(this.stamp(event));
   }
 
   onCacheMiss(event: DiagnosticEvent & { type: "cache_miss" }): void {
-    this.events.push(event);
+    this.events.push(this.stamp(event));
   }
 
   onPipelineEnd(event: DiagnosticEvent & { type: "pipeline_end" }): void {
-    this.events.push(event);
+    this.events.push(this.stamp(event));
   }
 
 getReport(): DiagnosticReport | undefined {

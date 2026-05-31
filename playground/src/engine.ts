@@ -40,11 +40,6 @@ export interface DagNode { id: string; label: string; type: string; lineNumber: 
 export interface DagEdge { source: string; target: string; }
 export interface MarkdownNode { id: string; type: string; content: string; children: MarkdownNode[]; hasRun: boolean; depth: number; result?: string; }
 
-function getNanoTime(): number {
-    if (typeof performance !== 'undefined' && performance.now) return performance.now() * 1_000_000;
-    return Date.now() * 1_000_000;
-}
-
 function formatType(val: Value): string {
     const typeNames: Record<number, string> = {
         [ValueType.Number]: 'Number',
@@ -107,6 +102,81 @@ function decodeOpcodeArgs(op: number, opcodeArray: Uint8Array, ip: number): numb
     return [];
 }
 
+/**
+ * Extract per-stage wall-clock timings from the diagnostic event timeline.
+ *
+ * Each event carries a real `elapsedNs` stamp (set by TimelineDiagnosticCollector)
+ * relative to `pipeline_start`. We derive:
+ *   - lexerTime:  first `token_emitted` → last `token_emitted`
+ *   - parserTime: last `token_emitted` → `bytecode_built`
+ *   - bytecodeTime: last `parselet_matched` → `bytecode_built` (compilation tail)
+ *   - executionTime: first `vm_step` (or `bytecode_built`) → `vm_halt`
+ *   - totalTime: `pipeline_start` → `pipeline_end`
+ *
+ * Falls back to zeros when events are unavailable (non-diagnostic mode).
+ *
+ * When a bytecode cache hit occurs, lexer/parser/compiler stages are skipped
+ * entirely — we report zero for those and only capture VM + total time.
+ */
+function extractStageTimings(events: readonly { type: string; elapsedNs: number }[]): PerformanceStats {
+    const hasCacheHit = events.some(e => e.type === 'cache_hit');
+
+    const byType = {
+        tokenEmitted: events.filter(e => e.type === 'token_emitted'),
+        parseletMatched: events.filter(e => e.type === 'parselet_matched'),
+        bytecodeBuilt: events.find(e => e.type === 'bytecode_built'),
+        vmStep: events.filter(e => e.type === 'vm_step'),
+        vmHalt: events.find(e => e.type === 'vm_halt'),
+        pipelineStart: events.find(e => e.type === 'pipeline_start'),
+        pipelineEnd: events.find(e => e.type === 'pipeline_end'),
+    };
+
+    if (hasCacheHit) {
+        // Cache hit: lexer/parser/compiler were skipped entirely.
+        // Only VM execution and total wall-clock time are meaningful.
+        const vmStart = byType.vmStep[0]?.elapsedNs ?? (byType.bytecodeBuilt?.elapsedNs ?? 0);
+        const vmEnd = byType.vmHalt?.elapsedNs ?? (byType.pipelineEnd?.elapsedNs ?? vmStart);
+        const totalStart = byType.pipelineStart?.elapsedNs ?? 0;
+        const totalEnd = byType.pipelineEnd?.elapsedNs ?? vmEnd;
+        return {
+            lexerTime: 0,
+            parserTime: 0,
+            bytecodeTime: 0,
+            executionTime: Math.max(0, vmEnd - vmStart),
+            totalTime: Math.max(0, totalEnd - totalStart),
+        };
+    }
+
+    // Lexer: first token to last token
+    const lexStart = byType.tokenEmitted[0]?.elapsedNs ?? 0;
+    const lexEnd = byType.tokenEmitted[byType.tokenEmitted.length - 1]?.elapsedNs ?? lexStart;
+
+    // Parser: last token → bytecode built
+    const parseStart = lexEnd;
+    const parseEnd = byType.bytecodeBuilt?.elapsedNs ?? parseStart;
+
+    // Compiler tail: last parselet matched → bytecode built
+    const lastParselet = byType.parseletMatched[byType.parseletMatched.length - 1];
+    const compileStart = lastParselet?.elapsedNs ?? parseEnd;
+    const compileEnd = parseEnd;
+
+    // VM: first vm_step (or bytecode built) → vm_halt
+    const vmStart = byType.vmStep[0]?.elapsedNs ?? parseEnd;
+    const vmEnd = byType.vmHalt?.elapsedNs ?? (byType.pipelineEnd?.elapsedNs ?? vmStart);
+
+    // Total: pipeline_start → pipeline_end
+    const totalStart = byType.pipelineStart?.elapsedNs ?? 0;
+    const totalEnd = byType.pipelineEnd?.elapsedNs ?? vmEnd;
+
+    return {
+        lexerTime: Math.max(0, lexEnd - lexStart),
+        parserTime: Math.max(0, parseEnd - parseStart),
+        bytecodeTime: Math.max(0, compileEnd - compileStart),
+        executionTime: Math.max(0, vmEnd - vmStart),
+        totalTime: Math.max(0, totalEnd - totalStart),
+    };
+}
+
 export function runEngine(expression: string): DebugResult {
     const errors: string[] = [];
     let rawTokens: Token[] = [];
@@ -120,16 +190,17 @@ export function runEngine(expression: string): DebugResult {
     let lineResults: LineResult[] = [];
     let parselets: ParseletInfo[] = [];
 
-    const stats: PerformanceStats = { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
-    const totalStart = getNanoTime();
+    // The TimelineDiagnosticCollector accumulates events across ALL
+    // evaluateLineWithDebug() calls without resetting, so line N's
+    // debug.events includes lines 1..N. We capture the last line's
+    // events (which contain the full timeline) and extract timings once.
+    let lastDebugEvents: readonly { type: string; elapsedNs: number }[] | null = null;
 
     try {
         const engine = new ExpressionEngine('en', true);
 
         markdownOutline = generateMarkdownOutline(expression);
         const allLines = expression.split('\n');
-
-        const executionStart = getNanoTime();
 
         allLines.forEach((line, idx) => {
             const trimmed = line.trim();
@@ -138,6 +209,11 @@ export function runEngine(expression: string): DebugResult {
 
             const result = engine.evaluateLineWithDebug(lineNum, trimmed);
             const parselet = (result.debug?.parselets?.[0] as any)?.parseletType ?? 'Expression';
+
+            // Capture the last valid event set (accumulated across all lines)
+            if (result.debug?.events && result.debug.events.length > 0) {
+                lastDebugEvents = result.debug.events;
+            }
 
             if (result.error) {
                 lineResults.push({ lineNumber: lineNum, expression: trimmed, result: '', type: 'Error', parselet, error: result.error });
@@ -196,8 +272,6 @@ export function runEngine(expression: string): DebugResult {
             }
         });
 
-        stats.executionTime = getNanoTime() - executionStart;
-
         if (lineResults.length > 0) {
             const last = lineResults[lineResults.length - 1];
             output = last.result || last.expression;
@@ -216,6 +290,11 @@ export function runEngine(expression: string): DebugResult {
         errors.push(error instanceof Error ? error.message : String(error));
     }
 
-    stats.totalTime = getNanoTime() - totalStart;
+    // Extract per-stage timings once from the last accumulated event set.
+    // Falls back to zeroes when events are unavailable (non-diagnostic mode).
+    const stats: PerformanceStats = lastDebugEvents
+        ? extractStageTimings(lastDebugEvents)
+        : { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
+
     return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets };
 }
