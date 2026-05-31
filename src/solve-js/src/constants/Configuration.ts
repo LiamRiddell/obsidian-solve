@@ -83,6 +83,16 @@ export interface ValidationConfig {
   readonly maxComplexity: number;
   /** Maximum parentheses nesting depth. Prevents stack overflow in the recursive-descent parser. */
   readonly maxNestingDepth: number;
+  /**
+   * Auto-balance unmatched parentheses by appending missing closing parens
+   * or prepending missing opening parens. When disabled, unbalanced expressions
+   * cause parse errors instead of being silently corrected.
+   *
+   * Disabled by default for strict parsing. Enable for forgiving user input
+   * (e.g., chat-style calculators where users often omit closing parens).
+   * Has zero overhead when disabled — the O(n) paren-count scan is skipped.
+   */
+  readonly autoBalanceParens: boolean;
 }
 
 /**
@@ -180,10 +190,11 @@ export const DEFAULT_CONFIG: EngineConfig = {
      parseTimeoutMs: 5000,
      executionTimeoutMs: 10000
    },
-   validation: {
-maxExpressionLength: 2000,
+    validation: {
+      maxExpressionLength: 2000,
       maxComplexity: 500,
-      maxNestingDepth: 50
+      maxNestingDepth: 50,
+      autoBalanceParens: false,
     },
     vm: {
       maxStackDepth: 200,
@@ -335,14 +346,14 @@ export class ConfigManager {
     base: EngineConfig,
     override: Partial<EngineConfig>
   ): EngineConfig {
-return {
+      return {
         date: { ...base.date, ...override.date },
         dice: { ...base.dice, ...override.dice },
         performance: { ...base.performance, ...override.performance },
         validation: { ...base.validation, ...override.validation },
         vm: { ...base.vm, ...override.vm },
         worker: { ...base.worker, ...override.worker },
-        diagnostic: { ...base.diagnostic, ...override.diagnostic }
+        diagnostic: { ...base.diagnostic, ...override.diagnostic },
       };
   }
 }

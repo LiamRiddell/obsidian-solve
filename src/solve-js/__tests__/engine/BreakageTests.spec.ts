@@ -169,7 +169,9 @@ Expression: 3 * 4
     });
 
     test("unmatched brackets are auto-balanced by inferred parentheses", () => {
-      const engine = new ExpressionEngine();
+      const engine = new ExpressionEngine("en", false, {
+        validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: true },
+      });
       const result = engine.evaluateLine(1, "(1 + 2");
       expect(result.toNumber()).toBe(3);
     });

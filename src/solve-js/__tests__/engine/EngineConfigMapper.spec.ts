@@ -135,6 +135,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: 2000,
         maxComplexity: 500,
         maxNestingDepth: 50,
+        autoBalanceParens: false,
       });
     });
 
@@ -162,6 +163,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: 100,
         maxComplexity: 50,
         maxNestingDepth: 10,
+        autoBalanceParens: false,
       });
     });
 
@@ -192,6 +194,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: 500,
         maxComplexity: 100,
         maxNestingDepth: 20,
+        autoBalanceParens: false,
       });
       expect(config.vm).toEqual({
         maxStackDepth: 100,
@@ -220,6 +223,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: 2000,
         maxComplexity: 500,
         maxNestingDepth: 50,
+        autoBalanceParens: false,
       });
       expect(config.vm).toEqual({
         maxStackDepth: 50,
@@ -235,6 +239,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: 100,
         maxComplexity: 500,
         maxNestingDepth: 50,
+        autoBalanceParens: false,
       });
       expect(config.vm).toEqual({
         maxStackDepth: 200,
@@ -278,6 +283,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: DEFAULT_SETTINGS.engine.validation.maxExpressionLength,
         maxComplexity: DEFAULT_SETTINGS.engine.validation.maxComplexity,
         maxNestingDepth: DEFAULT_SETTINGS.engine.validation.maxNestingDepth,
+        autoBalanceParens: false,
       });
     });
 
@@ -302,6 +308,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: DEFAULT_SETTINGS.engine.validation.maxExpressionLength,
         maxComplexity: DEFAULT_SETTINGS.engine.validation.maxComplexity,
         maxNestingDepth: DEFAULT_SETTINGS.engine.validation.maxNestingDepth,
+        autoBalanceParens: false,
       });
     });
 
@@ -340,6 +347,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: DEFAULT_SETTINGS.engine.validation.maxExpressionLength,
         maxComplexity: DEFAULT_SETTINGS.engine.validation.maxComplexity,
         maxNestingDepth: DEFAULT_SETTINGS.engine.validation.maxNestingDepth,
+        autoBalanceParens: false,
       });
 
       // VM should use the provided override
@@ -355,6 +363,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: DEFAULT_SETTINGS.engine.validation.maxExpressionLength,
         maxComplexity: DEFAULT_SETTINGS.engine.validation.maxComplexity,
         maxNestingDepth: DEFAULT_SETTINGS.engine.validation.maxNestingDepth,
+        autoBalanceParens: false,
       });
       expect(config.vm).toEqual({
         maxStackDepth: DEFAULT_SETTINGS.engine.vm.maxStackDepth,
@@ -390,6 +399,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: 0,
         maxComplexity: 0,
         maxNestingDepth: 0,
+        autoBalanceParens: false,
       });
       expect(config.vm).toEqual({
         maxStackDepth: 0,
@@ -411,6 +421,7 @@ describe("EngineConfigMapper", () => {
         maxExpressionLength: 100000,
         maxComplexity: 50000,
         maxNestingDepth: 5000,
+        autoBalanceParens: false,
       });
       expect(config.vm).toEqual({
         maxStackDepth: 10000,

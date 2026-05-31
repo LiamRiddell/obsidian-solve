@@ -75,6 +75,9 @@ export class EngineConfigMapper {
             maxExpressionLength: settings.engine.maxExpressionLength,
             maxComplexity: settings.engine.maxComplexity,
             maxNestingDepth: settings.engine.maxNestingDepth,
+            // Paren auto-balancing is off by default (strict parsing).
+            // No Obsidian UI control yet — future config toggle.
+            autoBalanceParens: false,
         };
     }
 

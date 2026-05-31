@@ -5,7 +5,9 @@ describe("Feature #74: Inferred Parentheses", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false);
+    engine = new ExpressionEngine("en", false, {
+      validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: true },
+    });
   });
 
   test("(1 + 2 (unmatched open) evaluates as (1 + 2)", () => {

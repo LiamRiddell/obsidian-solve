@@ -639,7 +639,10 @@ export class ExpressionEngine {
      */
     private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean): void {
         this.parser.setBuilder(builder);
-        this.parser.load(tokens, hasParens);
+        // When autoBalanceParens is disabled, skip the O(n) paren-count scan
+        // by always passing false — the parser will fail naturally on unmatched
+        // parens instead of silently inserting missing closing/opening tokens.
+        this.parser.load(tokens, this.config.validation.autoBalanceParens ? hasParens : false);
         this.parser.parseExpression(0);
     }
 
