@@ -16,7 +16,7 @@
 | `(error: unknown)` with no type guard | Use the `SolveError` type guard or narrow first |
 | `containerEl: any` leaking into core engine | Inject via typed interface |
 
-**Current debt**: ~15 `any` instances remain in production code. Eliminate them all. Zero is the target.
+**Current debt**: 0 `any` instances remain in solve-js production code. Zero is the target — any new `any` is a regression.
 
 ---
 
@@ -132,7 +132,11 @@ function riskyOperation(): Result<number, SolveError> {
 
 ### 5.4 Comments
 - **No redundant comments** — don't describe what the code does, describe *why*
-- **Every exported symbol gets JSDoc** with `@param`, `@returns`, `@throws`
+- **Every exported symbol gets JSDoc** with `@param`, `@returns`, `@throws` as applicable
+  - Classes: describe purpose and key behaviors
+  - Interfaces/types: describe what they represent and how they're used
+  - Functions: describe parameters, return value, and any thrown errors
+  - Enums: describe each member's meaning
 - **Every module gets a header** describing its purpose in the pipeline
 
 ---

@@ -1,3 +1,12 @@
+/**
+ * Lexer token produced by {@link ExpressionLexer} and consumed by parsers.
+ *
+ * Each token carries:
+ * - `type`: string name (e.g. "NUMBER", "PLUS") for diagnostics and parselet lookup
+ * - `typeId`: integer ID for O(1) comparison in parser hot paths
+ * - `value`/`text`: the token's semantic value and raw source text
+ * - `offset`/`line`/`col`: source position for error messages and highlighting
+ */
 export interface Token {
 	/** String token type (e.g., "NUMBER", "PLUS", "IDENT"). Used by ParseletRegistry string-keyed maps and error messages. */
 	type: string;
@@ -12,6 +21,11 @@ export interface Token {
 	col: number;
 }
 
+/**
+ * Canonical token type name constants.
+ * All token types used by the lexer, parser, and VM are defined here.
+ * Custom/plugin token types should be registered via {@link registerTokenType}.
+ */
 export const TokenTypes = {
   NUMBER: "NUMBER",
   BIGINT: "BIGINT",

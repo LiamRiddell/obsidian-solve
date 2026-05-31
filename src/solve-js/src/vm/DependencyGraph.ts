@@ -1,3 +1,13 @@
+/**
+ * Dependency graph for variable and data-source tracking across document lines.
+ *
+ * Tracks which lines read/write which variables, and propagates changes through
+ * the graph when a variable is modified. Supports:
+ * - Variable dependency tracking (registerLine, getAffectedLines)
+ * - Data-source dependency tracking (registerLineDataSourceDependency)
+ * - Topological ordering of affected lines (getAffectedLinesInOrder)
+ * - Efficient removal of deleted lines (removeLine)
+ */
 export class DependencyGraph {
    private consumers: Map<string, Set<number>> = new Map();
    private dependencies: Map<number, Set<string>> = new Map();

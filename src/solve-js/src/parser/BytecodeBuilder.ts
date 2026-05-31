@@ -1,5 +1,9 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 
+/**
+ * Compiled bytecode program produced by {@link BytecodeBuilder}.
+ * Ready for consumption by {@link executeBytecode} without further processing.
+ */
 export interface BytecodeProgram {
 	opcodes: Uint8Array;
 	numbers: Float64Array;
@@ -7,6 +11,15 @@ export interface BytecodeProgram {
 	constants?: Map<number, number>;
 }
 
+/**
+ * Direct-to-bytecode compiler for the Pratt parser.
+ *
+ * Accumulates opcodes, numeric constants, and string references during parsing,
+ * then produces a {@link BytecodeProgram} for VM execution. Supports:
+ * - Standard build via {@link build}
+ * - Zero-copy build into pre-allocated buffers via {@link buildInto}
+ * - In-place reset for reuse without reallocation
+ */
 export class BytecodeBuilder {
 	private opcodes: number[] = [];
 	private numbers: number[] = [];
@@ -49,6 +62,10 @@ export class BytecodeBuilder {
 		this.opcodes[position] = target;
 	}
 
+	/**
+	 * Build the accumulated opcodes/numbers/strings into a BytecodeProgram.
+	 * Creates new TypedArrays — the builder can be reused after this call.
+	 */
 	build(): BytecodeProgram {
 		return {
 			opcodes: new Uint8Array(this.opcodes),

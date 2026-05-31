@@ -47,13 +47,15 @@ Execution limits enforced before any performance work. A nanosecond response tha
 
 ## 4. Current State
 
-- **2,000+ tests** across 86+ test suites — all passing
-- **9 built-in providers**: Arithmetic, Percentage, Function, Datetime, UoM, Vector, BigInteger, Dice, Variables
+- **2,000+ tests** across 86+ test suites — all passing, all PascalCase named
+- **9 built-in provider packages**: Arithmetic, Percentage, Function, Datetime, UoM, Vector, BigInteger, Dice, Variables
 - **Sub-microsecond VM execution** on pre-built bytecode; **~1µs warm pipeline** with cached bytecode
 - **Safety limits enforced** in Configuration.ts — length, complexity, nesting, instruction count, stack depth
-- **Precedence parser** (Pratt-style) with pluggable parselet registry for community extensions
-- **DAG-driven incremental re-evaluation** — changing one variable only re-executes dependent lines
+- **PrecedenceParser** (Pratt-style with two-tier inline dispatch) as the primary parser; Parser kept for backwards compatibility
+- **DAG-driven incremental re-evaluation** — changing one variable only re-executes dependent lines in topological order
 - **Async streaming** via EvalResult discriminated union — no throw-based control flow in VM hot path
+- **Feature flags off by default** — autoBalanceParens and other non-essential features opt-in
+- **Clean public API** — core exported symbols carry TSDoc with @param/@returns/@throws; TSDoc required for all new exports
 
 ---
 
@@ -61,7 +63,7 @@ Execution limits enforced before any performance work. A nanosecond response tha
 
 **The user writes natural markdown — `10 + 2`, `£100 in GBP`, `Now + 20 days` — and the engine evaluates it in real time.** For inline solves (`s\`1+2\``), the frontend renders the result directly in the document. The engine never writes back to the document — the frontend controls presentation.
 
-The pipeline powering all of this: Raw text → Lexer → Pratt Parser → BytecodeCompiler → VM executes against typed Value stack → Result returned to frontend. Every module in `src/solve-js/src/` exists to serve this pipeline. If a module doesn't fit here, it's in the wrong place.
+The pipeline powering all of this: Raw text → Lexer → PrecedenceParser (inline dispatch) → BytecodeCompiler → VM executes against typed Value stack → Result returned to frontend. Every module in `src/solve-js/src/` exists to serve this pipeline. If a module doesn't fit here, it's in the wrong place.
 
 ---
 

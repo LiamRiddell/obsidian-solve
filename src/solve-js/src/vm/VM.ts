@@ -9,6 +9,19 @@ import { builtinFunctions, pluginFunctionRegistry } from "@solve-js/vm/VMBuiltin
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 
+/**
+ * Create a new VM instance with the given opcode registry and configurable limits.
+ *
+ * The VM is a stack machine that executes compiled bytecode. It manages:
+ * - A value stack (bounded by `maxStackDepth`)
+ * - A variable store (Map of name → Value)
+ * - An instruction counter (bounded by `maxInstructions`)
+ * - An AbortSignal for async cancellation
+ *
+ * @param registry - Opcode handler registry for plugin-extensible opcodes
+ * @param maxStackDepth - Maximum stack slots (default 200)
+ * @param maxInstructions - Maximum opcodes per expression (default 50000)
+ */
 export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructions = 50000): VM {
     const stack: Value[] = [];
     const variables = new Map<string, Value>();
@@ -59,23 +72,40 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
     };
 }
 
+/**
+ * Compiled bytecode ready for VM execution.
+ *
+ * Uses packed TypedArrays for cache-friendly memory layout:
+ * - `opcodes`: Uint8Array of OpCode values
+ * - `numbers`: Float64Array of numeric literals (indexed by opcode operands)
+ * - `strings`: String table for identifiers, UoM units, and BigInt literals
+ */
 export interface Bytecode {
     opcodes: Uint8Array;
     numbers: Float64Array;
     strings: string[];
 }
 
-// ── EvalResult: discriminated union returned by executeBytecode ───────────
-// Replaces the old throw-AsyncSuspenseError pattern. The VM now returns
-// { type: 'pending' } instead of throwing, eliminating the need for try/catch
-// in the engine. The orchestrator checks result.type to decide the next step.
-
-/** Result of a bytecode execution. */
+/**
+ * Discriminated union returned by {@link executeBytecode}.
+ *
+ * Two variants:
+ * - `value`: execution completed synchronously with a concrete Value
+ * - `pending`: an async plugin call was encountered — the orchestrator
+ *   must await the resolver Promise, then re-execute
+ *
+ * Replaces the old throw-AsyncSuspenseError pattern, eliminating the need
+ * for try/catch in the engine.
+ */
 export type EvalResult =
     | { type: 'value'; value: Value }
     | { type: 'pending'; queryKey: string; resolver: Promise<Value>; packageId: string; signal: AbortSignal };
 
-/** Extract the Value from an EvalResult, or throw if pending (shouldn't happen at call sites). */
+/**
+ * Extract the Value from an EvalResult.
+ * Throws if the result is pending (should not happen at call sites that
+ * have already resolved async dependencies).
+ */
 export function unwrapEvalResult(result: EvalResult): Value {
     if (result.type === 'value') return result.value;
     throw new Error(`Expected value result but got pending: ${result.queryKey}`);

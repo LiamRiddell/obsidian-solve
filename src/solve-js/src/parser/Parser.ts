@@ -4,6 +4,17 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@solve-js/diagnostics";
 
+/**
+ * Pratt parser (legacy) — parselet-based expression parser.
+ *
+ * Consumes a token stream and produces bytecode via a BytecodeBuilder.
+ * Forwards to registered {@link PrefixParselet} and {@link InfixParselet}
+ * handlers in the {@link ParseletRegistry}.
+ *
+ * New code should use {@link PrecedenceParser} which provides a two-tier
+ * fast-path optimization. This class is kept for backwards compatibility
+ * with existing parselet implementations that expect Parser's API.
+ */
 export class Parser {
      private tokens: Token[] = [];
      private current = 0;

@@ -1,5 +1,10 @@
 import { Value } from "@solve-js/vm/Value";
 
+/**
+ * Record of a compiled expression in the scope.
+ * Tracks the expression text, compiled bytecode, last evaluation result,
+ * and the variable reads/writes for dependency tracking.
+ */
 export interface ExpressionRecord {
   lineNumber: number;
   expression: string;
@@ -9,6 +14,13 @@ export interface ExpressionRecord {
   writeVariable: string | null;
 }
 
+/**
+ * Scoped variable manager for expression evaluation.
+ *
+ * Tracks variable definitions across line numbers with write-on-read semantics.
+ * When a value is read, the most recent definition at or before the reading line
+ * is returned. Invalidation trims downstream definitions when a variable is redefined.
+ */
 export class ScopeManager {
   private definitions: Map<string, { line: number; expr: ExpressionRecord }[]> = new Map();
 
