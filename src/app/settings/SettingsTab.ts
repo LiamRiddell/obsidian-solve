@@ -6,6 +6,13 @@ import SolvePlugin from "@app/main";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import { App, PluginSettingTab, Setting } from "obsidian";
 
+/**
+ * Obsidian settings tab for the Solve plugin.
+ *
+ * Renders all configuration sections: engine safety limits, interface toggles,
+ * inline-solve preferences, provider management, and per-type result formatting.
+ * Uses Obsidian's built-in {@link PluginSettingTab} framework.
+ */
 export class SettingTab extends PluginSettingTab {
 	plugin: SolvePlugin;
 

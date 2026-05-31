@@ -2,6 +2,14 @@ import { EDatetimeParsingFormat } from "@app/constants/EDatetimeFormat";
 import { IPluginSettings } from "@app/settings/definition/IPluginSettings";
 import moment from "moment";
 
+/**
+ * Default plugin settings used as the baseline for `deepMerge`.
+ *
+ * Every configurable value is listed here so saved settings from older
+ * plugin versions are automatically backfilled with defaults for new fields.
+ *
+ * @see {@link deepMerge} for the merge strategy.
+ */
 export const DEFAULT_SETTINGS: IPluginSettings = {
 	engine: {
 		explicitMode: false,

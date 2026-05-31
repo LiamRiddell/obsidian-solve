@@ -6,7 +6,15 @@
 // 	"Non English": "de-DE",
 // };
 
-// TODO: Allow the user to set locale in future but requires grammars to be updated
+/**
+ * Locale-to-label mapping for decimal separator settings.
+ *
+ * Maps BCP 47 locale tags to human-readable labels. Used by the
+ * settings UI dropdown for choosing between English-style (`.`)
+ * and non-English (`,`) decimal separators.
+ *
+ * @todo Allow user to set locale directly; requires grammar updates.
+ */
 export const SUPPORTED_SEPARATOR_LOCALES = {
 	// English locales will be detected as "en-US"
 	"en-US": "English",

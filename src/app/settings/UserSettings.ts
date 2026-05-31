@@ -20,6 +20,13 @@ import { UnitOfMeasurementResultSettings } from "@app/settings/properties/UnitOf
 import { VariableSettings } from "@app/settings/properties/VariableSettings";
 import { VectorArithmeticProviderSettings } from "@app/settings/properties/VectorArithmeticProviderSettings";
 
+/**
+ * Singleton holder for plugin settings with typed section proxies.
+ *
+ * Each property (e.g., `engine`, `interface`) is a typed proxy class that
+ * reads from `this.settings` and provides backward-compatible fallbacks
+ * for users whose saved data predates newer config sections.
+ */
 export default class UserSettings {
 	private static instance: UserSettings | null = null;
 	public settings: IPluginSettings;

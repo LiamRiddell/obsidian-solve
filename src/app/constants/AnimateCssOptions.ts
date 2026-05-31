@@ -1,3 +1,9 @@
+/**
+ * Mapping from Animate.css CSS class names to their human-readable labels.
+ *
+ * Used by the settings UI dropdown for selecting animation transitions.
+ * Commented-out entries are exit/out animations that are not exposed to users.
+ */
 export const ANIMATE_CSS_TRANSITIONS_OPTIONS = {
 	animate__bounce: "bounce",
 	animate__flash: "flash",

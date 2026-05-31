@@ -1,5 +1,15 @@
 import convert from "convert";
 
+/**
+ * Convert a numeric value from one unit of measurement to another.
+ *
+ * Delegates to the `convert` package for actual conversion logic.
+ *
+ * @param fromValue - The numeric value in the source unit.
+ * @param fromUnit - Source unit abbreviation (e.g., `"cm"`, `"m"`, `"kg"`).
+ * @param toUnit - Target unit abbreviation.
+ * @returns The equivalent value in the target unit.
+ */
 export function convertUnitOfMeasurementValue(
   fromValue: number,
   fromUnit: string,

@@ -15,6 +15,13 @@ import { insertAtIndex } from "@app/utilities/String";
 import { ViewPlugin } from "@codemirror/view";
 import { Notice, Plugin } from "obsidian";
 
+/**
+ * Solve — the main Obsidian plugin class.
+ *
+ * Orchestrates engine initialization, settings persistence, CodeMirror
+ * editor extensions, the status bar companion, inline-solve commands,
+ * and the event bus lifecycle.
+ */
 export default class SolvePlugin extends Plugin {
 	settings: UserSettings;
 	statusBarItemEl: HTMLElement;
