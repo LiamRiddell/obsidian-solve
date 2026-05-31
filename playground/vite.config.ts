@@ -7,6 +7,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '../src'),
+      '@solve-js': path.resolve(__dirname, '../src/solve-js/src'),
+      '@app': path.resolve(__dirname, '../src/app'),
+      '@tools': path.resolve(__dirname, '../src/solve-js/tools'),
       'convert-units': path.resolve(__dirname, './mock/convert-units.ts')
     }
   },
