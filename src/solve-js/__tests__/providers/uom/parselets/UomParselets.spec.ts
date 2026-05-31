@@ -7,7 +7,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
 import { registerUomParselets } from "@solve-js/providers/uom/parselets/index";
 import { registerPercentageParselets } from "@solve-js/providers/percentage/parselets/index";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { currencyExchangeService } from "@solve-js/uom/CurrencyExchange";
@@ -74,7 +74,7 @@ function parseAndExecute(input: string): Value {
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm
   );
-  return result!;
+  return unwrapEvalResult(result);
 }
 
 function parseNum(input: string): number {

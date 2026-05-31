@@ -47,10 +47,13 @@ describe("ExpressionEngine constructor — packages parameter", () => {
 
   // ── Empty packages ────────────────────────────────────────────────
 
-  test("empty packages array creates engine with no providers", () => {
+  test("empty packages array creates engine with only Tier 1 inline operations (no parselets)", () => {
     const engine = new ExpressionEngine("en", false, undefined, undefined, []);
-    // Arithmetic fails — no NUMBER parselet registered
-    expect(() => engine.evaluateLine(1, "1 + 2")).toThrow();
+    // Tier 1 inline: NUMBER, PLUS, MINUS etc. work without packages
+    expect(engine.evaluateLine(1, "1 + 2").toNumber()).toBe(3);
+    // But parselet-requiring operations (FUNC tokens, variables, etc.) fail
+    expect(() => engine.evaluateLine(2, "sqrt(144)")).toThrow();
+    expect(() => engine.evaluateLine(3, ":x = 100")).toThrow();
   });
 
   test("empty packages still allows engine instantiation without error", () => {
@@ -94,14 +97,12 @@ describe("ExpressionEngine constructor — packages parameter", () => {
     expect(() => engine.evaluateLine(1, "roll(1, 20)")).toThrow();
   });
 
-  test("ARITHMETIC_PACKAGE only: PERCENT token parses as left-hand side only (no infix parselet)", () => {
-    // % is tokenized as PERCENT by the lexer. Without PERCENTAGE_PACKAGE,
-    // there is no infix parselet for PERCENT, so the Pratt parser loop
-    // exits at the PERCENT token and the expression evaluates to just
-    // the prefix result (the leading number, 50).
+  test("ARITHMETIC_PACKAGE only: PERCENT token handled inline (Tier 1 infix)", () => {
+    // PERCENT is a Tier 1 inline infix operator — always available regardless of packages.
+    // "50% of 200" → 50 / 100 * 200 = 100
     const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
     const result = engine.evaluateLine(1, "50% of 200");
-    expect(result.toNumber()).toBe(50);
+    expect(result.toNumber()).toBe(100);
   });
 
   test("ARITHMETIC_PACKAGE only: variables are NOT available", () => {
@@ -121,15 +122,17 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // Note: FUNCTION alone cannot parse number literals since NUMBER parselet
   // is in ARITHMETIC. This tests the dependency chain correctly.
 
-  test("FUNCTION_PACKAGE only: cannot evaluate function calls (needs NUMBER parselet)", () => {
+  test("FUNCTION_PACKAGE only: functions work (NUMBER is Tier 1 inline)", () => {
     const engine = new ExpressionEngine("en", false, undefined, undefined, [FUNCTION_PACKAGE]);
-    // sqrt is recognized as FUNC, but 144 is NUMBER — no parselet for NUMBER
-    expect(() => engine.evaluateLine(1, "sqrt(144)")).toThrow();
+    // FUNCTION_PACKAGE provides FUNC prefix parselet; NUMBER 144 is Tier 1 inline
+    const result = engine.evaluateLine(1, "sqrt(144)");
+    expect(result.toNumber()).toBe(12);
   });
 
-  test("FUNCTION_PACKAGE only: arithmetic is NOT available", () => {
+  test("FUNCTION_PACKAGE only: basic arithmetic works (Tier 1 inline)", () => {
     const engine = new ExpressionEngine("en", false, undefined, undefined, [FUNCTION_PACKAGE]);
-    expect(() => engine.evaluateLine(1, "1 + 2")).toThrow();
+    // NUMBER and PLUS are Tier 1 inline — always available
+    expect(engine.evaluateLine(1, "1 + 2").toNumber()).toBe(3);
   });
 
   // ── Multiple packages (subset) ────────────────────────────────────
@@ -146,9 +149,9 @@ describe("ExpressionEngine constructor — packages parameter", () => {
     expect(engine.evaluateLine(2, "sqrt(144) + 5").toNumber()).toBe(17);
     // Dice NOT available
     expect(() => engine.evaluateLine(3, "roll(1, 20)")).toThrow();
-    // PERCENT token has no infix parselet — parses as left-side only
+    // PERCENT is Tier 1 inline infix — evaluates as 50 / 100 * 200 = 100
     const pct = engine.evaluateLine(4, "50% of 200");
-    expect(pct.toNumber()).toBe(50);
+    expect(pct.toNumber()).toBe(100);
   });
 
   test("ARITHMETIC + PERCENTAGE packages only", () => {
@@ -334,10 +337,11 @@ describe("ExpressionEngine constructor — packages parameter", () => {
     expect(() => e2.evaluateLine(2, ":x = 100")).toThrow();
   });
 
-  test("engine with only VARIABLES but no ARITHMETIC cannot evaluate variable assignments", () => {
+  test("engine with only VARIABLES but no ARITHMETIC: variable assignments work (NUMBER inline)", () => {
     const engine = new ExpressionEngine("en", false, undefined, undefined, [VARIABLES_PACKAGE]);
-    // Variable assignment requires a NUMBER parselet for the RHS
-    expect(() => engine.evaluateLine(1, ":x = 100")).toThrow();
+    // NUMBER 100 is Tier 1 inline — always available for RHS
+    engine.evaluateLine(1, ":x = 100");
+    expect(engine.evaluateLine(2, ":x + 50").toNumber()).toBe(150);
   });
 
   test("engine with VARIABLES + ARITHMETIC can assign and read variables", () => {

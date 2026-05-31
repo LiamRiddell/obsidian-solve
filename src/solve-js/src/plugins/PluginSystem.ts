@@ -10,6 +10,8 @@ import { ParseletRegistry } from '@solve-js/parser/registry/ParseletRegistry';
 import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
 import { sharedLexer } from '@solve-js/lexer/Lexer';
 import type { LexerPlugin } from '@solve-js/lexer/ExpressionLexer';
+import type { IAsyncResolver } from '@solve-js/resolvers/ResolverRegistry';
+import { AsyncResultCache } from '@solve-js/cache/AsyncResultCache';
 
 /**
  * Interface for solve-js plugins
@@ -37,12 +39,28 @@ export interface SolvePlugin {
   description?: string;
 
   /**
+   * Domains this plugin uses for cache keys.
+   * Enforced at runtime — the engine validates that cache keys
+   * are within declared domains. Prevents cross-plugin cache pollution.
+   * 
+   * Example: ["rates", "weather.current", "weather.forecast"]
+   */
+  domains?: string[];
+
+  /**
    * Optional lexer extensions to register with the engine's lexer.
    * Plugins can register custom keywords, operators, phrases, and units.
    * These are registered before `register()` is called so parselets
    * can depend on the custom token types being available.
    */
   lexerPlugin?: LexerPlugin;
+
+  /**
+   * Optional async resolver for data that needs to be fetched.
+   * The engine calls preflight() before VM execution and returns
+   * Pending if data is not yet cached.
+   */
+  asyncResolver?: IAsyncResolver;
   
   /**
    * Register plugin functionality with the engine
@@ -67,6 +85,33 @@ export interface PluginPackage {
   plugins: SolvePlugin[];
 }
 
+// ── Fast Package ID Generator ───────────────────────────────────────────────
+// Uses Math.random() prefix + monotonic counter instead of crypto.randomUUID().
+// 4-char base36 prefix (1.7M possible values) + counter. ~7 chars, ~30ns to generate.
+// Collision probability < 0.003 across 100 instances in the same session.
+
+class PackageIdGenerator {
+  private prefix = ((Math.random() * 0xFFFFFF) | 0).toString(36).padStart(4, '0');
+  private counter = 0;
+
+  next(): string { return `${this.prefix}${this.counter++}`; }
+}
+
+const idGen = new PackageIdGenerator();
+
+/** Generate a fast unique package ID. ~6-7 chars, non-crypto, low collision rate. */
+export function generatePackageId(): string {
+  return idGen.next();
+}
+
+/** Wrapper holding a package's runtime metadata (not exposed to package code). */
+export interface PackageMetadata {
+  /** Fast unique ID generated at registration time */
+  id: string;
+  /** The plugin itself */
+  plugin: SolvePlugin;
+}
+
 /**
  * Plugin manager for registering and managing plugins
  * 
@@ -78,15 +123,17 @@ export interface PluginPackage {
  * ```
  */
 export class PluginManager {
-  private plugins = new Map<string, SolvePlugin>();
+  private plugins = new Map<string, PackageMetadata>();
   private registry: ParseletRegistry;
+  /** Forward reference to the engine's ResolverRegistry (set by ExpressionEngine). */
+  resolverRegistry: import('@solve-js/resolvers/ResolverRegistry').ResolverRegistry | null = null;
 
   constructor(registry: ParseletRegistry) {
     this.registry = registry;
   }
 
   /**
-   * Register a plugin
+   * Register a plugin. Generates a packageId and validates domains.
    * 
    * @param plugin - Plugin to register
    * @throws Error if plugin name already registered
@@ -100,20 +147,44 @@ export class PluginManager {
       );
     }
 
+    const packageId = generatePackageId();
+
+    // Validate domains (if declared) — prevent empty/invalid domain names
+    if (plugin.domains) {
+      for (const domain of plugin.domains) {
+        if (!domain || typeof domain !== 'string' || domain.includes(':')) {
+          throw ErrorFactory.config(
+            'PLUGIN_INVALID_DOMAIN',
+            `Plugin ${plugin.name}: invalid domain "${domain}". Domains must be non-empty strings without colons.`,
+            { pluginName: plugin.name, packageId, domain }
+          );
+        }
+      }
+    }
+
     // Register lexer extensions first so custom token types are
     // available when the plugin's register() call registers parselets.
     if (plugin.lexerPlugin) {
       sharedLexer.registerPlugin(plugin.lexerPlugin);
     }
 
+    // Register async resolver if the plugin provides one
+    if (plugin.asyncResolver && this.resolverRegistry) {
+      this.resolverRegistry.register(plugin.asyncResolver);
+    }
+
     try {
       plugin.register(this.registry);
-      this.plugins.set(plugin.name, plugin);
+      this.plugins.set(plugin.name, { id: packageId, plugin });
     } catch (error) {
+      // Clean up on failure
+      if (plugin.asyncResolver && this.resolverRegistry) {
+        this.resolverRegistry.unregister(plugin.asyncResolver.namespace);
+      }
       throw ErrorFactory.config(
         'PLUGIN_REGISTRATION_FAILED',
         `Failed to register plugin ${plugin.name}: ${error}`,
-        { pluginName: plugin.name, error: String(error) }
+        { pluginName: plugin.name, packageId, error: String(error) }
       );
     }
   }
@@ -124,8 +195,8 @@ export class PluginManager {
    * @param pluginName - Name of plugin to unregister
    */
   unregister(pluginName: string): void {
-    const plugin = this.plugins.get(pluginName);
-    if (!plugin) {
+    const meta = this.plugins.get(pluginName);
+    if (!meta) {
       throw ErrorFactory.config(
         'PLUGIN_NOT_REGISTERED',
         `Plugin ${pluginName} is not registered`,
@@ -133,23 +204,46 @@ export class PluginManager {
       );
     }
 
-    if (plugin.unregister) {
-      plugin.unregister(this.registry);
+    if (meta.plugin.unregister) {
+      meta.plugin.unregister(this.registry);
     }
 
     // Unregister lexer extensions if the plugin registered any
-    if (plugin.lexerPlugin) {
-      sharedLexer.unregisterPlugin(plugin.lexerPlugin);
+    if (meta.plugin.lexerPlugin) {
+      sharedLexer.unregisterPlugin(meta.plugin.lexerPlugin);
     }
 
+    // Unregister async resolver
+    if (meta.plugin.asyncResolver && this.resolverRegistry) {
+      this.resolverRegistry.unregister(meta.plugin.asyncResolver.namespace);
+    }
+
+    // Clear all cached data for this plugin
+    AsyncResultCache.clearPackage(meta.id);
+
     this.plugins.delete(pluginName);
+  }
+
+  /**
+   * Get a plugin's metadata (includes its generated packageId).
+   * Returns undefined if not registered.
+   */
+  getPluginMeta(pluginName: string): PackageMetadata | undefined {
+    return this.plugins.get(pluginName);
+  }
+
+  /**
+   * Get a plugin's generated package ID by its name.
+   */
+  getPackageId(pluginName: string): string | undefined {
+    return this.plugins.get(pluginName)?.id;
   }
 
   /**
    * Get registered plugin by name
    */
   getPlugin(name: string): SolvePlugin | undefined {
-    return this.plugins.get(name);
+    return this.plugins.get(name)?.plugin;
   }
 
   /**
@@ -163,7 +257,7 @@ export class PluginManager {
    * Get all registered plugins
    */
   getPlugins(): SolvePlugin[] {
-    return Array.from(this.plugins.values());
+    return Array.from(this.plugins.values()).map(m => m.plugin);
   }
 
   /**
@@ -179,14 +273,20 @@ export class PluginManager {
    * Unregister all plugins
    */
   clear(): void {
-    for (const [name, plugin] of this.plugins.entries()) {
-      if (plugin.unregister) {
-        plugin.unregister(this.registry);
+    for (const [name, meta] of this.plugins.entries()) {
+      if (meta.plugin.unregister) {
+        meta.plugin.unregister(this.registry);
       }
       // Unregister lexer extensions if the plugin registered any
-      if (plugin.lexerPlugin) {
-        sharedLexer.unregisterPlugin(plugin.lexerPlugin);
+      if (meta.plugin.lexerPlugin) {
+        sharedLexer.unregisterPlugin(meta.plugin.lexerPlugin);
       }
+      // Unregister async resolver
+      if (meta.plugin.asyncResolver && this.resolverRegistry) {
+        this.resolverRegistry.unregister(meta.plugin.asyncResolver.namespace);
+      }
+      // Clear all cached data for this plugin
+      AsyncResultCache.clearPackage(meta.id);
       this.plugins.delete(name);
     }
   }

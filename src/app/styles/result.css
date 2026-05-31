@@ -58,3 +58,34 @@
 		currentColor
 	);
 }
+
+/* ── Pending / Loading State ─────────────────────────────────────── */
+
+.os-result--pending {
+	color: var(--text-muted);
+	text-decoration: none;
+	cursor: default;
+	opacity: 0.7;
+}
+
+.os-result--pending:hover {
+	cursor: default;
+	text-decoration-color: transparent;
+}
+
+.os-result__spinner {
+	display: inline-block;
+	animation: os-spin 1s linear infinite;
+	margin-right: 2px;
+	font-size: 0.9em;
+	line-height: 1;
+}
+
+@keyframes os-spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
+.os-result__pending-label {
+	font-style: italic;
+}

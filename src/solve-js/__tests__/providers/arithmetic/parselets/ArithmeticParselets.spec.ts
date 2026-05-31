@@ -5,7 +5,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { ValueType } from "@solve-js/vm/Value";
 
@@ -32,12 +32,13 @@ function parseAndExecute(input: string): number {
   const vmUint8 = new Uint8Array(program.opcodes);
   const vmFloat64 = new Float64Array(program.numbers);
   const vm = createVM(sharedOpRegistry);
-  const result = executeBytecode(
+  const evalResult = executeBytecode(
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm
   );
-  expect(result!.type).toBe(ValueType.Number);
-  return result!.toNumber();
+  const result = unwrapEvalResult(evalResult);
+  expect(result.type).toBe(ValueType.Number);
+  return result.toNumber();
 }
 
 describe("Arithmetic Parselets", () => {

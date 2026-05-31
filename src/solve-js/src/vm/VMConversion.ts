@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, bigIntValue, uomValue, vectorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, bigIntValue, uomValue, arrayValue } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 
@@ -66,26 +66,25 @@ export function binaryOp(
         return uomValue(op(lv, rv), unit!);
     }
 
-    if ((l.type === ValueType.Vector2 || l.type === ValueType.Vector3 || l.type === ValueType.Vector4) &&
-        (r.type === ValueType.Vector2 || r.type === ValueType.Vector3 || r.type === ValueType.Vector4)) {
+    if (l.type === ValueType.Array && r.type === ValueType.Array) {
         const lv = l.value as number[];
         const rv = r.value as number[];
         const len = Math.min(lv.length, rv.length);
         const result: number[] = [];
         for (let i = 0; i < len; i++) result.push(op(lv[i], rv[i]));
-        return vectorValue(result);
+        return arrayValue(result);
     }
 
-    if (l.type === ValueType.Vector2 || l.type === ValueType.Vector3 || l.type === ValueType.Vector4) {
+    if (l.type === ValueType.Array) {
         const lv = l.value as number[];
         const result = lv.map(v => op(v, r.toNumber()));
-        return vectorValue(result);
+        return arrayValue(result);
     }
 
-    if (r.type === ValueType.Vector2 || r.type === ValueType.Vector3 || r.type === ValueType.Vector4) {
+    if (r.type === ValueType.Array) {
         const rv = r.value as number[];
         const result = rv.map(v => op(l.toNumber(), v));
-        return vectorValue(result);
+        return arrayValue(result);
     }
 
     const lNum = l.toNumber();

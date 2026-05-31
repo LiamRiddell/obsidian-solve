@@ -5,6 +5,7 @@ import { Value, numberValue } from "@solve-js/vm/Value";
  * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
  */
 export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
+    // ── Populated below ──
     0: (args) => numberValue(Math.sqrt(args[0].toNumber())),
     1: (args) => numberValue(Math.abs(args[0].toNumber())),
     2: (args) => numberValue(Math.sin(args[0].toNumber())),
@@ -42,4 +43,22 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     34: (args) => numberValue(Math.trunc(args[0].toNumber())),
     35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),
     36: (args) => numberValue(args[0].toNumber() * 180 / Math.PI),
+    // 37: diceRoll(from, to) — random integer in range [from, to] inclusive
+    37: (args) => numberValue(Math.floor(Math.random() * (args[1].toNumber() - args[0].toNumber() + 1)) + args[0].toNumber()),
 };
+
+/**
+ * Registry of plugin-registered functions.
+ * Indexed by the number pushed as an operand of OpCode.CALL_PLUGIN.
+ *
+ * Functions may return a Promise — the orchestrator pre-resolves them
+ * before VM execution. If a Promise reaches the VM, the CALL_PLUGIN
+ * handler throws ASYNC_PLUGIN_CALL.
+ *
+ * Populated by DomainRegistry.register() at plugin registration time.
+ * Entries are cleared on plugin unregister.
+ */
+export const pluginFunctionRegistry: Record<
+    number,
+    (args: Value[]) => Value | Promise<Value>
+> = {};

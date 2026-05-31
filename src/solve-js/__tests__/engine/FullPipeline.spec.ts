@@ -3,7 +3,7 @@ import { Lexer } from "@solve-js/lexer/Lexer";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
 import { registerPercentageParselets } from "@solve-js/providers/percentage/parselets/index";
@@ -38,7 +38,7 @@ function fullEval(expression: string): number {
     strings: program.strings,
   }, vm);
 
-  return result!.toNumber();
+  return unwrapEvalResult(result).toNumber();
 }
 
 describe("Full pipeline: Lexer → Parser → BytecodeBuilder → VM", () => {
@@ -260,7 +260,7 @@ describe("Full pipeline: Lexer → Parser → BytecodeBuilder → VM", () => {
     const vmFloat64 = new Float64Array(program.numbers);
     const vm = createVM(sharedOpRegistry);
     const result = executeBytecode({ opcodes: vmUint8, numbers: vmFloat64, strings: program.strings }, vm);
-    expect(result!.toNumber()).toBe(256);
+    expect(unwrapEvalResult(result).toNumber()).toBe(256);
   });
 
   test("BODMAS: function precedence: sqrt(9) * 2 = 6", () => {

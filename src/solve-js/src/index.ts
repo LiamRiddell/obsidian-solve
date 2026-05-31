@@ -22,6 +22,14 @@ export type { OpcodeHandler, IOpcodeHandlerRegistration, VM } from "./vm/OpRegis
 export { ExpressionEngine } from "./engine/ExpressionEngine";
 export { checkExpressionLength, checkExpressionComplexity, extractReadsAndWrites, isEmptyLine, findInlineSolvesInLine } from "./engine/ExpressionEngineSafety";
 export type { ValidationConfig, SafetyCheckResult } from "./engine/ExpressionEngineSafety";
+export {
+	AsyncResolutionBatcher,
+	type AsyncResolutionEvent,
+	type LinesUpdatedEvent,
+	type AsyncErrorEvent,
+	type AsyncResolutionListener,
+	type UnsubscribeFn as AsyncUnsubscribeFn
+} from "./engine/AsyncResolutionBatcher";
 export { Solve, solve } from "./api/SolveAPI";
 export type { ISolve, ISolvePackage } from "./api/SolveAPI";
 

@@ -92,9 +92,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       return formatDatetime(value.value as number, locale);
     case ValueType.Uom:
       return formatUom(value.value as number, value.unit, locale, us);
-    case ValueType.Vector2:
-    case ValueType.Vector3:
-    case ValueType.Vector4:
+    case ValueType.Array:
       return formatVector(value.value as number[], locale);
     case ValueType.Percentage:
       return formatPercentage(value.value as number, locale, us);

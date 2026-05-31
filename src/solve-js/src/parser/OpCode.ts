@@ -41,20 +41,17 @@ export enum OpCode {
 	GTE = 45,
 
 	// Functions
-	CALL = 50,
-	CALL_BUILTIN = 51,
-	RETURN = 52,
+	CALL_PLUGIN = 50,     // Plugin-registered functions (may be async — pre-resolved by orchestrator)
+	CALL_BUILTIN = 51,    // Sync built-in functions (sqrt, sin, diceRoll, matmul)
+	RETURN = 52,          // Reserved for future user-defined functions
 
 	// Variables
 	LOAD_VAR = 60,
 	STORE_VAR = 61,
-	LOAD_PREV = 62,
 
 	// Type conversion
 	TO_NUMBER = 70,
 	TO_HEX = 71,
-	TO_STRING = 72,
-	TO_BIGINT = 73,
 	TO_PERCENTAGE = 74,
 
 	// UoM
@@ -68,18 +65,16 @@ export enum OpCode {
 	DATE_NOW = 90,
 	DATE_ADD = 91,
 	DATE_SUB = 92,
-	DATE_DIFF = 93,
 
-	// Vector
-	VEC_ADD = 100,
-	VEC_SUB = 101,
-	VEC_DOT = 102,
-	VEC_CROSS = 103,
-	VEC_SCALE = 104,
-	VEC_NEW = 105,
-
-	// Dice
-	DICE_ROLL = 110,
+	// Array (unified Vector/Array type — was VEC_ADD/VEC_SUB/etc.)
+	ARR_NEW = 100,
+	ARR_ADD = 101,
+	ARR_SUB = 102,
+	ARR_DOT = 103,
+	ARR_CROSS = 104,
+	ARR_SCALE = 105,
+	ARR_MAGNITUDE = 106,
+	ARR_NORMALIZE = 107,
 
 	// Plugin extensibility
 	PLUGIN_CUSTOM = 200,

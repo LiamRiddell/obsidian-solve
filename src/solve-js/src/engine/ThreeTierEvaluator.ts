@@ -115,7 +115,13 @@ export class ThreeTierEvaluator {
 	 *
 	 * @returns Results for all processed lines, including tier metadata.
 	 */
-	evaluate(viewport: ViewportRange): EvalResult {
+	evaluate(viewport: ViewportRange, signal?: AbortSignal): EvalResult {
+		// ── One AbortController Per Keystroke ────────────────────────
+		// Link the UI layer's keystroke signal to the engine so that
+		// all per-evaluation AbortControllers created during this call
+		// are canceled when the user types a new keystroke.
+		this.engine.setKeystrokeSignal(signal ?? null);
+
 		// ── Phase 5.3: Enable arena for zero-allocation Value reuse ──
 		enableValueArena();
 		try {
@@ -157,6 +163,10 @@ export class ThreeTierEvaluator {
 
 			return { lines, resultMap, tierCounts };
 		} finally {
+			// Clear keystroke signal to prevent stale signal references
+			// from being used by subsequent evaluations from other code paths.
+			this.engine.setKeystrokeSignal(null);
+
 			// Phase 5.3: Always disable arena — even on exception.
 			// Prevents arena Values from leaking into subsequent evaluations or tests.
 			disableValueArena();
@@ -264,9 +274,9 @@ export class ThreeTierEvaluator {
 	 * Evaluate all dirty lines in the document, regardless of viewport.
 	 * Used for full re-evaluation after plugin register/unregister.
 	 */
-	evaluateAll(): EvalResult {
+	evaluateAll(signal?: AbortSignal): EvalResult {
 		const viewport = { startLine: 1, endLine: this.doc.lineCount };
-		const result = this.evaluate(viewport);
+		const result = this.evaluate(viewport, signal);
 		// evaluate() already calls maintainAfterEval internally
 		return result;
 	}
@@ -295,13 +305,17 @@ export class ThreeTierEvaluator {
 	 * @returns Results for visible lines only. Lines before the viewport are
 	 * not included in `lines[]` or `resultMap`.
 	 */
-	setViewport(viewport: ViewportRange): EvalResult {
+	setViewport(viewport: ViewportRange, signal?: AbortSignal): EvalResult {
+		// ── One AbortController Per Keystroke ────────────────────────
+		// Link the UI layer's keystroke signal to the engine.
+		this.engine.setKeystrokeSignal(signal ?? null);
+
 		// ── Correctness guard: dirty lines before viewport invalidate checkpoints ──
 		if (viewport.startLine > 1 && this.hasDirtyLinesBefore(viewport.startLine)) {
 			// Clear stale checkpoints — evaluate() will rebuild them from line 1.
-			// evaluate() handles its own arena enable/disable.
+			// evaluate() handles its own arena enable/disable and signal cleanup.
 			this.checkpointer?.clear();
-			return this.evaluate(viewport);
+			return this.evaluate(viewport, signal);
 		}
 
 		// ── Phase 5.2g: Page-based LRU eviction (MUST run before preload) ──
@@ -323,6 +337,9 @@ export class ThreeTierEvaluator {
 			const result = this.collectEvalResults(viewport.startLine, viewport.endLine);
 			return result;
 		} finally {
+			// Clear keystroke signal to prevent stale signal references.
+			this.engine.setKeystrokeSignal(null);
+
 			// Phase 5.3: Always disable arena — even on exception.
 			// Prevents cross-test contamination from arena leaks.
 			disableValueArena();

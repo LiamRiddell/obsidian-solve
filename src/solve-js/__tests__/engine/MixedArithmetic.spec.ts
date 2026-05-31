@@ -3,7 +3,7 @@ import { Lexer } from "@solve-js/lexer/Lexer";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
 import { registerPercentageParselets } from "@solve-js/providers/percentage/parselets/index";
@@ -83,7 +83,7 @@ function evalFull(input: string): Value {
     { opcodes: new Uint8Array(program.opcodes), numbers: new Float64Array(program.numbers), strings: program.strings },
     vm
   );
-  return result!;
+  return unwrapEvalResult(result);
 }
 
 function evalNum(input: string): number {

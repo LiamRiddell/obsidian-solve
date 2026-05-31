@@ -281,36 +281,36 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
   });
 
   describe("Vector Provider Issues", () => {
-    test("vec2(1, 2) + vec2(3, 4) should return vec2(4, 6)", () => {
+    test("vec2(1, 2) + vec2(3, 4) should return array [4, 6]", () => {
       const result = engine.parseDocument("s`vec2(1, 2) + vec2(3, 4)`", { inputType: 'markdown' });
       
       expect(result.errors).toHaveLength(0);
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Vector2);
+      expect(value.type).toBe(ValueType.Array);
       expect(value.value as number[]).toEqual([4, 6]);
     });
 
-    test("vec3(1, 2, 3) * 2 should return vec3(2, 4, 6)", () => {
+    test("vec3(1, 2, 3) * 2 should return array [2, 4, 6]", () => {
       const result = engine.parseDocument("s`vec3(1, 2, 3) * 2`", { inputType: 'markdown' });
       
       expect(result.errors).toHaveLength(0);
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Vector3);
+      expect(value.type).toBe(ValueType.Array);
       expect(value.value as number[]).toEqual([2, 4, 6]);
     });
 
-    test("vec2(10, 20) / vec2(2, 5) should return vec2(5, 4)", () => {
+    test("vec2(10, 20) / vec2(2, 5) should return array [5, 4]", () => {
       const result = engine.parseDocument("s`vec2(10, 20) / vec2(2, 5)`", { inputType: 'markdown' });
       
       expect(result.errors).toHaveLength(0);
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Vector2);
+      expect(value.type).toBe(ValueType.Array);
       expect(value.value as number[]).toEqual([5, 4]);
     });
   });
@@ -438,14 +438,14 @@ s\`:x + :y\``;
       expect(value.toNumber()).toBe(5);
     });
 
-    test("vec2(10, 2) + 5 should return vec2(15, 7)", () => {
+    test("vec2(10, 2) + 5 should return array [15, 7]", () => {
       const result = engine.parseDocument("s`vec2(10, 2) + 5`", { inputType: 'markdown' });
       
       expect(result.errors).toHaveLength(0);
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Vector2);
+      expect(value.type).toBe(ValueType.Array);
       expect(value.value as number[]).toEqual([15, 7]);
     });
   });

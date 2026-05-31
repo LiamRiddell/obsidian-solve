@@ -11,7 +11,7 @@ export class VectorAddParselet implements InfixParselet {
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(this.bindingPower, builder);
-    builder.emitOpcode(OpCode.VEC_ADD);
+    builder.emitOpcode(OpCode.ARR_ADD);
   }
 }
 
@@ -21,7 +21,7 @@ export class VectorSubParselet implements InfixParselet {
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(this.bindingPower, builder);
-    builder.emitOpcode(OpCode.VEC_SUB);
+    builder.emitOpcode(OpCode.ARR_SUB);
   }
 }
 
@@ -31,6 +31,6 @@ export class VectorDotParselet implements InfixParselet {
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(this.bindingPower, builder);
-    builder.emitOpcode(OpCode.VEC_DOT);
+    builder.emitOpcode(OpCode.ARR_DOT);
   }
 }

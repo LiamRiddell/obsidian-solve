@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-05-31T13:25:24.685Z",
+  "results": {
+    "addEventListener + removeEventListener": 0.36106500000000324,
+    "addEventListener only": 262.53035050000665,
+    "new AbortController()": 0.2626619999994,
+    "controller.abort() (pre-aborted)": 0.11792759999899136,
+    "full create+link+unlink cycle": 0.47123149999402814,
+    "keystroke abort → 50 local aborts": 835.9128450000019,
+    "engine.evaluateLine (no signal)": 2.3266859999869487,
+    "engine.evaluateLine (with signal)": 914.5534319999596,
+    "overhead delta (with - without)": 912.2267459999726,
+    "50 keystroke cycles (per-cycle)": 34.58263999999035
+  }
+}

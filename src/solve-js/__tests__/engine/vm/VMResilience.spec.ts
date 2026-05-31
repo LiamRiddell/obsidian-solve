@@ -1,14 +1,15 @@
 import { describe, expect, test } from "@jest/globals";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 
 describe("VM Resilience", () => {
-  test("empty opcodes array returns undefined", () => {
+  test("empty opcodes array returns value result", () => {
     const vm = createVM(sharedOpRegistry);
     const result = executeBytecode({ opcodes: new Uint8Array([]), numbers: new Float64Array([]), strings: [] }, vm);
-    expect(result).toBeUndefined();
+    expect(result.type).toBe('value');
+    expect(unwrapEvalResult(result).toNumber()).toBe(0);
   });
 
   test("single opcode without halt flushes stack", () => {
@@ -16,7 +17,7 @@ describe("VM Resilience", () => {
     const opcodes = new Uint8Array([OpCode.PUSH_NUMBER, 0]);
     const numbers = new Float64Array([42]);
     const result = executeBytecode({ opcodes, numbers, strings: [] }, vm);
-    expect(result).toBeDefined();
+    expect(result.type).toBeDefined();
   });
 
   test("invalid opcode value does not throw", () => {
@@ -33,7 +34,7 @@ describe("VM Resilience", () => {
     const opcodes = new Uint8Array([OpCode.PUSH_STRING, 99, OpCode.HALT]);
     const numbers = new Float64Array([]);
     const result = executeBytecode({ opcodes, numbers, strings: ["a"] }, vm);
-    expect(result).toBeDefined();
+    expect(result.type).toBeDefined();
   });
 
   test("corrupted bytecode - truncated data after PUSH_NUMBER", () => {
@@ -41,7 +42,7 @@ describe("VM Resilience", () => {
     const opcodes = new Uint8Array([OpCode.PUSH_NUMBER]);
     const numbers = new Float64Array([]);
     const result = executeBytecode({ opcodes, numbers, strings: [] }, vm);
-    expect(result).toBeDefined();
+    expect(result.type).toBeDefined();
   });
 
   test("corrupted bytecode - truncated data after PUSH_STRING", () => {
@@ -49,7 +50,7 @@ describe("VM Resilience", () => {
     const opcodes = new Uint8Array([OpCode.PUSH_STRING]);
     const numbers = new Float64Array([]);
     const result = executeBytecode({ opcodes, numbers, strings: ["test"] }, vm);
-    expect(result).toBeDefined();
+    expect(result.type).toBeDefined();
   });
 
   test("HALT returns correct stack value after complex operations", () => {
@@ -62,7 +63,7 @@ describe("VM Resilience", () => {
     ]);
     const numbers = new Float64Array([42, 10]);
     const result = executeBytecode({ opcodes, numbers, strings: [] }, vm);
-    expect(result).toBeDefined();
+    expect(result.type).toBeDefined();
   });
 
   test("deep opcode chain without recursion overflow", () => {
@@ -74,7 +75,7 @@ describe("VM Resilience", () => {
     ops.push(OpCode.HALT);
     const numbers = new Float64Array(Array.from({ length: 50 }, (_, i) => i));
     const result = executeBytecode({ opcodes: new Uint8Array(ops), numbers: new Float64Array(numbers), strings: [] }, vm);
-    expect(result).toBeDefined();
+    expect(result.type).toBeDefined();
   });
 
   test("max stack depth - many pushes without pops", () => {
@@ -86,7 +87,7 @@ describe("VM Resilience", () => {
     ops.push(OpCode.HALT);
     const numbers = new Float64Array([1]);
     const result = executeBytecode({ opcodes: new Uint8Array(ops), numbers, strings: [] }, vm);
-    expect(result).toBeDefined();
+    expect(result.type).toBeDefined();
   });
 
   test("nested CALL_BUILTIN with multiple arguments", () => {
@@ -99,7 +100,7 @@ describe("VM Resilience", () => {
     ];
     const numbers = new Float64Array([2, 3]);
     const result = executeBytecode({ opcodes: new Uint8Array(ops), numbers, strings: [] }, vm);
-    expect(result).toBeDefined();
+    expect(result.type).toBeDefined();
   });
 
   test("all arithmetic opcodes produce valid results", () => {
@@ -121,7 +122,7 @@ describe("VM Resilience", () => {
         OpCode.HALT,
       ]);
       const result = executeBytecode({ opcodes, numbers: new Float64Array([a, b]), strings: [] }, vm);
-      expect(result).toBeDefined();
+      expect(result.type).toBeDefined();
     }
   });
 });

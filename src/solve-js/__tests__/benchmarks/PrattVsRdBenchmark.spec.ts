@@ -6,6 +6,7 @@
  *
  * Usage: npx jest --no-coverage src/solve-js/__tests__/benchmarks/PrattVsRdBenchmark.spec.ts
  */
+import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 // ── Test expressions (same as parseCompileMicroBenchmarks) ───────────────────

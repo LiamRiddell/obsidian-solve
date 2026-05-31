@@ -9,9 +9,8 @@ export class BigIntNumberParselet implements PrefixParselet {
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     let raw = token.value;
     if (raw.endsWith("n")) raw = raw.slice(0, -1);
-    const bigVal = BigInt(raw);
-    const num = Number(bigVal);
+    // Store as string to preserve arbitrary precision (exceeds Float64)
     builder.emitOpcode(OpCode.PUSH_BIGINT);
-    builder.emitNumber(num);
+    builder.emitString(raw);
   }
 }

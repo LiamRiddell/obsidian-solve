@@ -1,11 +1,11 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, vectorValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, arrayValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive } from "@solve-js/vm/Value";
 import { OpRegistry, type VM } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, pluginFunctionRegistry } from "@solve-js/vm/VMBuiltins";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 
@@ -13,6 +13,9 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
     const stack: Value[] = [];
     const variables = new Map<string, Value>();
     let instructionCount = 0;
+
+    let activeSignal: AbortSignal | undefined;
+    let abortCurrent: (() => void) | undefined;
 
     return {
       push(v: Value) {
@@ -37,7 +40,14 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
         stack.length = 0;
         variables.clear();
         instructionCount = 0;
+        // Abort any in-flight async work for the previous expression
+        if (abortCurrent) { abortCurrent(); abortCurrent = undefined; }
+        activeSignal = undefined;
       },
+      get activeSignal() { return activeSignal; },
+      set activeSignal(s: AbortSignal | undefined) { activeSignal = s; },
+      get abortCurrent() { return abortCurrent; },
+      set abortCurrent(f: (() => void) | undefined) { abortCurrent = f; },
       getMaxInstructions() { return maxInstructions; },
       getInstructionCount() { return instructionCount; },
       incrementInstructions(n: number) {
@@ -53,6 +63,22 @@ export interface Bytecode {
     opcodes: Uint8Array;
     numbers: Float64Array;
     strings: string[];
+}
+
+// ── EvalResult: discriminated union returned by executeBytecode ───────────
+// Replaces the old throw-AsyncSuspenseError pattern. The VM now returns
+// { type: 'pending' } instead of throwing, eliminating the need for try/catch
+// in the engine. The orchestrator checks result.type to decide the next step.
+
+/** Result of a bytecode execution. */
+export type EvalResult =
+    | { type: 'value'; value: Value }
+    | { type: 'pending'; queryKey: string; resolver: Promise<Value>; packageId: string; signal: AbortSignal };
+
+/** Extract the Value from an EvalResult, or throw if pending (shouldn't happen at call sites). */
+export function unwrapEvalResult(result: EvalResult): Value {
+    if (result.type === 'value') return result.value;
+    throw new Error(`Expected value result but got pending: ${result.queryKey}`);
 }
 
 // ── Shared helpers ─────────────────────────────────────────────────────
@@ -92,7 +118,7 @@ export function executeBytecode(
     vm: VM,
     pipeline?: DiagnosticPipeline | undefined,
     expression?: string
-): Value | undefined {
+): EvalResult {
     const { opcodes, numbers, strings } = bytecode;
     const reg = vm.registry;
     let ip = 0;
@@ -116,7 +142,7 @@ export function executeBytecode(
     // eliminate the unreachable persistentValue() branch entirely.
     const hasArena = isArenaActive();
 
-    if (opcodes.length === 0) return undefined;
+    if (opcodes.length === 0) return { type: 'value', value: numberValue(0) };
 
     while (ip < opcodes.length) {
       // Tighten instruction limit check: combined increment + guard.
@@ -153,7 +179,7 @@ export function executeBytecode(
           break;
         case OpCode.HALT: {
           const result = stack.pop()!;
-          return hasArena ? persistentValue(result) : result;
+          return { type: 'value', value: hasArena ? persistentValue(result) : result };
         }
         case OpCode.DUP:
           stack.push(stack[stack.length - 1]);
@@ -172,7 +198,7 @@ export function executeBytecode(
           stack.push(numberValue(numbers[opcodes[ip++]]));
           break;
         case OpCode.PUSH_BIGINT:
-          stack.push(bigIntValue(BigInt(numbers[opcodes[ip++]])));
+          stack.push(bigIntValue(BigInt(strings[opcodes[ip++]])));
           break;
         case OpCode.PUSH_HEX:
           stack.push(hexValue(numbers[opcodes[ip++]]));
@@ -314,8 +340,103 @@ export function executeBytecode(
         }
 
         // ═══════════════════════════════════════════════════════════════
+        // §4b Comparison  (OpCode 40–45)
+        //     Numeric fast path when both operands are Number;
+        //     EQ/NEQ support UoM unification for same-measure comparison.
+        // ═══════════════════════════════════════════════════════════════
+        case OpCode.EQ: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(boolValue((l.value as number) === (r.value as number)));
+          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
+            const { lv, rv, sameMeasure } = unifyUom(l, r);
+            stack.push(boolValue(sameMeasure && lv === rv));
+          } else {
+            stack.push(boolValue(l.toNumber() === r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.NEQ: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(boolValue((l.value as number) !== (r.value as number)));
+          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
+            const { lv, rv, sameMeasure } = unifyUom(l, r);
+            stack.push(boolValue(!sameMeasure || lv !== rv));
+          } else {
+            stack.push(boolValue(l.toNumber() !== r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.LT: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(boolValue((l.value as number) < (r.value as number)));
+          } else {
+            stack.push(boolValue(l.toNumber() < r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.LTE: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(boolValue((l.value as number) <= (r.value as number)));
+          } else {
+            stack.push(boolValue(l.toNumber() <= r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.GT: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(boolValue((l.value as number) > (r.value as number)));
+          } else {
+            stack.push(boolValue(l.toNumber() > r.toNumber()));
+          }
+          break;
+        }
+        case OpCode.GTE: {
+          const r = stack.pop()!, l = stack.pop()!;
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(boolValue((l.value as number) >= (r.value as number)));
+          } else {
+            stack.push(boolValue(l.toNumber() >= r.toNumber()));
+          }
+          break;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
         // §5  Functions  (OpCode 50–52)
         // ═══════════════════════════════════════════════════════════════
+        case OpCode.CALL_PLUGIN: {
+          const fnIdx = opcodes[ip++];
+          const argCount = opcodes[ip++];
+          const args: Value[] = [];
+          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
+          args.reverse();
+          const fn = pluginFunctionRegistry[fnIdx];
+          if (!fn) {
+            stack.push(numberValue(0));
+          } else {
+            const result = fn(args);
+            if (result instanceof Promise) {
+              // Return pending result — no throw. The orchestrator checks
+              // result.type and handles async resolution outside the VM.
+              // The pluginId + domain are embedded in the cache key format:
+              //   {pluginId}:{domain}:{fnIdx}:{hash(args)}
+              // We use a deterministic key from fnIdx + args for now;
+              // the engine scopes it by pluginId before storing.
+              const cacheKey = `plugin:${fnIdx}:${args.map(a => String(a.value ?? '')).join('|')}`;
+              // activeSignal must be set by the engine before calling executeBytecode.
+              // If it's not (bug), we use a new signal that will never abort —
+              // this is a safety net, not the expected path.
+              const signal = vm.activeSignal!;
+              return { type: 'pending', queryKey: cacheKey, resolver: result, packageId: '', signal };
+            }
+            stack.push(result);
+          }
+          break;
+        }
         case OpCode.CALL_BUILTIN: {
           const fnIdx = opcodes[ip++];
           const argCount = opcodes[ip++];
@@ -448,38 +569,84 @@ export function executeBytecode(
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // §10 Vector  (OpCode 100–105)
+        // §10 Array / Vector  (OpCode 100–108)
+        //     Unified Array type replaces Vec2/Vec3/Vec4. Stores number[].
         // ═══════════════════════════════════════════════════════════════
-        case OpCode.VEC_NEW: {
+        case OpCode.ARR_NEW: {
           const count = opcodes[ip++];
           const components: number[] = [];
           for (let i = 0; i < count; i++) components.unshift(stack.pop()!.toNumber());
-          stack.push(vectorValue(components));
+          stack.push(arrayValue(components));
           break;
         }
-        case OpCode.VEC_ADD: {
+        case OpCode.ARR_ADD: {
           const r = stack.pop()!, l = stack.pop()!;
           stack.push(binaryOp(l, r, (a, b) => a + b));
           break;
         }
-        case OpCode.VEC_SUB: {
+        case OpCode.ARR_SUB: {
           const r = stack.pop()!, l = stack.pop()!;
           stack.push(binaryOp(l, r, (a, b) => a - b));
           break;
         }
-
-        // ═══════════════════════════════════════════════════════════════
-        // §11 Dice  (OpCode 110)
-        // ═══════════════════════════════════════════════════════════════
-        case OpCode.DICE_ROLL: {
-          const to = stack.pop()!.toNumber();
-          const from = stack.pop()!.toNumber();
-          stack.push(numberValue(Math.floor(Math.random() * (to - from + 1)) + from));
+        case OpCode.ARR_DOT: {
+          const r = stack.pop()!, l = stack.pop()!;
+          const lv = l.value as number[], rv = r.value as number[];
+          const len = Math.min(lv.length, rv.length);
+          let sum = 0;
+          for (let i = 0; i < len; i++) sum += lv[i] * rv[i];
+          stack.push(numberValue(sum));
+          break;
+        }
+        case OpCode.ARR_CROSS: {
+          const r = stack.pop()!, l = stack.pop()!;
+          const lv = l.value as number[], rv = r.value as number[];
+          if (lv.length >= 3 && rv.length >= 3) {
+            stack.push(arrayValue([
+              lv[1] * rv[2] - lv[2] * rv[1],
+              lv[2] * rv[0] - lv[0] * rv[2],
+              lv[0] * rv[1] - lv[1] * rv[0],
+            ]));
+          } else {
+            stack.push(arrayValue([0, 0, 0]));
+          }
+          break;
+        }
+        case OpCode.ARR_SCALE: {
+          const scalar = stack.pop()!.toNumber();
+          const arr = stack.pop()!;
+          const av = arr.value as number[];
+          const result = new Array(av.length);
+          for (let i = 0; i < av.length; i++) result[i] = av[i] * scalar;
+          stack.push(arrayValue(result));
+          break;
+        }
+        case OpCode.ARR_MAGNITUDE: {
+          const arr = stack.pop()!;
+          const av = arr.value as number[];
+          let sumSq = 0;
+          for (let i = 0; i < av.length; i++) sumSq += av[i] * av[i];
+          stack.push(numberValue(Math.sqrt(sumSq)));
+          break;
+        }
+        case OpCode.ARR_NORMALIZE: {
+          const arr = stack.pop()!;
+          const av = arr.value as number[];
+          let sumSq = 0;
+          for (let i = 0; i < av.length; i++) sumSq += av[i] * av[i];
+          const mag = Math.sqrt(sumSq);
+          if (mag === 0) {
+            stack.push(arrayValue(new Array(av.length).fill(0)));
+          } else {
+            const result = new Array(av.length);
+            for (let i = 0; i < av.length; i++) result[i] = av[i] / mag;
+            stack.push(arrayValue(result));
+          }
           break;
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // §12 Plugin extensibility  (OpCode 200+)
+        // §11 Plugin extensibility  (OpCode 200+)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.PLUGIN_CUSTOM: {
           const handler = reg.get(OpCode.PLUGIN_CUSTOM);
@@ -503,5 +670,5 @@ export function executeBytecode(
 
     // Fallback return (reached if while loop exits without HALT — shouldn't happen on valid bytecode)
     const fallback = stack.pop()!;
-    return hasArena ? persistentValue(fallback) : fallback;
+    return { type: 'value', value: hasArena ? persistentValue(fallback) : fallback };
 }

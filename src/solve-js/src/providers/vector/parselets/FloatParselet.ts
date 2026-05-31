@@ -10,7 +10,7 @@ export class FloatParselet implements PrefixParselet {
 		parser.consume("LPAREN");
 		parser.parseExpression(0, builder);
 		parser.consume("RPAREN");
-		builder.emitOpcode(OpCode.VEC_NEW);
+		builder.emitOpcode(OpCode.ARR_NEW);
 		builder.emitIndex(1);
 	}
 }

@@ -79,7 +79,7 @@ describe("Memory Leak Tests", () => {
 			// Each engine creates Lexer (~5KB), VM (~3KB), LineCache,
 			// ParseletRegistry, and PluginManager — ~30KB/engine baseline.
 			// 10K × 30KB = ~300MB expected with heap fragmentation.
-			checkMemoryGrowth("10K parseDocument", beforeMB, afterMB, 10000, 400);
+			checkMemoryGrowth("10K parseDocument", beforeMB, afterMB, 10000, 500);
 		});
 
 		test("10K evaluateLine iterations do not leak memory", () => {

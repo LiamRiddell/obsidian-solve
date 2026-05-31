@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry, OpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, enableValueArena, disableValueArena, numberValue, bigIntValue, uomValue, vectorValue, percentageValue, datetimeValue, stringValue } from "@solve-js/vm/Value";
@@ -34,14 +34,14 @@ describe("VM — Stack operations", () => {
       vm
     );
     // After SWAP, top should be 10 (was 20 before swap)
-    expect(result!.toNumber()).toBe(10);
+    expect(unwrapEvalResult(result).toNumber()).toBe(10);
   });
 
   test("DUP duplicates top of stack", () => {
     const vm = freshVM();
     // PUSH 7, DUP (stack: [7, 7]), ADD (pop 7+7=14, push 14), HALT (pop+return 14)
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.DUP, OpCode.ADD, OpCode.HALT], [7]), vm);
-    expect(result!.toNumber()).toBe(14);
+    expect(unwrapEvalResult(result).toNumber()).toBe(14);
   });
 
   test("NOP does not affect stack", () => {
@@ -50,43 +50,43 @@ describe("VM — Stack operations", () => {
       bc([OpCode.NOP, OpCode.NOP, OpCode.PUSH_NUMBER, 0, OpCode.HALT], [42]),
       vm
     );
-    expect(result!.toNumber()).toBe(42);
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 });
 
 describe("VM — Push literals", () => {
   test("PUSH_BIGINT pushes a bigint value", () => {
     const vm = freshVM();
-    // BigInt values are stored as regular numbers in the numbers array;
-    // the VM converts them via BigInt() at runtime.
-    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.HALT], [9007199254740991]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(9007199254740991));
+    // BigInt values are stored in the strings array;
+    // the VM reads them as strings and converts via BigInt() at runtime.
+    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.HALT], [], ["9007199254740991"]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(9007199254740991));
   });
 
   test("PUSH_HEX pushes a hex value", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_HEX, 0, OpCode.HALT], [255]), vm);
-    expect(result!.type).toBe(ValueType.Hex);
-    expect(result!.toNumber()).toBe(255);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Hex);
+    expect(unwrapEvalResult(result).toNumber()).toBe(255);
   });
 
   test("PUSH_BOOLEAN true", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_BOOLEAN, 1, OpCode.HALT]), vm);
-    expect(result!.value).toBe(true);
+    expect(unwrapEvalResult(result).value).toBe(true);
   });
 
   test("PUSH_BOOLEAN false", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_BOOLEAN, 0, OpCode.HALT]), vm);
-    expect(result!.value).toBe(false);
+    expect(unwrapEvalResult(result).value).toBe(false);
   });
 
   test("PUSH_STRING with valid index", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_STRING, 0, OpCode.HALT], [], ["hello world"]), vm);
-    expect(result!.value).toBe("hello world");
+    expect(unwrapEvalResult(result).value).toBe("hello world");
   });
 });
 
@@ -94,39 +94,38 @@ describe("VM — Arithmetic", () => {
   test("NEG negates a positive number", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.NEG, OpCode.HALT], [42]), vm);
-    expect(result!.toNumber()).toBe(-42);
+    expect(unwrapEvalResult(result).toNumber()).toBe(-42);
   });
 
   test("NEG negates a negative number", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.NEG, OpCode.HALT], [-10]), vm);
-    expect(result!.toNumber()).toBe(10);
+    expect(unwrapEvalResult(result).toNumber()).toBe(10);
   });
 
   test("NEG on BigInt", () => {
     const vm = freshVM();
-    // Pass regular number (specifically a non-integer to avoid BigInt coercion in Float64Array)
-    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.NEG, OpCode.HALT], [100]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(-100));
+    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.NEG, OpCode.HALT], [], ["100"]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(-100));
   });
 
   test("POS on number is identity", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.POS, OpCode.HALT], [42]), vm);
-    expect(result!.toNumber()).toBe(42);
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 
   test("EXP computes power", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.EXP, OpCode.HALT], [2, 10]), vm);
-    expect(result!.toNumber()).toBe(1024);
+    expect(unwrapEvalResult(result).toNumber()).toBe(1024);
   });
 
   test("MOD with negative numbers", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.MOD, OpCode.HALT], [10, -3]), vm);
-    expect(result!.toNumber()).toBeCloseTo(10 % -3);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(10 % -3);
   });
 });
 
@@ -146,8 +145,8 @@ describe("VM — binaryOp fallback paths", () => {
     // Stack: [Number(10), Vector[1,2]]; ADD pops r=Vector, l=Number
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
     // binaryOp: l=Number, r=Vector → rv.map(v => op(lv, v)) → [10+1, 10+2]
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([11, 12]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([11, 12]);
   });
 
   test("ADD Vector + Number (vector scaling)", () => {
@@ -156,33 +155,33 @@ describe("VM — binaryOp fallback paths", () => {
     // Stack: [Vector[1,2], Number(10)]; ADD pops r=Number, l=Vector
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
     // binaryOp: l=Vector, r=Number → lv.map(v => op(v, rv)) → [1+10, 2+10]
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([11, 12]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([11, 12]);
   });
 
   test("ADD BigInt + Number", () => {
     const vm = freshVM();
     pushValues(vm, bigIntValue(BigInt(100)), numberValue(50));
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(150));
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(150));
   });
 
   test("ADD Number + BigInt", () => {
     const vm = freshVM();
     pushValues(vm, numberValue(50), bigIntValue(BigInt(100)));
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(150));
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(150));
   });
 
   test("ADD Number + UoM", () => {
     const vm = freshVM();
     pushValues(vm, numberValue(75), uomValue(5, "m"));
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.Uom);
-    expect(result!.toNumber()).toBe(80);
-    expect(result!.unit).toBe("m");
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Uom);
+    expect(unwrapEvalResult(result).toNumber()).toBe(80);
+    expect(unwrapEvalResult(result).unit).toBe("m");
   });
 
   test("ADD Number + String (falls through to numeric conversion)", () => {
@@ -192,8 +191,8 @@ describe("VM — binaryOp fallback paths", () => {
     pushValues(vm, numberValue(10), stringValue("5"));
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
     // binaryOp final fallback: both toNumber() → 10 + 5 = 15
-    expect(result!.type).toBe(ValueType.Number);
-    expect(result!.toNumber()).toBe(15);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Number);
+    expect(unwrapEvalResult(result).toNumber()).toBe(15);
   });
 
   // ── SUB: mixed-type fallback ────────────────────────────────────────
@@ -202,24 +201,24 @@ describe("VM — binaryOp fallback paths", () => {
     const vm = freshVM();
     pushValues(vm, bigIntValue(BigInt(100)), numberValue(30));
     const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(70));
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(70));
   });
 
   test("SUB Vector - Number", () => {
     const vm = freshVM();
     pushValues(vm, vectorValue([10, 20]), numberValue(3));
     const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([7, 17]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([7, 17]);
   });
 
   test("SUB Number - Vector", () => {
     const vm = freshVM();
     pushValues(vm, numberValue(10), vectorValue([1, 2]));
     const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([9, 8]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([9, 8]);
   });
 
   // ── MUL: mixed-type fallback ────────────────────────────────────────
@@ -228,24 +227,24 @@ describe("VM — binaryOp fallback paths", () => {
     const vm = freshVM();
     pushValues(vm, bigIntValue(BigInt(10)), numberValue(3));
     const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(30));
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(30));
   });
 
   test("MUL Vector * Number", () => {
     const vm = freshVM();
     pushValues(vm, vectorValue([2, 3]), numberValue(4));
     const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([8, 12]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([8, 12]);
   });
 
   test("MUL Number * Vector", () => {
     const vm = freshVM();
     pushValues(vm, numberValue(4), vectorValue([2, 3]));
     const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([8, 12]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([8, 12]);
   });
 
   // ── DIV/MOD: mixed-type fallback (always go through binaryOp) ──────
@@ -254,34 +253,34 @@ describe("VM — binaryOp fallback paths", () => {
     const vm = freshVM();
     pushValues(vm, vectorValue([10, 20]), numberValue(2));
     const result = executeBytecode(bc([OpCode.DIV, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([5, 10]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([5, 10]);
   });
 
   test("MOD BigInt % Number", () => {
     const vm = freshVM();
     pushValues(vm, bigIntValue(BigInt(10)), numberValue(3));
     const result = executeBytecode(bc([OpCode.MOD, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(1));
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(1));
   });
 
   // ── VEC_ADD/VEC_SUB: always delegate to binaryOp (no inlined fast path) ─
 
-  test("VEC_ADD Vector + Number", () => {
+  test("ARR_ADD Vector + Number", () => {
     const vm = freshVM();
     pushValues(vm, vectorValue([5, 10]), numberValue(3));
-    const result = executeBytecode(bc([OpCode.VEC_ADD, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([8, 13]);
+    const result = executeBytecode(bc([OpCode.ARR_ADD, OpCode.HALT]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([8, 13]);
   });
 
-  test("VEC_SUB Vector - Number", () => {
+  test("ARR_SUB Vector - Number", () => {
     const vm = freshVM();
     pushValues(vm, vectorValue([5, 10]), numberValue(3));
-    const result = executeBytecode(bc([OpCode.VEC_SUB, OpCode.HALT]), vm);
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([2, 7]);
+    const result = executeBytecode(bc([OpCode.ARR_SUB, OpCode.HALT]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([2, 7]);
   });
 });
 
@@ -289,73 +288,72 @@ describe("VM — Bitwise operations", () => {
   test("LSHIFT shifts left", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.LSHIFT, OpCode.HALT], [1, 3]), vm);
-    expect(result!.toNumber()).toBe(8);
+    expect(unwrapEvalResult(result).toNumber()).toBe(8);
   });
 
   test("RSHIFT shifts right", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.RSHIFT, OpCode.HALT], [16, 2]), vm);
-    expect(result!.toNumber()).toBe(4);
+    expect(unwrapEvalResult(result).toNumber()).toBe(4);
   });
 
   test("BIT_AND computes bitwise AND", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.BIT_AND, OpCode.HALT], [6, 3]), vm);
-    expect(result!.toNumber()).toBe(2);
+    expect(unwrapEvalResult(result).toNumber()).toBe(2);
   });
 
   test("BIT_OR computes bitwise OR", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.BIT_OR, OpCode.HALT], [5, 3]), vm);
-    expect(result!.toNumber()).toBe(7);
+    expect(unwrapEvalResult(result).toNumber()).toBe(7);
   });
 
   test("BIT_XOR computes bitwise XOR", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.BIT_XOR, OpCode.HALT], [5, 3]), vm);
-    expect(result!.toNumber()).toBe(6);
+    expect(unwrapEvalResult(result).toNumber()).toBe(6);
   });
 
   test("BIT_NOT computes bitwise NOT", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.BIT_NOT, OpCode.HALT], [0]), vm);
-    expect(result!.toNumber()).toBe(~0);
+    expect(unwrapEvalResult(result).toNumber()).toBe(~0);
   });
 
   test("LSHIFT with BigInt", () => {
     const vm = freshVM();
-    // BigInt values stored as regular numbers in Float64Array; VM casts at runtime
-    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.PUSH_BIGINT, 1, OpCode.LSHIFT, OpCode.HALT], [1, 3]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(8));
+    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.PUSH_BIGINT, 1, OpCode.LSHIFT, OpCode.HALT], [], ["1", "3"]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(8));
   });
 
   test("RSHIFT with BigInt", () => {
     const vm = freshVM();
-    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.PUSH_BIGINT, 1, OpCode.RSHIFT, OpCode.HALT], [16, 2]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(4));
+    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.PUSH_BIGINT, 1, OpCode.RSHIFT, OpCode.HALT], [], ["16", "2"]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(4));
   });
 
   test("BIT_AND with BigInt", () => {
     const vm = freshVM();
-    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.PUSH_BIGINT, 1, OpCode.BIT_AND, OpCode.HALT], [6, 3]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(2));
+    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.PUSH_BIGINT, 1, OpCode.BIT_AND, OpCode.HALT], [], ["6", "3"]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(2));
   });
 
   test("BIT_XOR with BigInt", () => {
     const vm = freshVM();
-    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.PUSH_BIGINT, 1, OpCode.BIT_XOR, OpCode.HALT], [5, 3]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(6));
+    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.PUSH_BIGINT, 1, OpCode.BIT_XOR, OpCode.HALT], [], ["5", "3"]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(6));
   });
 
   test("BIT_NOT with BigInt", () => {
     const vm = freshVM();
-    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.BIT_NOT, OpCode.HALT], [0]), vm);
-    expect(result!.type).toBe(ValueType.BigInt);
-    expect(result!.value).toEqual(BigInt(~BigInt(0)));
+    const result = executeBytecode(bc([OpCode.PUSH_BIGINT, 0, OpCode.BIT_NOT, OpCode.HALT], [], ["0"]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.BigInt);
+    expect(unwrapEvalResult(result).value).toEqual(BigInt(~BigInt(0)));
   });
 });
 
@@ -363,67 +361,67 @@ describe("VM — Type conversion", () => {
   test("TO_NUMBER converts to number", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_HEX, 0, OpCode.TO_NUMBER, OpCode.HALT], [255]), vm);
-    expect(result!.type).toBe(ValueType.Number);
-    expect(result!.toNumber()).toBe(255);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Number);
+    expect(unwrapEvalResult(result).toNumber()).toBe(255);
   });
 
   test("TO_HEX converts to hex", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.TO_HEX, OpCode.HALT], [255]), vm);
-    expect(result!.type).toBe(ValueType.Hex);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Hex);
   });
 
   test("TO_PERCENTAGE converts to percentage", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.TO_PERCENTAGE, OpCode.HALT], [0.5]), vm);
-    expect(result!.type).toBe(ValueType.Percentage);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Percentage);
   });
 });
 
 describe("VM — Dice roll", () => {
-  test("DICE_ROLL returns within range over many rolls", () => {
+  test("CALL_BUILTIN diceRoll returns within range over many rolls", () => {
     for (let i = 0; i < 100; i++) {
       const vm = freshVM();
-      const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.DICE_ROLL, OpCode.HALT], [1, 6]), vm);
-      const val = result!.toNumber();
+      const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.CALL_BUILTIN, 37, 2, OpCode.HALT], [1, 6]), vm);
+      const val = unwrapEvalResult(result).toNumber();
       expect(val).toBeGreaterThanOrEqual(1);
       expect(val).toBeLessThanOrEqual(6);
     }
   });
 });
 
-describe("VM — Vector operations", () => {
-  test("VEC_NEW creates a 2-component vector", () => {
+describe("VM — Array operations", () => {
+  test("ARR_NEW creates a 2-component array", () => {
     const vm = freshVM();
     const result = executeBytecode(
-      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.VEC_NEW, 2, OpCode.HALT], [10, 20]),
+      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.ARR_NEW, 2, OpCode.HALT], [10, 20]),
       vm
     );
-    expect(result!.type).toBe(ValueType.Vector2);
-    expect(result!.value).toEqual([10, 20]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([10, 20]);
   });
 
-  test("VEC_NEW creates a 4-component vector", () => {
+  test("ARR_NEW creates a 4-component array", () => {
     const vm = freshVM();
     const result = executeBytecode(
-      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.PUSH_NUMBER, 3, OpCode.VEC_NEW, 4, OpCode.HALT], [1, 2, 3, 4]),
+      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.PUSH_NUMBER, 3, OpCode.ARR_NEW, 4, OpCode.HALT], [1, 2, 3, 4]),
       vm
     );
-    expect(result!.type).toBe(ValueType.Vector4);
-    expect(result!.value).toEqual([1, 2, 3, 4]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
+    expect(unwrapEvalResult(result).value).toEqual([1, 2, 3, 4]);
   });
 
-  test("VEC_ADD adds two vectors", () => {
+  test("ARR_ADD adds two arrays", () => {
     const vm = freshVM();
     const result = executeBytecode(
       bc([
-        OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.VEC_NEW, 2, // [1, 2]
-        OpCode.PUSH_NUMBER, 2, OpCode.PUSH_NUMBER, 3, OpCode.VEC_NEW, 2, // [3, 4]
-        OpCode.VEC_ADD, OpCode.HALT,
+        OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.ARR_NEW, 2, // [1, 2]
+        OpCode.PUSH_NUMBER, 2, OpCode.PUSH_NUMBER, 3, OpCode.ARR_NEW, 2, // [3, 4]
+        OpCode.ARR_ADD, OpCode.HALT,
       ], [1, 2, 3, 4]),
       vm
     );
-    expect(result!.value).toEqual([4, 6]);
+    expect(unwrapEvalResult(result).value).toEqual([4, 6]);
   });
 });
 
@@ -435,8 +433,8 @@ describe("VM — Datetime operations", () => {
       bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.DATE_ADD, OpCode.HALT], [base, 5000]),
       vm
     );
-    expect(result!.type).toBe(ValueType.Datetime);
-    expect(result!.toNumber()).toBe(base + 5000);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Datetime);
+    expect(unwrapEvalResult(result).toNumber()).toBe(base + 5000);
   });
 
   test("DATE_SUB subtracts milliseconds from datetime", () => {
@@ -446,8 +444,8 @@ describe("VM — Datetime operations", () => {
       bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.DATE_SUB, OpCode.HALT], [base, 3000]),
       vm
     );
-    expect(result!.type).toBe(ValueType.Datetime);
-    expect(result!.toNumber()).toBe(base - 3000);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Datetime);
+    expect(unwrapEvalResult(result).toNumber()).toBe(base - 3000);
   });
 
   test("DATE_NOW pushes current timestamp", () => {
@@ -455,9 +453,9 @@ describe("VM — Datetime operations", () => {
     const before = Date.now();
     const result = executeBytecode(bc([OpCode.DATE_NOW, OpCode.HALT]), vm);
     const after = Date.now();
-    expect(result!.type).toBe(ValueType.Datetime);
-    expect((result!.value as number)).toBeGreaterThanOrEqual(before);
-    expect((result!.value as number)).toBeLessThanOrEqual(after);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Datetime);
+    expect((unwrapEvalResult(result).value as number)).toBeGreaterThanOrEqual(before);
+    expect((unwrapEvalResult(result).value as number)).toBeLessThanOrEqual(after);
   });
 
   test("ADD with Datetime + number milliseconds", () => {
@@ -469,8 +467,8 @@ describe("VM — Datetime operations", () => {
       bc([OpCode.PUSH_NUMBER, 0, OpCode.ADD, OpCode.HALT], [5000]),
       vm
     );
-    expect(result!.type).toBe(ValueType.Datetime);
-    expect(result!.toNumber()).toBe(6000);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Datetime);
+    expect(unwrapEvalResult(result).toNumber()).toBe(6000);
   });
 });
 
@@ -483,9 +481,9 @@ describe("VM — UoM operations", () => {
       bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_STRING, 0, OpCode.UOM_CONVERT, OpCode.HALT], [100], ["cm"]),
       vm
     );
-    expect(result!.type).toBe(ValueType.Uom);
-    expect(result!.toNumber()).toBe(100);
-    expect(result!.unit).toBe("cm");
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Uom);
+    expect(unwrapEvalResult(result).toNumber()).toBe(100);
+    expect(unwrapEvalResult(result).unit).toBe("cm");
   });
 
   test("UOM_GET_VALUE extracts numeric value from UoM", () => {
@@ -494,8 +492,8 @@ describe("VM — UoM operations", () => {
       bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_STRING, 0, OpCode.UOM_CONVERT, OpCode.UOM_GET_VALUE, OpCode.HALT], [42], ["kg"]),
       vm
     );
-    expect(result!.type).toBe(ValueType.Number);
-    expect(result!.toNumber()).toBe(42);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Number);
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 
   test("UOM_BEST finds best unit", () => {
@@ -507,9 +505,9 @@ describe("VM — UoM operations", () => {
       vm
     );
     // 1000 mm should convert to 1 m
-    expect(result!.type).toBe(ValueType.Uom);
-    expect(result!.toNumber()).toBeCloseTo(1, 5);
-    expect(result!.unit).toBe("m");
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Uom);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(1, 5);
+    expect(unwrapEvalResult(result).unit).toBe("m");
   });
 });
 
@@ -521,7 +519,7 @@ describe("VM — Variables", () => {
       vm
     );
     // STORE_VAR also leaves value on stack
-    expect(result!.toNumber()).toBe(42);
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
     // Verify variable was set
     expect(vm.getVar("x")!.toNumber()).toBe(42);
   });
@@ -531,13 +529,13 @@ describe("VM — Variables", () => {
     // Pre-set a variable using the public VM API
     vm.setVar("y", numberValue(99));
     const result = executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["y"]), vm);
-    expect(result!.toNumber()).toBe(99);
+    expect(unwrapEvalResult(result).toNumber()).toBe(99);
   });
 
   test("LOAD_VAR returns 0 for undefined variable", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm);
-    expect(result!.toNumber()).toBe(0);
+    expect(unwrapEvalResult(result).toNumber()).toBe(0);
   });
 });
 
@@ -553,94 +551,95 @@ describe("VM — CALL_BUILTIN", () => {
   test("sin(0) = 0", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 2, 1, OpCode.HALT], [0]), vm);
-    expect(result!.toNumber()).toBeCloseTo(0);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(0);
   });
 
   test("cos(0) = 1", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 3, 1, OpCode.HALT], [0]), vm);
-    expect(result!.toNumber()).toBeCloseTo(1);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(1);
   });
 
   test("log(1) = 0", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 5, 1, OpCode.HALT], [1]), vm);
-    expect(result!.toNumber()).toBeCloseTo(0);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(0);
   });
 
   test("ceil(4.2) = 5", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 6, 1, OpCode.HALT], [4.2]), vm);
-    expect(result!.toNumber()).toBe(5);
+    expect(unwrapEvalResult(result).toNumber()).toBe(5);
   });
 
   test("floor(4.9) = 4", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 7, 1, OpCode.HALT], [4.9]), vm);
-    expect(result!.toNumber()).toBe(4);
+    expect(unwrapEvalResult(result).toNumber()).toBe(4);
   });
 
   test("round(4.5) = 5", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 8, 1, OpCode.HALT], [4.5]), vm);
-    expect(result!.toNumber()).toBe(5);
+    expect(unwrapEvalResult(result).toNumber()).toBe(5);
   });
 
   test("atan2(1, 0) ≈ π/2", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.CALL_BUILTIN, 14, 2, OpCode.HALT], [1, 0]), vm);
-    expect(result!.toNumber()).toBeCloseTo(Math.PI / 2, 5);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(Math.PI / 2, 5);
   });
 
   test("exp(1) ≈ e", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 24, 1, OpCode.HALT], [1]), vm);
-    expect(result!.toNumber()).toBeCloseTo(Math.E, 5);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(Math.E, 5);
   });
 
   test("pow(2, 10) = 1024", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.CALL_BUILTIN, 31, 2, OpCode.HALT], [2, 10]), vm);
-    expect(result!.toNumber()).toBe(1024);
+    expect(unwrapEvalResult(result).toNumber()).toBe(1024);
   });
 
   test("sign(-5) = -1", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 33, 1, OpCode.HALT], [-5]), vm);
-    expect(result!.toNumber()).toBe(-1);
+    expect(unwrapEvalResult(result).toNumber()).toBe(-1);
   });
 
   test("trunc(3.9) = 3", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 34, 1, OpCode.HALT], [3.9]), vm);
-    expect(result!.toNumber()).toBe(3);
+    expect(unwrapEvalResult(result).toNumber()).toBe(3);
   });
 
   test("deg(180) ≈ 3.14159", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 35, 1, OpCode.HALT], [180]), vm);
-    expect(result!.toNumber()).toBeCloseTo(Math.PI, 5);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(Math.PI, 5);
   });
 
   test("rad(π) ≈ 180", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.CALL_BUILTIN, 36, 1, OpCode.HALT], [Math.PI]), vm);
-    expect(result!.toNumber()).toBeCloseTo(180, 5);
+    expect(unwrapEvalResult(result).toNumber()).toBeCloseTo(180, 5);
   });
 });
 
 describe("VM — Edge cases & error handling", () => {
-  test("empty bytecode returns undefined", () => {
+  test("empty bytecode returns value result", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([], [], []), vm);
-    expect(result).toBeUndefined();
+    expect(result.type).toBe('value');
+    expect(unwrapEvalResult(result).toNumber()).toBe(0);
   });
 
   test("no HALT — fallback stack pop", () => {
     const vm = freshVM();
     const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0], [42]), vm);
     expect(result).toBeDefined();
-    expect(result!.toNumber()).toBe(42);
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 
   test("stack overflow — push beyond maxStackDepth", () => {
@@ -673,7 +672,7 @@ describe("VM — Edge cases & error handling", () => {
       vm
     );
     // 255 is not a recognized opcode — falls through default which is a no-op
-    expect(result!.toNumber()).toBe(42);
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 });
 
@@ -697,7 +696,7 @@ describe("VM — Custom opcode (PLUGIN_CUSTOM)", () => {
       bc([OpCode.PUSH_NUMBER, 0, OpCode.PLUGIN_CUSTOM, 0, OpCode.HALT], [21]),
       vm
     );
-    expect(result!.toNumber()).toBe(42);
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 
   test("unregistered PLUGIN_CUSTOM is a no-op", () => {
@@ -707,7 +706,7 @@ describe("VM — Custom opcode (PLUGIN_CUSTOM)", () => {
       vm
     );
     // No handler registered for PLUGIN_CUSTOM — default fallthrough, stack unchanged
-    expect(result!.toNumber()).toBe(42);
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 });
 
@@ -718,9 +717,9 @@ describe("VM — UoM conversion edge cases", () => {
       bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_STRING, 0, OpCode.UOM_CONVERT, OpCode.HALT], [1.5], ["m"]),
       vm
     );
-    expect(result!.type).toBe(ValueType.Uom);
-    expect(result!.toNumber()).toBe(1.5);
-    expect(result!.unit).toBe("m");
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Uom);
+    expect(unwrapEvalResult(result).toNumber()).toBe(1.5);
+    expect(unwrapEvalResult(result).unit).toBe("m");
   });
 
   test("UOM_CONVERT_TO converts between compatible units", () => {
@@ -740,7 +739,7 @@ describe("VM — UoM conversion edge cases", () => {
       vm
     );
     // Expect the uom (100 cm) to be pushed as-is since convert would fail with our test setup
-    expect(result!.type).toBe(ValueType.Uom);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Uom);
   });
 });
 
@@ -750,7 +749,7 @@ describe("VM — Value arena integration", () => {
     try {
       const vm = freshVM();
       const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.HALT], [42]), vm);
-      expect(result!.toNumber()).toBe(42);
+      expect(unwrapEvalResult(result).toNumber()).toBe(42);
     } finally {
       disableValueArena();
     }

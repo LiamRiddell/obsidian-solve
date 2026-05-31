@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, test, afterAll } from "@jest/globals";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { sharedOpRegistry, type VM } from "@solve-js/vm/OpRegistry";
 
@@ -69,7 +69,7 @@ const PROGRAMS: Array<{ name: string; bytecode: BytecodeProgram }> = [
     bytecode: makeBytecode(
       [
         OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1,
-        OpCode.PUSH_NUMBER, 2, OpCode.VEC_NEW, 3, OpCode.HALT,
+        OpCode.PUSH_NUMBER, 2, OpCode.ARR_NEW, 3, OpCode.HALT,
       ],
       [1, 2, 3]
     ),
@@ -90,7 +90,7 @@ const PROGRAMS: Array<{ name: string; bytecode: BytecodeProgram }> = [
   {
     name: "dice_roll",
     bytecode: makeBytecode(
-      [OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.DICE_ROLL, OpCode.HALT],
+      [OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.CALL_BUILTIN, 37, 2, OpCode.HALT],
       [1, 6]
     ),
   },

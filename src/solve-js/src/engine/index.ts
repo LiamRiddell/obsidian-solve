@@ -6,3 +6,12 @@ export { DocumentModel } from "./DocumentModel";
 export type { LineState, ViewportRange, LineChange, ApplyChangesResult } from "./DocumentModel";
 export { ThreeTierEvaluator, EvalTier } from "./ThreeTierEvaluator";
 export type { EvalLineResult, EvalResult } from "./ThreeTierEvaluator";
+export {
+	AsyncResolutionBatcher,
+	type AsyncResolutionEvent,
+	type LinesUpdatedEvent,
+	type AsyncErrorEvent,
+	type AsyncResolutionListener,
+	type UnsubscribeFn as AsyncUnsubscribeFn,
+} from "./AsyncResolutionBatcher";
+export { ExecutionPool, WORKER_OFFLOAD_THRESHOLD, reconstructValue } from "./ExecutionPool";

@@ -8,7 +8,7 @@ import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/pars
 import { registerDatetimeParselets } from "@solve-js/providers/datetime/parselets/index";
 import { registerUomParselets } from "@solve-js/providers/uom/parselets/index";
 import { registerVariableParselets } from "@solve-js/providers/variables/parselets/index";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
 
@@ -48,7 +48,7 @@ function parseAndExecute(input: string, variables: Map<string, Value> = new Map(
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm
   );
-  return result!;
+  return unwrapEvalResult(result);
 }
 
 describe("User Scenario Test", () => {

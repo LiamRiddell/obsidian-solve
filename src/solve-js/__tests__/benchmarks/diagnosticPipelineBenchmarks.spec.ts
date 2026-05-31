@@ -145,7 +145,8 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
 test("diagnostic report has correct structure", () => {
      const engine = new ExpressionEngine("en", true);
-     const result = engine.evaluateLineWithDebug(1, "1 + 2 * 3");
+     // Use an expression with sqrt() to exercise Tier 2 FunctionParselet
+     const result = engine.evaluateLineWithDebug(1, "sqrt(144) + 5");
 
      expect(result.debug).toBeDefined();
      const debug = result.debug!;
@@ -160,13 +161,14 @@ test("diagnostic report has correct structure", () => {
      expect(debug.summary.parseCategories).toBeDefined();
 
      // Check metadata
-     expect(debug.metadata.expression).toBe("1 + 2 * 3");
+     expect(debug.metadata.expression).toBe("sqrt(144) + 5");
      expect(debug.metadata.vmTraceEnabled).toBe(false);
 
-     // Verify parselet categories populated
+     // Verify parselet categories populated (Tier 2 parselets only;
+     // Tier 1 inline tokens like NUMBER do not fire parselet events).
      const cats = Object.keys(debug.summary.parseCategories);
      expect(cats.length).toBeGreaterThan(0);
-     expect(cats).toContain("Arithmetic");
+     expect(cats).toContain("Function");
 
      // Check events include parselet_matched with categories
      const parseletEvents = debug.events.filter(

@@ -6,7 +6,7 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
 import { registerVariableParselets } from "@solve-js/providers/variables/parselets/index";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
 
@@ -38,7 +38,7 @@ function parseAndExecute(input: string): Value {
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm
   );
-  return result!;
+  return unwrapEvalResult(result);
 }
 
 describe("Variable Parselets", () => {
@@ -86,8 +86,8 @@ describe("Variable Parselets", () => {
       { opcodes: vm2Uint8, numbers: vm2Float64, strings: program2.strings },
       vm2
     );
-    expect(result2!.type).toBe(ValueType.Number);
-    expect(result2!.toNumber()).toBe(15);
+    expect(unwrapEvalResult(result2).type).toBe(ValueType.Number);
+    expect(unwrapEvalResult(result2).toNumber()).toBe(15);
   });
 
   test("variable assignment with expression RHS", () => {
@@ -148,11 +148,12 @@ describe("Variable Parselets", () => {
     const vm3 = createVM(sharedOpRegistry);
     vm3.setVar("var1", vm2.getVar("var1")!);
     vm3.setVar("var2", vm2.getVar("var2")!);
-    const result = executeBytecode(
+    const evalResult = executeBytecode(
       { opcodes: vm3Uint8, numbers: vm3Float64, strings: program3.strings },
       vm3
     );
-    expect(result!.type).toBe(ValueType.Number);
-    expect(result!.toNumber()).toBe(30);
+    const result = unwrapEvalResult(evalResult);
+    expect(result.type).toBe(ValueType.Number);
+    expect(result.toNumber()).toBe(30);
   });
 });

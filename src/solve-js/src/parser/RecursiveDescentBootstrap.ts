@@ -150,6 +150,9 @@ function registerDatetimeHandlers(parser: RecursiveDescentParser): void {
 // DICE PROVIDER
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/** CALL_BUILTIN index for diceRoll(from, to). Matches VMBuiltins.ts index 37. */
+const DICE_ROLL_BUILTIN = 37;
+
 function registerDiceHandlers(parser: RecursiveDescentParser): void {
 	parser.registerPrefix("ROLL", (p, token) => {
 		const next = p.peek();
@@ -159,7 +162,9 @@ function registerDiceHandlers(parser: RecursiveDescentParser): void {
 			p.parseExpression(40); // parse lower bound with Product precedence
 			p.consume(); // consume AND or TO (whichever separator)
 			p.parseExpression(0); // parse upper bound
-			p.builder.emitOpcode(OpCode.DICE_ROLL);
+			p.builder.emitOpcode(OpCode.CALL_BUILTIN);
+			p.builder.emitIndex(DICE_ROLL_BUILTIN);
+			p.builder.emitIndex(2);
 		} else {
 			// roll(X, Y) syntax
 			p.consume("LPAREN");
@@ -167,7 +172,9 @@ function registerDiceHandlers(parser: RecursiveDescentParser): void {
 			p.consume("COMMA");
 			p.parseExpression(0);
 			p.consume("RPAREN");
-			p.builder.emitOpcode(OpCode.DICE_ROLL);
+			p.builder.emitOpcode(OpCode.CALL_BUILTIN);
+			p.builder.emitIndex(DICE_ROLL_BUILTIN);
+			p.builder.emitIndex(2);
 		}
 	});
 }
@@ -372,7 +379,7 @@ function registerVectorHandlers(parser: RecursiveDescentParser): void {
 				}
 			}
 			p.consume("RPAREN");
-			p.builder.emitOpcode(OpCode.VEC_NEW);
+			p.builder.emitOpcode(OpCode.ARR_NEW);
 			p.builder.emitIndex(dimension > 0 ? dimension : count);
 		};
 	};
@@ -386,7 +393,7 @@ function registerVectorHandlers(parser: RecursiveDescentParser): void {
 		p.consume("LPAREN");
 		p.parseExpression(0);
 		p.consume("RPAREN");
-		p.builder.emitOpcode(OpCode.VEC_NEW);
+		p.builder.emitOpcode(OpCode.ARR_NEW);
 		p.builder.emitIndex(1);
 	});
 }

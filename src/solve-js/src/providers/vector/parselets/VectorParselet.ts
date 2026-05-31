@@ -24,7 +24,7 @@ export class VectorParselet implements PrefixParselet {
       }
     }
     parser.consume("RPAREN");
-    builder.emitOpcode(OpCode.VEC_NEW);
+    builder.emitOpcode(OpCode.ARR_NEW);
     builder.emitIndex(this.dimension > 0 ? this.dimension : count);
   }
 }

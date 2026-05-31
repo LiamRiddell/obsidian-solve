@@ -5,6 +5,9 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
+/** CALL_BUILTIN index for diceRoll(from, to). Matches VMBuiltins.ts index 37. */
+const DICE_ROLL_BUILTIN = 37;
+
 export class DiceRollParselet implements PrefixParselet {
 	readonly category = "Dice";
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
@@ -16,7 +19,9 @@ export class DiceRollParselet implements PrefixParselet {
       parser.parseExpression(BindingPower.Product, builder);
       parser.consume(); // AND or TO
       parser.parseExpression(0, builder);
-      builder.emitOpcode(OpCode.DICE_ROLL);
+      builder.emitOpcode(OpCode.CALL_BUILTIN);
+      builder.emitIndex(DICE_ROLL_BUILTIN);
+      builder.emitIndex(2); // argc = 2
     } else {
       // Handle "roll(X, Y)"
       parser.consume("LPAREN");
@@ -24,7 +29,9 @@ export class DiceRollParselet implements PrefixParselet {
       parser.consume("COMMA");
       parser.parseExpression(0, builder);
       parser.consume("RPAREN");
-      builder.emitOpcode(OpCode.DICE_ROLL);
+      builder.emitOpcode(OpCode.CALL_BUILTIN);
+      builder.emitIndex(DICE_ROLL_BUILTIN);
+      builder.emitIndex(2); // argc = 2
     }
   }
 }

@@ -8,4 +8,6 @@ export enum EResultType {
 	Vector3,
 	Vector4,
 	UnitOfMeasurement,
+	/** Async result not yet resolved — show loading indicator. */
+	Pending,
 }

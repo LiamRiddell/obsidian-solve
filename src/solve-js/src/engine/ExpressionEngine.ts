@@ -3,19 +3,32 @@ import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { ScopeManager } from "@solve-js/vm/ScopeManager";
 import { Lexer } from "@solve-js/lexer/Lexer";
-import { Parser } from "@solve-js/parser/Parser";
+import { PrecedenceParser } from "@solve-js/parser/PrecedenceParser";
 import { RecursiveDescentParser } from "@solve-js/parser/RecursiveDescentParser";
 import { registerAllHandlers } from "@solve-js/parser/RecursiveDescentBootstrap";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import type { EvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { Value, numberValue } from "@solve-js/vm/Value";
+import { Value, numberValue, pendingValue, errorValue } from "@solve-js/vm/Value";
 import { PluginManager } from "@solve-js/plugins/PluginSystem";
 import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
 import type { ISolvePackage } from "@solve-js/api/SolveAPI";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { AsyncResultCache } from "@solve-js/cache/AsyncResultCache";
+import {
+	ResolverRegistry,
+	type AsyncCheckResult,
+} from "@solve-js/resolvers/ResolverRegistry";
+import {
+	AsyncResolutionBatcher,
+	type AsyncResolutionListener,
+	type UnsubscribeFn,
+} from "@solve-js/engine/AsyncResolutionBatcher";
+import { dataQueryService } from "@solve-js/services/DataQueryService";
+import { AllocationTracker, type PipelineTelemetry, type StageAllocation } from "@solve-js/telemetry";
 import {
     ParsingResult,
     ParsedLine,
@@ -39,6 +52,7 @@ import {
     extractReadsAndWrites,
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
+import { abortLogger } from "@app/utilities/AbortControllerLogger";
 
 
 
@@ -48,13 +62,63 @@ export class ExpressionEngine {
     private scopeManager = new ScopeManager();
     private lexer: Lexer;
     private registry: ParseletRegistry;
-    private parser: Parser;
+    private parser: PrecedenceParser;
     private rdParser: RecursiveDescentParser | undefined;
     private localeCode: string;
     private vm: VM;
     private config: typeof DEFAULT_CONFIG;
     private pluginManager: PluginManager;
     private diagnosticPipeline: DiagnosticPipeline;
+    /** Registry of async resolvers from registered packages. */
+    private resolverRegistry = new ResolverRegistry();
+
+    /**
+     * Keystroke-level AbortSignal — set by the UI layer (MarkdownEditorViewPlugin)
+     * before each evaluation. When the user types a new keystroke, the old signal
+     * is aborted, causing all in-flight async work (fetches, preflight checks,
+     * batcher flushes) to be canceled atomically.
+     *
+     * executeAndStore() and executeRaw() link their local AbortControllers to
+     * this signal so that when the keystroke changes, all per-evaluation controllers
+     * are aborted together.
+     */
+    private keystrokeSignal: AbortSignal | null = null;
+
+    /**
+     * Micro-batcher that collapses multiple async resolutions into a single
+     * DAG walk + re-evaluation pass. Replaces the old single-callback pattern.
+     */
+    private batcher: AsyncResolutionBatcher;
+
+    /**
+     * @deprecated Use `addAsyncListener()` for multi-listener event stream.
+     * Still set-able for backwards compatibility — sets a single listener.
+     */
+    get onAsyncResolved(): ((queryKey: string) => void) | null {
+        // Backwards compat: no way to get the old callback back.
+        return null;
+    }
+    set onAsyncResolved(cb: ((queryKey: string) => void) | null) {
+        if (this._onAsyncResolvedUnsub) {
+            this._onAsyncResolvedUnsub();
+            this._onAsyncResolvedUnsub = null;
+        }
+        if (cb) {
+            this._onAsyncResolvedUnsub = this.batcher.addListener((event) => {
+                if (event.type === "lines-updated") {
+                    for (const qk of event.affectedQueryKeys) {
+                        cb(qk);
+                    }
+                }
+            });
+        }
+    }	private _onAsyncResolvedUnsub: UnsubscribeFn | null = null;
+
+	/**
+	 * Unsubscribe from DataQueryService cache updates.
+	 * Set in constructor, called in clear()/destroy.
+	 */
+	private _dqsUnsubscribe: (() => void) | null = null;
     // Bytecode cache — avoids re-parsing identical expressions
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
     // Pre-allocated BytecodeBuilder pool — avoids 4 heap allocations per
@@ -70,6 +134,9 @@ export class ExpressionEngine {
     // Index into the builder pool — incremented modulo pool size.
     // Not thread-safe, but ExpressionEngine is single-threaded.
     private builderPoolIndex = 0;
+    // Most recent pipeline telemetry — populated when AllocationTracker.isEnabled().
+    // Null when tracking is disabled (production — zero overhead).
+    private lastTelemetry: PipelineTelemetry | null = null;
 
     constructor(
         localeCode = "en",
@@ -83,6 +150,8 @@ export class ExpressionEngine {
         this.lexer = new Lexer(localeCode, buildTokenLookup(localeCode));
         this.registry = new ParseletRegistry();
         this.pluginManager = new PluginManager(this.registry);
+        // Wire resolver registry so PluginManager can register async resolvers
+        this.pluginManager.resolverRegistry = this.resolverRegistry;
 
 // Wire diagnostic pipeline: use provided, create timeline if enabled, or leave empty for production
          if (diagnosticPipeline) {
@@ -107,15 +176,56 @@ export class ExpressionEngine {
         for (const pkg of pkgList) {
             this.registerPackage(pkg);
         }
-        this.parser = new Parser(this.registry, this.config.validation.maxNestingDepth, localeCode);
+        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
         if (this.config.parser.useRecursiveDescent) {
             this.rdParser = new RecursiveDescentParser(
                 this.config.validation.maxNestingDepth,
                 localeCode
             );
             registerAllHandlers(this.rdParser);
-        }
-        this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
+        }	this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
+		this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
+
+		// ── Bridge: DataQueryService → batcher ──────────────────────
+		// DataQueryService resolves data independently (via its own worker).
+		// When a cache update fires, we feed it into the batcher so it goes
+		// through the same DAG-walk + re-execution + event-stream pipeline
+		// as engine-originated async resolutions. This eliminates the old
+		// parallel pipeline where MarkdownEditorViewPlugin subscribed to
+		// DataQueryService directly and did its own manual DAG walk.
+		this._dqsUnsubscribe = dataQueryService.onCacheUpdate(
+			(dataSourceId, queryKeys, _data) => {
+				// DataQueryService uses compound queryKeys (e.g., ["rate", "USD", "GBP"]).
+				// Join into a single string to match the DAG's stored format
+				// (registered via registerLineDataSourceDependency with [queryKey]).
+				const compositeKey = queryKeys.join(':');
+				this.batcher.add({
+					queryKey: compositeKey,
+					packageId: dataSourceId,
+					signal: new AbortController().signal,
+					isError: false,
+				});
+			},
+		);
+	}
+
+    // ── Multi-listener event stream ────────────────────────────────────
+
+    /**
+     * Subscribe to async resolution events.
+     *
+     * Receives either `{ type: 'lines-updated', lineNumbers, affectedQueryKeys }`
+     * or `{ type: 'error', queryKey, packageId, error }`.
+     *
+     * Use this instead of the deprecated `onAsyncResolved` callback for:
+     * - Triggering view re-renders after async data loads
+     * - Showing transient error toasts for failed resolutions
+     * - Updating loading spinners for specific query keys
+     *
+     * @returns An unsubscribe function — call it in your `destroy()` method.
+     */
+    addAsyncListener(listener: AsyncResolutionListener): UnsubscribeFn {
+        return this.batcher.addListener(listener);
     }
 
     /**
@@ -159,6 +269,9 @@ export class ExpressionEngine {
                 sharedVariableResolver.registerSource(vs);
             }
         }
+        if (pkg.asyncResolver) {
+            this.resolverRegistry.register(pkg.asyncResolver);
+        }
     }
 
     /**
@@ -176,6 +289,187 @@ export class ExpressionEngine {
      */
     getDiagnosticPipeline(): DiagnosticPipeline {
         return this.diagnosticPipeline;
+    }
+
+    /**
+     * Store a result in the line cache (with DAG registration).
+     * Extracted common pattern from 8 call sites.
+     */
+    private storeLineResult(
+        lineNumber: number,
+        result: Value,
+        program: BytecodeProgram,
+        reads: string[],
+        writes: string[],
+        expression: string,
+    ): void {
+        this.lineCache.set(lineNumber, new LineCacheEntry(
+            result,
+            program,
+            reads,
+            writes.length > 0 ? writes[0] : null
+        ), expression);
+    }
+
+    /**
+     * Execute bytecode and handle the result.
+     *
+     * Replaces ALL 5 try/catch blocks that previously caught AsyncSuspenseError.
+     * Now that executeBytecode returns an EvalResult discriminated union,
+     * we simply check result.type instead of catching errors.
+     *
+     * Sets up AbortController → VM for stale-data prevention.
+     * Cleans up the VM stack after execution (success or pending).
+     * Fires async resolution via fire-and-forget for pending results.
+     */
+    private executeAndStore(
+        program: BytecodeProgram,
+        lineNumber: number,
+        expression: string,
+        reads: string[],
+        writes: string[],
+        packageId: string,
+    ): Value {
+        const stackBefore = this.vm.getStack().length;
+
+        // Set up AbortController for this evaluation.
+        // When the user edits the line before resolution, the old controller
+        // is aborted, preventing stale data from surfacing.
+        const controller = new AbortController();
+        // ── Link to keystroke signal (One AbortController Per Keystroke) ──
+        // When the user types a new keystroke, the keystrokeController is aborted,
+        // which in turn aborts this local controller, canceling all in-flight
+        // async work for this specific evaluation.
+        const abortLocal = () => controller.abort();
+        this.keystrokeSignal?.addEventListener('abort', abortLocal, { once: true });
+
+        abortLogger.localControllerCreated("executeAndStore");
+        if (this.keystrokeSignal) {
+            abortLogger.signalLinked("executeAndStore");
+        }
+
+        this.vm.activeSignal = controller.signal;
+        this.vm.abortCurrent = () => {
+            abortLogger.signalUnlinked("executeAndStore");
+            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+            controller.abort();
+        };
+
+        const result = executeBytecode(program, this.vm);
+
+        // Single stack cleanup (replaces 10 occurrences)
+        while (this.vm.getStack().length > stackBefore) {
+            this.vm.pop();
+        }
+
+        if (result.type === 'pending') {
+            // Fire-and-forget async resolution
+            void this.resolveAsync(result);
+
+            // Register data source dependency in DAG for re-evaluation tracking
+            this.dag.registerLineDataSourceDependency(
+                lineNumber,
+                result.packageId || packageId,
+                [result.queryKey]
+            );
+
+            const pending = pendingValue(result.queryKey);
+            this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
+            return pending;
+        }
+
+        // Success path
+        this.dag.registerLine(lineNumber, reads, writes);
+        this.storeLineResult(lineNumber, result.value, program, reads, writes, expression);
+        return result.value;
+    }
+
+    /**
+     * Execute bytecode and return the raw EvalResult without DAG/LineCache updates.
+     * Used by reEvaluateLine, executeCached, and evaluateIncremental which
+     * manage their own cache state differently.
+     */
+    private executeRaw(program: BytecodeProgram): EvalResult {
+        const stackBefore = this.vm.getStack().length;
+
+        const controller = new AbortController();
+        // ── Link to keystroke signal (One AbortController Per Keystroke) ──
+        const abortLocal = () => controller.abort();
+        this.keystrokeSignal?.addEventListener('abort', abortLocal, { once: true });
+
+        abortLogger.localControllerCreated("executeRaw");
+        if (this.keystrokeSignal) {
+            abortLogger.signalLinked("executeRaw");
+        }
+
+        this.vm.activeSignal = controller.signal;
+        this.vm.abortCurrent = () => {
+            abortLogger.signalUnlinked("executeRaw");
+            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+            controller.abort();
+        };
+
+        const result = executeBytecode(program, this.vm);
+
+        // Stack cleanup
+        while (this.vm.getStack().length > stackBefore) {
+            this.vm.pop();
+        }
+
+        return result;
+    }
+
+    /**
+     * Fire-and-forget async resolution using async/await.
+     *
+     * On resolution or error:
+     * 1. Checks AbortSignal — if aborted, stale data is discarded.
+     * 2. Stores result/error in AsyncResultCache (per-package scoped).
+     * 3. Defers re-evaluation to AsyncResolutionBatcher which collapses
+     *    multiple resolutions into a single DAG walk + re-execution pass
+     *    and fires typed events to all listeners.
+     */
+    private async resolveAsync(pending: Extract<EvalResult, { type: 'pending' }>): Promise<void> {
+        const { queryKey, resolver, packageId, signal } = pending;
+        const effectivePackageId = packageId || '_engine';
+
+        // Dedup: skip if already in-flight
+        if (AsyncResultCache.isInFlight(effectivePackageId, queryKey)) return;
+
+        AsyncResultCache.registerInFlight(effectivePackageId, queryKey, resolver);
+
+        try {
+            const value = await resolver;
+            if (signal.aborted) {
+                abortLogger.staleDataDiscarded(queryKey, "signal aborted after resolve");
+                return; // Stale — expression changed
+            }
+            AsyncResultCache.set(effectivePackageId, queryKey, value);
+
+            // Defer re-evaluation to batcher (collapsed across microtask).
+            this.batcher.add({
+                queryKey,
+                packageId: effectivePackageId,
+                signal,
+                isError: false,
+            });
+        } catch (err) {
+            if (signal.aborted) {
+                abortLogger.staleDataDiscarded(queryKey, "signal aborted after error");
+                return; // Stale — expression changed
+            }
+            const error = err instanceof Error ? err : new Error(String(err));
+            AsyncResultCache.setError(effectivePackageId, queryKey, error);
+
+            // Notify batcher of the error.
+            this.batcher.add({
+                queryKey,
+                packageId: effectivePackageId,
+                signal,
+                isError: true,
+                error,
+            });
+        }
     }
 
     /**
@@ -369,12 +663,12 @@ export class ExpressionEngine {
     }
 
     /**
-     * Route parse+compile to the active parser (Pratt or Recursive Descent).
+     * Route parse+compile to the active parser (PrecedenceParser or Recursive Descent).
      *
      * Sets up the builder on the active parser, loads tokens, and calls
      * parseExpression(). Abstracts the API difference between the two parsers:
-     * - Pratt:   parser.parseExpression(0, builder)
-     * - RD:      parser.builder = builder; parser.parseExpression(0)
+     * - PrecedenceParser:  parser.setBuilder(builder); parser.parseExpression(0)
+     * - RD:                parser.builder = builder; parser.parseExpression(0)
      */
     private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean): void {
         if (this.rdParser) {
@@ -382,8 +676,9 @@ export class ExpressionEngine {
             this.rdParser.load(tokens, hasParens);
             this.rdParser.parseExpression(0);
         } else {
+            this.parser.setBuilder(builder);
             this.parser.load(tokens, hasParens);
-            this.parser.parseExpression(0, builder);
+            this.parser.parseExpression(0);
         }
     }
 
@@ -455,27 +750,49 @@ export class ExpressionEngine {
             this.bytecodeCache.set(expression, program);
         }
 
-        const stackBefore = this.vm.getStack().length;
-        const result = executeBytecode(program, this.vm);
-        while (this.vm.getStack().length > stackBefore) {
-            this.vm.pop();
+        // ══ PRE-FLIGHT ASYNC CHECK ══
+        // Check all registered async resolvers BEFORE VM execution.
+        // If any resolver says "data not ready", skip VM and return Pending.
+        // Link the preflight AbortController to the keystroke signal so
+        // that in-flight preflight checks are canceled on new keystrokes.
+        const preflightController = new AbortController();
+        const abortPreflight = () => preflightController.abort();
+        this.keystrokeSignal?.addEventListener('abort', abortPreflight, { once: true });
+
+        abortLogger.localControllerCreated("evaluateWithTokens preflight");
+        if (this.keystrokeSignal) {
+            abortLogger.signalLinked("evaluateWithTokens preflight");
         }
 
-        if (result) {
-            this.dag.registerLine(lineNumber, reads, writes);
-            this.lineCache.set(lineNumber, new LineCacheEntry(
-                result,
-                program,
-                reads,
-                writes.length > 0 ? writes[0] : null
-            ), expression);
+        const preflightSignal = preflightController.signal;
+        const asyncCheck = this.resolverRegistry.preflightAll(
+            tokens, program, '_engine', preflightSignal
+        );
+        if (asyncCheck) {
+            // Fire-and-forget — resolves asynchronously, re-evaluates on completion
+            void this.resolveAsync({
+                type: 'pending',
+                queryKey: asyncCheck.queryKey,
+                resolver: asyncCheck.resolver,
+                packageId: asyncCheck.packageId || '_engine',
+                signal: asyncCheck.signal,
+            });
+
+            // Register data source dependency for DAG re-evaluation tracking
+            this.dag.registerLineDataSourceDependency(
+                lineNumber,
+                asyncCheck.packageId || '_engine',
+                [asyncCheck.queryKey]
+            );
+
+            const pending = pendingValue(asyncCheck.queryKey);
+            this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
+            return pending;
         }
 
-        if (!result) {
-            throw ErrorFactory.execution('EVALUATION_ERROR', 'No result from evaluation', { lineNumber });
-        }
-
-        return result;
+        // Execute and handle result — no try/catch needed.
+        // executeBytecode now returns EvalResult (discriminated union).
+        return this.executeAndStore(program, lineNumber, expression, reads, writes, '_engine');
     }
 
     evaluateLine(
@@ -522,10 +839,16 @@ export class ExpressionEngine {
     /**
      * Core expression evaluation logic with diagnostic pipeline integration.
      * Every pipeline stage fires events to registered collectors.
+     *
+     * When AllocationTracker.isEnabled(), each pipeline stage is wrapped
+     * with AllocationTracker.track() to capture wall-time and heap delta.
+     * When disabled (production), track() is a zero-overhead passthrough.
      */
     private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; debug?: DiagnosticReportJSON } {
         const pipeline = this.diagnosticPipeline;
         const hasCollectors = pipeline.hasCollectors;
+        const trackEnabled = AllocationTracker.isEnabled();
+        const stageAllocs: StageAllocation[] = [];
 
         // === SAFETY CHECK 1: Expression length limit ===
         const lengthCheck = checkExpressionLength(expression, this.config.validation);
@@ -545,31 +868,37 @@ export class ExpressionEngine {
              });
         }
 
+        // ══ LEXER STAGE ══
         // Lexing with token emission events — use resetExpression to skip
         // redundant classifyLine (caller already knows this is an expression).
-        this.lexer.resetExpression(expression);
-        let tokenIndex = 0;
-        let hasParens = false;
-        for (const t of this.lexer) {
-            if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
-            tokens.push(t);
+        const lexResult = AllocationTracker.track('lexer', () => {
+            this.lexer.resetExpression(expression);
+            let tokenIndex = 0;
+            let hasParens = false;
+            for (const t of this.lexer) {
+                if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
+                tokens.push(t);
 
-            if (hasCollectors) {
-                pipeline.fireTokenEmitted({
-                    type: DiagnosticEventType.TokenEmitted,
-                    elapsedNs: 0, // zero-cost placeholder (timeline collector overrides)
-                    expression,
-                    token: {
-                        type: t.type,
-                        value: t.value,
-                        offset: t.offset || 0,
-                        line: t.line || lineNumber,
-                        col: t.col || 0,
-                    },
-                });
+                if (hasCollectors) {
+                    pipeline.fireTokenEmitted({
+                        type: DiagnosticEventType.TokenEmitted,
+                        elapsedNs: 0, // zero-cost placeholder (timeline collector overrides)
+                        expression,
+                        token: {
+                            type: t.type,
+                            value: t.value,
+                            offset: t.offset || 0,
+                            line: t.line || lineNumber,
+                            col: t.col || 0,
+                        },
+                    });
+                }
+                tokenIndex++;
             }
-            tokenIndex++;
-        }
+            return { hasParens };
+        });
+        const hasParens = lexResult.result.hasParens;
+        if (trackEnabled && lexResult.alloc) stageAllocs.push(lexResult.alloc);
 
         if (tokens.length === 0) {
             const v = numberValue(0);
@@ -659,11 +988,20 @@ export class ExpressionEngine {
                 }
             }
 
+            // ══ PARSER STAGE ══
             // Get a pooled builder — avoids 4 heap allocations per expression
             const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
             builder.reset();
             try {
-                this.parseExpression(builder, tokens, hasParens);
+                const parseResult = AllocationTracker.track('parser', () => {
+                    this.parseExpression(builder, tokens, hasParens);
+                    // Use build() which allocates TypedArrays directly from builder arrays.
+                    // This is a single copy (builder → TypedArray) instead of the old
+                    // double copy (builder → pool buffer → TypedArray for cache).
+                    return builder.build();
+                });
+                if (trackEnabled && parseResult.alloc) stageAllocs.push(parseResult.alloc);
+                program = parseResult.result;
             } catch (e) {
                 const errorMessage = e instanceof Error ? e.message : String(e);
 
@@ -687,10 +1025,6 @@ export class ExpressionEngine {
                 };
             }
 
-            // Use build() which allocates TypedArrays directly from builder arrays.
-            // This is a single copy (builder → TypedArray) instead of the old
-            // double copy (builder → pool buffer → TypedArray for cache).
-            program = builder.build();
             this.bytecodeCache.set(expression, program);
 
             if (hasCollectors) {
@@ -713,24 +1047,142 @@ export class ExpressionEngine {
             }
         }
 
-        // Use the shared VM instance
-        // Only emit VM step events when vmTrace is explicitly enabled (very verbose)
+        // ══ PRE-FLIGHT ASYNC CHECK ══
+        // Check all registered async resolvers BEFORE VM execution.
+        // Link the preflight AbortController to the keystroke signal so
+        // that in-flight preflight checks are canceled on new keystrokes.
+        const preflightController = new AbortController();
+        const abortPreflight = () => preflightController.abort();
+        this.keystrokeSignal?.addEventListener('abort', abortPreflight, { once: true });
+
+        abortLogger.localControllerCreated("diagnostic preflight");
+        if (this.keystrokeSignal) {
+            abortLogger.signalLinked("diagnostic preflight");
+        }
+
+        const preflightSignal = preflightController.signal;
+        const asyncCheck = this.resolverRegistry.preflightAll(
+            tokens, program, '_engine', preflightSignal
+        );
+        if (asyncCheck) {
+            void this.resolveAsync({
+                type: 'pending',
+                queryKey: asyncCheck.queryKey,
+                resolver: asyncCheck.resolver,
+                packageId: asyncCheck.packageId || '_engine',
+                signal: asyncCheck.signal,
+            });
+
+            this.dag.registerLineDataSourceDependency(
+                lineNumber,
+                asyncCheck.packageId || '_engine',
+                [asyncCheck.queryKey]
+            );
+
+            const pending = pendingValue(asyncCheck.queryKey);
+            this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
+
+            if (hasCollectors) {
+                pipeline.firePipelineEnd({
+                    type: DiagnosticEventType.PipelineEnd,
+                    elapsedNs: 0,
+                    expression,
+                    success: true,
+                    totalTokens: tokens.length,
+                    totalOpcodes: program.opcodes.length,
+                });
+            }
+
+            return {
+                value: pending,
+                tokens,
+                program,
+                debug: undefined,
+            };
+        }
+
+        // ══ VM STAGE ══
         const emitVmTrace = hasCollectors && this.config.diagnostic.vmTraceEnabled === true;
         const stackBefore = this.vm.getStack().length;
-        const result = executeBytecode(program, this.vm, emitVmTrace ? pipeline : undefined, expression);
-        // Pop any leftover stack items from this expression
+
+        // Set up AbortController for VM execution
+        // ── Link to keystroke signal (One AbortController Per Keystroke) ──
+        const controller = new AbortController();
+        const abortLocal = () => controller.abort();
+        this.keystrokeSignal?.addEventListener('abort', abortLocal, { once: true });
+
+        abortLogger.localControllerCreated("diagnostic vm");
+        if (this.keystrokeSignal) {
+            abortLogger.signalLinked("diagnostic vm");
+        }
+
+        this.vm.activeSignal = controller.signal;
+        this.vm.abortCurrent = () => {
+            abortLogger.signalUnlinked("diagnostic vm");
+            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+            controller.abort();
+        };
+
+        let evalResult: EvalResult;
+        const vmResult = AllocationTracker.track('vm', () => {
+            return executeBytecode(
+                program,
+                this.vm,
+                emitVmTrace ? pipeline : undefined,
+                expression
+            );
+        }, { cacheHit: !!cachedProgram });
+        evalResult = vmResult.result;
+        if (trackEnabled && vmResult.alloc) stageAllocs.push(vmResult.alloc);
+
+        // Stack cleanup
         while (this.vm.getStack().length > stackBefore) {
             this.vm.pop();
         }
 
-        if (result) {
-            this.dag.registerLine(lineNumber, reads, writes);
-            this.lineCache.set(lineNumber, new LineCacheEntry(
-                result,
+        if (evalResult.type === 'pending') {
+            void this.resolveAsync(evalResult);
+
+            this.dag.registerLineDataSourceDependency(
+                lineNumber,
+                evalResult.packageId || '_engine',
+                [evalResult.queryKey]
+            );
+
+            const pending = pendingValue(evalResult.queryKey);
+            this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
+
+            if (hasCollectors) {
+                pipeline.firePipelineEnd({
+                    type: DiagnosticEventType.PipelineEnd,
+                    elapsedNs: 0,
+                    expression,
+                    success: true,
+                    totalTokens: tokens.length,
+                    totalOpcodes: program.opcodes.length,
+                });
+            }
+
+            return {
+                value: pending,
+                tokens,
                 program,
-                reads,
-                writes.length > 0 ? writes[0] : null
-            ), expression);
+                debug: undefined,
+            };
+        }
+
+        const result = evalResult.value;
+
+        this.dag.registerLine(lineNumber, reads, writes);
+        this.storeLineResult(lineNumber, result, program, reads, writes, expression);
+
+        // ══ BUILD TELEMETRY ══
+        if (trackEnabled && stageAllocs.length > 0) {
+            this.lastTelemetry = AllocationTracker.createTelemetry(
+                expression,
+                stageAllocs,
+                !!cachedProgram
+            );
         }
 
 if (hasCollectors) {
@@ -780,13 +1232,43 @@ if (hasCollectors) {
         const program = this.bytecodeCache.get(expression);
         if (!program) return undefined;
 
-        this.vm.reset();
-        const result = executeBytecode(program, this.vm);
+        // Pre-flight async check — run before VM even for cached bytecode
+        // ── Link to keystroke signal ──
+        const preflightController = new AbortController();
+        const abortPreflight = () => preflightController.abort();
+        this.keystrokeSignal?.addEventListener('abort', abortPreflight, { once: true });
 
-        if (result) {
-            entry.result = result;
-            this.lineCache.markClean(lineNumber, expression);
+        abortLogger.localControllerCreated("reEvaluateLine preflight");
+        if (this.keystrokeSignal) {
+            abortLogger.signalLinked("reEvaluateLine preflight");
         }
+
+        const preflightSignal = preflightController.signal;
+        const asyncCheck = this.resolverRegistry.preflightAll(
+            [], program, '_engine', preflightSignal
+        );
+        if (asyncCheck) {
+            void this.resolveAsync({
+                type: 'pending',
+                queryKey: asyncCheck.queryKey,
+                resolver: asyncCheck.resolver,
+                packageId: asyncCheck.packageId || '_engine',
+                signal: asyncCheck.signal,
+            });
+            return pendingValue(asyncCheck.queryKey);
+        }
+
+        this.vm.reset();
+        const evalResult = this.executeRaw(program);
+
+        if (evalResult.type === 'pending') {
+            void this.resolveAsync(evalResult);
+            return pendingValue(evalResult.queryKey);
+        }
+
+        const result = evalResult.value;
+        entry.result = result;
+        this.lineCache.markClean(lineNumber, expression);
 
         return result;
     }
@@ -815,12 +1297,45 @@ if (hasCollectors) {
         return this.lexer;
     }
 
-    getParser(): Parser {
+    getParser(): PrecedenceParser {
         return this.parser;
     }
 
     isDiagnosticMode(): boolean {
         return this.diagnosticPipeline.hasCollectors;
+    }
+
+    /**
+     * Set the keystroke-level AbortSignal for the current evaluation cycle.
+     *
+     * Called by the UI layer (via ThreeTierEvaluator) before evaluate() or
+     * evaluateAll(). All per-evaluation AbortControllers created during this
+     * cycle link to this signal so that when the user types a new keystroke,
+     * all in-flight async work is canceled atomically.
+     *
+     * @param signal The keystroke's AbortSignal, or null to clear.
+     */
+    setKeystrokeSignal(signal: AbortSignal | null): void {
+        if (signal) {
+            abortLogger.keystrokeSignalSet(signal.aborted);
+        } else {
+            abortLogger.keystrokeSignalCleared();
+        }
+        this.keystrokeSignal = signal;
+    }
+
+    /**
+     * Get the most recent pipeline telemetry from AllocationTracker.
+     *
+     * Returns null when AllocationTracker.isEnabled() is false (production —
+     * zero overhead), or when no expression has been evaluated via
+     * evaluateExpressionWithDiagnostic() since the last clear().
+     *
+     * Use this in test/benchmark suites to inspect per-stage wall-time and
+     * heap allocation data without enabling the full diagnostic pipeline.
+     */
+    getLastTelemetry(): PipelineTelemetry | null {
+        return this.lastTelemetry;
     }
 
     /**
@@ -926,16 +1441,14 @@ if (hasCollectors) {
 		if (program.opcodes.length === 0) {
 			return numberValue(0);
 		}
-		const stackBefore = this.vm.getStack().length;
-		const result = executeBytecode(program, this.vm);
-		// Pop any leftover stack items from this expression
-		while (this.vm.getStack().length > stackBefore) {
-			this.vm.pop();
+		const evalResult = this.executeRaw(program);
+
+		if (evalResult.type === 'pending') {
+			void this.resolveAsync(evalResult);
+			return pendingValue(evalResult.queryKey);
 		}
-		if (!result) {
-			return numberValue(0);
-		}
-		return result;
+
+		return evalResult.value;
 	}
 
     evaluateNumber(expression: string): number {
@@ -956,14 +1469,22 @@ if (hasCollectors) {
          } catch {
              return NaN;
          }
-     }
-
-    clear(): void {
+     }	clear(): void {
+         // Cancel pending batcher flushes and clear listeners to prevent
+         // stale re-evaluations from in-flight promises that resolve after clear.
+         if (this._onAsyncResolvedUnsub) {
+             this._onAsyncResolvedUnsub();
+             this._onAsyncResolvedUnsub = null;
+         }		// NOTE: _dqsUnsubscribe is NOT called here — the bridge must survive
+		// engine clear() so DataQueryService cache updates continue to flow
+		// into the batcher after document switches / engine resets.
+		this.batcher.clearAll();
          this.dag.clear();
          this.lineCache.clear();
          this.scopeManager.clear();
          this.bytecodeCache.clear();
          this.vm.reset();
+         this.lastTelemetry = null;
      }
 
     /**
@@ -1058,19 +1579,19 @@ if (hasCollectors) {
         for (const lineNumber of affectedLines) {
             const entry = this.lineCache.getEntryForLine(lineNumber);
             if (!entry || entry.bytecode.opcodes.length === 0) continue;
-            try {
-                const stackBefore = this.vm.getStack().length;
-                const result = executeBytecode(entry.bytecode, this.vm);
-                // Pop any leftover stack items from this expression
-                while (this.vm.getStack().length > stackBefore) {
-                    this.vm.pop();
-                }
-                if (result) {
-                    updated.set(lineNumber, result);
-                    entry.result = result;
-                    this.lineCache.markClean(lineNumber);
-                }
-            } catch { }
+            const evalResult = this.executeRaw(entry.bytecode);
+
+            if (evalResult.type === 'pending') {
+                void this.resolveAsync(evalResult);
+                // Don't block — continue processing other affected lines.
+                // The pending result will trigger re-evaluation when resolved.
+                continue;
+            }
+
+            const result = evalResult.value;
+            updated.set(lineNumber, result);
+            entry.result = result;
+            this.lineCache.markClean(lineNumber);
         }
         return updated;
     }

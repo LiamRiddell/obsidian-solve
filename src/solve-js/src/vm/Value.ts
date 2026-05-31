@@ -6,11 +6,14 @@ export const enum ValueType {
 	Datetime = 4,
 	Percentage = 5,
 	Uom = 6,
-	Vector2 = 7,
-	Vector3 = 8,
-	Vector4 = 9,
+	/** Unified array type — replaces Vector2/3/4. Stores number[] for any-length vectors + nested arrays. */
+	Array = 7,
 	Boolean = 10,
 	Unit = 11,
+	/** Async result not yet resolved — value stores the queryKey string. */
+	Pending = 12,
+	/** Plugin-raised error — value stores the error code string, unit stores the message. */
+	Error = 13,
 }
 
 // ── ValueArena ────────────────────────────────────────────────────────────
@@ -142,10 +145,14 @@ export class Value {
 	}
 
 	isVector(): this is Value & { value: number[] } {
-		return this.type === ValueType.Vector2 || this.type === ValueType.Vector3 || this.type === ValueType.Vector4;
+		return this.type === ValueType.Array;
 	}
 
 	toNumber(): number {
+		// Pending and Error values have no numeric representation
+		if (this.type === ValueType.Pending) return 0;
+		if (this.type === ValueType.Error) return 0;
+
 		if (this._cachedNumber !== undefined) return this._cachedNumber;
 
 		if (typeof this.value === 'bigint') {
@@ -159,6 +166,8 @@ export class Value {
 	}
 
 	isNaN(): boolean {
+		if (this.type === ValueType.Pending) return false;
+		if (this.type === ValueType.Error) return false;
 		if (typeof this.value === 'number') return isNaN(this.value);
 		if (typeof this.value === 'bigint') return false;
 		return isNaN(parseFloat(this.value as string));
@@ -190,10 +199,20 @@ export function uomValue(n: number, unit: string): Value {
 	return new Value(ValueType.Uom, n, unit);
 }
 
+/**
+ * Create an Array value — any-length vectors and nested arrays.
+ * Replaces the old vectorValue() which selected Vec2/Vec3/Vec4 based on length.
+ */
+export function arrayValue(v: number[]): Value {
+	if (_arena) return _arena.acquire(ValueType.Array, v);
+	return new Value(ValueType.Array, v);
+}
+
+/**
+ * @deprecated Use arrayValue() instead. Kept for backward compatibility.
+ */
 export function vectorValue(v: number[]): Value {
-	const type = v.length === 2 ? ValueType.Vector2 : v.length === 3 ? ValueType.Vector3 : ValueType.Vector4;
-	if (_arena) return _arena.acquire(type, v);
-	return new Value(type, v);
+	return arrayValue(v);
 }
 
 export function boolValue(b: boolean): Value {
@@ -209,4 +228,24 @@ export function datetimeValue(n: number): Value {
 export function percentageValue(n: number): Value {
 	if (_arena) return _arena.acquire(ValueType.Percentage, n);
 	return new Value(ValueType.Percentage, n);
+}
+
+/**
+ * Create a Pending value — signals that an async result is not yet resolved.
+ * The value field stores the queryKey string for deduplication and diagnostics.
+ * Pending values should NEVER be stored in the arena (they persist across
+ * scroll frames until resolution completes).
+ */
+export function pendingValue(queryKey: string): Value {
+	return new Value(ValueType.Pending, queryKey);
+}
+
+/**
+ * Create an Error value — propagated through the DAG when a plugin raises an error.
+ * The value field stores the SolveError code, unit stores the message.
+ * Downstream consumers (lines that depend on errored data) bubble this up.
+ * Should NEVER be stored in the arena.
+ */
+export function errorValue(code: string, message: string): Value {
+	return new Value(ValueType.Error, code, message);
 }

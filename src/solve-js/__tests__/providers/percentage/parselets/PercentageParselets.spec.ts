@@ -6,7 +6,7 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
 import { registerPercentageParselets } from "@solve-js/providers/percentage/parselets/index";
-import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { ValueType } from "@solve-js/vm/Value";
 
@@ -34,12 +34,13 @@ function parseAndExecute(input: string): number {
   const vmUint8 = new Uint8Array(program.opcodes);
   const vmFloat64 = new Float64Array(program.numbers);
   const vm = createVM(sharedOpRegistry);
-  const result = executeBytecode(
+  const evalResult = executeBytecode(
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm
   );
-  expect(result!.type === ValueType.Number || result!.type === ValueType.Percentage).toBe(true);
-  return result!.toNumber();
+  const result = unwrapEvalResult(evalResult);
+  expect(result.type === ValueType.Number || result.type === ValueType.Percentage).toBe(true);
+  return result.toNumber();
 }
 
 function parseAndExecuteFull(input: string) {
@@ -61,7 +62,7 @@ function parseAndExecuteFull(input: string) {
     vm
   );
   expect(result).toBeDefined();
-  return result!;
+  return unwrapEvalResult(result);
 }
 
 describe("Percentage Parselets", () => {

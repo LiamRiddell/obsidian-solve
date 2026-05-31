@@ -5,7 +5,9 @@
  * and one with the Recursive Descent parser — and compares their output across
  * a comprehensive set of expressions spanning all provider packages.
  */
+import { afterAll, beforeAll, describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { ValueType } from "@solve-js/vm/Value";
 
 function prattEngine(): ExpressionEngine {
   return new ExpressionEngine("en", false);
@@ -16,6 +18,11 @@ function rdEngine(): ExpressionEngine {
     parser: { useRecursiveDescent: true },
   });
 }
+
+/** Expressions whose results are non-deterministic (random).
+ *  For these we verify both parsers produce values in the same expected range,
+ *  rather than requiring exact equality. */
+const diceExpressions = new Set(["dice_roll", "dice_between"]);
 
 const expressions: Record<string, string> = {
   // ─── Arithmetic ──────────────────────────────────────────────────────
@@ -109,6 +116,102 @@ const expressions: Record<string, string> = {
   percent_complex: "20% of (100 + 50)",
 };
 
+describe("Recursive Descent Parser — Deterministic Dice Rolls", () => {
+  // ── Helpers ────────────────────────────────────────────────────────────
+  let originalRandom: () => number;
+
+  beforeAll(() => {
+    originalRandom = Math.random;
+  });
+
+  afterAll(() => {
+    Math.random = originalRandom;
+  });
+
+  /** Seed Math.random to return a fixed value.
+   *  `roll(1, 6)` = `Math.floor(random * (6 - 1 + 1)) + 1`
+   *               = `Math.floor(random * 6) + 1`
+   *  So random = 0.5 → 4, random = 0.0 → 1, random = 0.25 → 2 */
+  function seedRandom(value: number) {
+    Math.random = () => value;
+  }
+
+  test("roll(1, 6) returns identical result when Math.random is seeded", () => {
+    seedRandom(0.5);
+    const pratt = prattEngine();
+    const rd = rdEngine();
+
+    const prattResult = pratt.evaluateExpression("roll(1, 6)");
+    const rdResult = rd.evaluateExpression("roll(1, 6)");
+
+    expect(prattResult.type).toBe(ValueType.Number);
+    expect(rdResult.type).toBe(ValueType.Number);
+    expect(prattResult.value).toBe(4);  // floor(0.5 * 6) + 1 = 4
+    expect(rdResult.value).toBe(4);
+  });
+
+  test("roll between 1 and 6 returns identical result when Math.random is seeded", () => {
+    // Use a different seed than the roll(1, 6) test so they aren't duplicates.
+    // 0.25 → floor(0.25 * 6) + 1 = 1 + 1 = 2
+    seedRandom(0.25);
+    const pratt = prattEngine();
+    const rd = rdEngine();
+
+    const prattResult = pratt.evaluateExpression("roll between 1 and 6");
+    const rdResult = rd.evaluateExpression("roll between 1 and 6");
+
+    expect(prattResult.type).toBe(ValueType.Number);
+    expect(rdResult.type).toBe(ValueType.Number);
+    expect(prattResult.value).toBe(2);
+    expect(rdResult.value).toBe(2);
+  });
+
+  test("roll(1, 6) covers full range [1, 6] when Math.random is re-seeded per call", () => {
+    // Each engine gets two calls to Math.random (one for Pratt, one for RD).
+    // Provide enough values so every call gets a deterministic result.
+    // 0.0 → 1, 0.2 → 2, 0.4 → 3, 0.6 → 4, 0.8 → 5, 0.999 → 6
+    const seeds = [0.0, 0.2, 0.4, 0.6, 0.8, 0.999];
+    const results = new Set<number>();
+
+    for (const seed of seeds) {
+      seedRandom(seed);
+      const pratt = prattEngine();
+      const prattResult = pratt.evaluateExpression("roll(1, 6)");
+      expect(prattResult.type).toBe(ValueType.Number);
+      results.add(prattResult.value as number);
+
+      seedRandom(seed);
+      const rd = rdEngine();
+      const rdResult = rd.evaluateExpression("roll(1, 6)");
+      expect(rdResult.type).toBe(ValueType.Number);
+      expect(rdResult.value).toBe(prattResult.value);
+    }
+
+    // Verify we covered the full [1, 6] range.
+    // Expected values: floor(0*6)+1=1, floor(0.2*6)+1=2, floor(0.4*6)+1=3,
+    //                   floor(0.6*6)+1=4, floor(0.8*6)+1=5, floor(0.999*6)+1=6
+    expect(results.size).toBe(6);
+    for (let i = 1; i <= 6; i++) {
+      expect(results.has(i)).toBe(true);
+    }
+  });
+
+  test("roll(3, 8) returns identical result and within [3, 8] when seeded", () => {
+    seedRandom(0.5);
+    const pratt = prattEngine();
+    const rd = rdEngine();
+
+    const prattResult = pratt.evaluateExpression("roll(3, 8)");
+    const rdResult = rd.evaluateExpression("roll(3, 8)");
+
+    // floor(0.5 * (8 - 3 + 1)) + 3 = floor(0.5 * 6) + 3 = 3 + 3 = 6
+    expect(prattResult.type).toBe(ValueType.Number);
+    expect(rdResult.type).toBe(ValueType.Number);
+    expect(prattResult.value).toBe(6);
+    expect(rdResult.value).toBe(6);
+  });
+});
+
 describe("Recursive Descent Parser — Correctness", () => {
   const pratt = prattEngine();
   const rd = rdEngine();
@@ -126,21 +229,33 @@ describe("Recursive Descent Parser — Correctness", () => {
         const rdResult = rd.evaluateExpression(expr);
 
         if (
-          prattResult.type === "number" &&
-          rdResult.type === "number"
+          prattResult.type === ValueType.Number &&
+          rdResult.type === ValueType.Number
         ) {
+          const pv = prattResult.value as number;
+          const rv = rdResult.value as number;
+          let match: boolean;
+          if (diceExpressions.has(name)) {
+            // Dice rolls are non-deterministic. Verify both values are
+            // integers in [1, 6] (1d6) and both are finite.
+            match =
+              Number.isInteger(pv) &&
+              Number.isInteger(rv) &&
+              pv >= 1 &&
+              pv <= 6 &&
+              rv >= 1 &&
+              rv <= 6;
+          } else {
+            match = Math.abs(pv - rv) < 1e-9;
+          }
           results[name] = {
-            pratt: prattResult.value as number,
-            rd: rdResult.value as number,
-            match:
-              Math.abs(
-                (prattResult.value as number) -
-                  (rdResult.value as number)
-              ) < 1e-9,
+            pratt: pv,
+            rd: rv,
+            match,
           };
         } else if (
-          prattResult.type === "uom" &&
-          rdResult.type === "uom"
+          prattResult.type === ValueType.Uom &&
+          rdResult.type === ValueType.Uom
         ) {
           results[name] = {
             pratt: `${prattResult.value} ${prattResult.unit}`,

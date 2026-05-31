@@ -124,3 +124,10 @@
 ---
 
 1. The lexer could it use our own hand rolled regex based that optimised for both large document and small document scanning with level of detail. Getting best of both worlds.
+
+-- New
+
+1. I don't like how the try catch is being used for executeBytecode to check for async. I think plugin code should return essentially a fixed result type e.g. Result.Pending for example. Then we can make use everywhere of abort signals to prevent request stacking and or old data from coming back into the cache or cache busting. If a user writes for example a flight number and it starts retrieving but then they backspace twice and change it to another. We would not want the old data to be surfaced.
+2. With the above in mind we'd need the engine to have the ability to stream results back somehow ideally in chunks possibly or whatever is most performant. Then it's up to the frontend handler e.g. obsidian, website, etc.. to deal with UX/UI + state updates.
+3. Create a mid-level mermaid diagram showing the infrastructuore of end to end parse for async plugin and simple arithmetic. So we can confirm it's right on my end.
+4. I'd really like for plugins to be able to have the ability to do this async capability in a super easy way. We'd need to think how to work this with the the workers backend that's offloading in a new tab. The engine should take a lot of the heavy lifting so we can optimise the engine as much as possible.

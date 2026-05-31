@@ -116,19 +116,31 @@ export const VARIABLES_PACKAGE: ISolvePackage = {
 // ── UOM (Units of Measurement) ───────────────────────────────────────────
 import { UomLiteralParselet } from "./uom/parselets/UomLiteralParselet";
 import { ConvertParselet } from "./uom/parselets/ConvertParselet";
-import { CurrencySymbolParselet } from "./uom/parselets/CurrencySymbolParselet";
-import { InParselet } from "./uom/parselets/InParselet";
 
 export const UOM_PACKAGE: ISolvePackage = {
   name: "solve-uom",
   prefixParselets: [
     { tokenType: "CONVERT", parselet: new ConvertParselet() },
+  ],
+  infixParselets: [
+    { tokenType: "UNIT", parselet: new UomLiteralParselet() },
+  ],
+};
+
+// ── Currency ──────────────────────────────────────────────────────────────
+import { CurrencySymbolParselet } from "./uom/parselets/CurrencySymbolParselet";
+import { InParselet } from "./uom/parselets/InParselet";
+import { CurrencyAsyncResolver } from "@solve-js/uom/CurrencyResolver";
+
+export const CURRENCY_PACKAGE: ISolvePackage = {
+  name: "solve-currency",
+  asyncResolver: new CurrencyAsyncResolver(),
+  prefixParselets: [
     { tokenType: "DOLLAR", parselet: new CurrencySymbolParselet() },
     { tokenType: "POUND", parselet: new CurrencySymbolParselet() },
     { tokenType: "EURO", parselet: new CurrencySymbolParselet() },
   ],
   infixParselets: [
-    { tokenType: "UNIT", parselet: new UomLiteralParselet() },
     { tokenType: "IN", parselet: new InParselet() },
   ],
 };
@@ -166,6 +178,7 @@ export const BUILTIN_PACKAGES: ISolvePackage[] = [
   DICE_PACKAGE,
   VARIABLES_PACKAGE,
   UOM_PACKAGE,
+  CURRENCY_PACKAGE,
   VECTOR_PACKAGE,
   BIGINT_PACKAGE,
 ];

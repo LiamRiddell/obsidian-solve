@@ -39,6 +39,10 @@ export interface VM {
 	getMaxInstructions(): number;
 	getInstructionCount(): number;
 	incrementInstructions(n: number): void;
+	/** Active AbortSignal for the current expression evaluation. Checked before cache writes. */
+	activeSignal?: AbortSignal;
+	/** Abort the current evaluation (called when expression changes before resolution). */
+	abortCurrent?: () => void;
 }
 
 export const sharedOpRegistry = new OpRegistry();

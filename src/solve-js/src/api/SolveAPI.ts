@@ -7,6 +7,7 @@ import { IVariableSource } from "@solve-js/variables/IVariableSource";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 import type { LexerPlugin } from "@solve-js/lexer/ExpressionLexer";
+import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
 
 export interface ISolve {
   registerPrefixParselet(tokenType: string, parselet: PrefixParselet): void;
@@ -25,6 +26,13 @@ export interface ISolvePackage {
   infixParselets?: Array<{ tokenType: string; parselet: InfixParselet }>;
   opcodeHandlers?: IOpcodeHandlerRegistration[];
   variableSources?: IVariableSource[];
+  /**
+   * Async resolver for this package's domain.
+   * When set, the ExpressionEngine runs preflight() before VM execution.
+   * If async data is needed, a Pending result is returned immediately
+   * and the line re-evaluates when the data resolves.
+   */
+  asyncResolver?: IAsyncResolver;
 }
 
 export class Solve implements ISolve {

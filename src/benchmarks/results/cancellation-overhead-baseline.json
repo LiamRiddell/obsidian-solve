@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-05-31T13:55:37.302Z",
+  "results": {
+    "addEventListener + removeEventListener": 0.5474304999999822,
+    "addEventListener only": 0.37369700000009176,
+    "new AbortController()": 0.2871119999999939,
+    "full create+link+unlink cycle": 0.6266144999997686,
+    "keystroke abort → 50 local aborts": 859.8439699999976,
+    "executeCached (no signal)": 0.6028125000015552,
+    "executeCached (with signal, raw)": 18.239384499997794,
+    "keystroke wrapper overhead": 0.8329294999980812,
+    "overhead delta (with - without - wrapper)": 16.80364249999816,
+    "engine.evaluateLine (no signal)": 2.5896240000038233,
+    "engine.evaluateLine (with signal, raw)": 37.487963999999195,
+    "50 keystroke cycles (total)": 1873.258800000025,
+    "per keystroke cycle": 37.465176000000504,
+    "addEventListener on aborted signal": 147.47109299999238,
+    "signal.aborted property access": 0.11854939999907947
+  }
+}

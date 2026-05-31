@@ -1,14 +1,16 @@
 import { ExpressionResultWidget } from "@app/codemirror/widgets/ExpressionResultWidget";
 import { SolveHighlightProvider } from "@app/codemirror/SolveHighlightProvider";
 import { EngineProvider } from "@app/engine/EngineProvider";
-import { Value } from "@solve-js/vm/Value";
+import { Value, ValueType } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
+import { abortLogger } from "@app/utilities/AbortControllerLogger";
 import { DocumentModel, ViewportRange, LineChange } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
+import type { AsyncResolutionEvent, UnsubscribeFn } from "@solve-js/engine/AsyncResolutionBatcher";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -17,19 +19,25 @@ import {
 	PluginValue,
 	ViewUpdate,
 } from "@codemirror/view";
-import { dataQueryService } from "@solve-js/services/DataQueryService";
 
 export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
 	private userSettings: UserSettings;
 	private highlightProvider: SolveHighlightProvider;
-	private cacheUpdateUnsubscribe: () => void;
+	private asyncEventUnsubscribe: UnsubscribeFn | null = null;
 
 	private currentDoc: object | null = null;
 
 	// ── Three-tier evaluator (Phase 5.2 integration) ─────────────────
 	private docModel: DocumentModel;
 	private evaluator: ThreeTierEvaluator;
+
+	// ── Keystroke-level cancellation (One AbortController Per Keystroke) ──
+	// When the user types, we abort the previous keystroke's AbortController.
+	// This automatically cancels all in-flight async fetches, pending batcher
+	// flushes, and stale preflight checks from the previous keystroke.
+	// The signal propagates through: evaluator → engine → executeAndStore/executeRaw → resolveAsync.
+	private keystrokeController: AbortController | null = null;
 
 	constructor(view: EditorView) {
 		logger.debug(`[SolveViewPlugin] Constructor`);
@@ -48,20 +56,21 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.evaluator = new ThreeTierEvaluator(this.docModel, engine, checkpointer);
 
 		// First full evaluation to populate bytecode cache + checkpoints
-		this.evaluator.evaluateAll();
+		this.keystrokeController = new AbortController();
+		abortLogger.keystrokeCreated();
+		this.evaluator.evaluateAll(this.keystrokeController.signal);
 
 		// Dispatch background compilation for lines beyond viewport
 		this.evaluator.dispatchBackgroundCompiles(this.getViewportFromView(view));
 
-		// Subscribe to cache updates from DataQueryService
-		this.cacheUpdateUnsubscribe = dataQueryService.onCacheUpdate((dataSourceId, queryKey, data) => {
-			// Mark only affected lines as dirty using the dependency graph
-			const affectedLines = engine.getDag().getAffectedLinesByDataSource(dataSourceId, queryKey);
-			for (const line of affectedLines) {
-				this.docModel.markDirtyByLineNumber(line);
-			}
-			// Trigger a re-render by dispatching a dummy transaction
-			view.dispatch({});
+		// Subscribe to batcher event stream — the SINGLE async resolution pipeline.
+		// Engine bridges DataQueryService cache updates into the batcher,
+		// so all async resolutions (engine-originated AND DataQueryService)
+		// flow through this one listener.
+		// This handles lines-updated and error events from the batcher's
+		// single-DAG-walk re-evaluation pass (replaces onAsyncResolved).
+		this.asyncEventUnsubscribe = engine.addAsyncListener((event: AsyncResolutionEvent) => {
+			this.handleAsyncEvent(event, view);
 		});
 
 		this.currentDoc = view.state.doc;
@@ -72,6 +81,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		// Detect document switch — reset shared engine to prevent variable leaking between documents
 		const newDoc = update.state?.doc;
 		if (newDoc && newDoc !== this.currentDoc) {
+			// Abort in-flight async work from the old document
+			this.abortKeystroke('Document switch');
+
 			this.currentDoc = newDoc;
 			EngineProvider.reset();
 			this.highlightProvider = new SolveHighlightProvider(EngineProvider.get());
@@ -85,7 +97,9 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			this.docModel.setDocument(newDoc.toString());
 			const checkpointer = new VMCheckpointer(engine.getVM());
 			this.evaluator = new ThreeTierEvaluator(this.docModel, engine, checkpointer);
-			this.evaluator.evaluateAll();
+			this.keystrokeController = new AbortController();
+			abortLogger.keystrokeCreated();
+			this.evaluator.evaluateAll(this.keystrokeController.signal);
 
 			this.decorations = this.buildDecorations(update.view);
 
@@ -95,6 +109,15 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 
 		if (update.docChanged) {
+			// ── One AbortController Per Keystroke ────────────────────
+			// Abort all in-flight async work from the PREVIOUS keystroke.
+			// This cancels pending fetches, preflight checks, and batcher
+			// flushes that were triggered by the text that just changed.
+			// The new keystroke gets a fresh AbortController.
+			this.abortKeystroke('New keystroke');
+			this.keystrokeController = new AbortController();
+			abortLogger.keystrokeCreated();
+
 			this.highlightProvider.invalidateCache();
 
 			// ── Phase 5.2f: Incremental document update ──────────────
@@ -110,13 +133,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		if (update.docChanged || update.viewportChanged) {
 			// Determine viewport range from visible ranges
 			const viewport = this.getViewportFromView(update.view);
+			const signal = this.keystrokeController?.signal;
 
 			if (update.docChanged) {
 				// Document changed — full evaluation from line 1
-				this.evaluator.evaluate(viewport);
+				this.evaluator.evaluate(viewport, signal);
 			} else {
 				// Viewport-only change (scroll) — optimized zero-allocation path
-				this.evaluator.setViewport(viewport);
+				this.evaluator.setViewport(viewport, signal);
 			}
 
 			this.decorations = this.buildDecorations(update.view);
@@ -130,11 +154,63 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 	destroy() {
 		logger.debug(`[SolveViewPlugin] Destroyed`);
-		if (this.cacheUpdateUnsubscribe) {
-			this.cacheUpdateUnsubscribe();
+		// Abort all in-flight async work before teardown
+		this.abortKeystroke('Plugin destroyed');
+		if (this.asyncEventUnsubscribe) {
+			this.asyncEventUnsubscribe();
+			this.asyncEventUnsubscribe = null;
 		}
 		// Phase 5.2h: Clean up compilation worker through evaluator
 		this.evaluator.terminateWorker();
+	}
+
+	// ── Keystroke cancellation ─────────────────────────────────────────
+
+	/**
+	 * Abort the current keystroke's AbortController, canceling all in-flight
+	 * async work: pending fetches, preflight checks, and batcher flushes.
+	 *
+	 * This implements the "One AbortController Per Keystroke" pattern:
+	 * every keystroke gets a fresh AbortController; when the user types
+	 * again, the old controller is aborted, and all async work from the
+	 * old keystroke is canceled atomically.
+	 *
+	 * The signal propagates through: evaluator → engine → executeAndStore /
+	 * executeRaw → resolveAsync, where `signal.aborted` guards prevent
+	 * stale data from being stored or re-evaluated.
+	 */
+	private abortKeystroke(reason: string): void {
+		if (this.keystrokeController) {
+			abortLogger.keystrokeAborted(reason);
+			this.keystrokeController.abort(reason);
+			this.keystrokeController = null;
+		}
+	}
+
+	// ── Async event handler ───────────────────────────────────────────
+
+	/**
+	 * Handle async resolution events from the batcher.
+	 *
+	 * - `lines-updated`: marks affected lines dirty and dispatches view refresh.
+	 * - `error`: logs the error for debugging/transient toast display.
+	 */
+	private handleAsyncEvent(event: AsyncResolutionEvent, view: EditorView): void {
+		switch (event.type) {
+			case "lines-updated": {
+				// Batcher already updated LineCache with fresh results.
+				// Just trigger a view re-render — no need to mark dirty
+				// (avoids double re-evaluation by ThreeTierEvaluator).
+				view.dispatch({});
+				break;
+			}
+			case "error": {
+				logger.warn(
+					`[SolveViewPlugin] Async resolution error for ${event.packageId}:${event.queryKey}: ${event.error.message}`,
+				);
+				break;
+			}
+		}
 	}
 
 	// ── Viewport extraction ──────────────────────────────────────────
@@ -194,14 +270,16 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 				// Full-line expression result from evaluator
 				const result = lineState.result;
-				const formattedResult = formatValue(result);
+				const isPending = result.type === ValueType.Pending;
+				const formattedResult = isPending ? "" : formatValue(result);
 				const expression = lineState.expression ?? line.text.trim();
+				const queryKey = isPending ? (result.value as string) : null;
 
 				builder.add(
 					line.to,
 					line.to,
 					Decoration.widget({
-						widget: new ExpressionResultWidget(line.number, false, expression, formattedResult),
+						widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey),
 						side: 1,
 					}),
 				);
@@ -233,14 +311,16 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			try {
 				const result = engine.evaluateLine(line.number, solve.expression);
 				if (result !== null && result !== undefined) {
-					const formattedResult = formatValue(result);
+					const isPending = result.type === ValueType.Pending;
+					const formattedResult = isPending ? "" : formatValue(result);
+					const queryKey = isPending ? (result.value as string) : null;
 					const widgetPos = line.from + solve.start + solve.expression.length + 3;
 
 					builder.add(
 						widgetPos,
 						widgetPos,
 						Decoration.widget({
-							widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult),
+							widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult, isPending, queryKey),
 							side: 1,
 						}),
 					);
