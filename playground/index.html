@@ -65,6 +65,7 @@
                 <button class="tab-btn" data-tab="tokens">Tokens</button>
                 <button class="tab-btn" data-tab="bytecode">Bytecode</button>
                 <button class="tab-btn" data-tab="perf">Perf</button>
+                <button class="tab-btn" data-tab="workers">Workers</button>
                 <button class="tab-btn" data-tab="errors">Errors</button>
             </nav>
 
@@ -235,6 +236,79 @@
                 <div class="perf-history" id="perf-history">
                     <h4>History (last 50)</h4>
                     <div class="perf-history-chart" id="perf-history-chart"></div>
+                </div>
+            </div>
+
+            <!-- Tab: Workers -->
+            <div class="tab-panel" id="panel-workers">
+                <div class="panel-scroll" id="workers-display">
+                    <!-- Engine Worker Card -->
+                    <div class="worker-card" id="worker-card-engine">
+                        <div class="worker-card-header">
+                            <span class="worker-card-icon">⚙️</span>
+                            <span class="worker-card-name">Engine Worker</span>
+                            <span class="worker-card-status" id="worker-engine-status">idle</span>
+                        </div>
+                        <div class="worker-card-body">
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Latency</span>
+                                <span class="worker-metric-value" id="worker-engine-latency">—</span>
+                            </div>
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Queue depth</span>
+                                <span class="worker-metric-value" id="worker-engine-queue">0</span>
+                            </div>
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Last run</span>
+                                <span class="worker-metric-value" id="worker-engine-last-run">—</span>
+                            </div>
+                            <div class="worker-latency-bar">
+                                <div class="worker-latency-fill" id="worker-engine-latency-bar"></div>
+                            </div>
+                            <div class="worker-latency-scale">
+                                <span>0</span><span>10ms</span><span>50ms</span><span>100ms+</span>
+                            </div>
+                        </div>
+                        <div class="worker-card-footer">
+                            <span class="worker-metric-label">Messages received</span>
+                            <span class="worker-metric-value" id="worker-engine-msgs">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Data Query Worker Card -->
+                    <div class="worker-card" id="worker-card-dq">
+                        <div class="worker-card-header">
+                            <span class="worker-card-icon">📡</span>
+                            <span class="worker-card-name">Data Query Worker</span>
+                            <span class="worker-card-status status-offline" id="worker-dq-status">idle</span>
+                        </div>
+                        <div class="worker-card-body">
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Active requests</span>
+                                <span class="worker-metric-value" id="worker-dq-active">0</span>
+                            </div>
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Registered sources</span>
+                                <span class="worker-metric-value" id="worker-dq-sources">0</span>
+                            </div>
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Last activity</span>
+                                <span class="worker-metric-value" id="worker-dq-last-activity">—</span>
+                            </div>
+                        </div>
+                        <div class="worker-card-footer">
+                            <span class="worker-metric-label">Total fetches</span>
+                            <span class="worker-metric-value" id="worker-dq-fetches">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Activity Log -->
+                    <div class="worker-log" id="worker-log">
+                        <h4>Activity Log</h4>
+                        <div class="worker-log-entries" id="worker-log-entries">
+                            <span class="empty">No worker activity yet</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 

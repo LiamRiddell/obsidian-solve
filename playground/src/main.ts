@@ -48,6 +48,20 @@ const detailCache = $('detail-cache');
 const detailAsync = $('detail-async');
 const perfHistoryChart = $('perf-history-chart');
 
+/* Worker telemetry DOM refs */
+const workerEngineStatus = $('worker-engine-status');
+const workerEngineLatency = $('worker-engine-latency');
+const workerEngineQueue = $('worker-engine-queue');
+const workerEngineLastRun = $('worker-engine-last-run');
+const workerEngineLatencyBar = $('worker-engine-latency-bar');
+const workerEngineMsgs = $('worker-engine-msgs');
+const workerDqStatus = $('worker-dq-status');
+const workerDqActive = $('worker-dq-active');
+const workerDqSources = $('worker-dq-sources');
+const workerDqLastActivity = $('worker-dq-last-activity');
+const workerDqFetches = $('worker-dq-fetches');
+const workerLogEntries = $('worker-log-entries');
+
 const highlightProvider = new SolveHighlightProvider();
 
 let runId = 0;
@@ -55,13 +69,47 @@ let currentResult: DebugResult | null = null;
 const statsHistory: PerformanceStats[] = [];
 const MAX_HISTORY = 50;
 
+/* ── Worker Telemetry State ────────────────────────────────────── */
+let engineMsgCount = 0;
+let engineQueueDepth = 0;
+let engineLastRunTime = 0;
+let engineRoundTripTimes: number[] = [];
+const MAX_RTT_HISTORY = 20;
+let dqActiveRequests = 0;
+let dqFetches = 0;
+let dqSources = 0;
+let dqLastActivityTs = 0;
+interface WorkerLogEntry { ts: number; source: 'engine' | 'dataquery'; msg: string; error?: boolean; }
+const workerLog: WorkerLogEntry[] = [];
+const MAX_LOG_ENTRIES = 100;
+
 /* ── Workers ───────────────────────────────────────────────────── */
 const engineWorker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' });
 engineWorker.onmessage = (e: MessageEvent<{ id: number; result?: DebugResult; error?: string }>) => {
     const { id, result, error } = e.data;
-    if (id !== runId) return;
+    if (id !== runId) {
+        /* stale response — still count for telemetry */
+        engineMsgCount++;
+        engineQueueDepth = Math.max(0, engineQueueDepth - 1);
+        updateEngineWorkerTelemetry();
+        return;
+    }
+
+    const rtt = performance.now() - engineLastRunTime;
+    engineRoundTripTimes.push(rtt);
+    if (engineRoundTripTimes.length > MAX_RTT_HISTORY) engineRoundTripTimes.shift();
+    engineMsgCount++;
+    engineQueueDepth = Math.max(0, engineQueueDepth - 1);
+
     setStatus('ready');
-    if (error) { renderErrors([error]); return; }
+    logWorkerActivity('engine', error ? `Error: ${error}` : `Completed in ${fmt(result?.stats?.totalTime ?? 0)}`);
+    updateEngineWorkerTelemetry();
+
+    if (error) {
+        logWorkerActivity('engine', error, true);
+        renderErrors([error]);
+        return;
+    }
     if (!result) return;
     currentResult = result;
     renderAll(result);
@@ -198,7 +246,11 @@ function run(): void {
         highlightProvider.invalidateCache();
         setStatus('busy');
         runId++;
+        engineQueueDepth++;
+        engineLastRunTime = performance.now();
         footerExpression.textContent = expression.slice(0, 60) + (expression.length > 60 ? '\u2026' : '');
+        logWorkerActivity('engine', `Enqueued run #${runId}: ${expression.slice(0, 40)}${expression.length > 40 ? '…' : ''}`);
+        updateEngineWorkerTelemetry();
         engineWorker.postMessage({ id: runId, expression });
     }, 150);
 }
@@ -214,6 +266,7 @@ function renderAll(result: DebugResult): void {
     renderStats(result.stats);
     renderPipelineFlow(result);
     renderInlineResults(result.lineResults);
+    updateDataQueryWorkerTelemetry();
 
     pipelineTiming.textContent = fmt(result.stats.totalTime);
     pipelineMini.querySelectorAll('.pipeline-stage').forEach(s => s.classList.add('executed'));
@@ -566,6 +619,114 @@ function populateFullDocExamples(): void {
             fullDocSelect.value = '';
         }
     });
+}
+
+/* ── Worker Telemetry ──────────────────────────────────────────── */
+function logWorkerActivity(source: 'engine' | 'dataquery', msg: string, isError = false): void {
+    workerLog.push({ ts: Date.now(), source, msg, error: isError });
+    if (workerLog.length > MAX_LOG_ENTRIES) workerLog.shift();
+
+    /* deduplicate consecutive identical entries */
+    if (workerLog.length >= 2) {
+        const prev = workerLog[workerLog.length - 2];
+        const last = workerLog[workerLog.length - 1];
+        if (prev.source === last.source && prev.msg === last.msg) {
+            /* first duplicate — append counter */
+            prev.msg = last.msg + ' (×2)';
+            workerLog.pop();
+            return;
+        }
+        /* already has counter — increment it */
+        const counterMatch = prev.msg.match(/\s+\(×(\d+)\)$/);
+        if (counterMatch && prev.source === last.source &&
+            prev.msg.slice(0, counterMatch.index!) === last.msg) {
+            const count = parseInt(counterMatch[1]) + 1;
+            prev.msg = last.msg + ` (×${count})`;
+            workerLog.pop();
+            return;
+        }
+    }
+
+    renderWorkerLog();
+}
+
+function renderWorkerLog(): void {
+    workerLogEntries.innerHTML = '';
+    if (workerLog.length === 0) {
+        workerLogEntries.innerHTML = '<span class="empty">No worker activity yet</span>';
+        return;
+    }
+    const entries = workerLog.slice(-30);
+    for (const entry of entries) {
+        const row = document.createElement('div');
+        row.className = 'worker-log-entry';
+        const time = new Date(entry.ts);
+        const timeStr = time.getHours().toString().padStart(2, '0') + ':' +
+            time.getMinutes().toString().padStart(2, '0') + ':' +
+            time.getSeconds().toString().padStart(2, '0') + '.' +
+            time.getMilliseconds().toString().padStart(3, '0');
+        row.innerHTML =
+            '<span class="worker-log-time">' + timeStr + '</span>' +
+            '<span class="worker-log-source ' + entry.source + '">' + entry.source + '</span>' +
+            '<span class="worker-log-msg' + (entry.error ? ' error' : '') + '">' + escHtml(entry.msg) + '</span>';
+        workerLogEntries.appendChild(row);
+    }
+    workerLogEntries.scrollTop = workerLogEntries.scrollHeight;
+}
+
+function updateEngineWorkerTelemetry(): void {
+    const status = engineQueueDepth > 0 ? 'busy' : 'idle';
+    workerEngineStatus.textContent = status;
+    workerEngineStatus.className = 'worker-card-status' + (status === 'busy' ? ' status-busy' : '');
+
+    /* round-trip latency */
+    if (engineRoundTripTimes.length > 0) {
+        const avg = engineRoundTripTimes.reduce((a, b) => a + b, 0) / engineRoundTripTimes.length;
+        workerEngineLatency.textContent = avg < 1 ? '<1 ms' : avg.toFixed(1) + ' ms';
+    } else {
+        workerEngineLatency.textContent = '—';
+    }
+
+    /* queue depth */
+    workerEngineQueue.textContent = String(engineQueueDepth);
+
+    /* last run timestamp */
+    if (engineLastRunTime > 0) {
+        const ago = Date.now() - engineLastRunTime;
+        workerEngineLastRun.textContent = ago < 60_000
+            ? (ago < 1_000 ? '<1s ago' : (ago / 1_000).toFixed(0) + 's ago')
+            : (ago / 60_000).toFixed(0) + 'm ago';
+    } else {
+        workerEngineLastRun.textContent = '—';
+    }
+
+    /* latency bar — latest RTT as percentage of 100ms threshold */
+    const latestRtt = engineRoundTripTimes[engineRoundTripTimes.length - 1] ?? 0;
+    const pct = Math.min(100, latestRtt);
+    workerEngineLatencyBar.style.width = Math.max(1, pct) + '%';
+    workerEngineLatencyBar.className = 'worker-latency-fill' +
+        (latestRtt > 50 ? ' slow' : latestRtt > 25 ? ' warn' : '');
+
+    /* message count */
+    workerEngineMsgs.textContent = String(engineMsgCount);
+}
+
+function updateDataQueryWorkerTelemetry(): void {
+    const hasData = dqFetches > 0 || dqActiveRequests > 0 || dqSources > 0;
+    workerDqStatus.textContent = hasData ? 'active' : 'inactive';
+    workerDqStatus.className = 'worker-card-status' + (hasData ? '' : ' status-offline');
+
+    workerDqActive.textContent = String(dqActiveRequests);
+    workerDqSources.textContent = String(dqSources);
+    if (dqLastActivityTs > 0) {
+        const ago = Date.now() - dqLastActivityTs;
+        workerDqLastActivity.textContent = ago < 60_000
+            ? (ago < 1_000 ? '<1s ago' : (ago / 1_000).toFixed(0) + 's ago')
+            : (ago / 60_000).toFixed(0) + 'm ago';
+    } else {
+        workerDqLastActivity.textContent = '—';
+    }
+    workerDqFetches.textContent = String(dqFetches);
 }
 
 /* ── Init ──────────────────────────────────────────────────────── */

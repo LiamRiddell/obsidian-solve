@@ -696,6 +696,131 @@ html, body {
 .cm-solve-unit { color: var(--stage-compiler) !important; }
 .cm-solve-error { color: var(--error) !important; text-decoration: wavy underline; }
 
+/* ── Worker Telemetry Tab ──────────────────────────────────────── */
+.worker-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+.worker-card:hover { border-color: var(--border-color); }
+
+.worker-card-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+}
+.worker-card-icon { font-size: 14px; }
+.worker-card-name {
+  flex: 1;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-primary);
+}
+.worker-card-status {
+  font-size: 9px; font-weight: 600;
+  padding: 2px 7px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.worker-card-status:empty { display: none; }
+#worker-engine-status { background: var(--accent-dim); color: var(--accent); }
+#worker-dq-status { background: rgba(78, 201, 176, 0.12); color: var(--stage-compiler); }
+.worker-card-status.status-busy { background: var(--stage-vm-dim); color: var(--stage-vm); animation: pulse-dot 0.8s ease infinite; }
+.worker-card-status.status-offline { background: var(--bg-tertiary); color: var(--text-muted); }
+.worker-card-status.status-error { background: var(--error-dim); color: var(--error); }
+
+.worker-card-body {
+  padding: 8px 12px;
+}
+.worker-metric {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 3px 0;
+}
+.worker-metric-label {
+  font-size: 10px; color: var(--text-muted);
+}
+.worker-metric-value {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-primary);
+}
+
+.worker-latency-bar {
+  height: 6px; border-radius: 3px;
+  background: var(--bg-tertiary);
+  margin-top: 6px;
+  overflow: hidden;
+}
+.worker-latency-fill {
+  height: 100%; border-radius: 3px;
+  background: var(--accent);
+  transition: width var(--transition-fast);
+  width: 0%;
+  min-width: 2px;
+}
+.worker-latency-fill.warn { background: var(--stage-vm); }
+.worker-latency-fill.slow { background: var(--error); }
+.worker-latency-scale {
+  display: flex; justify-content: space-between;
+  margin-top: 3px;
+  font-size: 8px; color: var(--text-muted);
+}
+
+.worker-card-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Activity Log */
+.worker-log {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.worker-log h4 {
+  padding: 7px 12px;
+  background: var(--bg-tertiary);
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.worker-log-entries {
+  padding: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.worker-log-entry {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  border-radius: 3px;
+  animation: fadeIn 0.15s var(--ease) both;
+}
+.worker-log-entry:hover { background: var(--bg-tertiary); }
+.worker-log-time {
+  color: var(--text-muted);
+  min-width: 68px;
+}
+.worker-log-source {
+  font-weight: 600;
+  min-width: 48px;
+}
+.worker-log-source.engine { color: var(--accent); }
+.worker-log-source.dataquery { color: var(--stage-compiler); }
+.worker-log-msg {
+  color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.worker-log-msg.error { color: var(--error); }
+
 /* ── Footer Bar ───────────────────────────────────────────────── */
 .footer-bar {
   height: var(--footer-h);
