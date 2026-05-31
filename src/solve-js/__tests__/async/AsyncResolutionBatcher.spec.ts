@@ -833,7 +833,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		dag.registerLineDataSourceDependency(2, "pkg", ["key"]);
 		// Line 1 has bytecode, line 2 has empty bytecode
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
-		lc.set(2, new LineCacheEntry(numberValue(0), { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, [], null));
+		lc.set(2, new LineCacheEntry(numberValue(0), { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null));
 
 		const { events } = captureEvents(batcher);
 

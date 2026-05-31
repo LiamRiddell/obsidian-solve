@@ -24,7 +24,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(42),
-      { opcodes: new Uint8Array([10]), numbers: new Float64Array([42]), strings: [] },
+      { opcodes: new Uint8Array([10]), numbers: new Float64Array([42]), strings: [], hasAsync: false },
       [],
       null
     );
@@ -38,7 +38,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(0),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     );
@@ -52,7 +52,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(42),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     );
@@ -71,7 +71,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       numberValue(0),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     );
@@ -84,7 +84,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     cache.set(1, new LineCacheEntry(
       numberValue(1),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     ));
@@ -97,13 +97,13 @@ describe("LineCache", () => {
     const cache = new LineCache();
     cache.set(10, new LineCacheEntry(
       numberValue(1),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     ), "expr1");
     cache.set(10, new LineCacheEntry(
       numberValue(2),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     ), "expr2");
@@ -116,7 +116,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     cache.set(5, new LineCacheEntry(
       numberValue(1),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     ));
@@ -128,7 +128,7 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry = new LineCacheEntry(
       stringValue("hello"),
-      { opcodes: new Uint8Array([10, 20]), numbers: new Float64Array(0), strings: ["hello"] },
+      { opcodes: new Uint8Array([10, 20]), numbers: new Float64Array(0), strings: ["hello"], hasAsync: false },
       ["x", "y"],
       "z"
     );
@@ -144,14 +144,14 @@ describe("LineCache", () => {
     expect(cache.size).toBe(0);
     cache.set(1, new LineCacheEntry(
       numberValue(1),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     ));
     expect(cache.size).toBe(1);
     cache.set(2, new LineCacheEntry(
       numberValue(2),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     ));
@@ -164,13 +164,13 @@ describe("LineCache", () => {
     const cache = new LineCache();
     const entry1 = new LineCacheEntry(
       numberValue(1),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     );
     const entry2 = new LineCacheEntry(
       numberValue(2),
-      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
     );

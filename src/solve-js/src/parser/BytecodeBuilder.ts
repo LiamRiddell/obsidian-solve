@@ -9,6 +9,13 @@ export interface BytecodeProgram {
 	numbers: Float64Array;
 	strings: string[];
 	constants?: Map<number, number>;
+	/**
+	 * Whether the program contains any async opcodes (CALL_PLUGIN, etc.).
+	 * Set during compilation by the BytecodeBuilder. Allows the engine
+	 * to skip the O(n) resolver preflight check in O(1) for purely
+	 * synchronous expressions like `2 + 2`.
+	 */
+	hasAsync: boolean;
 }
 
 /**
@@ -25,9 +32,13 @@ export class BytecodeBuilder {
 	private numbers: number[] = [];
 	private strings: string[] = [];
 	private stringIndex = new Map<string, number>();
+	private _hasAsync = false;
 
 	emitOpcode(op: OpCode): void {
 		this.opcodes.push(op);
+		if (op === OpCode.CALL_PLUGIN) {
+			this._hasAsync = true;
+		}
 	}
 
 	emitNumber(n: number): void {
@@ -75,6 +86,7 @@ export class BytecodeBuilder {
 			// cost is negligible.
 			strings: [...this.strings],
 			constants: new Map(),
+			hasAsync: this._hasAsync,
 		};
 	}
 
@@ -115,6 +127,7 @@ export class BytecodeBuilder {
 			numbers,
 			strings: [...this.strings],
 			constants: new Map(),
+			hasAsync: this._hasAsync,
 		};
 	}
 
@@ -126,5 +139,6 @@ export class BytecodeBuilder {
 		this.numbers.length = 0;
 		this.strings.length = 0;
 		this.stringIndex.clear();
+		this._hasAsync = false;
 	}
 }

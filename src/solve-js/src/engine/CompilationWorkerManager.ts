@@ -208,7 +208,7 @@ export class CompilationWorkerManager {
 			return {
 				lineId: raw.lineId,
 				compiledAgainstHash: raw.compiledAgainstHash,
-				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
 				reads: [],
 				writes: [],
 				isVariableDef: false,
@@ -231,6 +231,7 @@ export class CompilationWorkerManager {
 			opcodes,
 			numbers,
 			strings: raw.strings,
+			hasAsync: false,
 		};
 
 		return {

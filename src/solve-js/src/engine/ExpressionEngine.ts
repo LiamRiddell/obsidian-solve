@@ -672,7 +672,7 @@ export class ExpressionEngine {
 
         if (tokens.length === 0) {
             const v = numberValue(0);
-            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, [], null), expression);
+            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null), expression);
             return v;
         }
 
@@ -715,6 +715,14 @@ export class ExpressionEngine {
         }
 
         // ══ PRE-FLIGHT ASYNC CHECK ══
+        // O(1) guard: skip the O(n) resolver scan when the bytecode has no
+        // async opcodes AND no resolvers are registered. Either condition
+        // alone is enough to warrant a preflight scan:
+        //   - program.hasAsync: bytecode contains CALL_PLUGIN (async VM path)
+        //   - resolverRegistry.size > 0: resolvers may intercept any expression
+        // For purely sync expressions (e.g., `2 + 2`) with no resolvers, this
+        // is an O(1) fast-path that bypasses the resolver scan entirely.
+        if (program.hasAsync || this.resolverRegistry.size > 0) {
         // Check all registered async resolvers BEFORE VM execution.
         // If any resolver says "data not ready", skip VM and return Pending.
         // Link the preflight AbortController to the keystroke signal so
@@ -753,6 +761,7 @@ export class ExpressionEngine {
             this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
             return pending;
         }
+        } // end preflight guard
 
         // Execute and handle result — no try/catch needed.
         // executeBytecode now returns EvalResult (discriminated union).
@@ -866,7 +875,7 @@ export class ExpressionEngine {
 
         if (tokens.length === 0) {
             const v = numberValue(0);
-            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, [], null), expression);
+            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null), expression);
 
             if (hasCollectors) {
                 pipeline.firePipelineEnd({
@@ -879,7 +888,7 @@ export class ExpressionEngine {
                 });
             }
 
-            return { value: v, tokens, program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] }, debug: undefined };
+            return { value: v, tokens, program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, debug: undefined };
         }
 
         // === SAFETY CHECK 2: Complexity scoring ===
@@ -898,7 +907,7 @@ export class ExpressionEngine {
             return {
                 value: numberValue(0),
                 tokens: [],
-                program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+                program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
                 error: complexityCheck.errorMessage!,
                 debug: undefined
             };
@@ -979,7 +988,7 @@ export class ExpressionEngine {
                 return {
                     value: numberValue(0),
                     tokens,
-                    program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+                    program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
                     error: errorMessage,
                     debug: undefined
                 };
@@ -1004,6 +1013,9 @@ export class ExpressionEngine {
         }
 
         // ══ PRE-FLIGHT ASYNC CHECK ══
+        // O(1) guard: skip the O(n) resolver scan when the bytecode has no
+        // async opcodes AND no resolvers are registered.
+        if (program.hasAsync || this.resolverRegistry.size > 0) {
         // Check all registered async resolvers BEFORE VM execution.
         // Link the preflight AbortController to the keystroke signal so
         // that in-flight preflight checks are canceled on new keystrokes.
@@ -1056,6 +1068,7 @@ export class ExpressionEngine {
                 debug: undefined,
             };
         }
+        } // end preflight guard
 
         // ══ VM STAGE ══
         const emitVmTrace = hasCollectors && this.config.diagnostic.vmTraceEnabled === true;
@@ -1188,6 +1201,10 @@ if (hasCollectors) {
         const program = this.bytecodeCache.get(expression);
         if (!program) return undefined;
 
+        // ══ PRE-FLIGHT ASYNC CHECK ══
+        // O(1) guard: skip the O(n) resolver scan when the bytecode has no
+        // async opcodes AND no resolvers are registered.
+        if (entry.bytecode.hasAsync || this.resolverRegistry.size > 0) {
         // Pre-flight async check — run before VM even for cached bytecode
         // ── Link to keystroke signal ──
         const preflightController = new AbortController();
@@ -1201,7 +1218,7 @@ if (hasCollectors) {
 
         const preflightSignal = preflightController.signal;
         const asyncCheck = this.resolverRegistry.preflightAll(
-            [], program, '_engine', preflightSignal
+            [], entry.bytecode, '_engine', preflightSignal
         );
         if (asyncCheck) {
             void this.resolveAsync({
@@ -1213,6 +1230,7 @@ if (hasCollectors) {
             });
             return pendingValue(asyncCheck.queryKey);
         }
+        } // end hasAsync guard
 
         this.vm.reset();
         const evalResult = this.executeRaw(program);
@@ -1338,7 +1356,7 @@ if (hasCollectors) {
 
 		if (tokens.length === 0) {
 			return {
-				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
 				tokens: [],
 				reads: [],
 				writes: [],

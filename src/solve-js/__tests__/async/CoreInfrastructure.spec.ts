@@ -24,7 +24,7 @@ import type { VM } from "@solve-js/vm/OpRegistry";
 
 /** Build bytecode that calls a plugin function via CALL_PLUGIN. */
 function buildCallPluginBytecode(fnIdx: number, argCount: number): {
-    opcodes: Uint8Array; numbers: Float64Array; strings: string[];
+    opcodes: Uint8Array; numbers: Float64Array; strings: string[]; hasAsync: boolean;
 } {
     const builder = new BytecodeBuilder();
     builder.reset();
@@ -41,6 +41,7 @@ function buildCallPluginBytecode(fnIdx: number, argCount: number): {
         opcodes: builder.build().opcodes,
         numbers: builder.build().numbers,
         strings: builder.build().strings,
+        hasAsync: builder.build().hasAsync,
     };
 }
 

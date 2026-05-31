@@ -1075,7 +1075,7 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 
 		// Line 1 has bytecode, line 2 has empty bytecode
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(42), [], null));
-		const emptyBytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] as string[] };
+		const emptyBytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] as string[], hasAsync: false };
 		lc.set(2, new LineCacheEntry(pendingValue("key"), emptyBytecode, [], null));
 
 		const events: AsyncResolutionEvent[] = [];

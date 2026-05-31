@@ -294,7 +294,7 @@ describe("ExecutionPool — worker dispatch", () => {
 
 	test("executeBatch skips entries with empty bytecode", () => {
 		const pool = new ExecutionPool(2);
-		const emptyBytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] };
+		const emptyBytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false };
 		const entries = new Map<number, LineCacheEntry>();
 		entries.set(1, new LineCacheEntry(numberValue(0), emptyBytecode, [], null));
 		entries.set(2, makeEntry(buildSimpleBytecode(42)));
@@ -337,7 +337,7 @@ describe("ExecutionPool — worker dispatch", () => {
 
 	test("executeBatch returns resolved empty Promise when all entries are empty", async () => {
 		const pool = new ExecutionPool(2);
-		const emptyBytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] };
+		const emptyBytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false };
 		const entries = new Map<number, LineCacheEntry>();
 		entries.set(1, new LineCacheEntry(numberValue(0), emptyBytecode, [], null));
 		entries.set(2, new LineCacheEntry(numberValue(0), emptyBytecode, [], null));
@@ -674,7 +674,7 @@ describe("ExecutionPool — Transferable buffer cloning", () => {
 		subView[1] = 0; // number index
 		subView[2] = OpCode.HALT;
 
-		const bytecode = { opcodes: subView, numbers: new Float64Array(1), strings: [] as string[] };
+		const bytecode = { opcodes: subView, numbers: new Float64Array(1), strings: [] as string[], hasAsync: false };
 		const entries = new Map<number, LineCacheEntry>();
 		entries.set(1, new LineCacheEntry(numberValue(0), bytecode, [], null));
 
@@ -695,7 +695,7 @@ describe("ExecutionPool — Transferable buffer cloning", () => {
 
 	test("strings array is shallow-cloned (spread) into items", () => {
 		const pool = new ExecutionPool(2);
-		const bytecode = { opcodes: new Uint8Array([OpCode.PUSH_NUMBER, 0, OpCode.HALT]), numbers: new Float64Array(1), strings: ["hello", "world"] };
+		const bytecode = { opcodes: new Uint8Array([OpCode.PUSH_NUMBER, 0, OpCode.HALT]), numbers: new Float64Array(1), strings: ["hello", "world"], hasAsync: false };
 		const entries = new Map<number, LineCacheEntry>();
 		entries.set(1, new LineCacheEntry(numberValue(0), bytecode, [], null));
 
@@ -710,7 +710,7 @@ describe("ExecutionPool — Transferable buffer cloning", () => {
 
 	test("empty buffers are not added to transfer list", () => {
 		const pool = new ExecutionPool(2);
-		const bytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] as string[] };
+		const bytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] as string[], hasAsync: false };
 		const entries = new Map<number, LineCacheEntry>();
 		entries.set(1, new LineCacheEntry(numberValue(0), bytecode, [], null));
 

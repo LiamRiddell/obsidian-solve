@@ -74,7 +74,7 @@ describe("Worker Integration", () => {
 			const result = {
 				lineId: line1.lineId,
 				compiledAgainstHash: originalHash,
-				program: { opcodes: new Uint8Array([1, 2, 3]), numbers: new Float64Array([42]), strings: [] },
+				program: { opcodes: new Uint8Array([1, 2, 3]), numbers: new Float64Array([42]), strings: [], hasAsync: false },
 				reads: [],
 				writes: ["x"],
 				isVariableDef: true,
@@ -105,7 +105,7 @@ describe("Worker Integration", () => {
 			const result = {
 				lineId: line1.lineId,
 				compiledAgainstHash: 999999, // wrong hash!
-				program: { opcodes: new Uint8Array([1, 2, 3]), numbers: new Float64Array([42]), strings: [] },
+				program: { opcodes: new Uint8Array([1, 2, 3]), numbers: new Float64Array([42]), strings: [], hasAsync: false },
 				reads: [],
 				writes: ["x"],
 				isVariableDef: true,
@@ -131,7 +131,7 @@ describe("Worker Integration", () => {
 			const result = {
 				lineId: line1.lineId,
 				compiledAgainstHash: line1.textHash,
-				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] },
+				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
 				reads: [],
 				writes: [],
 				isVariableDef: false,
@@ -156,7 +156,7 @@ describe("Worker Integration", () => {
 			const result = {
 				lineId: 99999, // doesn't exist in the document
 				compiledAgainstHash: 12345,
-				program: { opcodes: new Uint8Array([1]), numbers: new Float64Array([]), strings: [] },
+				program: { opcodes: new Uint8Array([1]), numbers: new Float64Array([]), strings: [], hasAsync: false },
 				reads: [],
 				writes: [],
 				isVariableDef: false,
@@ -187,7 +187,7 @@ describe("Worker Integration", () => {
 				{
 					lineId: line1.lineId,
 					compiledAgainstHash: line1.textHash, // matches
-					program: { opcodes: new Uint8Array([1]), numbers: new Float64Array([1]), strings: [] },
+					program: { opcodes: new Uint8Array([1]), numbers: new Float64Array([1]), strings: [], hasAsync: false },
 					reads: [],
 					writes: ["a"],
 					isVariableDef: true,
@@ -196,7 +196,7 @@ describe("Worker Integration", () => {
 				{
 					lineId: line2.lineId,
 					compiledAgainstHash: 999999, // DOES NOT match (stale)
-					program: { opcodes: new Uint8Array([2]), numbers: new Float64Array([2]), strings: [] },
+					program: { opcodes: new Uint8Array([2]), numbers: new Float64Array([2]), strings: [], hasAsync: false },
 					reads: [],
 					writes: ["b"],
 					isVariableDef: true,
@@ -255,7 +255,7 @@ describe("Worker Integration", () => {
 			doc.updateLineCompiled(
 				line1.lineId,
 				":x = 42",
-				{ opcodes: new Uint8Array([1, 2]), numbers: new Float64Array([42]), strings: [] },
+				{ opcodes: new Uint8Array([1, 2]), numbers: new Float64Array([42]), strings: [], hasAsync: false },
 				[],
 				["x"],
 				true
