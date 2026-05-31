@@ -157,7 +157,27 @@ lexer ← parser ← bytecode ← VM ← cache ← engine ← providers/plugins/
 
 ---
 
-## 5. Plugin Architecture (Future)
+## 5. CI-Readiness Principles
+
+We don't maintain CI config today — it overcomplicates rapid iteration. But the
+architecture is designed to be CI-ready when the time comes.
+
+### What "CI-ready" means for this project:
+- **Deterministic tests**: No flaky tests, no `Date.now()` without seeding, no `Math.random()` without seeding
+- **Fast default suite**: Default test run (excluding heavy/benchmarks/fuzz) completes in under 30 seconds
+- **Typecheck first**: `tsc --noEmit` must pass before any commit — caught by pre-commit hook or CI
+- **Test isolation**: Each test file is self-contained. No shared mutable state between suites.
+- **Reproducible builds**: `npm install && npm run build` produces identical output on any machine
+- **Platform agnostic**: All tests pass cross-platform (Windows, macOS, Linux) — Path separators, line endings handled
+
+### What to add when we adopt CI:
+1. `test` workflow: `npm ci && npx tsc --noEmit && npm test` on push/PR
+2. `heavy-test` workflow: weekly run of benchmarks, fuzz, memory-leak suites
+3. `release` workflow: build + publish to Obsidian community plugins on tag
+4. Coverage reporting with minimum thresholds (80%+)
+5. Automated dependency updates (Dependabot/Renovate)
+
+## 6. Plugin Architecture (Future)
 
 ```
 External plugin registers via PluginSystem
