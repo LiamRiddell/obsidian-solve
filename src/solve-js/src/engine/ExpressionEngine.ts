@@ -4,8 +4,6 @@ import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { ScopeManager } from "@solve-js/vm/ScopeManager";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { PrecedenceParser } from "@solve-js/parser/PrecedenceParser";
-import { RecursiveDescentParser } from "@solve-js/parser/RecursiveDescentParser";
-import { registerAllHandlers } from "@solve-js/parser/RecursiveDescentBootstrap";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
@@ -63,7 +61,6 @@ export class ExpressionEngine {
     private lexer: Lexer;
     private registry: ParseletRegistry;
     private parser: PrecedenceParser;
-    private rdParser: RecursiveDescentParser | undefined;
     private localeCode: string;
     private vm: VM;
     private config: typeof DEFAULT_CONFIG;
@@ -177,13 +174,7 @@ export class ExpressionEngine {
             this.registerPackage(pkg);
         }
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
-        if (this.config.parser.useRecursiveDescent) {
-            this.rdParser = new RecursiveDescentParser(
-                this.config.validation.maxNestingDepth,
-                localeCode
-            );
-            registerAllHandlers(this.rdParser);
-        }	this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
+        this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
 		this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
 
 		// ── Bridge: DataQueryService → batcher ──────────────────────
@@ -671,15 +662,9 @@ export class ExpressionEngine {
      * - RD:                parser.builder = builder; parser.parseExpression(0)
      */
     private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean): void {
-        if (this.rdParser) {
-            this.rdParser.builder = builder;
-            this.rdParser.load(tokens, hasParens);
-            this.rdParser.parseExpression(0);
-        } else {
-            this.parser.setBuilder(builder);
-            this.parser.load(tokens, hasParens);
-            this.parser.parseExpression(0);
-        }
+        this.parser.setBuilder(builder);
+        this.parser.load(tokens, hasParens);
+        this.parser.parseExpression(0);
     }
 
     /**
@@ -981,11 +966,7 @@ export class ExpressionEngine {
 
             // Parselet matching event: inject into parser via pipeline
             if (hasCollectors) {
-                if (this.rdParser) {
-                    this.rdParser.setDiagnosticPipeline(pipeline, expression);
-                } else {
-                    this.parser.setDiagnosticPipeline(pipeline, expression);
-                }
+                this.parser.setDiagnosticPipeline(pipeline, expression);
             }
 
             // ══ PARSER STAGE ══
@@ -1040,11 +1021,7 @@ export class ExpressionEngine {
             }
 
             // Clear parser pipeline reference to avoid holding refs
-            if (this.rdParser) {
-                this.rdParser.setDiagnosticPipeline(undefined, "");
-            } else {
-                this.parser.setDiagnosticPipeline(undefined, "");
-            }
+            this.parser.setDiagnosticPipeline(undefined, "");
         }
 
         // ══ PRE-FLIGHT ASYNC CHECK ══
