@@ -4,7 +4,7 @@ import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { SolveHighlightProvider } from '@/app/codemirror/SolveHighlightProvider';
-import type { DebugResult, Token, OpcodeInfo, ConstantInfo, PerformanceStats, LineResult, ParseletInfo } from './engine.js';
+import type { DebugResult, Token, OpcodeInfo, ConstantInfo, PerformanceStats, LineResult, ParseletInfo, VmTraceStep } from './engine.js';
 import { exampleData, fullDocumentExamples } from './examples.js';
 
 /* ── DOM Refs ──────────────────────────────────────────────────── */
@@ -47,6 +47,8 @@ const detailStrings = $('detail-strings');
 const detailCache = $('detail-cache');
 const detailAsync = $('detail-async');
 const perfHistoryChart = $('perf-history-chart');
+const vmtraceDisplay = $('vmtrace-display');
+const vmtraceCount = $('vmtrace-count');
 
 /* Worker telemetry DOM refs */
 const workerEngineStatus = $('worker-engine-status');
@@ -266,6 +268,7 @@ function renderAll(result: DebugResult): void {
     renderStats(result.stats);
     renderPipelineFlow(result);
     renderInlineResults(result.lineResults);
+    renderVmTrace(result.vmTrace);
     updateDataQueryWorkerTelemetry();
 
     pipelineTiming.textContent = fmt(result.stats.totalTime);
@@ -618,6 +621,41 @@ function populateFullDocExamples(): void {
             editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: fullDocSelect.value } });
             fullDocSelect.value = '';
         }
+    });
+}
+
+/* ── VM Trace ──────────────────────────────────────────────────── */
+function renderVmTrace(steps: VmTraceStep[]): void {
+    vmtraceDisplay.innerHTML = '';
+    vmtraceCount.textContent = steps.length + ' steps';
+
+    if (steps.length === 0) {
+        vmtraceDisplay.innerHTML = '<span class="empty">No trace data — enable vmTraceEnabled mode</span>';
+        return;
+    }
+
+    const maxStackDepth = Math.max(...steps.map(s => s.stackDepth), 1);
+
+    steps.forEach((step, i) => {
+        const row = document.createElement('div');
+        const isLast = i === steps.length - 1;
+        row.className = 'vm-trace-row' + (isLast ? ' halt' : '');
+
+        const barPct = Math.max(2, (step.stackDepth / Math.max(maxStackDepth, 1)) * 100);
+        const timeStr = step.elapsedNs < 1_000
+            ? step.elapsedNs.toFixed(0) + 'ns'
+            : (step.elapsedNs / 1_000).toFixed(1) + 'µs';
+
+        row.innerHTML =
+            '<span class="vm-trace-col-step">' + step.instructionNumber + '</span>' +
+            '<span class="vm-trace-col-ip">' + step.ip + '</span>' +
+            '<span class="vm-trace-col-op" title="Opcode 0x' + step.opcode.toString(16).toUpperCase().padStart(2, '0') + '">' + escHtml(step.opcodeName) + '</span>' +
+            '<span class="vm-trace-col-stack">' +
+                '<span class="vm-trace-stack-bar" style="width:' + barPct + '%"></span>' +
+                '<span class="vm-trace-stack-depth">' + step.stackDepth + '</span>' +
+            '</span>' +
+            '<span class="vm-trace-col-time">' + timeStr + '</span>';
+        vmtraceDisplay.appendChild(row);
     });
 }
 

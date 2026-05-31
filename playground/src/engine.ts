@@ -22,6 +22,7 @@ export interface DebugResult {
     markdownOutline: MarkdownNode[];
     lineResults: LineResult[];
     parselets: ParseletInfo[];
+    vmTrace: VmTraceStep[];
 }
 
 export interface LineResult {
@@ -36,6 +37,7 @@ export interface LineResult {
 export interface OpcodeInfo { name: string; value: number; args: number[]; }
 export interface ConstantInfo { type: 'number' | 'string' | 'bigint' | 'hex'; value: any; index: number; }
 export interface PerformanceStats { lexerTime: number; parserTime: number; bytecodeTime: number; executionTime: number; totalTime: number; }
+export interface VmTraceStep { ip: number; opcodeName: string; opcode: number; stackDepth: number; instructionNumber: number; elapsedNs: number; }
 export interface DagNode { id: string; label: string; type: string; lineNumber: number; }
 export interface DagEdge { source: string; target: string; }
 export interface MarkdownNode { id: string; type: string; content: string; children: MarkdownNode[]; hasRun: boolean; depth: number; result?: string; }
@@ -197,7 +199,9 @@ export function runEngine(expression: string): DebugResult {
     let lastDebugEvents: readonly { type: string; elapsedNs: number }[] | null = null;
 
     try {
-        const engine = new ExpressionEngine('en', true);
+        const engine = new ExpressionEngine('en', true, {
+            diagnostic: { enabled: true, vmTraceEnabled: true },
+        });
 
         markdownOutline = generateMarkdownOutline(expression);
         const allLines = expression.split('\n');
@@ -296,5 +300,22 @@ export function runEngine(expression: string): DebugResult {
         ? extractStageTimings(lastDebugEvents)
         : { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
 
-    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets };
+    // Extract VM trace steps from the last accumulated event set
+    const vmTrace: VmTraceStep[] = lastDebugEvents
+        ? lastDebugEvents
+            .filter(e => e.type === 'vm_step')
+            .map(e => {
+                const step = e as { type: 'vm_step'; ip: number; opcodeName: string; opcode: number; stackDepth: number; instructionNumber: number; elapsedNs: number };
+                return {
+                    ip: step.ip,
+                    opcodeName: step.opcodeName,
+                    opcode: step.opcode,
+                    stackDepth: step.stackDepth,
+                    instructionNumber: step.instructionNumber,
+                    elapsedNs: step.elapsedNs,
+                };
+            })
+        : [];
+
+    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets, vmTrace };
 }

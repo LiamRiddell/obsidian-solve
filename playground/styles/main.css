@@ -502,6 +502,57 @@ html, body {
 .opcode-col-operand { color: var(--accent); }
 .opcode-col-desc { color: var(--text-secondary); }
 
+/* ── VM Trace Table ────────────────────────────────────────────── */
+.vm-trace-table { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.vm-trace-header-row {
+  display: grid;
+  grid-template-columns: 44px 44px 130px 1fr 90px;
+  padding: 5px 10px;
+  background: var(--bg-tertiary);
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.vm-trace-row {
+  display: grid;
+  grid-template-columns: 44px 44px 130px 1fr 90px;
+  padding: 3px 10px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
+  align-items: center;
+}
+.vm-trace-row:hover { background: var(--bg-tertiary); }
+.vm-trace-row.halt { border-left: 2px solid var(--accent); background: var(--accent-dim); }
+.vm-trace-row.halt:hover { background: var(--accent-dim); }
+.vm-trace-col-step { color: var(--text-muted); text-align: right; padding-right: 6px; }
+.vm-trace-col-ip { color: var(--text-muted); text-align: right; padding-right: 6px; }
+.vm-trace-col-op {
+  color: var(--stage-vm); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vm-trace-col-stack {
+  display: flex; align-items: center; gap: 4px;
+  min-width: 0; overflow: hidden;
+}
+.vm-trace-stack-bar {
+  height: 14px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--stage-vm), var(--accent));
+  transition: width var(--transition-fast);
+  min-width: 2px;
+}
+.vm-trace-stack-depth {
+  font-size: 9px; color: var(--text-muted);
+  min-width: 16px; text-align: right;
+}
+.vm-trace-col-time {
+  color: var(--text-secondary);
+  text-align: right;
+}
+
 .bytecode-constants, .bytecode-variables {
   padding: 8px 10px;
   flex-shrink: 0;

@@ -64,6 +64,7 @@
                 <button class="tab-btn" data-tab="flow">Pipeline</button>
                 <button class="tab-btn" data-tab="tokens">Tokens</button>
                 <button class="tab-btn" data-tab="bytecode">Bytecode</button>
+                <button class="tab-btn" data-tab="vmtrace">VM Trace</button>
                 <button class="tab-btn" data-tab="perf">Perf</button>
                 <button class="tab-btn" data-tab="workers">Workers</button>
                 <button class="tab-btn" data-tab="errors">Errors</button>
@@ -227,6 +228,26 @@
                 <div class="bytecode-variables">
                     <h4>Variables</h4>
                     <div class="variables-chips" id="variables-display"></div>
+                </div>
+            </div>
+
+            <!-- Tab: VM Trace -->
+            <div class="tab-panel" id="panel-vmtrace">
+                <div class="panel-toolbar">
+                    <span class="bytecode-count" id="vmtrace-count">0 steps</span>
+                    <span class="toggle-label" style="font-size:10px;color:var(--text-muted)">vmTraceEnabled mode</span>
+                </div>
+                <div class="vm-trace-table">
+                    <div class="vm-trace-header-row">
+                        <span class="vm-trace-col-step">#</span>
+                        <span class="vm-trace-col-ip">IP</span>
+                        <span class="vm-trace-col-op">Opcode</span>
+                        <span class="vm-trace-col-stack">Stack</span>
+                        <span class="vm-trace-col-time">Elapsed</span>
+                    </div>
+                    <div class="panel-scroll" id="vmtrace-display">
+                        <span class="empty">No trace data — enable vmTraceEnabled</span>
+                    </div>
                 </div>
             </div>
 
