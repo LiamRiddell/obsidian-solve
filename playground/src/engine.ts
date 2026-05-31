@@ -5,6 +5,7 @@ import { Value, ValueType } from '@/solve-js/src/vm/Value';
 import type { BytecodeProgram } from '@/solve-js/src/parser/BytecodeBuilder';
 import type { Token } from '@/solve-js/src/lexer/Token';
 import type { ParseletInfo } from '@/solve-js/src/types/ParsingResult';
+import { dataQueryService } from '@solve-js/services/DataQueryService';
 
 export type { Token };
 
@@ -23,6 +24,7 @@ export interface DebugResult {
     lineResults: LineResult[];
     parselets: ParseletInfo[];
     vmTrace: VmTraceStep[];
+    dqMetrics: DQMetrics;
 }
 
 export interface LineResult {
@@ -38,6 +40,7 @@ export interface OpcodeInfo { name: string; value: number; args: number[]; }
 export interface ConstantInfo { type: 'number' | 'string' | 'bigint' | 'hex'; value: any; index: number; }
 export interface PerformanceStats { lexerTime: number; parserTime: number; bytecodeTime: number; executionTime: number; totalTime: number; }
 export interface VmTraceStep { ip: number; opcodeName: string; opcode: number; stackDepth: number; instructionNumber: number; elapsedNs: number; }
+export interface DQMetrics { queryCount: number; pendingQueries: number; dataSources: number; cacheSize: number; }
 export interface DagNode { id: string; label: string; type: string; lineNumber: number; }
 export interface DagEdge { source: string; target: string; }
 export interface MarkdownNode { id: string; type: string; content: string; children: MarkdownNode[]; hasRun: boolean; depth: number; result?: string; }
@@ -317,5 +320,9 @@ export function runEngine(expression: string): DebugResult {
             })
         : [];
 
-    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets, vmTrace };
+    // Collect real DataQueryService metrics for the worker telemetry panel
+    const m = dataQueryService.getMetrics();
+    const dqMetrics: DQMetrics = { queryCount: m.queryCount, pendingQueries: m.pendingQueries, dataSources: m.dataSources, cacheSize: m.cacheSize };
+
+    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics };
 }

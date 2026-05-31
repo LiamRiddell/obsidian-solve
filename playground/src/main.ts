@@ -4,7 +4,7 @@ import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { SolveHighlightProvider } from '@/app/codemirror/SolveHighlightProvider';
-import type { DebugResult, Token, OpcodeInfo, ConstantInfo, PerformanceStats, LineResult, ParseletInfo, VmTraceStep } from './engine.js';
+import type { DebugResult, Token, OpcodeInfo, ConstantInfo, PerformanceStats, LineResult, ParseletInfo, VmTraceStep, DQMetrics } from './engine.js';
 import { exampleData, fullDocumentExamples } from './examples.js';
 
 /* ── DOM Refs ──────────────────────────────────────────────────── */
@@ -269,6 +269,12 @@ function renderAll(result: DebugResult): void {
     renderPipelineFlow(result);
     renderInlineResults(result.lineResults);
     renderVmTrace(result.vmTrace);
+
+    /* Update DQ telemetry state from result */
+    dqActiveRequests = result.dqMetrics.pendingQueries;
+    dqFetches = result.dqMetrics.queryCount;
+    dqSources = result.dqMetrics.dataSources;
+    dqLastActivityTs = Date.now();
     updateDataQueryWorkerTelemetry();
 
     pipelineTiming.textContent = fmt(result.stats.totalTime);
