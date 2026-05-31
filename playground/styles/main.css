@@ -269,6 +269,8 @@ html, body {
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   padding: 0 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .tab-btn {
   padding: 8px 14px;
@@ -909,6 +911,179 @@ html, body {
   .sidebar.collapsed { max-height: 0; }
   .editor-pane { width: 100% !important; height: 260px; border-right: none; border-bottom: 1px solid var(--border-color); }
   .diagnostics-pane { flex: 1; }
+}
+
+/* ── Workers Tab Responsive ───────────────────────────────────── */
+@media (max-width: 750px) {
+  .worker-card-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 12px;
+    padding: 6px 12px;
+  }
+  .worker-card-body .worker-latency-bar,
+  .worker-card-body .worker-latency-scale {
+    grid-column: 1 / -1;
+  }
+  .worker-card-footer {
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+  }
+  .worker-latency-scale {
+    font-size: 7px;
+  }
+  .worker-latency-scale span:nth-child(2),
+  .worker-latency-scale span:nth-child(3) {
+    display: none;
+  }
+  .worker-log-entry {
+    flex-wrap: wrap;
+    gap: 2px 6px;
+  }
+  .worker-log-time {
+    min-width: 58px;
+    font-size: 9px;
+  }
+  .worker-log-source {
+    min-width: 40px;
+    font-size: 9px;
+  }
+  .worker-log-msg {
+    width: 100%;
+    padding-left: 0;
+    font-size: 9px;
+  }
+}
+@media (max-width: 550px) {
+  .worker-card-body {
+    grid-template-columns: 1fr;
+  }
+  .worker-metric {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 2px 0;
+  }
+  .worker-metric-label {
+    font-size: 9px;
+  }
+  .worker-metric-value {
+    font-size: 10px;
+  }
+  .worker-latency-scale span {
+    display: none;
+  }
+  .worker-latency-scale span:first-child,
+  .worker-latency-scale span:last-child {
+    display: inline;
+  }
+}
+
+/* ── VM Trace Tab Responsive ───────────────────────────────────── */
+@media (max-width: 750px) {
+  .vm-trace-header-row {
+    grid-template-columns: 40px 100px 1fr;
+    padding: 4px 8px;
+  }
+  .vm-trace-header-row .vm-trace-col-ip,
+  .vm-trace-header-row .vm-trace-col-time {
+    display: none;
+  }
+  .vm-trace-row {
+    grid-template-columns: 40px 100px 1fr;
+    padding: 3px 8px;
+  }
+  .vm-trace-col-ip,
+  .vm-trace-col-time {
+    display: none;
+  }
+  .vm-trace-col-step {
+    font-size: 10px;
+  }
+  .vm-trace-col-op {
+    font-size: 10px;
+  }
+  .vm-trace-stack-bar {
+    height: 12px;
+  }
+  .vm-trace-stack-depth {
+    font-size: 8px;
+  }
+}
+@media (max-width: 550px) {
+  .vm-trace-header-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding: 4px 6px;
+  }
+  .vm-trace-header-row .vm-trace-col-step,
+  .vm-trace-header-row .vm-trace-col-op,
+  .vm-trace-header-row .vm-trace-col-stack {
+    display: block;
+  }
+  .vm-trace-header-row .vm-trace-col-step {
+    grid-column: 1;
+  }
+  .vm-trace-header-row .vm-trace-col-op {
+    grid-column: 2;
+    text-align: left;
+  }
+  .vm-trace-header-row .vm-trace-col-stack {
+    grid-column: 1 / -1;
+    padding-top: 2px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .vm-trace-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding: 3px 6px;
+  }
+  .vm-trace-col-step {
+    grid-column: 1;
+    text-align: left;
+    color: var(--text-muted);
+    font-size: 9px;
+  }
+  .vm-trace-col-op {
+    grid-column: 2;
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vm-trace-col-stack {
+    grid-column: 1 / -1;
+    padding-left: 0;
+  }
+  .vm-trace-col-ip,
+  .vm-trace-col-time {
+    display: none;
+  }
+  .vm-trace-stack-bar {
+    height: 10px;
+  }
+  .vm-trace-stack-depth {
+    font-size: 8px;
+  }
+  .panel-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 5px 8px;
+  }
+}
+
+/* ── Perf Tab Responsive ───────────────────────────────────────── */
+@media (max-width: 600px) {
+  .perf-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 6px;
+    padding: 6px;
+  }
+  .stat-card-value {
+    font-size: 15px;
+  }
 }
 
 /* ── Animations ────────────────────────────────────────────────── */
