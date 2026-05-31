@@ -3,77 +3,255 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solve Engine Playground</title>
+    <title>Solve Engine — Diagnostic Playground</title>
     <link rel="stylesheet" href="styles/main.css">
-    <script type="module" src="src/main.ts"></script>
 </head>
 <body>
-    <header class="app-banner">
-        <h1>Solve Engine Playground</h1>
-        <p>Debug lexer, parser, and execution</p>
+    <!-- ═══ Header Bar ═══ -->
+    <header class="header-bar">
+        <div class="header-left">
+            <h1 class="header-title">
+                <span class="header-logo">⟐</span>
+                Solve Engine
+                <span class="header-badge">Diagnostic Playground</span>
+            </h1>
+        </div>
+        <div class="header-center">
+            <div class="pipeline-mini" id="pipeline-mini">
+                <span class="pipeline-stage mini-lexer" data-stage="lexer">Lex</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-parser" data-stage="parser">Parse</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-compiler" data-stage="compiler">Comp</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-vm" data-stage="vm">VM</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-result" data-stage="result">Result</span>
+            </div>
+            <div class="pipeline-timing" id="pipeline-timing">0 µs</div>
+        </div>
+        <div class="header-right">
+            <button id="btn-collapse-all" class="header-btn" title="Collapse all panels">⊟</button>
+            <button id="btn-expand-all" class="header-btn" title="Expand all panels">⊞</button>
+            <button id="btn-sidebar-toggle" class="header-btn active" title="Toggle sidebar">☰</button>
+            <span id="status-indicator" class="status-dot status-ready" title="Ready"></span>
+        </div>
     </header>
 
-    <div class="container">
-        <div class="sidebar-column">
-            <div class="sidebar-header"><h2>Examples</h2></div>
-            <div class="sidebar-content" id="examples-sidebar"></div>
-        </div>
-
-        <div class="editor-column">
-            <div class="full-doc-section">
-                <label for="full-doc-select">Full Document Examples</label>
-                <select id="full-doc-select">
-                    <option value="">-- Select a full document example --</option>
+    <!-- ═══ Main Layout ═══ -->
+    <div class="main-layout" id="main-layout">
+        <!-- Left Sidebar: Examples -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Examples</h2>
+                <select id="full-doc-select" class="full-doc-select">
+                    <option value="">📄 Full Documents…</option>
                 </select>
             </div>
+            <div class="sidebar-content" id="examples-sidebar"></div>
+        </aside>
 
-            <div class="editor-section">
-                <div id="editor-container"></div>
+        <!-- Center: Editor -->
+        <main class="editor-pane">
+            <div class="editor-wrapper" id="editor-container"></div>
+        </main>
+
+        <!-- Right: Diagnostic Tabs -->
+        <section class="diagnostics-pane" id="diagnostics-pane">
+            <!-- Tab Bar -->
+            <nav class="tab-bar" id="tab-bar">
+                <button class="tab-btn active" data-tab="results">Results</button>
+                <button class="tab-btn" data-tab="flow">Pipeline</button>
+                <button class="tab-btn" data-tab="tokens">Tokens</button>
+                <button class="tab-btn" data-tab="bytecode">Bytecode</button>
+                <button class="tab-btn" data-tab="perf">Perf</button>
+                <button class="tab-btn" data-tab="errors">Errors</button>
+            </nav>
+
+            <!-- Tab: Results -->
+            <div class="tab-panel active" id="panel-results">
+                <div class="panel-scroll" id="line-results-display"></div>
             </div>
-        </div>
 
-        <div class="results-column">
-            <div class="results-scroll">
-                <div class="panel output-panel">
-                    <h3>Results by Line</h3>
-                    <div id="line-results-display"></div>
+            <!-- Tab: Pipeline Flow -->
+            <div class="tab-panel" id="panel-flow">
+                <div class="pipeline-flow">
+                    <!-- Stage 1: Lexer -->
+                    <div class="flow-stage" id="flow-lexer">
+                        <div class="flow-stage-header lexer">
+                            <span class="flow-stage-icon">🔤</span>
+                            <span class="flow-stage-name">Lexer</span>
+                            <span class="flow-stage-time" id="flow-time-lexer">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Expression</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output" id="flow-lexer-output">
+                                <span class="empty">Tokenizing…</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flow-connector">→</div>
+
+                    <!-- Stage 2: Parser (Pratt) -->
+                    <div class="flow-stage" id="flow-parser">
+                        <div class="flow-stage-header parser">
+                            <span class="flow-stage-icon">🌳</span>
+                            <span class="flow-stage-name">Parser</span>
+                            <span class="flow-stage-time" id="flow-time-parser">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Tokens → AST</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output" id="flow-parser-output">
+                                <span class="empty">Parsing…</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flow-connector">→</div>
+
+                    <!-- Stage 3: Bytecode Compiler -->
+                    <div class="flow-stage" id="flow-compiler">
+                        <div class="flow-stage-header compiler">
+                            <span class="flow-stage-icon">⚙️</span>
+                            <span class="flow-stage-name">Compiler</span>
+                            <span class="flow-stage-time" id="flow-time-compiler">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">AST → Bytecode</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output" id="flow-compiler-output">
+                                <span class="empty">Compiling…</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flow-connector">→</div>
+
+                    <!-- Stage 4: VM Execution -->
+                    <div class="flow-stage" id="flow-vm">
+                        <div class="flow-stage-header vm">
+                            <span class="flow-stage-icon">⚡</span>
+                            <span class="flow-stage-name">VM Execute</span>
+                            <span class="flow-stage-time" id="flow-time-vm">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Bytecode → Stack</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output" id="flow-vm-output">
+                                <span class="empty">Executing…</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flow-connector">→</div>
+
+                    <!-- Stage 5: Result -->
+                    <div class="flow-stage" id="flow-result">
+                        <div class="flow-stage-header result">
+                            <span class="flow-stage-icon">✓</span>
+                            <span class="flow-stage-name">Result</span>
+                            <span class="flow-stage-time" id="flow-time-total">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-output-result" id="flow-result-output">
+                                <span class="empty">—</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div id="debug-panels">
-                    <div class="panel tokens-panel">
-                        <h3>Tokens <label class="tokens-toggle-label"><input type="checkbox" id="group-tokens" checked> Group by line</label></h3>
-                        <div id="tokens-display"></div>
+                <!-- Pipeline Detail Stats -->
+                <div class="pipeline-detail" id="pipeline-detail">
+                    <div class="detail-row">
+                        <span class="detail-label">Tokens</span>
+                        <span class="detail-value" id="detail-tokens">0</span>
                     </div>
-
-                    <div class="panel variables-panel"><h3>Variables</h3><div id="variables-display"></div></div>
-                    <div class="panel opcodes-panel"><h3>Opcodes</h3><div id="opcodes-display"></div></div>
-                    <div class="panel constants-panel"><h3>Constants</h3><div id="constants-display"></div></div>
-
-                    <div class="panel errors-panel">
-                        <h3>Errors</h3>
-                        <div id="errors-display"></div>
+                    <div class="detail-row">
+                        <span class="detail-label">Opcodes</span>
+                        <span class="detail-value" id="detail-opcodes">0</span>
                     </div>
-
-                    <div class="panel markdown-outline-panel"><h3>Markdown Outline</h3><div id="markdown-outline-display"></div></div>
-                    <div class="panel ast-panel"><h3>Parse Structure</h3><div id="ast-display"></div></div>
-
-                    <div class="panel stats-panel">
-                        <h3>Performance Stats</h3>
-                        <div id="stats-display"></div>
+                    <div class="detail-row">
+                        <span class="detail-label">Numbers</span>
+                        <span class="detail-value" id="detail-numbers">0</span>
                     </div>
-
-                    <div class="panel datastore-panel">
-                        <h3>Data Store</h3>
-                        <div id="datastore-display"></div>
+                    <div class="detail-row">
+                        <span class="detail-label">Strings</span>
+                        <span class="detail-value" id="detail-strings">0</span>
                     </div>
-
-                    <div class="panel background-thread-panel">
-                        <h3>Background Thread</h3>
-                        <div id="background-thread-display"></div>
+                    <div class="detail-row">
+                        <span class="detail-label">Cache</span>
+                        <span class="detail-value" id="detail-cache">miss</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Async</span>
+                        <span class="detail-value" id="detail-async">no</span>
                     </div>
                 </div>
             </div>
-        </div>
+
+            <!-- Tab: Tokens -->
+            <div class="tab-panel" id="panel-tokens">
+                <div class="panel-toolbar">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="group-tokens" checked>
+                        Group by line
+                    </label>
+                    <span class="token-count" id="token-count">0 tokens</span>
+                </div>
+                <div class="panel-scroll" id="tokens-display"></div>
+            </div>
+
+            <!-- Tab: Bytecode -->
+            <div class="tab-panel" id="panel-bytecode">
+                <div class="panel-toolbar">
+                    <span class="bytecode-count" id="bytecode-count">0 opcodes</span>
+                </div>
+                <div class="bytecode-disasm">
+                    <div class="bytecode-header-row">
+                        <span class="bytecode-col-ip">IP</span>
+                        <span class="bytecode-col-hex">Hex</span>
+                        <span class="bytecode-col-mnem">Mnemonic</span>
+                        <span class="bytecode-col-operand">Operand</span>
+                        <span class="bytecode-col-desc">Description</span>
+                    </div>
+                    <div class="panel-scroll" id="opcodes-display"></div>
+                </div>
+                <div class="bytecode-constants">
+                    <h4>Constants Table</h4>
+                    <div class="constants-grid" id="constants-display"></div>
+                </div>
+                <div class="bytecode-variables">
+                    <h4>Variables</h4>
+                    <div class="variables-chips" id="variables-display"></div>
+                </div>
+            </div>
+
+            <!-- Tab: Performance -->
+            <div class="tab-panel" id="panel-perf">
+                <div class="perf-grid" id="stats-display"></div>
+                <div class="perf-history" id="perf-history">
+                    <h4>History (last 50)</h4>
+                    <div class="perf-history-chart" id="perf-history-chart"></div>
+                </div>
+            </div>
+
+            <!-- Tab: Errors -->
+            <div class="tab-panel" id="panel-errors">
+                <div class="panel-scroll" id="errors-display"></div>
+            </div>
+        </section>
     </div>
+
+    <!-- ═══ Footer Bar ═══ -->
+    <footer class="footer-bar">
+        <span id="footer-status">Ready</span>
+        <span class="footer-sep">·</span>
+        <span id="footer-expression">No expression</span>
+    </footer>
+
+    <script type="module" src="src/main.ts"></script>
 </body>
 </html>

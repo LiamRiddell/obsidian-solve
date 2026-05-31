@@ -1,9 +1,10 @@
-import { ExpressionEngine } from '@/engine/engine/ExpressionEngine';
-import { formatValue } from '@/engine/format/FormatEngine';
-import { getOpCodeName } from '@/engine/parser/OpCode';
-import { Value, ValueType } from '@/engine/vm/Value';
-import type { Token } from '@/engine/lexer/Token';
-import type { ParseletInfo } from '@/engine/types/ParsingResult';
+import { ExpressionEngine } from '@/solve-js/src/engine/ExpressionEngine';
+import { formatValue } from '@/solve-js/src/format/FormatEngine';
+import { getOpCodeName, OpCode } from '@/solve-js/src/parser/OpCode';
+import { Value, ValueType } from '@/solve-js/src/vm/Value';
+import type { BytecodeProgram } from '@/solve-js/src/parser/BytecodeBuilder';
+import type { Token } from '@/solve-js/src/lexer/Token';
+import type { ParseletInfo } from '@/solve-js/src/types/ParsingResult';
 
 export type { Token };
 
@@ -46,10 +47,18 @@ function getNanoTime(): number {
 
 function formatType(val: Value): string {
     const typeNames: Record<number, string> = {
-        0: 'Number', 1: 'Hex', 2: 'BigInt', 3: 'String',
-        4: 'Datetime', 5: 'Percentage', 6: 'Uom',
-        7: 'Vector2', 8: 'Vector3', 9: 'Vector4',
-        10: 'Boolean', 11: 'Unit'
+        [ValueType.Number]: 'Number',
+        [ValueType.Hex]: 'Hex',
+        [ValueType.BigInt]: 'BigInt',
+        [ValueType.String]: 'String',
+        [ValueType.Datetime]: 'Datetime',
+        [ValueType.Percentage]: 'Percentage',
+        [ValueType.Uom]: 'Uom',
+        [ValueType.Array]: 'Array',
+        [ValueType.Boolean]: 'Boolean',
+        [ValueType.Unit]: 'Unit',
+        [ValueType.Pending]: 'Pending',
+        [ValueType.Error]: 'Error',
     };
     const t = typeNames[val.type] ?? 'Value';
     return val.unit ? `${t} (${val.unit})` : t;
@@ -74,10 +83,33 @@ function generateMarkdownOutline(text: string): MarkdownNode[] {
     return nodes;
 }
 
+/**
+ * Decode opcode operands from the bytecode stream.
+ *
+ * Opcodes that carry an operand (index into numbers/strings/variables):
+ *   PUSH_NUMBER(10), PUSH_BIGINT(11), PUSH_HEX(12),
+ *   PUSH_STRING(13), PUSH_BOOLEAN(14), PUSH_VARIABLE(15)
+ *   CALL_PLUGIN(50), CALL_BUILTIN(51)
+ *   LOAD_VAR(60), STORE_VAR(61)
+ *
+ * All other opcodes (arithmetic, comparison, stack ops, etc.) have zero operands.
+ */
+function decodeOpcodeArgs(op: number, opcodeArray: Uint8Array, ip: number): number[] {
+    // Opcodes that take exactly 1 operand (an index)
+    const hasOperand =
+        (op >= OpCode.PUSH_NUMBER && op <= OpCode.PUSH_VARIABLE) ||
+        op === OpCode.CALL_PLUGIN ||
+        op === OpCode.CALL_BUILTIN ||
+        (op >= OpCode.LOAD_VAR && op <= OpCode.STORE_VAR);
+    if (hasOperand && ip + 1 < opcodeArray.length) {
+        return [opcodeArray[ip + 1]];
+    }
+    return [];
+}
+
 export function runEngine(expression: string): DebugResult {
     const errors: string[] = [];
     let rawTokens: Token[] = [];
-    let tokens: Token[] = [];
     let ast = '';
     let output = '';
     let outputType = 'unknown';
@@ -92,9 +124,8 @@ export function runEngine(expression: string): DebugResult {
     const totalStart = getNanoTime();
 
     try {
-        // Use the main ExpressionEngine with diagnostic mode enabled
-        const engine = new ExpressionEngine("en", true);
-        
+        const engine = new ExpressionEngine('en', true);
+
         markdownOutline = generateMarkdownOutline(expression);
         const allLines = expression.split('\n');
 
@@ -106,8 +137,8 @@ export function runEngine(expression: string): DebugResult {
             const lineNum = idx + 1;
 
             const result = engine.evaluateLineWithDebug(lineNum, trimmed);
-            const parselet = result.debug?.parselets?.[0]?.parseletType ?? 'Expression';
-            
+            const parselet = (result.debug?.parselets?.[0] as any)?.parseletType ?? 'Expression';
+
             if (result.error) {
                 lineResults.push({ lineNumber: lineNum, expression: trimmed, result: '', type: 'Error', parselet, error: result.error });
                 errors.push(result.error);
@@ -115,26 +146,36 @@ export function runEngine(expression: string): DebugResult {
                 lineResults.push({ lineNumber: lineNum, expression: trimmed, result: formatValue(result.value), type: formatType(result.value), parselet });
             }
 
-            // Always collect debug data in playground environment
+            // Collect tokens
             if (result.tokens) {
-                // Set the correct line number on each token
-                const tokensWithLine = result.tokens.map(t => ({ ...t, line: lineNum }));
+                const tokensWithLine = result.tokens.map(t => ({
+                    ...t,
+                    line: (t as any).line ?? lineNum,
+                    col: (t as any).col ?? 0,
+                    lineBreaks: (t as any).lineBreaks ?? 0,
+                } as Token));
                 rawTokens.push(...tokensWithLine);
             }
+
+            // Collect parselets from debug report
             if (result.debug?.parselets) {
-                parselets.push(...result.debug.parselets);
+                for (const p of result.debug.parselets) {
+                    parselets.push({
+                        tokenType: p.tokenType,
+                        tokenValue: p.tokenValue,
+                        parseletType: p.parseletType,
+                        tokenOffset: p.tokenOffset,
+                    });
+                }
             }
+
             if (result.program) {
-                // Collect opcodes
                 const opcodeArray = new Uint8Array(result.program.opcodes);
                 let ip = 0;
                 while (ip < opcodeArray.length) {
                     const op = opcodeArray[ip];
-                    // Use the engine's helper function to get the opcode name
                     const name = getOpCodeName(op);
-                    const args: number[] = [];
-                    if (op >= 10 && op <= 15) { if (ip + 1 < opcodeArray.length) args.push(opcodeArray[ip + 1]); }
-                    else if (op >= 60 && op <= 62) { if (ip + 1 < opcodeArray.length) args.push(opcodeArray[ip + 1]); }
+                    const args = decodeOpcodeArgs(op, opcodeArray, ip);
                     opcodes.push({ name, value: op, args });
                     ip += 1 + args.length;
                 }
@@ -145,8 +186,13 @@ export function runEngine(expression: string): DebugResult {
                 numbers.forEach((num, idx) => { constants.push({ type: 'number', value: num, index: idx }); });
                 strings.forEach((str: string, idx: number) => { constants.push({ type: 'string', value: str, index: idx }); });
 
-                // AST
-                ast = JSON.stringify(result.program, null, 2);
+                // AST approximation
+                ast = JSON.stringify({
+                    opcodes: opcodes.length,
+                    numbers: numbers.length,
+                    strings: strings.length,
+                    hasAsync: result.program.hasAsync,
+                }, null, 2);
             }
         });
 
@@ -171,5 +217,5 @@ export function runEngine(expression: string): DebugResult {
     }
 
     stats.totalTime = getNanoTime() - totalStart;
-    return { tokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets };
+    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets };
 }

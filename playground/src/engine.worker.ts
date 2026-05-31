@@ -1,7 +1,7 @@
 import { runEngine, DebugResult, Token } from './engine.js';
 
 function serializeToken(t: Token): any {
-    return { type: t.type, value: t.value, offset: t.offset };
+    return { type: t.type, value: t.value, offset: t.offset, line: t.line, col: t.col };
 }
 
 self.onmessage = (e: MessageEvent<{ id: number; expression: string }>) => {
