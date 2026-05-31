@@ -26,7 +26,7 @@
  * abortLogger.keystrokeSignalSet(true);  // signal set, not aborted
  * abortLogger.keystrokeSignalCleared();
  */
-const isDebugEnabled = process.env.DEBUG_ABORTCTRL === "true";
+const isDebugEnabled = typeof process !== "undefined" && process.env.DEBUG_ABORTCTRL === "true";
 
 export const abortLogger = {
 	/** Whether debug logging is currently active. */

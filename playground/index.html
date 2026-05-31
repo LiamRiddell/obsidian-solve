@@ -20,9 +20,15 @@
             <div class="pipeline-mini" id="pipeline-mini">
                 <span class="pipeline-stage mini-lexer" data-stage="lexer">Lex</span>
                 <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-validate" data-stage="validate">Validate</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-cache" data-stage="cache">Cache</span>
+                <span class="pipeline-arrow">→</span>
                 <span class="pipeline-stage mini-parser" data-stage="parser">Parse</span>
                 <span class="pipeline-arrow">→</span>
-                <span class="pipeline-stage mini-compiler" data-stage="compiler">Comp</span>
+                <span class="pipeline-stage mini-compiler" data-stage="compiler">Compile</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-async" data-stage="async">Async</span>
                 <span class="pipeline-arrow">→</span>
                 <span class="pipeline-stage mini-vm" data-stage="vm">VM</span>
                 <span class="pipeline-arrow">→</span>
@@ -40,6 +46,7 @@
 
     <!-- ═══ Main Layout ═══ -->
     <div class="main-layout" id="main-layout">
+        <div class="main-body" id="main-body">
         <!-- Left Sidebar: Examples -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
@@ -67,7 +74,6 @@
                 <button class="tab-btn" data-tab="vmtrace">VM Trace</button>
                 <button class="tab-btn" data-tab="perf">Perf</button>
                 <button class="tab-btn" data-tab="workers">Workers</button>
-                <button class="tab-btn" data-tab="errors">Errors</button>
             </nav>
 
             <!-- Tab: Results -->
@@ -77,6 +83,16 @@
 
             <!-- Tab: Pipeline Flow -->
             <div class="tab-panel" id="panel-flow">
+                <!-- Line selector bar -->
+                <div class="pipeline-line-selector">
+                    <label class="pipeline-line-label">
+                        <span class="pipeline-line-icon">#</span>
+                        <span class="pipeline-line-text">Line</span>
+                    </label>
+                    <select id="pipeline-line-select" class="pipeline-line-select">
+                        <option value="0">All Lines (aggregate)</option>
+                    </select>
+                </div>
                 <div class="pipeline-flow">
                     <!-- Stage 1: Lexer -->
                     <div class="flow-stage" id="flow-lexer">
@@ -86,17 +102,50 @@
                             <span class="flow-stage-time" id="flow-time-lexer">—</span>
                         </div>
                         <div class="flow-stage-body">
-                            <div class="flow-stage-input">Expression</div>
+                            <div class="flow-stage-input">Expression → Tokens</div>
                             <div class="flow-stage-arrow">↓</div>
                             <div class="flow-stage-output" id="flow-lexer-output">
                                 <span class="empty">Tokenizing…</span>
                             </div>
+                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
 
-                    <div class="flow-connector">→</div>
+                    <!-- Stage 2: Validation (Safety Checks) -->
+                    <div class="flow-stage" id="flow-validate">
+                        <div class="flow-stage-header validate">
+                            <span class="flow-stage-icon">🛡️</span>
+                            <span class="flow-stage-name">Validation</span>
+                            <span class="flow-stage-time" id="flow-time-validate">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Length + Complexity</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output" id="flow-validate-output">
+                                <span class="empty">Passed</span>
+                            </div>
+                            <div class="flow-stage-next">→</div>
+                        </div>
+                    </div>
 
-                    <!-- Stage 2: Parser (Pratt) -->
+                    <!-- Stage 3: Cache Check -->
+                    <div class="flow-stage" id="flow-cache">
+                        <div class="flow-stage-header cache">
+                            <span class="flow-stage-icon">💾</span>
+                            <span class="flow-stage-name">Cache Check</span>
+                            <span class="flow-stage-time" id="flow-time-cache">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Bytecode Lookup</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output" id="flow-cache-output">
+                                <span class="empty">Checking…</span>
+                            </div>
+                            <div class="flow-stage-next">→</div>
+                        </div>
+                    </div>
+
+                    <!-- Stage 4: Parser (Pratt) -->
                     <div class="flow-stage" id="flow-parser">
                         <div class="flow-stage-header parser">
                             <span class="flow-stage-icon">🌳</span>
@@ -109,12 +158,11 @@
                             <div class="flow-stage-output" id="flow-parser-output">
                                 <span class="empty">Parsing…</span>
                             </div>
+                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
 
-                    <div class="flow-connector">→</div>
-
-                    <!-- Stage 3: Bytecode Compiler -->
+                    <!-- Stage 5: Bytecode Compiler -->
                     <div class="flow-stage" id="flow-compiler">
                         <div class="flow-stage-header compiler">
                             <span class="flow-stage-icon">⚙️</span>
@@ -127,12 +175,28 @@
                             <div class="flow-stage-output" id="flow-compiler-output">
                                 <span class="empty">Compiling…</span>
                             </div>
+                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
 
-                    <div class="flow-connector">→</div>
+                    <!-- Stage 6: Async Preflight -->
+                    <div class="flow-stage" id="flow-async">
+                        <div class="flow-stage-header async">
+                            <span class="flow-stage-icon">🔮</span>
+                            <span class="flow-stage-name">Async Preflight</span>
+                            <span class="flow-stage-time" id="flow-time-async">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Resolver Registry</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output" id="flow-async-output">
+                                <span class="empty">Sync path</span>
+                            </div>
+                            <div class="flow-stage-next">→</div>
+                        </div>
+                    </div>
 
-                    <!-- Stage 4: VM Execution -->
+                    <!-- Stage 7: VM Execution -->
                     <div class="flow-stage" id="flow-vm">
                         <div class="flow-stage-header vm">
                             <span class="flow-stage-icon">⚡</span>
@@ -145,12 +209,11 @@
                             <div class="flow-stage-output" id="flow-vm-output">
                                 <span class="empty">Executing…</span>
                             </div>
+                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
 
-                    <div class="flow-connector">→</div>
-
-                    <!-- Stage 5: Result -->
+                    <!-- Stage 8: Result (no next arrow) -->
                     <div class="flow-stage" id="flow-result">
                         <div class="flow-stage-header result">
                             <span class="flow-stage-icon">✓</span>
@@ -253,9 +316,24 @@
 
             <!-- Tab: Performance -->
             <div class="tab-panel" id="panel-perf">
+                <div class="perf-flamegraph-section" id="perf-flamegraph-container">
+                    <h4 class="perf-section-title">Pipeline Flamegraph</h4>
+                    <div class="perf-flamegraph" id="perf-flamegraph">
+                        <div class="empty">No data yet</div>
+                    </div>
+                    <div class="perf-flamegraph-legend" id="perf-flamegraph-legend"></div>
+                </div>
+                <div class="perf-heatmap-section" id="perf-heatmap-container">
+                    <h4 class="perf-section-title">Pipeline Heatmap <span style="font-weight:400;color:var(--text-muted)">— stage hotness across evaluations</span></h4>
+                    <div class="perf-heatmap-wrapper">
+                        <div class="perf-heatmap" id="perf-heatmap">
+                            <div class="empty">Need 2+ evaluations</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="perf-grid" id="stats-display"></div>
                 <div class="perf-history" id="perf-history">
-                    <h4>History (last 50)</h4>
+                    <h4 class="perf-section-title">History (last 50)</h4>
                     <div class="perf-history-chart" id="perf-history-chart"></div>
                 </div>
             </div>
@@ -333,11 +411,22 @@
                 </div>
             </div>
 
-            <!-- Tab: Errors -->
-            <div class="tab-panel" id="panel-errors">
-                <div class="panel-scroll" id="errors-display"></div>
-            </div>
         </section>
+        </div>
+
+        <!-- ═══ Errors Bar (collapsible, bottom) ═══ -->
+        <div class="errors-bar collapsed" id="errors-bar">
+            <div class="errors-bar-header" id="errors-bar-header">
+                <div class="errors-bar-header-left">
+                    <span class="errors-bar-title">Errors</span>
+                    <span class="errors-bar-count" id="errors-bar-count">0</span>
+                </div>
+                <span class="errors-bar-toggle" id="errors-bar-toggle">▲</span>
+            </div>
+            <div class="errors-bar-content" id="errors-display">
+                <span class="empty">No errors</span>
+            </div>
+        </div>
     </div>
 
     <!-- ═══ Footer Bar ═══ -->

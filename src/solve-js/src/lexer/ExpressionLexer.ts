@@ -1019,7 +1019,9 @@ export class ExpressionLexer {
             yield new LexerToken('EURO', tokenTypeId('EURO'), '\u20AC', '\u20AC', this.pos, 0, this.line, col);
             this.pos++;
           } else if (c0 >= 128) {
-            // Unknown unicode — treat as IDENT for forward compatibility
+            // Unknown unicode — treat as IDENT for forward compatibility.
+            // tokenizeIdentifier() now includes cc >= 128 in its reading loop,
+            // so this properly advances past all consecutive Unicode chars.
             yield this.tokenizeIdentifier();
           } else {
             // Unknown ASCII — silently skip
@@ -1175,14 +1177,18 @@ export class ExpressionLexer {
     const startCol = pos - this.lineStartPos + 1;
     let cc: number;
 
-    // Read [a-zA-Z0-9_]*
+    // Read [a-zA-Z0-9_]* plus any Unicode (>= 128) including emoji surrogate pairs.
+    // Without this, non-ASCII characters cause an infinite loop: the default case
+    // calls tokenizeIdentifier(), the while loop doesn't match the Unicode char,
+    // pos never advances, and the outer loop re-reads the same char forever.
     while (
       pos < len &&
       ((cc = input.charCodeAt(pos)),
         (cc >= 48 && cc <= 57) ||   // 0-9
         (cc >= 65 && cc <= 90) ||   // A-Z
         (cc >= 97 && cc <= 122) ||  // a-z
-        cc === 95)                   // _
+        cc === 95 ||                 // _
+        cc >= 128)                   // Unicode (accented chars, emoji, etc.)
     ) {
       pos++;
     }

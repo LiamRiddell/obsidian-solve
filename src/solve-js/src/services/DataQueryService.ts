@@ -382,6 +382,18 @@ export class DataQueryService {
   // EVENT LISTENERS
   // ------------------------------------------------------------------------
 
+  /**
+   * Return current diagnostic metrics for telemetry purposes.
+   */
+  getMetrics(): { queryCount: number; pendingQueries: number; dataSources: number; cacheSize: number } {
+    return {
+      queryCount: this.queryCount,
+      pendingQueries: this.pendingQueries.size,
+      dataSources: this.dataSources.size,
+      cacheSize: this.localCache.size,
+    };
+  }
+
   onCacheUpdate(listener: (dataSourceId: string, queryKey: string[], data: unknown) => void): () => void {
     this.cacheUpdateListeners.add(listener);
     return () => this.cacheUpdateListeners.delete(listener);

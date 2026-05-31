@@ -8,6 +8,7 @@ import type { ParseletInfo } from '@/solve-js/src/types/ParsingResult';
 import { dataQueryService } from '@solve-js/services/DataQueryService';
 
 export type { Token };
+export type { ParseletInfo };
 
 export interface DebugResult {
     tokens: Token[];
@@ -20,6 +21,7 @@ export interface DebugResult {
     constants: ConstantInfo[];
     variables: string[];
     stats: PerformanceStats;
+    lineStats: LineStats[];   /* per-line stage timings for multi-line docs */
     markdownOutline: MarkdownNode[];
     lineResults: LineResult[];
     parselets: ParseletInfo[];
@@ -39,6 +41,7 @@ export interface LineResult {
 export interface OpcodeInfo { name: string; value: number; args: number[]; }
 export interface ConstantInfo { type: 'number' | 'string' | 'bigint' | 'hex'; value: any; index: number; }
 export interface PerformanceStats { lexerTime: number; parserTime: number; bytecodeTime: number; executionTime: number; totalTime: number; }
+export interface LineStats { lineNumber: number; stats: PerformanceStats; }
 export interface VmTraceStep { ip: number; opcodeName: string; opcode: number; stackDepth: number; instructionNumber: number; elapsedNs: number; }
 export interface DQMetrics { queryCount: number; pendingQueries: number; dataSources: number; cacheSize: number; }
 export interface DagNode { id: string; label: string; type: string; lineNumber: number; }
@@ -123,6 +126,46 @@ function decodeOpcodeArgs(op: number, opcodeArray: Uint8Array, ip: number): numb
  * When a bytecode cache hit occurs, lexer/parser/compiler stages are skipped
  * entirely — we report zero for those and only capture VM + total time.
  */
+
+/**
+ * Extract per-stage timings from a single line's diagnostic events.
+ * This is a simpler version of extractStageTimings that doesn't depend
+ * on pipeline_start/pipeline_end events (which only appear once globally).
+ * The total time for the line is derived from the first-to-last event span. */
+function extractLineTimings(events: readonly { type: string; elapsedNs: number }[]): PerformanceStats {
+    if (events.length === 0) {
+        return { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
+    }
+
+    const firstEvent = events[0];
+    const lastEvent = events[events.length - 1];
+
+    const firstToken = events.find(e => e.type === 'token_emitted');
+    const lastToken = [...events].reverse().find(e => e.type === 'token_emitted');
+    const firstParselet = events.find(e => e.type === 'parselet_matched');
+    const lastParselet = [...events].reverse().find(e => e.type === 'parselet_matched');
+    const bytecodeBuilt = events.find(e => e.type === 'bytecode_built');
+    const firstVmStep = events.find(e => e.type === 'vm_step');
+    const lastVmHalt = [...events].reverse().find(e => e.type === 'vm_halt');
+
+    const lexStart = firstToken?.elapsedNs ?? firstEvent.elapsedNs;
+    const lexEnd = lastToken?.elapsedNs ?? lexStart;
+    const parseStart = lexEnd;
+    const parseEnd = bytecodeBuilt?.elapsedNs ?? (lastParselet?.elapsedNs ?? parseStart);
+    const compileStart = lastParselet?.elapsedNs ?? parseEnd;
+    const compileEnd = parseEnd;
+    const vmStart = firstVmStep?.elapsedNs ?? (bytecodeBuilt?.elapsedNs ?? parseEnd);
+    const vmEnd = lastVmHalt?.elapsedNs ?? lastEvent.elapsedNs;
+
+    return {
+        lexerTime: Math.max(0, lexEnd - lexStart),
+        parserTime: Math.max(0, parseEnd - parseStart),
+        bytecodeTime: Math.max(0, compileEnd - compileStart),
+        executionTime: Math.max(0, vmEnd - vmStart),
+        totalTime: Math.max(0, lastEvent.elapsedNs - firstEvent.elapsedNs),
+    };
+}
+
 function extractStageTimings(events: readonly { type: string; elapsedNs: number }[]): PerformanceStats {
     const hasCacheHit = events.some(e => e.type === 'cache_hit');
 
@@ -197,9 +240,11 @@ export function runEngine(expression: string): DebugResult {
 
     // The TimelineDiagnosticCollector accumulates events across ALL
     // evaluateLineWithDebug() calls without resetting, so line N's
-    // debug.events includes lines 1..N. We capture the last line's
-    // events (which contain the full timeline) and extract timings once.
+    // debug.events includes lines 1..N. We capture per-line snapshots
+    // to compute per-line stage timings, plus the last line's events
+    // for the aggregate timing.
     let lastDebugEvents: readonly { type: string; elapsedNs: number }[] | null = null;
+    const lineEventSnapshots: { lineNumber: number; events: readonly { type: string; elapsedNs: number }[] }[] = [];
 
     try {
         const engine = new ExpressionEngine('en', true, {
@@ -217,9 +262,10 @@ export function runEngine(expression: string): DebugResult {
             const result = engine.evaluateLineWithDebug(lineNum, trimmed);
             const parselet = (result.debug?.parselets?.[0] as any)?.parseletType ?? 'Expression';
 
-            // Capture the last valid event set (accumulated across all lines)
+            // Capture per-line event snapshot + last valid set (accumulated across all lines)
             if (result.debug?.events && result.debug.events.length > 0) {
                 lastDebugEvents = result.debug.events;
+                lineEventSnapshots.push({ lineNumber: lineNum, events: result.debug.events });
             }
 
             if (result.error) {
@@ -297,11 +343,21 @@ export function runEngine(expression: string): DebugResult {
         errors.push(error instanceof Error ? error.message : String(error));
     }
 
-    // Extract per-stage timings once from the last accumulated event set.
-    // Falls back to zeroes when events are unavailable (non-diagnostic mode).
+    // Extract aggregate per-stage timings from the last accumulated event set.
     const stats: PerformanceStats = lastDebugEvents
         ? extractStageTimings(lastDebugEvents)
         : { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
+
+    // Extract per-line timings from event snapshot deltas.
+    // Each snapshot is cumulative; we slice the delta between consecutive snapshots
+    // to get the events that belong to each line.
+    const lineStats: LineStats[] = [];
+    let prevEventCount = 0;
+    for (const snap of lineEventSnapshots) {
+        const lineOnlyEvents = snap.events.slice(prevEventCount);
+        prevEventCount = snap.events.length;
+        lineStats.push({ lineNumber: snap.lineNumber, stats: extractLineTimings(lineOnlyEvents) });
+    }
 
     // Extract VM trace steps from the last accumulated event set
     const vmTrace: VmTraceStep[] = lastDebugEvents
@@ -324,5 +380,5 @@ export function runEngine(expression: string): DebugResult {
     const m = dataQueryService.getMetrics();
     const dqMetrics: DQMetrics = { queryCount: m.queryCount, pendingQueries: m.pendingQueries, dataSources: m.dataSources, cacheSize: m.cacheSize };
 
-    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics };
+    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, lineStats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics };
 }

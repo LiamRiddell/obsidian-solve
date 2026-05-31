@@ -8,15 +8,14 @@ import { HighlightRange } from "@solve-js/cache/LineCache";
  * This ensures the same lexer, registry, and locale are used across components.
  */
 export class SolveHighlightProvider {
-  private engine: ExpressionEngine;
+  private engine: ExpressionEngine | null;
   private cache: Map<string, HighlightRange[]> = new Map();
 
-  constructor(engine: ExpressionEngine) {
-    this.engine = engine;
+  constructor(engine?: ExpressionEngine | null) {
+    this.engine = engine ?? null;
   }
 
   getLineHighlights(lineText: string, lineNumber?: number): HighlightRange[] {
-    const engine = this.engine;
     const cacheKey = lineNumber !== undefined ? `${lineNumber}:${lineText}` : lineText;
 
     const cached = this.cache.get(cacheKey);
@@ -24,8 +23,13 @@ export class SolveHighlightProvider {
       return cached;
     }
 
+    // No engine available (e.g. playground where eval runs in a worker) — skip highlighting
+    if (!this.engine) {
+      return [];
+    }
+
     // Use the shared engine's integrated lexer to get highlight tokens
-    const tokens = engine.getLexer().getHighlightTokens(lineText);
+    const tokens = this.engine.getLexer().getHighlightTokens(lineText);
     if (tokens.length === 0) {
       this.cache.set(cacheKey, []);
       return [];

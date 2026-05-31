@@ -4,7 +4,7 @@ import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { SolveHighlightProvider } from '@/app/codemirror/SolveHighlightProvider';
-import type { DebugResult, Token, OpcodeInfo, ConstantInfo, PerformanceStats, LineResult, ParseletInfo, VmTraceStep, DQMetrics } from './engine.js';
+import type { DebugResult, Token, OpcodeInfo, ConstantInfo, PerformanceStats, LineStats, LineResult, ParseletInfo, VmTraceStep, DQMetrics } from './engine.js';
 import { exampleData, fullDocumentExamples } from './examples.js';
 
 /* ── DOM Refs ──────────────────────────────────────────────────── */
@@ -31,13 +31,19 @@ const bytecodeCount = $('bytecode-count');
 const groupTokensCheckbox = $('group-tokens') as HTMLInputElement;
 
 const flowLexerOutput = $('flow-lexer-output');
+const flowValidateOutput = $('flow-validate-output');
+const flowCacheOutput = $('flow-cache-output');
 const flowParserOutput = $('flow-parser-output');
 const flowCompilerOutput = $('flow-compiler-output');
+const flowAsyncOutput = $('flow-async-output');
 const flowVmOutput = $('flow-vm-output');
 const flowResultOutput = $('flow-result-output');
 const flowTimeLexer = $('flow-time-lexer');
+const flowTimeValidate = $('flow-time-validate');
+const flowTimeCache = $('flow-time-cache');
 const flowTimeParser = $('flow-time-parser');
 const flowTimeCompiler = $('flow-time-compiler');
+const flowTimeAsync = $('flow-time-async');
 const flowTimeVm = $('flow-time-vm');
 const flowTimeTotal = $('flow-time-total');
 const detailTokens = $('detail-tokens');
@@ -46,9 +52,19 @@ const detailNumbers = $('detail-numbers');
 const detailStrings = $('detail-strings');
 const detailCache = $('detail-cache');
 const detailAsync = $('detail-async');
+const perfFlamegraph = $('perf-flamegraph');
+const perfFlamegraphLegend = $('perf-flamegraph-legend');
+const perfHeatmap = $('perf-heatmap');
 const perfHistoryChart = $('perf-history-chart');
 const vmtraceDisplay = $('vmtrace-display');
 const vmtraceCount = $('vmtrace-count');
+const pipelineLineSelect = $('pipeline-line-select') as HTMLSelectElement;
+let pipelineLineListenerAttached = false;
+
+/* Errors bar DOM refs */
+const errorsBar = $('errors-bar');
+const errorsBarCount = $('errors-bar-count');
+const errorsBarHeader = $('errors-bar-header');
 
 /* Worker telemetry DOM refs */
 const workerEngineStatus = $('worker-engine-status');
@@ -70,6 +86,37 @@ let runId = 0;
 let currentResult: DebugResult | null = null;
 const statsHistory: PerformanceStats[] = [];
 const MAX_HISTORY = 50;
+let selectedPipelineLine: number | null = null;
+
+/* ── Flamegraph Click Filter ──────────────────────────────────── */
+let flamegraphFilter: string | null = null;
+
+/* Map flamegraph segment labels to the stat card labels they should highlight.
+   Each flamegraph stage corresponds to one or more stat cards. */
+const FLAMEGRAPH_TO_CARD_LABELS: Record<string, string[]> = {
+    'Lexer':     ['Lexer'],
+    'Parser':    ['Parser'],
+    'Compile':   ['Compiler'],
+    'VM':        ['VM Execute'],
+    'Overhead':  ['Validation', 'Cache Check', 'Async Preflight', 'Overhead'],
+};
+
+/* Per-line stage timings for multi-line flamegraph */
+let currentLineStats: LineStats[] | null = null;
+
+function clearFlamegraphFilter(): void {
+    flamegraphFilter = null;
+    if (currentResult) renderStats(currentResult.stats, currentLineStats ?? undefined);
+}
+
+function setFlamegraphFilter(stageLabel: string): void {
+    if (flamegraphFilter === stageLabel) {
+        clearFlamegraphFilter();
+    } else {
+        flamegraphFilter = stageLabel;
+        if (currentResult) renderStats(currentResult.stats, currentLineStats ?? undefined);
+    }
+}
 
 /* ── Worker Telemetry State ────────────────────────────────────── */
 let engineMsgCount = 0;
@@ -181,6 +228,16 @@ const editor = new EditorView({
             placeholder('Enter an expression\u2026  e.g. 10 + 5 * 2'),
             EditorView.updateListener.of((update: ViewUpdate) => {
                 if (update.docChanged) run();
+                /* Track cursor line for pipeline line selector */
+                if (update.selectionSet) {
+                    const pos = update.state.selection.main.head;
+                    const line = update.state.doc.lineAt(pos);
+                    const newLine = line.number;
+                    if (newLine !== lastCursorLine) {
+                        lastCursorLine = newLine;
+                        updatePipelineLineSelection(newLine);
+                    }
+                }
             }),
             keymap.of([{ key: 'Ctrl-Enter', run: () => { run(); return true; } }]),
             EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
@@ -225,6 +282,24 @@ groupTokensCheckbox.addEventListener('change', () => {
     if (currentResult) renderTokens(currentResult.rawTokens);
 });
 
+/* ── Pipeline Line Tracking ────────────────────────────────────── */
+let lastCursorLine = 1;
+
+function updatePipelineLineSelection(lineNumber: number): void {
+    const sel = pipelineLineSelect;
+    /* Check if this line number exists as an option */
+    for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === String(lineNumber)) {
+            sel.value = String(lineNumber);
+            selectedPipelineLine = lineNumber;
+            return;
+        }
+    }
+    /* Line not in options — fall back to All Lines */
+    sel.value = '0';
+    selectedPipelineLine = null;
+}
+
 /* ── Status ────────────────────────────────────────────────────── */
 function setStatus(s: 'ready' | 'busy' | 'error'): void {
     statusIndicator.className = 'status-dot status-' + s;
@@ -265,8 +340,24 @@ function renderAll(result: DebugResult): void {
     renderOpcodesDisasm(result.opcodes);
     renderConstants(result.constants);
     renderVariables(result.variables);
-    renderStats(result.stats);
+    currentLineStats = result.lineStats ?? null;
+    renderStats(result.stats, result.lineStats);
+
+    renderPipelineLineSelector(result);
+    /* After selector is populated, re-apply cursor-driven selection */
+    const cursorLine = editor.state.doc.lineAt(editor.state.selection.main.head).number;
+    updatePipelineLineSelection(cursorLine);
     renderPipelineFlow(result);
+
+    /* Wire up manual dropdown selection — clicking triggers a full re-render */
+    if (!pipelineLineListenerAttached) {
+        pipelineLineSelect.addEventListener('change', () => {
+            const val = pipelineLineSelect.value;
+            selectedPipelineLine = val === '0' ? null : Number(val);
+            if (currentResult) renderPipelineFlow(currentResult);
+        });
+        pipelineLineListenerAttached = true;
+    }
     renderInlineResults(result.lineResults);
     renderVmTrace(result.vmTrace);
 
@@ -448,13 +539,30 @@ function renderVariables(variables: string[]): void {
     });
 }
 
+/* ── Errors Bar Toggle ──────────────────────────────────────────── */
+errorsBarHeader.addEventListener('click', () => {
+    const isCollapsed = errorsBar.classList.contains('collapsed');
+    if (isCollapsed) {
+        errorsBar.classList.remove('collapsed');
+    } else {
+        errorsBar.classList.add('collapsed');
+    }
+});
+
 /* ── Errors ────────────────────────────────────────────────────── */
 function renderErrors(errors: string[]): void {
     errorsDisplay.innerHTML = '';
+    errorsBarCount.textContent = String(errors.length);
+    errorsBarCount.classList.toggle('has-errors', errors.length > 0);
+
     if (errors.length === 0) {
         errorsDisplay.innerHTML = '<div class="no-errors">\u2713 No errors</div>';
         return;
     }
+
+    /* Auto-expand the errors bar when errors arrive */
+    errorsBar.classList.remove('collapsed');
+
     errors.forEach(err => {
         const div = document.createElement('div');
         div.className = 'error-item';
@@ -464,36 +572,393 @@ function renderErrors(errors: string[]): void {
 }
 
 /* ── Performance ───────────────────────────────────────────────── */
-function renderStats(stats: PerformanceStats): void {
+
+/* Map display labels to PerformanceStats property names for sparkline lookup */
+const STAT_LABEL_TO_KEY: Record<string, keyof PerformanceStats> = {
+    'Lexer': 'lexerTime',
+    'Parser': 'parserTime',
+    'Compiler': 'bytecodeTime',
+    'VM Execute': 'executionTime',
+    'Total': 'totalTime',
+};
+
+/* Stages with real diagnostic timestamps vs overhead */
+const TIMED_KEYS: (keyof PerformanceStats)[] = ['lexerTime', 'parserTime', 'bytecodeTime', 'executionTime'];
+
+function computeOverhead(stats: PerformanceStats): number {
+    const sumTimed = TIMED_KEYS.reduce((acc, k) => acc + (stats[k] || 0), 0);
+    return Math.max(0, stats.totalTime - sumTimed);
+}
+
+function renderStats(stats: PerformanceStats, lineStats?: LineStats[]): void {
     statsHistory.push({ ...stats });
     if (statsHistory.length > MAX_HISTORY) statsHistory.shift();
 
+    renderFlamegraph(stats, lineStats);
+    renderPipelineHeatmap();
     statsDisplay.innerHTML = '';
 
-    const cards: { label: string; key: keyof PerformanceStats; color: string; icon: string }[] = [
-        { label: 'Lexer', key: 'lexerTime', color: '#5ac8fa', icon: '#5ac8fa' },
-        { label: 'Parser', key: 'parserTime', color: '#9b7bec', icon: '#9b7bec' },
-        { label: 'Compiler', key: 'bytecodeTime', color: '#4ec9b0', icon: '#4ec9b0' },
-        { label: 'VM Execute', key: 'executionTime', color: '#ffd866', icon: '#ffd866' },
-        { label: 'Total', key: 'totalTime', color: '#29ce99', icon: '#29ce99' },
+    const overhead = computeOverhead(stats);
+
+    const cardEntries: { label: string; value: number; color: string; icon: string; isOverhead?: boolean }[] = [
+        { label: 'Lexer', value: stats.lexerTime, color: '#5ac8fa', icon: '#5ac8fa' },
+        { label: 'Validation', value: overhead, color: '#dcdcaa', icon: '#dcdcaa', isOverhead: true },
+        { label: 'Cache Check', value: overhead, color: '#569cd6', icon: '#569cd6', isOverhead: true },
+        { label: 'Parser', value: stats.parserTime, color: '#9b7bec', icon: '#9b7bec' },
+        { label: 'Compiler', value: stats.bytecodeTime, color: '#4ec9b0', icon: '#4ec9b0' },
+        { label: 'Async Preflight', value: overhead, color: '#ce9178', icon: '#ce9178', isOverhead: true },
+        { label: 'VM Execute', value: stats.executionTime, color: '#ffd866', icon: '#ffd866' },
+        { label: 'Overhead', value: overhead, color: '#6b6b75', icon: '#6b6b75', isOverhead: true },
+        { label: 'Total', value: stats.totalTime, color: '#29ce99', icon: '#29ce99' },
     ];
 
-    cards.forEach(card => {
+    const activeFilter = flamegraphFilter;
+    const visibleCardLabels = activeFilter ? FLAMEGRAPH_TO_CARD_LABELS[activeFilter] ?? [] : null;
+
+    cardEntries.forEach(card => {
         const div = document.createElement('div');
-        div.className = 'stat-card';
-        const vals = statsHistory.map(s => s[card.key]);
+        const isDimmed = visibleCardLabels !== null && !visibleCardLabels.includes(card.label);
+        const isHighlighted = visibleCardLabels !== null && visibleCardLabels.includes(card.label);
+        let cardClass = 'stat-card' + (card.isOverhead ? ' stat-card-overhead' : '');
+        if (isDimmed) cardClass += ' stat-card-dimmed';
+        if (isHighlighted) cardClass += ' stat-card-highlighted';
+        div.className = cardClass;
+        /* Use proper key lookup for sparkline data */
+        const statKey = STAT_LABEL_TO_KEY[card.label];
+        const vals = card.isOverhead
+            ? statsHistory.map(s => computeOverhead(s))
+            : statKey
+                ? statsHistory.map(s => s[statKey] || 0)
+                : [];
         const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         const sparkline = vals.length >= 2 ? renderSparklineSvg(vals, card.color) : '';
+
+        const displayTime = card.isOverhead && card.label !== 'Overhead'
+            ? '<span style="font-size:10px;opacity:0.6">in overhead</span>'
+            : fmt(card.value);
+        const displayAvg = card.isOverhead && card.label !== 'Overhead'
+            ? ''
+            : '<div class="stat-card-avg" style="color:' + card.color + '">avg ' + fmt(avg) + '</div>';
+
         div.innerHTML =
             '<div class="stat-card-header"><span class="stat-card-label">' + card.label + '</span>' +
             '<span class="stat-card-icon" style="background:' + card.icon + '"></span></div>' +
-            '<div class="stat-card-value" style="color:' + card.color + '">' + fmt(stats[card.key]) + '</div>' +
-            '<div class="stat-card-avg" style="color:' + card.color + '">avg ' + fmt(avg) + '</div>' +
+            '<div class="stat-card-value" style="color:' + card.color + '">' + displayTime + '</div>' +
+            displayAvg +
             (sparkline ? '<div class="stat-card-spark">' + sparkline + '</div>' : '');
         statsDisplay.appendChild(div);
     });
 
     renderPerfHistory();
+}
+
+function renderFlamegraph(stats: PerformanceStats, lineStats?: LineStats[]): void {
+    /* For multi-line documents, show per-line flamegraph segments */
+    if (lineStats && lineStats.length >= 2) {
+        renderLineFlamegraph(stats, lineStats);
+        return;
+    }
+    const overhead = computeOverhead(stats);
+    const total = stats.totalTime || 1;
+
+    // Only timed stages + a single combined Overhead segment.
+    // Individual untimed stages (Validation, Cache, Async) are not rendered
+    // as separate segments to avoid double-counting the overhead time.
+    const allTimes = [
+        { time: stats.lexerTime, color: '#5ac8fa' },
+        { time: stats.parserTime, color: '#9b7bec' },
+        { time: stats.bytecodeTime, color: '#4ec9b0' },
+        { time: stats.executionTime, color: '#ffd866' },
+        { time: overhead, color: '#6b6b75' },
+    ];
+
+    let segments: { label: string; time: number; color: string }[] = [];
+
+    const timedLabels = ['Lexer', 'Parser', 'Compile', 'VM', 'Overhead'];
+    allTimes.forEach((t, i) => {
+        if (t.time > 0) {
+            segments.push({
+                label: timedLabels[i],
+                time: t.time,
+                color: t.color,
+            });
+        }
+    });
+
+    // Merge tiny segments (< 3% of total) into a combined "Other" segment
+    const totalTime = segments.reduce((a, s) => a + s.time, 0) || 1;
+    let merged: typeof segments = [];
+    let otherTime = 0;
+    for (const seg of segments) {
+        const pct = (seg.time / totalTime) * 100;
+        if (pct < 3) {
+            otherTime += seg.time;
+        } else {
+            merged.push(seg);
+        }
+    }
+    if (otherTime > 0) {
+        merged.push({ label: 'Other', time: otherTime, color: '#4a4a55' });
+    }
+
+    if (merged.length === 0) {
+        perfFlamegraph.innerHTML = '<div class="empty" style="width:100%;display:flex;align-items:center;justify-content:center">No timing data</div>';
+        perfFlamegraphLegend.innerHTML = '';
+        return;
+    }
+
+    const mergedTotal = merged.reduce((a, s) => a + s.time, 0) || 1;
+    let html = '';
+    const legendItems: { label: string; color: string }[] = [];
+    const activeFilter = flamegraphFilter;
+
+    merged.forEach(seg => {
+        const pct = (seg.time / mergedTotal) * 100;
+        const width = pct < 2 ? Math.max(2, pct) : pct;
+        const timeStr = fmt(seg.time);
+        const pctStr = pct.toFixed(1) + '%';
+        const showLabel = pct >= 10;
+        const isDimmed = activeFilter !== null && seg.label !== activeFilter && seg.label !== 'Other';
+        const isHighlighted = activeFilter !== null && seg.label === activeFilter;
+
+        html += '<div class="perf-flamegraph-bar' +
+            (isHighlighted ? ' flamegraph-bar-highlighted' : '') +
+            (isDimmed ? ' flamegraph-bar-dimmed' : '') +
+            '" data-stage="' + seg.label + '" style="width:' + width + '%;background:' + seg.color + '">' +
+            (showLabel ? '<span class="perf-flamegraph-bar-label">' + seg.label + '</span>' : '') +
+            '<div class="perf-flamegraph-tooltip">' +
+            '<div class="perf-flamegraph-tooltip-name" style="color:' + seg.color + '">' + seg.label + '</div>' +
+            '<span class="perf-flamegraph-tooltip-time">' + timeStr + '</span>' +
+            '<span class="perf-flamegraph-tooltip-pct">' + pctStr + '</span>' +
+            '</div></div>';
+
+        legendItems.push({ label: seg.label, color: seg.color });
+    });
+
+    perfFlamegraph.innerHTML = html;
+
+    /* Attach click listeners to each flamegraph bar */
+    perfFlamegraph.querySelectorAll('.perf-flamegraph-bar').forEach(bar => {
+        const stageLabel = (bar as HTMLElement).dataset.stage;
+        if (stageLabel) {
+            bar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setFlamegraphFilter(stageLabel);
+            });
+        }
+    });
+
+    /* Build legend with optional clear-filter button */
+    let legendHtml = legendItems.map(item =>
+        '<span class="perf-flamegraph-legend-item' +
+        (activeFilter === item.label ? ' legend-item-active' : '') +
+        '">' +
+        '<span class="perf-flamegraph-legend-swatch" style="background:' + item.color + '"></span>' +
+        item.label +
+        '</span>'
+    ).join('');
+
+    if (activeFilter) {
+        legendHtml += '<span class="flamegraph-active-label" style="font-size:9px;opacity:0.7;margin-left:8px">Filter: <strong>' + activeFilter + '</strong></span>';
+        legendHtml += '<button class="flamegraph-clear-filter" title="Clear filter">\u2716 Clear filter</button>';
+    }
+
+    perfFlamegraphLegend.innerHTML = legendHtml;
+    /* Bind the clear filter button click */
+    const clearBtn = perfFlamegraphLegend.querySelector('.flamegraph-clear-filter');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearFlamegraphFilter);
+    }
+}
+
+/* ── Per-Line Flamegraph (multi-line documents) ──────────────────── */
+
+/* Stage color map for dominant-stage coloring */
+const STAGE_COLORS: Record<string, string> = {
+    'Lexer':     '#5ac8fa',
+    'Parser':    '#9b7bec',
+    'Compile':   '#4ec9b0',
+    'VM':        '#ffd866',
+    'Overhead':  '#6b6b75',
+};
+
+function getDominantStage(s: PerformanceStats): string {
+    const stages: [string, number][] = [
+        ['Lexer', s.lexerTime],
+        ['Parser', s.parserTime],
+        ['Compile', s.bytecodeTime],
+        ['VM', s.executionTime],
+        ['Overhead', computeOverhead(s)],
+    ];
+    let maxVal = -1;
+    let dominant = 'Overhead';
+    for (const [label, val] of stages) {
+        if (val > maxVal) { maxVal = val; dominant = label; }
+    }
+    return dominant;
+}
+
+function renderLineFlamegraph(aggregateStats: PerformanceStats, lineStats: LineStats[]): void {
+    const totalAggregate = aggregateStats.totalTime || 1;
+    const lineCount = lineStats.length;
+
+    if (lineCount === 0) {
+        perfFlamegraph.innerHTML = '<div class="empty" style="width:100%;display:flex;align-items:center;justify-content:center">No timing data</div>';
+        perfFlamegraphLegend.innerHTML = '';
+        return;
+    }
+
+    const mergedTotal = lineStats.reduce((a, ls) => a + ls.stats.totalTime, 0) || 1;
+    const activeFilter = flamegraphFilter;
+
+    let html = '';
+    const legendItems: { label: string; color: string }[] = [];
+
+    lineStats.forEach((ls, i) => {
+        const s = ls.stats;
+        const lineNumber = ls.lineNumber;
+        const pct = (s.totalTime / mergedTotal) * 100;
+        const width = pct < 1.5 ? Math.max(1.5, pct) : pct;
+        const dominant = getDominantStage(s);
+        const color = STAGE_COLORS[dominant] ?? '#6b6b75';
+        const timeStr = fmt(s.totalTime);
+        const pctStr = pct.toFixed(1) + '%';
+        const showLabel = pct >= 8 && lineCount <= 15;
+        const isDimmed = activeFilter !== null && dominant !== activeFilter;
+        const isHighlighted = activeFilter !== null && dominant === activeFilter;
+
+        /* Per-stage breakdown tooltip */
+        const tooltipBreakdown =
+            '<div style="font-size:9px;margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.1)">' +
+            '<div>Lx ' + fmt(s.lexerTime) + '</div>' +
+            '<div>Pr ' + fmt(s.parserTime) + '</div>' +
+            '<div>Cp ' + fmt(s.bytecodeTime) + '</div>' +
+            '<div>VM ' + fmt(s.executionTime) + '</div>' +
+            '<div>Ov ' + fmt(computeOverhead(s)) + '</div>' +
+            '</div>';
+
+        html += '<div class="perf-flamegraph-bar' +
+            (isHighlighted ? ' flamegraph-bar-highlighted' : '') +
+            (isDimmed ? ' flamegraph-bar-dimmed' : '') +
+            '" data-stage="' + dominant + '" style="width:' + width + '%;background:' + color + '">' +
+            (showLabel ? '<span class="perf-flamegraph-bar-label">L' + lineNumber + '</span>' : '') +
+            '<div class="perf-flamegraph-tooltip">' +
+            '<div class="perf-flamegraph-tooltip-name" style="color:' + color + '">Line ' + lineNumber + ' &middot; ' + dominant + '</div>' +
+            '<span class="perf-flamegraph-tooltip-time">' + timeStr + '</span>' +
+            '<span class="perf-flamegraph-tooltip-pct">' + pctStr + '</span>' +
+            tooltipBreakdown +
+            '</div></div>';
+
+        if (!legendItems.find(item => item.label === dominant)) {
+            legendItems.push({ label: dominant, color });
+        }
+    });
+
+    perfFlamegraph.innerHTML = html;
+
+    /* Attach click listeners — chain to setFlamegraphFilter with dominant stage */
+    perfFlamegraph.querySelectorAll('.perf-flamegraph-bar').forEach(bar => {
+        const stageLabel = (bar as HTMLElement).dataset.stage;
+        if (stageLabel) {
+            bar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setFlamegraphFilter(stageLabel);
+            });
+        }
+    });
+
+    /* Legend: per-line mode indicator + dominant stage legend + clear filter */
+    let legendHtml = '<span class="perf-flamegraph-legend-item" style="opacity:0.5;font-size:8px;letter-spacing:0.5px">' +
+        lineCount + ' lines &middot; colored by dominant stage</span>';
+
+    legendHtml += legendItems.map(item =>
+        '<span class="perf-flamegraph-legend-item' +
+        (activeFilter === item.label ? ' legend-item-active' : '') +
+        '">' +
+        '<span class="perf-flamegraph-legend-swatch" style="background:' + item.color + '"></span>' +
+        item.label +
+        '</span>'
+    ).join('');
+
+    if (activeFilter) {
+        legendHtml += '<span class="flamegraph-active-label" style="font-size:9px;opacity:0.7;margin-left:8px">Filter: <strong>' + activeFilter + '</strong></span>';
+        legendHtml += '<button class="flamegraph-clear-filter" title="Clear filter">\u2716 Clear filter</button>';
+    }
+
+    perfFlamegraphLegend.innerHTML = legendHtml;
+    const clearBtn = perfFlamegraphLegend.querySelector('.flamegraph-clear-filter');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearFlamegraphFilter);
+    }
+}
+
+/* ── Pipeline Heatmap ────────────────────────────────────────── */
+function renderPipelineHeatmap(): void {
+    perfHeatmap.innerHTML = '';
+
+    const entries = statsHistory;
+    if (entries.length < 2) {
+        perfHeatmap.innerHTML = '<div class="empty">Need 2+ evaluations</div>';
+        return;
+    }
+
+    // Last 50 entries, newest on top (reversed so top = most recent)
+    const slice = entries.slice(-50).reverse();
+
+    const stages: { label: string; getValue: (s: PerformanceStats) => number; color: string }[] = [
+        { label: 'Lexer',   getValue: s => s.lexerTime,      color: '#5ac8fa' },
+        { label: 'Parser',  getValue: s => s.parserTime,     color: '#9b7bec' },
+        { label: 'Compile', getValue: s => s.bytecodeTime,   color: '#4ec9b0' },
+        { label: 'VM',      getValue: s => s.executionTime,  color: '#ffd866' },
+        { label: 'Overhead', getValue: s => computeOverhead(s), color: '#6b6b75' },
+    ];
+
+    const activeFilter = flamegraphFilter;
+
+    let html = '';
+
+    // ── Header row ───────────────────────────────────────────────
+    html += '<div class="perf-heatmap-header">';
+    html += '<div class="perf-heatmap-header-label">#</div>';
+    for (const s of stages) {
+        const isDimmed = activeFilter !== null && s.label !== activeFilter;
+        html += `<div class="perf-heatmap-header-label" style="color:${s.color};opacity:${isDimmed ? 0.25 : 1}">${s.label}</div>`;
+    }
+    html += '</div>';
+
+    // ── Data rows ────────────────────────────────────────────────
+    for (let i = 0; i < slice.length; i++) {
+        const stats = slice[i];
+        const total = stats.totalTime || 1;
+        const evalNum = entries.length - i;
+
+        html += '<div class="perf-heatmap-row">';
+        html += `<div class="perf-heatmap-row-label" title="Evaluation #${evalNum}">#${evalNum}</div>`;
+
+        for (const stage of stages) {
+            const val = stage.getValue(stats);
+            const pct = (val / total) * 100;
+            // Intensity: 0% → opacity 0.06, 50%+ of total → opacity 0.92
+            const pctNorm = Math.min(1, pct / 50);
+            const opacity = 0.06 + pctNorm * 0.86;
+            // When a flamegraph filter is active, cap dimmed columns to a low opacity
+            const isDimmed = activeFilter !== null && stage.label !== activeFilter;
+            const finalOpacity = isDimmed ? Math.min(0.08, opacity) : opacity;
+            const timeStr = fmt(val);
+            const pctStr = pct.toFixed(1) + '%';
+
+            html += '<div class="perf-heatmap-cell" style="background:' + stage.color + ';opacity:' + finalOpacity + '">' +
+                '<div class="perf-heatmap-cell-tooltip">' +
+                '<div class="perf-heatmap-cell-tooltip-name" style="color:' + stage.color + '">' + stage.label + '</div>' +
+                '<span class="perf-heatmap-cell-tooltip-time">' + timeStr + '</span>' +
+                '<span class="perf-heatmap-cell-tooltip-pct">' + pctStr + '</span>' +
+                '</div></div>';
+        }
+
+        html += '</div>';
+    }
+
+    perfHeatmap.innerHTML = html;
 }
 
 function renderPerfHistory(): void {
@@ -522,9 +987,39 @@ function renderSparklineSvg(values: number[], color: string): string {
         '</svg>';
 }
 
+/* ── Line Selector ────────────────────────────────────────────── */
+function renderPipelineLineSelector(result: DebugResult): void {
+    const sel = pipelineLineSelect;
+    const currentValue = sel.value;
+    let html = '<option value="0">All Lines (aggregate)</option>';
+    for (const lr of result.lineResults) {
+        const label = 'Line ' + lr.lineNumber + ': ' + escHtml(lr.expression.slice(0, 30)) + (lr.expression.length > 30 ? '…' : '');
+        html += '<option value="' + lr.lineNumber + '">' + label + '</option>';
+    }
+    sel.innerHTML = html;
+    /* Restore previous selection if still valid */
+    if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) {
+        sel.value = currentValue;
+    } else {
+        sel.value = '0';
+        selectedPipelineLine = null;
+    }
+}
+
 /* ── Pipeline Flow ─────────────────────────────────────────────── */
 function renderPipelineFlow(result: DebugResult): void {
-    const s = result.stats;
+    const selectedLine = selectedPipelineLine;
+
+    /* Determine per-line data if a specific line is selected */
+    const perLineResult = selectedLine !== null
+        ? result.lineResults.find(lr => lr.lineNumber === selectedLine) ?? null
+        : null;
+    const perLineStats = selectedLine !== null
+        ? (currentLineStats ?? []).find(ls => ls.lineNumber === selectedLine)?.stats ?? null
+        : null;
+
+    /* Aggregate vs per-line timings */
+    const s = perLineStats ?? result.stats;
 
     flowTimeLexer.textContent = fmt(s.lexerTime);
     flowTimeParser.textContent = fmt(s.parserTime);
@@ -532,26 +1027,67 @@ function renderPipelineFlow(result: DebugResult): void {
     flowTimeVm.textContent = fmt(s.executionTime);
     flowTimeTotal.textContent = fmt(s.totalTime);
 
-    const firstTokens = result.rawTokens.slice(0, 8);
+    // Validation (safety checks) + cache + async don't have individual
+    // diagnostic event timestamps, so show "—" instead of fabricated values.
+    flowTimeValidate.textContent = '—';
+    flowTimeCache.textContent = '—';
+    flowTimeAsync.textContent = '—';
+
+    // Filter data based on selected line
+    const lineTokens = selectedLine !== null
+        ? result.rawTokens.filter(t => (t as any).line === selectedLine)
+        : result.rawTokens;
+    const hasTokens = lineTokens.length > 0;
+    const hasParselets = result.parselets && result.parselets.length > 0;
+    const wasCached = !hasParselets && result.rawTokens.length > 0;
+    const hasErrors = perLineResult?.error ? true : (selectedLine === null && result.errors.length > 0);
+    const hasAsync = selectedLine !== null
+        ? perLineResult?.type === 'Pending'
+        : result.lineResults.some(lr => lr.type === 'Pending');
+
+    // Lexer output: first 8 tokens
+    const firstTokens = lineTokens.slice(0, 8);
     flowLexerOutput.innerHTML = firstTokens.length > 0
         ? firstTokens.map(t => '<span class="token token-' + t.type.toLowerCase() + '" style="font-size:9px;cursor:default">' + escHtml(t.value) + '</span>').join(' ')
         : '<span class="empty">\u2014</span>';
 
+    // Validation output: token count + safety status
+    flowValidateOutput.innerHTML = firstTokens.length > 0
+        ? '<span style="color:' + (hasErrors ? '#f48771' : '#4ec9b0') + ';font-size:10px">' +
+          (hasErrors ? 'Failed' : firstTokens.length + ' tokens ✓') + '</span>'
+        : '<span class="empty">\u2014</span>';
+
+    // Cache output: Hit / Miss (derived from parselets presence)
+    const cacheLabel = wasCached ? 'Hit' : (hasErrors ? '—' : 'Miss');
+    const cacheColor = wasCached ? '#4ec9b0' : '#5ac8fa';
+    flowCacheOutput.innerHTML = firstTokens.length > 0
+        ? '<span style="color:' + cacheColor + ';font-size:10px;font-weight:600">' + cacheLabel + '</span>'
+        : '<span class="empty">\u2014</span>';
+
+    // Parser output: unique parselet types
     const parseletNames = [...new Set(result.parselets?.map((p: ParseletInfo) => p.parseletType) ?? [])];
     flowParserOutput.innerHTML = parseletNames.length > 0
         ? parseletNames.map((p: string) => '<span class="token token-keyword" style="font-size:9px;cursor:default">' + escHtml(p) + '</span>').join(' ')
-        : '<span class="empty">\u2014</span>';
+        : (wasCached ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>' : '<span class="empty">\u2014</span>');
 
+    // Compiler output: first 4 unique opcode names
     const opcodeNames = [...new Set(result.opcodes.map(o => o.name))].slice(0, 4);
     flowCompilerOutput.innerHTML = opcodeNames.length > 0
         ? opcodeNames.map(n => '<span class="token token-func" style="font-size:9px;cursor:default">' + escHtml(n) + '</span>').join(' ')
-        : '<span class="empty">\u2014</span>';
+        : (wasCached ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>' : '<span class="empty">\u2014</span>');
 
+    // Async preflight output
+    flowAsyncOutput.innerHTML = hasAsync
+        ? '<span style="color:#ffd866;font-size:10px">Pending resolution</span>'
+        : '<span style="color:#6b6b75;font-size:10px">Sync path</span>';
+
+    // VM output: first result type
     const firstResult = result.lineResults[0];
     flowVmOutput.innerHTML = firstResult
         ? '<span style="color:#29ce99;font-size:10px">' + (firstResult.error ? 'Error' : firstResult.type) + '</span>'
         : '<span class="empty">\u2014</span>';
 
+    // Result output: last line's final value
     const lastResult = result.lineResults[result.lineResults.length - 1];
     flowResultOutput.innerHTML = lastResult
         ? '<span style="color:' + (lastResult.error ? '#f48771' : '#29ce99') + '">' + escHtml(lastResult.error || lastResult.result) + '</span>'
@@ -561,8 +1097,8 @@ function renderPipelineFlow(result: DebugResult): void {
     detailOpcodes.textContent = String(result.opcodes.length);
     detailNumbers.textContent = String(result.constants.filter(c => c.type === 'number').length);
     detailStrings.textContent = String(result.constants.filter(c => c.type === 'string').length);
-    detailCache.textContent = 'n/a';
-    detailAsync.textContent = result.lineResults.some(lr => lr.type === 'Pending') ? 'yes' : 'no';
+    detailCache.textContent = wasCached ? 'hit' : (hasParselets ? 'miss' : '—');
+    detailAsync.textContent = hasAsync ? 'yes' : 'no';
 }
 
 /* ── Utils ─────────────────────────────────────────────────────── */
@@ -772,6 +1308,14 @@ function updateDataQueryWorkerTelemetry(): void {
     }
     workerDqFetches.textContent = String(dqFetches);
 }
+
+/* ── Escape key clears flamegraph filter ───────────────────────── */
+document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && flamegraphFilter !== null) {
+        e.preventDefault();
+        clearFlamegraphFilter();
+    }
+});
 
 /* ── Init ──────────────────────────────────────────────────────── */
 renderExamplesSidebar();

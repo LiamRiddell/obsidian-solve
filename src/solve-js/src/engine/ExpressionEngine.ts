@@ -594,15 +594,7 @@ export class ExpressionEngine {
                 if (hasInlineSolves && !isVariableAssignment) {
                     for (const solve of inlineSolves) {
                         try {
-                            const value = this.	/**
-	 * Evaluate a single expression line with full DAG and LineCache integration.
-	 *
-	 * @param lineNumber - 1-based line position in the document.
-	 * @param lineText - The raw line text (may contain inline solve syntax).
-	 * @returns The evaluated Value.
-	 * @throws {SolveError} On safety validation failure or parse error.
-	 */
-	evaluateLine(lineNumber, solve.expression);
+                            const value = this.evaluateLine(lineNumber, solve.expression);
                             solve.result = value;
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -685,15 +677,7 @@ export class ExpressionEngine {
     /**
      * Evaluate an expression using already-lexed tokens.
      *
-     * This is the shared core of both 	/**
-	 * Evaluate a single expression line with full DAG and LineCache integration.
-	 *
-	 * @param lineNumber - 1-based line position in the document.
-	 * @param lineText - The raw line text (may contain inline solve syntax).
-	 * @returns The evaluated Value.
-	 * @throws {SolveError} On safety validation failure or parse error.
-	 */
-	evaluateLine() (which lexes via
+     * This is the shared core of both evaluateLine (which lexes via
      * resetExpression) and evaluateLineWithPreTokenized() (which uses
      * tokens from scanDocument). It handles safety checks, bytecode
      * caching, parsing, and VM execution.
@@ -1368,15 +1352,7 @@ if (hasCollectors) {
      * Returns the Value result. Throws on error.
      */
     evaluateExpression(expression: string): Value {
-        return this.	/**
-	 * Evaluate a single expression line with full DAG and LineCache integration.
-	 *
-	 * @param lineNumber - 1-based line position in the document.
-	 * @param lineText - The raw line text (may contain inline solve syntax).
-	 * @returns The evaluated Value.
-	 * @throws {SolveError} On safety validation failure or parse error.
-	 */
-	evaluateLine(-1, expression);
+        return this.evaluateLine(-1, expression);
     }
 
     /**
@@ -1497,15 +1473,7 @@ if (hasCollectors) {
          }
 
          try {
-             const result = this.	/**
-	 * Evaluate a single expression line with full DAG and LineCache integration.
-	 *
-	 * @param lineNumber - 1-based line position in the document.
-	 * @param lineText - The raw line text (may contain inline solve syntax).
-	 * @returns The evaluated Value.
-	 * @throws {SolveError} On safety validation failure or parse error.
-	 */
-	evaluateLine(-1, expression);
+             const result = this.evaluateLine(-1, expression);
              return result.toNumber();
          } catch {
              return NaN;
