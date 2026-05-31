@@ -40,7 +40,7 @@ Execution limits enforced before any performance work. A nanosecond response tha
 | **P1 — Safety** | No infinite loops, no overflows, no crashes | Before any perf work |
 | **P2 — Testability** | Every behaviour covered by a test | Before any refactor |
 | **P3 — Sub-1ms pipeline** | Full eval pipeline < 1ms; components in nanoseconds | Before shipping |
-| **P4 — Clean code** | No `any`, JSDoc on exports, clear module boundaries | Ongoing, never blocks shipping |
+| **P4 — Clean code** | No `any`, TSDoc on **every** exported symbol, clear module boundaries | Ongoing, never blocks shipping |
 | **P5 — Extensibility** | Plugin system, custom providers, runtime loading | Post-1.0 only |
 
 ---
@@ -55,7 +55,7 @@ Execution limits enforced before any performance work. A nanosecond response tha
 - **DAG-driven incremental re-evaluation** — changing one variable only re-executes dependent lines in topological order
 - **Async streaming** via EvalResult discriminated union — no throw-based control flow in VM hot path
 - **Feature flags off by default** — autoBalanceParens and other non-essential features opt-in
-- **Clean public API** — core exported symbols carry TSDoc with @param/@returns/@throws; TSDoc required for all new exports
+- **Full TSDoc coverage** — **every exported symbol** (class, interface, type, function, enum, const) carries a TSDoc comment with `@param`, `@returns`, `@throws`, and `@example` as applicable. No undocumented public surface. See `CODING_STANDARDS.md §5.4` for the complete standard.
 
 ---
 
@@ -86,6 +86,7 @@ The pipeline powering all of this: Raw text → Lexer → PrecedenceParser (inli
 6. **Keep it small** — one commit, one phase, one acceptance gate
 7. **Measure before and after** — every change has a before/after number
 8. **Think in nanoseconds** — if a function takes microseconds and is called thousands of times, it's a bottleneck. Aim for sub-microsecond on hot-path components
+9. **Document every export** — no exported symbol ships without a TSDoc comment. This is non-negotiable for contributor onboarding and API discoverability.
 
 ---
 

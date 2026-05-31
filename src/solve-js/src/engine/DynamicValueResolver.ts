@@ -1,11 +1,23 @@
 import { IDynamicDataSource } from "@solve-js/engine/IDynamicDataSource";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 
+/**
+ * Pending variable update queued for batch processing.
+ */
 export interface PendingUpdate {
   variable: string;
   newValue: number | string;
 }
 
+/**
+ * Polling-based resolver that subscribes to dynamic data sources and
+ * batches variable updates.
+ *
+ * Used for real-time data sources (stock tickers, exchange rates, etc.)
+ * that push updates on a configurable interval. Updates are collected
+ * into a batch and flushed together, collapsing multiple updates into a
+ * single DAG walk + re-evaluation pass.
+ */
 export class DynamicValueResolver {
   private sources: Map<string, IDynamicDataSource> = new Map();
   private timers: Map<string, ReturnType<typeof setInterval>> = new Map();

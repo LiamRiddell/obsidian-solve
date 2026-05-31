@@ -54,6 +54,34 @@ import { abortLogger } from "@app/utilities/AbortControllerLogger";
 
 
 
+/**
+ * Core expression evaluation engine — the top-level orchestrator.
+ *
+ * Owns the full evaluation pipeline: lexing, parsing, bytecode compilation,
+ * VM execution, DAG-based dependency tracking, and async resolution.
+ *
+ * Key responsibilities:
+ * - Pipeline orchestration: lex → parse → compile → execute → cache
+ * - Bytecode caching for repeated expressions
+ * - DAG-based incremental re-evaluation on variable changes
+ * - Async resolution via ResolverRegistry + AsyncResolutionBatcher
+ * - Package registration (built-in + external plugins)
+ * - Safety validation (length, complexity, nesting)
+ * - Diagnostic pipeline integration
+ * - Keystroke-level AbortSignal management
+ *
+ * Each engine instance has its own isolated lexer, registry, parser, and
+ * LineCache. The VM is shared via `sharedOpRegistry` but each engine
+ * creates its own VM instance with configurable limits.
+ *
+ * @example
+ * ```typescript
+ * import { ExpressionEngine } from "@solve-js";
+ * const engine = new ExpressionEngine("en");
+ * const value = engine.evaluateExpression("2 + 2 * 10");
+ * console.log(value.toNumber()); // 22
+ * ```
+ */
 export class ExpressionEngine {
     private dag = new DependencyGraph();
     private lineCache = new LineCache();
@@ -566,7 +594,15 @@ export class ExpressionEngine {
                 if (hasInlineSolves && !isVariableAssignment) {
                     for (const solve of inlineSolves) {
                         try {
-                            const value = this.evaluateLine(lineNumber, solve.expression);
+                            const value = this.	/**
+	 * Evaluate a single expression line with full DAG and LineCache integration.
+	 *
+	 * @param lineNumber - 1-based line position in the document.
+	 * @param lineText - The raw line text (may contain inline solve syntax).
+	 * @returns The evaluated Value.
+	 * @throws {SolveError} On safety validation failure or parse error.
+	 */
+	evaluateLine(lineNumber, solve.expression);
                             solve.result = value;
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -649,7 +685,15 @@ export class ExpressionEngine {
     /**
      * Evaluate an expression using already-lexed tokens.
      *
-     * This is the shared core of both evaluateLine() (which lexes via
+     * This is the shared core of both 	/**
+	 * Evaluate a single expression line with full DAG and LineCache integration.
+	 *
+	 * @param lineNumber - 1-based line position in the document.
+	 * @param lineText - The raw line text (may contain inline solve syntax).
+	 * @returns The evaluated Value.
+	 * @throws {SolveError} On safety validation failure or parse error.
+	 */
+	evaluateLine() (which lexes via
      * resetExpression) and evaluateLineWithPreTokenized() (which uses
      * tokens from scanDocument). It handles safety checks, bytecode
      * caching, parsing, and VM execution.
@@ -768,7 +812,15 @@ export class ExpressionEngine {
         return this.executeAndStore(program, lineNumber, expression, reads, writes, '_engine');
     }
 
-    evaluateLine(
+    	/**
+	 * Evaluate a single expression line with full DAG and LineCache integration.
+	 *
+	 * @param lineNumber - 1-based line position in the document.
+	 * @param lineText - The raw line text (may contain inline solve syntax).
+	 * @returns The evaluated Value.
+	 * @throws {SolveError} On safety validation failure or parse error.
+	 */
+	evaluateLine(
         lineNumber: number,
         lineText: string
     ): Value {
@@ -1316,7 +1368,15 @@ if (hasCollectors) {
      * Returns the Value result. Throws on error.
      */
     evaluateExpression(expression: string): Value {
-        return this.evaluateLine(-1, expression);
+        return this.	/**
+	 * Evaluate a single expression line with full DAG and LineCache integration.
+	 *
+	 * @param lineNumber - 1-based line position in the document.
+	 * @param lineText - The raw line text (may contain inline solve syntax).
+	 * @returns The evaluated Value.
+	 * @throws {SolveError} On safety validation failure or parse error.
+	 */
+	evaluateLine(-1, expression);
     }
 
     /**
@@ -1437,7 +1497,15 @@ if (hasCollectors) {
          }
 
          try {
-             const result = this.evaluateLine(-1, expression);
+             const result = this.	/**
+	 * Evaluate a single expression line with full DAG and LineCache integration.
+	 *
+	 * @param lineNumber - 1-based line position in the document.
+	 * @param lineText - The raw line text (may contain inline solve syntax).
+	 * @returns The evaluated Value.
+	 * @throws {SolveError} On safety validation failure or parse error.
+	 */
+	evaluateLine(-1, expression);
              return result.toNumber();
          } catch {
              return NaN;

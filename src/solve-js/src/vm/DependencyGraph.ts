@@ -19,6 +19,17 @@ export class DependencyGraph {
    // Reverse map: query key -> Set of line numbers
    private dataSourceConsumers: Map<string, Set<number>> = new Map();
 
+  /**
+   * Register a line's variable reads and writes in the dependency graph.
+   *
+   * If re-registering the same line (e.g., after editing), old consumer
+   * references are cleaned up first. Write-variables are removed from
+   * the consumer set so that redefinition breaks the old dependency chain.
+   *
+   * @param lineNumber - 1-based line number in the document
+   * @param reads - Variable names this line reads
+   * @param writes - Variable names this line writes (assigns to)
+   */
    registerLine(lineNumber: number, reads: string[], writes: string[]): void {
      // Clean up old consumer references if re-registering this line
      const oldReads = this.lineReads.get(lineNumber);
@@ -47,6 +58,16 @@ export class DependencyGraph {
      }
    }
 
+  /**
+   * Register a line's dependency on an external data source (e.g., currency rate, OSRS GE price).
+   *
+   * When the data source updates, {@link getAffectedLinesByDataSource} returns all lines
+   * that depend on this data, enabling targeted re-evaluation.
+   *
+   * @param lineNumber - 1-based line number in the document
+   * @param dataSourceId - Unique identifier for the data source (e.g., "currency", "osrs-ge")
+   * @param queryKey - Query key array identifying the specific data (e.g., ["USD", "EUR"])
+   */
   registerLineDataSourceDependency(lineNumber: number, dataSourceId: string, queryKey: string[]): void {
     const queryKeyStr = JSON.stringify(queryKey);
     const key = `${dataSourceId}:${queryKeyStr}`;
@@ -62,6 +83,16 @@ export class DependencyGraph {
     this.dataSourceConsumers.get(key)!.add(lineNumber);
   }
 
+  /**
+   * Find all lines affected by a changed variable via BFS through the consumer graph.
+   *
+   * When a variable is modified (e.g., `:x = 5` changes to `:x = 10`), this returns
+   * all lines that transitively depend on it — lines that read `x`, lines that read
+   * variables written by those lines, and so on.
+   *
+   * @param changedVariable - The variable name that changed
+   * @returns Set of line numbers that need re-evaluation
+   */
   getAffectedLines(changedVariable: string): Set<number> {
     const visited = new Set<number>();
     const queue = [changedVariable];
@@ -172,13 +203,31 @@ export class DependencyGraph {
     return ordered;
   }
 
+  /**
+   * Find all lines affected by a data source update.
+   *
+   * When an async data source resolves (e.g., currency rate fetch completes),
+   * this returns all lines that depend on that specific data query.
+   *
+   * @param dataSourceId - The data source identifier
+   * @param queryKey - The query key that was updated
+   * @returns Set of line numbers that need re-evaluation
+   */
   getAffectedLinesByDataSource(dataSourceId: string, queryKey: string[]): Set<number> {
     const queryKeyStr = JSON.stringify(queryKey);
     const key = `${dataSourceId}:${queryKeyStr}`;
     return this.dataSourceConsumers.get(key) ?? new Set();
   }
 
-removeLine(lineNumber: number): void {
+  /**
+   * Remove a line from the dependency graph (e.g., when a line is deleted from the document).
+   *
+   * Cleans up all consumer references, write registrations, and data source dependencies
+   * for the removed line. O(k) where k is the number of variables the line reads.
+   *
+   * @param lineNumber - The line number being removed
+   */
+  removeLine(lineNumber: number): void {
      // Remove from consumers of variables this line read — O(k) not O(V)
      const reads = this.lineReads.get(lineNumber);
      if (reads) {
@@ -198,18 +247,37 @@ removeLine(lineNumber: number): void {
      }
    }
 
+  /**
+   * Get all line numbers that consume (read) a given variable.
+   *
+   * @param variable - The variable name
+   * @returns Set of line numbers that read this variable, or empty set if none
+   */
   getConsumers(variable: string): Set<number> {
     return this.consumers.get(variable) ?? new Set();
   }
 
+  /**
+   * Get all variables that a line depends on (reads).
+   *
+   * @param lineNumber - The line number to query
+   * @returns Set of variable names this line reads, or empty set if none
+   */
   getDependencies(lineNumber: number): Set<string> {
     return this.dependencies.get(lineNumber) ?? new Set();
   }
 
+  /**
+   * Get all variables that a line writes (assigns to).
+   *
+   * @param lineNumber - The line number to query
+   * @returns Set of variable names this line writes, or empty set if none
+   */
   getWrites(lineNumber: number): Set<string> {
     return this.writes.get(lineNumber) ?? new Set();
   }
 
+  /** Clear all dependency graph state. Called on document switch or engine reset. */
   clear(): void {
     this.consumers.clear();
     this.dependencies.clear();

@@ -1,3 +1,11 @@
+/**
+ * Set of all known unit identifiers (case-sensitive).
+ * Includes length, mass, volume, time, temperature, frequency, power, energy,
+ * pressure, angle, data storage, area, and ISO 4217 currency codes.
+ *
+ * Units are case-sensitive to eliminate ambiguity
+ * (e.g., `C` = Celsius vs `c` = centiliter, `B` = bytes vs `b` = bits).
+ */
 export const knownUnits = new Set([
   // Length
   "mm", "cm", "m", "km", "ft", "yd", "mi",

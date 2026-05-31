@@ -117,12 +117,12 @@ function riskyOperation(): Result<number, SolveError> {
 ## 5. Code Structure
 
 ### 5.1 Class size
-- **Hard limit**: 300 lines per class
+- **Hard limit**: 300 lines per class (TSDoc header excluded)
 - **Soft limit**: 200 lines — if you exceed this, extract a helper
 - `ExpressionEngine.ts` is the primary offender. Refactor aggressively.
 
 ### 5.2 Function size
-- **Hard limit**: 50 lines
+- **Hard limit**: 50 lines (TSDoc header excluded)
 - **Soft limit**: 30 lines
 - Extract predicates, helpers, and named sub-expressions
 
@@ -130,14 +130,111 @@ function riskyOperation(): Result<number, SolveError> {
 - **Hard limit**: 3 levels
 - Extract early returns and guard clauses
 
-### 5.4 Comments
-- **No redundant comments** — don't describe what the code does, describe *why*
-- **Every exported symbol gets JSDoc** with `@param`, `@returns`, `@throws` as applicable
-  - Classes: describe purpose and key behaviors
-  - Interfaces/types: describe what they represent and how they're used
-  - Functions: describe parameters, return value, and any thrown errors
-  - Enums: describe each member's meaning
-- **Every module gets a header** describing its purpose in the pipeline
+### 5.4 Comments & TSDoc
+
+#### The Mandate
+**Every exported symbol MUST have a TSDoc comment.** No exceptions. This includes `export class`, `export interface`, `export type`, `export function`, `export const`, and `export enum` at any scope — top-level or re-exported.
+
+#### Why
+TSDoc enables IDE hover tooltips, API reference generation, and contributor onboarding. Undocumented exports create friction for every new contributor and every code review. The cost of not documenting is paid by everyone who reads the code.
+
+#### Template by Symbol Type
+
+**Classes:**
+```typescript
+/**
+ * Brief one-liner describing what this class does in the pipeline.
+ *
+ * Multi-paragraph description of behavior, lifecycle, and invariants.
+ *
+ * @example
+ * ```typescript
+ * const instance = new MyClass(config);
+ * instance.doSomething();
+ * ```
+ */
+export class MyClass {
+```
+
+**Interfaces:**
+```typescript
+/**
+ * Describes the shape of a FooBar used throughout the engine.
+ *
+ * Implemented by providers that need to hook into the resolution pipeline.
+ */
+export interface IFooBar {
+```
+
+**Type aliases:**
+```typescript
+/**
+ * Discriminated union of all possible evaluation outcomes.
+ *
+ * Use `unwrapEvalResult()` to extract the Value from either branch.
+ */
+export type EvalResult = SyncResult | PendingResult;
+```
+
+**Functions:**
+```typescript
+/**
+ * Converts a raw numeric value into a typed Value with the given unit string.
+ *
+ * @param n - The numeric magnitude to wrap.
+ * @param unit - The unit identifier (e.g., `"GBP"`, `"km"`, `"°C"`).
+ * @returns A new Value with `type === ValueType.UOM` and the unit attached.
+ * @throws {SolveError} If the unit string is empty or malformed.
+ */
+export function uomValue(n: number, unit: string): Value {
+```
+
+**Enums:**
+```typescript
+/**
+ * Categories for typed error handling throughout the engine.
+ *
+ * Each member maps to a specific recovery strategy.
+ */
+export enum ErrorCategory {
+	/** Lexer/parser failure — skip the line, continue to next. */
+	PARSING = 'PARSING',
+	/** VM runtime failure — return error Value, keep engine alive. */
+	EXECUTION = 'EXECUTION',
+}
+```
+
+**Constants:**
+```typescript
+/**
+ * Maximum number of VM instructions before forced termination.
+ *
+ * Safety limit to prevent infinite loops in user expressions.
+ * Tuned to 50,000 — enough for ~500 lines of complex math.
+ */
+export const MAX_INSTRUCTIONS = 50_000;
+```
+
+#### Required Tags
+
+| Tag | Required for | When |
+|-----|-------------|------|
+| `@param` | Functions, methods | Every parameter that isn't self-documenting by name |
+| `@returns` | Functions, methods | Every non-void return |
+| `@throws` | Functions, methods | Any function that can throw (use `{SolveError}` with category) |
+| `@example` | Classes, interfaces | Complex usage patterns or non-obvious APIs |
+| `@see` | Any | Cross-references to related symbols |
+| `@deprecated` | Any | Symbols marked for removal with migration path |
+
+#### What NOT to document
+- **Private fields/methods** — use inline `//` comments for internal implementation notes
+- **Redundant repetition** — don't restate the type signature; explain the *contract*
+- **Obvious names** — `numToHex(n: number): string` doesn't need "Converts a number"; explain *how* it converts (IEEE 754? BigInt?)
+
+#### Enforcement
+- **Code review**: No exported symbol merges without TSDoc
+- **Linting**: ESLint `jsdoc/require-jsdoc` rule (when enabled) catches missing docs
+  - If you add the rule, add it to `.eslintrc` and fix all violations in the same PR
 
 ---
 

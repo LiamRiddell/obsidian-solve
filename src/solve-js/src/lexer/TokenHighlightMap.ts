@@ -44,6 +44,13 @@ const TOKEN_HIGHLIGHT_MAP: Record<string, string> = {
   ERROR: "cm-solve-error",
 };
 
+/**
+ * Map a token type string to its corresponding Codemirror highlight CSS class.
+ * Used by the SolveHighlightProvider to style individual tokens in the editor.
+ *
+ * @param tokenType - The token type string produced by the lexer (e.g., "NUMBER", "FUNC")
+ * @returns The CSS class name (e.g., "cm-solve-number"), or undefined if no highlight class exists.
+ */
 export function getTokenHighlightClass(tokenType: string): string | undefined {
   return TOKEN_HIGHLIGHT_MAP[tokenType];
 }
