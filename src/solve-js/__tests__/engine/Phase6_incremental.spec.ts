@@ -13,13 +13,6 @@ describe("Phase 6: Incremental Evaluation", () => {
       expect(result).toBeInstanceOf(Map);
     });
 
-    test("markDirtyFromVariable is a no-op (dirty state consolidated into DocumentModel)", () => {
-      const engine = new ExpressionEngine();
-      engine.parseDocument(":x = 5\nx + 3");
-      // Should not throw — dirty state tracked in DocumentModel now.
-      engine.markDirtyFromVariable("x");
-    });
-
     test("getDag returns dependency graph with correct methods", () => {
       const engine = new ExpressionEngine();
       engine.parseDocument(":x = 5\nx + 3");

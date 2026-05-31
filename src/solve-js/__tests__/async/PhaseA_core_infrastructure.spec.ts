@@ -2,7 +2,6 @@
  * Phase A: Async Streaming Results — Core Infrastructure Tests
  *
  * Tests for:
- * - AsyncSuspenseError construction and type guard (deprecated, kept for compat)
  * - AsyncResultCache per-plugin isolation (set, get, has, inFlight, clearAll, clearDomain, clearPlugin)
  * - ValueType.Pending + pendingValue() factory
  * - EResultType.Pending enum value
@@ -11,7 +10,6 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "@jest/globals";
-import { AsyncSuspenseError } from "@solve-js/errors/AsyncSuspenseError";
 import { AsyncResultCache } from "@solve-js/cache";
 import { ValueType, Value, numberValue, stringValue, pendingValue } from "@solve-js/vm/Value";
 import { EResultType } from "@app/constants/EResultType";
@@ -52,43 +50,7 @@ function freshVM(): VM {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// §1  AsyncSuspenseError
-// ────────────────────────────────────────────────────────────────────────
-
-describe("AsyncSuspenseError", () => {
-	test("should construct with queryKey, resolver, and metadata", () => {
-        const resolver = Promise.resolve(numberValue(42));
-        const error = new AsyncSuspenseError("test:key", resolver, { foo: "bar" });
-
-        expect(error.queryKey).toBe("test:key");
-        expect(error.resolver).toBe(resolver);
-        expect(error.metadata).toEqual({ foo: "bar" });
-        expect(error.name).toBe("AsyncSuspenseError");
-        expect(error).toBeInstanceOf(Error);	});
-
-	test("should construct without metadata", () => {
-        const resolver = Promise.resolve(numberValue(1));
-        const error = new AsyncSuspenseError("test:key2", resolver);
-
-        expect(error.queryKey).toBe("test:key2");
-        expect(error.resolver).toBe(resolver);
-        expect(error.metadata).toBeUndefined();	});
-
-	test("isAsyncSuspense should identify AsyncSuspenseError", () => {
-        const resolver = Promise.resolve(numberValue(1));
-        const suspense = new AsyncSuspenseError("k", resolver);
-        const regular = new Error("regular error");
-
-        expect(AsyncSuspenseError.isAsyncSuspense(suspense)).toBe(true);
-        expect(AsyncSuspenseError.isAsyncSuspense(regular)).toBe(false);
-        expect(AsyncSuspenseError.isAsyncSuspense(null)).toBe(false);
-        expect(AsyncSuspenseError.isAsyncSuspense(undefined)).toBe(false);
-        expect(AsyncSuspenseError.isAsyncSuspense("string")).toBe(false);
-    });
-});
-
-// ────────────────────────────────────────────────────────────────────────
-// §2  AsyncResultCache (per-plugin isolated)
+// §1  AsyncResultCache (per-plugin isolated)
 // ────────────────────────────────────────────────────────────────────────
 
 const TEST_PACKAGE = "test_0";
@@ -222,7 +184,7 @@ describe("AsyncResultCache", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// §3  ValueType.Pending + pendingValue()
+// §2  ValueType.Pending + pendingValue()
 // ────────────────────────────────────────────────────────────────────────
 
 describe("ValueType.Pending", () => {	test("should have Pending = 12 in ValueType enum", () => {
@@ -253,7 +215,7 @@ describe("ValueType.Pending", () => {	test("should have Pending = 12 in ValueTyp
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// §4  EResultType.Pending
+// §3  EResultType.Pending
 // ────────────────────────────────────────────────────────────────────────
 
 describe("EResultType.Pending", () => {	test("should exist in the enum", () => {
@@ -264,7 +226,7 @@ describe("EResultType.Pending", () => {	test("should exist in the enum", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// §5  VM CALL_PLUGIN returns EvalResult (no longer throws)
+// §4  VM CALL_PLUGIN returns EvalResult (no longer throws)
 // ────────────────────────────────────────────────────────────────────────
 
 describe("VM CALL_PLUGIN → EvalResult", () => {
@@ -352,7 +314,7 @@ describe("VM CALL_PLUGIN → EvalResult", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// §6  ExpressionEngine handles EvalResult (no try/catch needed)
+// §5  ExpressionEngine handles EvalResult (no try/catch needed)
 // ────────────────────────────────────────────────────────────────────────
 
 describe("ExpressionEngine EvalResult handling", () => {
@@ -425,7 +387,7 @@ describe("ExpressionEngine EvalResult handling", () => {
 
         delete pluginFunctionRegistry[201];
     });
-	test("should propagate non-AsyncSuspenseError exceptions from plugin functions", () => {
+	test("should propagate exceptions from plugin functions", () => {
         const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
         // Register a plugin function that throws a regular error
         pluginFunctionRegistry[202] = () => { throw new Error("regular failure"); };
@@ -465,7 +427,7 @@ describe("ExpressionEngine EvalResult handling", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// §7  Integration: Full pending flow via engine's internal methods
+// §6  Integration: Full pending flow via engine's internal methods
 // ────────────────────────────────────────────────────────────────────────
 
 describe("ExpressionEngine evaluateExpression with async plugin", () => {
@@ -527,8 +489,7 @@ describe("ExpressionEngine evaluateExpression with async plugin", () => {
         // Clear the engine — should abort in-flight work
         engine.clear();
 
-        // After clear, the onAsyncResolved callback should be null (prevents stale re-evals)
-        expect(engine.onAsyncResolved).toBeNull();
+        // After clear, batcher listeners should be cleaned up
 
         delete pluginFunctionRegistry[212];
     });

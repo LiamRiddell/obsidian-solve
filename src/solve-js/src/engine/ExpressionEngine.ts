@@ -88,30 +88,6 @@ export class ExpressionEngine {
     private batcher: AsyncResolutionBatcher;
 
     /**
-     * @deprecated Use `addAsyncListener()` for multi-listener event stream.
-     * Still set-able for backwards compatibility — sets a single listener.
-     */
-    get onAsyncResolved(): ((queryKey: string) => void) | null {
-        // Backwards compat: no way to get the old callback back.
-        return null;
-    }
-    set onAsyncResolved(cb: ((queryKey: string) => void) | null) {
-        if (this._onAsyncResolvedUnsub) {
-            this._onAsyncResolvedUnsub();
-            this._onAsyncResolvedUnsub = null;
-        }
-        if (cb) {
-            this._onAsyncResolvedUnsub = this.batcher.addListener((event) => {
-                if (event.type === "lines-updated") {
-                    for (const qk of event.affectedQueryKeys) {
-                        cb(qk);
-                    }
-                }
-            });
-        }
-    }	private _onAsyncResolvedUnsub: UnsubscribeFn | null = null;
-
-	/**
 	 * Unsubscribe from DataQueryService cache updates.
 	 * Set in constructor, called in clear()/destroy.
 	 */
@@ -1447,12 +1423,9 @@ if (hasCollectors) {
              return NaN;
          }
      }	clear(): void {
-         // Cancel pending batcher flushes and clear listeners to prevent
-         // stale re-evaluations from in-flight promises that resolve after clear.
-         if (this._onAsyncResolvedUnsub) {
-             this._onAsyncResolvedUnsub();
-             this._onAsyncResolvedUnsub = null;
-         }		// NOTE: _dqsUnsubscribe is NOT called here — the bridge must survive
+        // Cancel pending batcher flushes and clear listeners to prevent
+        // stale re-evaluations from in-flight promises that resolve after clear.
+		// NOTE: _dqsUnsubscribe is NOT called here — the bridge must survive
 		// engine clear() so DataQueryService cache updates continue to flow
 		// into the batcher after document switches / engine resets.
 		this.batcher.clearAll();
@@ -1463,14 +1436,6 @@ if (hasCollectors) {
          this.vm.reset();
          this.lastTelemetry = null;
      }
-
-    /**
-     * @deprecated Dirty-state tracking consolidated into DocumentModel.
-     * Use DocumentModel.markDirty() or DocumentModel.markDirtyByLineNumber() instead.
-     */
-    markDirtyFromVariable(_variable: string): void {
-        // No-op: DocumentModel is the canonical dirty-state source.
-    }
 
     /**
      * Evaluate independent expressions using a worker pool (Web Workers).

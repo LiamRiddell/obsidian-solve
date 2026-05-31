@@ -29,20 +29,6 @@ describe("Issue #78: Committing Inline w/ Variable Fails", () => {
     expect(result.toNumber()).toBe(25);
   });
 
-  test("markDirtyFromVariable is a no-op (dirty state consolidated into DocumentModel)", () => {
-    engine.evaluateLine(1, ":x = 5");
-    engine.evaluateLine(2, "s`x * 2`");
-
-    // markDirtyFromVariable is a no-op — dirty state is in DocumentModel now.
-    // It should not throw and the line cache entry should still exist.
-    engine.markDirtyFromVariable("x");
-
-    const cache = engine.getLineCache();
-    const entry = cache.getEntryForLine(2);
-    expect(entry).toBeDefined();
-    expect(entry!.result.toNumber()).toBe(10); // 5 * 2
-  });
-
   test("inline solve without variable commits correctly", () => {
     // Baseline: inline solve without variables should work
     const result = engine.evaluateLine(1, "s`10 + 20`");
