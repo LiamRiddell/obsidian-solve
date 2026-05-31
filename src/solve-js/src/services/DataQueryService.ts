@@ -85,7 +85,11 @@ export class DataQueryService {
     }
 
     // Start cache cleanup
-    setInterval(() => this.cleanupCache(), 30000); // Every 30 seconds
+    const cleanupTimer = setInterval(() => this.cleanupCache(), 30000); // Every 30 seconds
+    // Don't let the cleanup timer keep the process alive (important for tests & SSR)
+    if (typeof cleanupTimer === 'object' && 'unref' in cleanupTimer) {
+      cleanupTimer.unref();
+    }
   }
 
   // ------------------------------------------------------------------------
