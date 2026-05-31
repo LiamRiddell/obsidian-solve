@@ -172,9 +172,12 @@ const config = {
 	testPathIgnorePatterns: [
 		"\\\\node_modules\\\\",
 		"__mocks__",
-		"BreakageTests\\.",
-		"LexerFuzz\\.",
-		"LongDocumentRobustness\\."
+		// Heavy / stress tests — not part of the normal dev cycle
+		"heavy/",
+		"benchmarks/",
+		"LexerFuzz\\.spec\\.",
+		"LexerPluginFuzz\\.spec\\.",
+		"LongDocumentRobustness\\.spec\\."
 	],
 
 	// The regexp pattern or array of patterns that Jest uses to detect test files

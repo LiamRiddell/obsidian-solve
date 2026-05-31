@@ -131,3 +131,8 @@
 2. With the above in mind we'd need the engine to have the ability to stream results back somehow ideally in chunks possibly or whatever is most performant. Then it's up to the frontend handler e.g. obsidian, website, etc.. to deal with UX/UI + state updates.
 3. Create a mid-level mermaid diagram showing the infrastructuore of end to end parse for async plugin and simple arithmetic. So we can confirm it's right on my end.
 4. I'd really like for plugins to be able to have the ability to do this async capability in a super easy way. We'd need to think how to work this with the the workers backend that's offloading in a new tab. The engine should take a lot of the heavy lifting so we can optimise the engine as much as possible.
+5. The above has to be completed in the way where it's 100% integrated with the underlying DAG so we can do partial re-executions once streamed results come back.
+
+--
+
+We need to agree on one parser for the whole project and then drop the other implementations, e.g. is it precendence or pratt or RD. WE need to evaluate and settle on what works for us now and future providers we may have and what's super pluggable in the future for community plugins. Now we have streaming support it opens the door to less instant plugins being able to do cool stuff

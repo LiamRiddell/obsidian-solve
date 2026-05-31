@@ -1,3 +1,13 @@
+/**
+ * Vector Parselets — Package Integration Tests
+ *
+ * Full-pipeline tests for the vector package (vec2, vec3, vec4).
+ * Verifies:
+ * - ARR_NEW opcode produces ValueType.Array with correct dimensions
+ * - Nested arithmetic expressions inside vector components
+ * - Unary operators and exponentiation in components
+ */
+
 import { describe, expect, test } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { TokenTypes } from "@solve-js/lexer/Token";
