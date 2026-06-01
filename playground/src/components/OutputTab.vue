@@ -23,20 +23,20 @@
       <span class="tier-summary-label">Evaluation Tiers</span>
       <span
         class="tier-summary-pill tier-pill-1"
-        :title="tierBreakdown.t1.length > 0 ? 'Lines: ' + tierBreakdown.t1.join(', ') : ''"
+        :title="tierTooltips.t1"
       >T1: {{ tierSummary.t1 }} fresh</span>
       <span
         class="tier-summary-pill tier-pill-2"
-        :title="tierBreakdown.t2.length > 0 ? 'Lines: ' + tierBreakdown.t2.join(', ') : ''"
+        :title="tierTooltips.t2"
       >T2: {{ tierSummary.t2 }} cached</span>
       <span
         class="tier-summary-pill tier-pill-3"
-        :title="tierBreakdown.t3.length > 0 ? 'Lines: ' + tierBreakdown.t3.join(', ') : ''"
+        :title="tierTooltips.t3"
       >T3: {{ tierSummary.t3 }} pending</span>
       <span
         v-if="tierSummary.skip > 0"
         class="tier-summary-pill tier-pill-skip"
-        :title="tierBreakdown.skip.length > 0 ? 'Lines: ' + tierBreakdown.skip.map(l => `L${l.line} "${l.expr}": ${l.error}`).join('\n') : ''"
+        :title="tierTooltips.skip"
       >SKIP: {{ tierSummary.skip }} errors</span>
     </div>
 
@@ -250,11 +250,9 @@ const tierSummary = computed<TierSummary>(() => {
 });
 
 /* ── Per-line tier breakdown for tooltips ──────────────────── */
-interface TierBreakdownItem { line: number; error?: string; expr?: string; }
-
-const tierBreakdown = computed<{ t1: number[]; t2: number[]; t3: number[]; skip: TierBreakdownItem[] }>(() => {
+const tierBreakdown = computed<{ t1: number[]; t2: number[]; t3: number[]; skip: { line: number; error: string; expr: string }[] }>(() => {
   const results = engine.currentResult?.lineResults ?? [];
-  const b = { t1: [] as number[], t2: [] as number[], t3: [] as number[], skip: [] as TierBreakdownItem[] };
+  const b = { t1: [] as number[], t2: [] as number[], t3: [] as number[], skip: [] as { line: number; error: string; expr: string }[] };
   for (const r of results) {
     const ln = r.lineNumber ?? 1;
     if (r.error) { b.skip.push({ line: ln, error: r.error, expr: r.expression }); continue; }
@@ -263,6 +261,19 @@ const tierBreakdown = computed<{ t1: number[]; t2: number[]; t3: number[]; skip:
     b.t1.push(ln);
   }
   return b;
+});
+
+/** Pre-formatted tooltip strings for each tier pill, computed to avoid complex template expressions. */
+const tierTooltips = computed(() => {
+  const b = tierBreakdown.value;
+  const fmtLines = (nums: number[]) => nums.length > 0 ? 'Lines: ' + nums.join(', ') : '';
+  const fmtSkip = b.skip.length > 0 ? 'Lines:\n' + b.skip.map(s => 'L' + s.line + ' "' + s.expr + '": ' + s.error).join('\n') : '';
+  return {
+    t1: fmtLines(b.t1),
+    t2: fmtLines(b.t2),
+    t3: fmtLines(b.t3),
+    skip: fmtSkip,
+  };
 });
 
 /* ── Three-tier badge helpers ──────────────────────────────── */
