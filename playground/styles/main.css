@@ -674,6 +674,9 @@ html, body {
 .flow-stage.executed .flow-stage-header.compiler .flow-stage-step { background: var(--stage-compiler-dim); color: var(--stage-compiler); }
 .flow-stage.executed .flow-stage-header.async .flow-stage-step { background: var(--stage-async-dim); color: var(--stage-async); }
 .flow-stage.executed .flow-stage-header.vm .flow-stage-step { background: var(--stage-vm-dim); color: var(--stage-vm); }
+.flow-stage.executed .flow-stage-header.normalizer .flow-stage-step { background: var(--stage-parser-dim); color: var(--stage-parser); }
+.flow-stage.executed .flow-stage-header.readwrite .flow-stage-step { background: rgba(86, 156, 214, 0.15); color: var(--stage-cache); }
+.flow-stage.executed .flow-stage-header.dag .flow-stage-step { background: rgba(206, 145, 120, 0.15); color: var(--stage-async); }
 .flow-stage.executed .flow-stage-header.result .flow-stage-step { background: var(--stage-result-dim); color: var(--stage-result); }
 .flow-stage-header.lexer { background: var(--stage-lexer-dim); color: var(--stage-lexer); }
 .flow-stage-header.validate { background: var(--stage-validate-dim); color: var(--stage-validate); }
@@ -682,6 +685,9 @@ html, body {
 .flow-stage-header.compiler { background: var(--stage-compiler-dim); color: var(--stage-compiler); }
 .flow-stage-header.async { background: var(--stage-async-dim); color: var(--stage-async); }
 .flow-stage-header.vm { background: var(--stage-vm-dim); color: var(--stage-vm); }
+.flow-stage-header.normalizer { background: var(--stage-parser-dim); color: var(--stage-parser); }
+.flow-stage-header.readwrite { background: rgba(86, 156, 214, 0.1); color: var(--stage-cache); }
+.flow-stage-header.dag { background: rgba(206, 145, 120, 0.1); color: var(--stage-async); }
 .flow-stage-header.result { background: var(--stage-result-dim); color: var(--stage-result); }
 
 .flow-stage-icon { font-size: 12px; }
@@ -840,6 +846,110 @@ html, body {
   color: var(--text-secondary);
 }
 
+/* ── Stage Detail (expandable fusion/breakdown content) ───────── */
+.flow-stage-detail {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.normalize-fusion-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+}
+.normalize-fusion-table th {
+  padding: 4px 8px;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+}
+.normalize-fusion-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.normalize-fusion-table tbody tr:hover {
+  background: var(--bg-tertiary);
+}
+.normalize-fusion-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.normalize-fusion-rule {
+  color: var(--stage-compiler);
+  font-weight: 600;
+  font-size: 9px;
+}
+.normalize-fusion-arrow {
+  color: var(--text-muted);
+  font-weight: 700;
+  padding: 0 4px;
+}
+.normalize-fusion-source-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.normalize-fusion-result-token {
+  font-weight: 700;
+}
+.normalize-fusion-result-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  background: rgba(155, 123, 236, 0.15);
+  color: var(--stage-parser);
+  border: 1px solid rgba(155, 123, 236, 0.25);
+}
+.normalize-fusion-token {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+}
+.normalize-fusion-token.val-number { background: rgba(41, 206, 153, 0.12); color: var(--accent); border: 1px solid rgba(41, 206, 153, 0.25); }
+.normalize-fusion-token.val-ident { background: rgba(90, 200, 250, 0.12); color: var(--stage-lexer); border: 1px solid rgba(90, 200, 250, 0.2); }
+.normalize-fusion-token.val-keyword { background: rgba(155, 123, 236, 0.12); color: var(--stage-parser); border: 1px solid rgba(155, 123, 236, 0.2); }
+.normalize-fusion-token.val-operator { background: rgba(244, 135, 113, 0.12); color: var(--error); border: 1px solid rgba(244, 135, 113, 0.2); }
+.normalize-fusion-token.val-default { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-subtle); }
+
+.normalize-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.normalize-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+.normalize-stat-label {
+  color: var(--text-muted);
+}
+.normalize-stat-value {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 700;
+  color: var(--accent);
+}
+
 /* ── Pipeline Stage Connectors (vertical arrows between stages) ── */
 .flow-stage-connector {
   display: flex;
@@ -884,6 +994,33 @@ html, body {
   border-color: var(--border-color);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
+}
+
+/* ── Normalizer compact output badge ──────────────────────────── */
+.normalize-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+.normalize-compact-count {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(41, 206, 153, 0.1);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(41, 206, 153, 0.2);
+}
+.normalize-compact-fusions {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 600;
+  color: var(--stage-parser);
+  background: rgba(155, 123, 236, 0.12);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(155, 123, 236, 0.2);
+  font-size: 9px;
 }
 
 .empty { color: var(--text-muted); font-style: italic; font-size: 11px; }

@@ -1394,6 +1394,24 @@ export class ExpressionEngine {
             this.vm.pop();
         }
 
+        // Structured: VM Execute stage
+        if (hasCollectors) {
+            const resultValue = evalResult.type === 'pending'
+                ? 'pending'
+                : String(evalResult.value?.value ?? '');
+            const resultType = evalResult.type === 'pending'
+                ? 'Pending'
+                : (evalResult.value?.unit ? 'Uom' : 'Number');
+            this.addDiagnosticStage(stages, 'vm_execute', 'VM Execute', '⚡', 'vm', 11, zeroElapsed, false, {
+                type: 'vm_execute',
+                totalInstructions: program.opcodes.length,
+                stackDepth: this.vm.getStack().length,
+                resultType,
+                resultValue,
+                isPending: evalResult.type === 'pending',
+            });
+        }
+
         if (evalResult.type === 'pending') {
             void this.resolveAsync(evalResult);
 
@@ -1442,19 +1460,19 @@ export class ExpressionEngine {
 
         // Structured: DAG Registration + LineCache + Result + PipelineEnd
         if (hasCollectors) {
-            this.addDiagnosticStage(stages, 'dag_registration', 'DAG Registration', '🔗', 'dag', 11, zeroElapsed, false, {
+            this.addDiagnosticStage(stages, 'dag_registration', 'DAG Registration', '🔗', 'dag', 12, zeroElapsed, false, {
                 type: 'dag_registration',
                 readsRegistered: reads,
                 writesRegistered: writes,
                 dataSourcesRegistered: [],
             });
-            this.addDiagnosticStage(stages, 'linecache', 'Line Cache', '📦', 'cache', 12, zeroElapsed, false, {
+            this.addDiagnosticStage(stages, 'linecache', 'Line Cache', '📦', 'cache', 13, zeroElapsed, false, {
                 type: 'linecache',
                 lineNumber,
                 expression,
                 stored: true,
             });
-            this.addDiagnosticStage(stages, 'result', 'Result', '✓', 'result', 13, zeroElapsed, false, {
+            this.addDiagnosticStage(stages, 'result', 'Result', '✓', 'result', 14, zeroElapsed, false, {
                 type: 'result',
                 rawValue: String(result.value),
                 formattedValue: String(result.value),
@@ -1473,7 +1491,7 @@ export class ExpressionEngine {
                 } : undefined,
             });
 
-            this.addDiagnosticStage(stages, 'pipeline_end', 'Pipeline End', '⏹', 'pipeline', 14, zeroElapsed, false, {
+            this.addDiagnosticStage(stages, 'pipeline_end', 'Pipeline End', '⏹', 'pipeline', 15, zeroElapsed, false, {
                 type: 'pipeline_end',
                 success: true,
                 totalTokens: tokens.length,

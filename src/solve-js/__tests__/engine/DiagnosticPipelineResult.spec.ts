@@ -193,6 +193,129 @@ describe('DiagnosticPipelineResult', () => {
         });
     });
 
+    describe('normalizer stage — fusion visibility', () => {
+        it('tracks fusions with rule name, source tokens, and fused token', () => {
+            const result = engine.evaluateLineWithDebug(1, '2 to the power of 3');
+
+            const normStage = result.diagnostic!.stages.find(s => s.stage === 'normalizer');
+            expect(normStage).toBeDefined();
+            expect(normStage!.skipped).toBe(false);
+            const output = normStage!.output as any;
+            expect(output.fusions).toBeDefined();
+            expect(output.fusions.length).toBeGreaterThan(0);
+
+            // Verify fusion structure
+            const fusion = output.fusions[0];
+            expect(fusion.rule).toBeTruthy();
+            expect(fusion.sourceTokens).toBeDefined();
+            expect(fusion.sourceTokens.length).toBeGreaterThan(1);
+            expect(fusion.fusedToken).toBeDefined();
+            expect(fusion.fusedToken.type).toBeTruthy();
+            expect(fusion.fusedToken.value).toBeTruthy();
+        });
+
+        it('tracks rulesApplied counts', () => {
+            const result = engine.evaluateLineWithDebug(1, '2 power of 3');
+
+            const normStage = result.diagnostic!.stages.find(s => s.stage === 'normalizer');
+            const output = normStage!.output as any;
+            expect(output.rulesApplied).toBeDefined();
+            expect(output.rulesApplied.length).toBeGreaterThan(0);
+            for (const ra of output.rulesApplied) {
+                expect(ra.rule).toBeTruthy();
+                expect(typeof ra.count).toBe('number');
+                expect(ra.count).toBeGreaterThan(0);
+            }
+        });
+
+        it('reports input/output token counts', () => {
+            const result = engine.evaluateLineWithDebug(1, '2 to the power of 3');
+
+            const normStage = result.diagnostic!.stages.find(s => s.stage === 'normalizer');
+            const output = normStage!.output as any;
+            expect(output.inputTokenCount).toBeGreaterThan(output.outputTokenCount);
+        });
+
+        it('includes normalized tokens in output', () => {
+            const result = engine.evaluateLineWithDebug(1, '2 + 2');
+
+            const normStage = result.diagnostic!.stages.find(s => s.stage === 'normalizer');
+            const output = normStage!.output as any;
+            expect(output.tokens).toBeDefined();
+            expect(output.tokens.length).toBe(output.outputTokenCount);
+        });
+    });
+
+    describe('vm_execute stage', () => {
+        it('is present after async_preflight and before dag_registration', () => {
+            const result = engine.evaluateLineWithDebug(1, '2 + 2');
+
+            const stageIds = result.diagnostic!.stages.map(s => s.stage);
+            expect(stageIds).toContain('vm_execute');
+
+            const vmIdx = stageIds.indexOf('vm_execute');
+            const asyncIdx = stageIds.indexOf('async_preflight');
+            const dagIdx = stageIds.indexOf('dag_registration');
+
+            expect(vmIdx).toBeGreaterThan(asyncIdx);
+            expect(vmIdx).toBeLessThan(dagIdx);
+        });
+
+        it('has step number 11', () => {
+            const result = engine.evaluateLineWithDebug(1, '1 + 1');
+
+            const vmStage = result.diagnostic!.stages.find(s => s.stage === 'vm_execute');
+            expect(vmStage).toBeDefined();
+            expect(vmStage!.stepNumber).toBe(11);
+        });
+
+        it('reports result type, value, and instruction count', () => {
+            const result = engine.evaluateLineWithDebug(1, '3 * 5');
+
+            const vmStage = result.diagnostic!.stages.find(s => s.stage === 'vm_execute');
+            expect(vmStage).toBeDefined();
+            const output = vmStage!.output as any;
+            expect(output.totalInstructions).toBeGreaterThan(0);
+            expect(output.resultType).toBeTruthy();
+            expect(output.resultValue).toBeTruthy();
+            expect(typeof output.isPending).toBe('boolean');
+        });
+
+        it('shows isPending=false for sync results', () => {
+            const result = engine.evaluateLineWithDebug(1, '42');
+
+            const vmStage = result.diagnostic!.stages.find(s => s.stage === 'vm_execute');
+            const output = vmStage!.output as any;
+            expect(output.isPending).toBe(false);
+        });
+    });
+
+    describe('stage renumbering after vm_execute insertion', () => {
+        it('dag_registration is step 12', () => {
+            const result = engine.evaluateLineWithDebug(1, '1 + 1');
+            const s = result.diagnostic!.stages.find(st => st.stage === 'dag_registration');
+            expect(s!.stepNumber).toBe(12);
+        });
+
+        it('linecache is step 13', () => {
+            const result = engine.evaluateLineWithDebug(1, '1 + 1');
+            const s = result.diagnostic!.stages.find(st => st.stage === 'linecache');
+            expect(s!.stepNumber).toBe(13);
+        });
+
+        it('result is step 14', () => {
+            const result = engine.evaluateLineWithDebug(1, '1 + 1');
+            const s = result.diagnostic!.stages.find(st => st.stage === 'result');
+            expect(s!.stepNumber).toBe(14);
+        });
+
+        it('pipeline_end is step 15', () => {
+            const result = engine.evaluateLineWithDebug(1, '1 + 1');
+            const s = result.diagnostic!.stages.find(st => st.stage === 'pipeline_end');
+            expect(s!.stepNumber).toBe(15);
+        });
+    });
+
     describe('error handling', () => {
         it('has null error on success', () => {
             const result = engine.evaluateLineWithDebug(1, '1 + 1');

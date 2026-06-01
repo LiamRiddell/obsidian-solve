@@ -21,6 +21,9 @@
           <span class="empty">—</span>
         </slot>
       </div>
+      <div v-if="$slots.detail" class="flow-stage-detail">
+        <slot name="detail" />
+      </div>
     </div>
   </div>
 </template>

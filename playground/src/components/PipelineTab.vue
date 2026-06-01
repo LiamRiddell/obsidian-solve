@@ -43,6 +43,9 @@
             />
             <span v-else class="empty">—</span>
           </template>
+          <template v-if="stage.stage === 'normalizer' && hasNormalizerDetail(stage)" #detail>
+            <component :is="() => normalizerDetailRenderer(stage)" />
+          </template>
         </pipeline-stage>
         <div v-if="!isResultStage(stage)" class="flow-stage-connector">
           <span class="connector-arrow">▼</span>
@@ -264,7 +267,83 @@ function getStageOutputLabel(stage: PipelineStageResult): string {
   return labels[stage.stage] || '';
 }
 
+/* ── Shared helpers ────────────────────────────────────────── */
+
+/** Map token type to CSS class for token chips in normalizer detail */
+function tokClass(t: { type?: string }): string {
+  const type = String(t.type || '').toLowerCase();
+  if (['number','hex','bigint'].includes(type)) return 'val-number';
+  if (type === 'ident') return 'val-ident';
+  if (['star','plus','minus','slash','caret','equals'].includes(type)) return 'val-operator';
+  if (type === 'keyword' || type.includes('_by')) return 'val-keyword';
+  return 'val-default';
+}
+
 /* ── Data-driven stage renderers ─────────────────────────────── */
+
+/** Whether the normalizer stage has fusion detail to show in the expandable slot */
+function hasNormalizerDetail(stage: PipelineStageResult): boolean {
+  if (stage.stage !== 'normalizer') return false;
+  const o = stage.output as any;
+  return (o.fusions?.length ?? 0) > 0;
+}
+
+/** Renders the full fusion table for the normalizer's #detail slot */
+function normalizerDetailRenderer(stage: PipelineStageResult) {
+  const o = stage.output as any;
+  const fusions: any[] = o.fusions ?? [];
+  const rulesApplied: any[] = o.rulesApplied ?? [];
+
+  const children: any[] = [];
+
+  // Stats row
+  children.push(h('div', { class: 'normalize-stats' }, [
+    h('span', { class: 'normalize-stat' }, [
+      h('span', { class: 'normalize-stat-label' }, 'Tokens:'),
+      h('span', { class: 'normalize-stat-value' }, `${o.inputTokenCount} → ${o.outputTokenCount}`),
+    ]),
+    h('span', { class: 'normalize-stat' }, [
+      h('span', { class: 'normalize-stat-label' }, 'Fusions:'),
+      h('span', { class: 'normalize-stat-value' }, String(fusions.length)),
+    ]),
+    ...rulesApplied.map((r: any) => h('span', { class: 'normalize-stat' }, [
+      h('span', { class: 'normalize-stat-label' }, r.rule + ':'),
+      h('span', { class: 'normalize-stat-value' }, String(r.count)),
+    ])),
+  ]));
+
+  // Fusion table
+  if (fusions.length > 0) {
+    children.push(h('table', { class: 'normalize-fusion-table' }, [
+      h('thead', {}, h('tr', {}, [
+        h('th', {}, 'Rule'),
+        h('th', {}, 'Source Tokens'),
+        h('th', {}, ''),
+        h('th', {}, 'Fused Token'),
+      ])),
+      h('tbody', {}, fusions.map((f: any) =>
+        h('tr', {}, [
+          h('td', {}, h('span', { class: 'normalize-fusion-rule' }, f.rule)),
+          h('td', {}, h('span', { class: 'normalize-fusion-source-tokens' },
+            (f.sourceTokens ?? []).map((st: any) =>
+              h('span', { class: `normalize-fusion-token ${tokClass(st)}` }, st.value)
+            )
+          )),
+          h('td', {}, h('span', { class: 'normalize-fusion-arrow' }, '→')),
+          h('td', {}, [
+            h('span', { class: 'normalize-fusion-result-type' }, f.fusedToken.type),
+            h('span', { class: 'normalize-fusion-result-token', style: { marginLeft: '6px', color: '#dcdcaa' } }, f.fusedToken.value),
+          ]),
+        ])
+      )),
+    ]));
+  } else if (o.outputTokenCount > 0) {
+    children.push(h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'No tokens were fused in this pass'));
+  }
+
+  return h('div', {}, children);
+}
+
 const stageRenderers: Record<string, (stage: PipelineStageResult) => ReturnType<typeof h>> = {
   pipeline_start(stage) { const o = stage.output as any; return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, o.inputType ?? '—'); },
   safety_length(stage) {
@@ -283,13 +362,21 @@ const stageRenderers: Record<string, (stage: PipelineStageResult) => ReturnType<
   },
   normalizer(stage) {
     const o = stage.output as any;
-    if (o.fusions?.length) {
-      return h('span', {}, o.fusions.slice(0, 3).map((f: any) =>
-        h('span', { class: 'token token-keyword', style: { fontSize: '9px', cursor: 'default' } }, f.fusedToken.type)
-      ));
-    }
+    const fusions: any[] = o.fusions ?? [];
+    const rulesApplied: any[] = o.rulesApplied ?? [];
+
     if (stage.skipped) return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'No rules active');
-    return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, `${o.outputTokenCount} tokens`);
+
+    // Compact output: token count change + rule summary
+    const children: any[] = [];
+    children.push(h('span', { class: 'normalize-compact' }, [
+      h('span', { class: 'normalize-compact-count' }, `${o.inputTokenCount}→${o.outputTokenCount}`),
+      fusions.length > 0
+        ? h('span', { class: 'normalize-compact-fusions' }, `${fusions.length} fusion${fusions.length !== 1 ? 's' : ''}`)
+        : h('span', { style: { color: '#6b6b75', fontSize: '9px' } }, 'no fusions'),
+    ]));
+
+    return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, children);
   },
   safety_complexity(stage) {
     const o = stage.output as any;
