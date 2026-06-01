@@ -157,6 +157,12 @@ export interface MarkdownNode {
 	result?: string;
 }
 
+// ── LRU line access tracking for page heatmap ──────────────────────────
+/** Records the last evaluation sequence number for each line. Persists across evaluations for LRU tracking. */
+const lineAccessSeq = new Map<number, number>();
+/** Incrementing counter for access sequence numbers. */
+let nextAccessSeq = 0;
+
 // ── DAG Snapshot ───────────────────────────────────────────────────────
 export interface DagSnapshot {
 	/** Variable → line numbers that read it */
@@ -555,6 +561,10 @@ function extractBatcherMetrics(engine: ExpressionEngine): BatcherMetrics {
  * Pages are 128-line chunks. Temperature is inferred from the
  * line cache state — lines with cached results are "hot", those
  * with only bytecode are "warm", and those with nothing are "cold".
+ *
+ * accessSeq is calculated from the module-level `lineAccessSeq` map,
+ * which records real LRU access order as lines are evaluated.
+ * Higher accessSeq = more recently accessed.
  */
 function extractPageHeatmap(
 	engine: ExpressionEngine | null,
@@ -566,19 +576,31 @@ function extractPageHeatmap(
 	const totalPages = Math.ceil(lineCount / linesPerPage);
 
 	// Build a set of line numbers that have cached bytecode or results
+	// using actual LineCache entry keys rather than a placeholder range.
 	const cachedLines = new Set<number>();
 	if (engine) {
 		try {
 			const lc = engine.getLineCache();
-			// Try to extract cached line numbers from LineCache
-			// (LineCache doesn't expose a public getAll, so we approximate)
-			const lineCount_ = Math.min(lineCount, 1000);
-			for (let ln = 1; ln <= lineCount_; ln++) {
-				cachedLines.add(ln);
+			for (const key of lc.keys()) {
+				// Keys are "{line}:{expression}" or "{line}" — extract line number
+				const colonIdx = key.indexOf(":");
+				if (colonIdx > 0) {
+					const ln = parseInt(key.substring(0, colonIdx), 10);
+					if (!isNaN(ln)) cachedLines.add(ln);
+				} else {
+					const ln = parseInt(key, 10);
+					if (!isNaN(ln)) cachedLines.add(ln);
+				}
 			}
 		} catch {
 			/* fall through */
 		}
+	}
+
+	// Compute global max accessSeq for normalization
+	let maxSeq = 0;
+	for (const seq of lineAccessSeq.values()) {
+		if (seq > maxSeq) maxSeq = seq;
 	}
 
 	for (let p = 0; p < totalPages; p++) {
@@ -592,12 +614,22 @@ function extractPageHeatmap(
 		const temperature: "hot" | "warm" | "cold" =
 			ratio > 0.5 ? "hot" : ratio > 0.1 ? "warm" : "cold";
 
+		// Compute LRU-based accessSeq: the most recent access sequence number
+		// among lines in this page. Higher = more recently accessed.
+		let pageMaxSeq = 0;
+		for (let ln = startLine; ln <= endLine; ln++) {
+			const seq = lineAccessSeq.get(ln);
+			if (seq !== undefined && seq > pageMaxSeq) pageMaxSeq = seq;
+		}
+		// Normalize to 0..100 scale for consistent UI rendering
+		const accessSeq = maxSeq > 0 ? Math.round((pageMaxSeq / maxSeq) * 100) : 0;
+
 		pages.push({
 			pageNum: p,
 			startLine,
 			endLine,
 			temperature,
-			accessSeq: Math.max(0, totalPages - p),
+			accessSeq,
 			hasBytecode: cachedCount > 0,
 			hasResults: cachedCount > pageLines * 0.3,
 		});
@@ -703,6 +735,7 @@ export function runEngineWithStreaming(
 								const lineText = (
 									allLines[ln - 1] || ""
 								).trim();
+								lineAccessSeq.set(ln, ++nextAccessSeq);
 								const reResult = engine!.evaluateLineWithDebug(
 									ln,
 									lineText
@@ -762,6 +795,9 @@ export function runEngineWithStreaming(
 					const parselet =
 						(result.debug?.parselets?.[0] as any)?.parseletType ??
 						"Expression";
+
+					// Record LRU access sequence for page heatmap
+					lineAccessSeq.set(lineNum, ++nextAccessSeq);
 
 					// Collect structured pipeline stages from the last line
 					if (result.diagnostic?.stages) {
@@ -1117,6 +1153,9 @@ export function runEngine(expression: string): DebugResult {
 			const parselet =
 				(result.debug?.parselets?.[0] as any)?.parseletType ??
 				"Expression";
+
+			// Record LRU access sequence for page heatmap
+			lineAccessSeq.set(lineNum, ++nextAccessSeq);
 
 			// Collect structured pipeline stages from the last line (most complete diagnostic data)
 			if (result.diagnostic?.stages) {
