@@ -17,6 +17,16 @@
       </div>
       <span class="token-count">{{ countLabel }}</span>
     </div>
+
+    <!-- Three-tier summary bar -->
+    <div v-if="engine.currentResult && tierSummary.total > 0" class="tier-summary-bar">
+      <span class="tier-summary-label">Evaluation Tiers</span>
+      <span class="tier-summary-pill tier-pill-1">T1: {{ tierSummary.t1 }} fresh</span>
+      <span class="tier-summary-pill tier-pill-2">T2: {{ tierSummary.t2 }} cached</span>
+      <span class="tier-summary-pill tier-pill-3">T3: {{ tierSummary.t3 }} pending</span>
+      <span v-if="tierSummary.skip > 0" class="tier-summary-pill tier-pill-skip">SKIP: {{ tierSummary.skip }} errors</span>
+    </div>
+
     <div class="panel-scroll">
       <span v-if="!engine.currentResult" class="empty">No tokens</span>
       <span v-else-if="visibleCount === 0 && filterActive" class="empty">No tokens match &ldquo;{{ tokens.filterQuery }}&rdquo;</span>
@@ -33,7 +43,7 @@
             <div class="token-line-header-left">
               <span class="token-line-header-label">Line {{ entry.line }}</span>
               <!-- Three-tier badge -->
-              <span v-if="entry.result" class="tier-badge" :class="getTierClass(entry.result)">{{ getTierLabel(entry.result) }}</span>
+              <span v-if="entry.result" class="tier-badge" :class="getTierClass(entry.result)" :title="getTierReason(entry.result)">{{ getTierLabel(entry.result) }}</span>
               <span v-if="entry.result" class="token-line-microstats">
                 <span
                   class="microstat-badge"
@@ -93,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useEngineStore } from '../stores/engine.js';
 import { useTokensStore } from '../stores/tokens.js';
 import { usePipelineStore } from '../stores/pipeline.js';
@@ -205,6 +215,27 @@ watch(
   { deep: false, immediate: true }
 );
 
+/* ── Tier summary ──────────────────────────────────────────── */
+interface TierSummary {
+  t1: number;
+  t2: number;
+  t3: number;
+  skip: number;
+  total: number;
+}
+
+const tierSummary = computed<TierSummary>(() => {
+  const results = engine.currentResult?.lineResults ?? [];
+  const s = { t1: 0, t2: 0, t3: 0, skip: 0, total: results.length };
+  for (const r of results) {
+    if (r.error) { s.skip++; continue; }
+    if (r.wasCached) { s.t2++; continue; }
+    if (r.type === 'Pending') { s.t3++; continue; }
+    s.t1++;
+  }
+  return s;
+});
+
 /* ── Three-tier badge helpers ──────────────────────────────── */
 function getTierClass(result: LineResult): string {
   if (result.error) return 'tier-skip';
@@ -218,6 +249,13 @@ function getTierLabel(result: LineResult): string {
   if (result.wasCached) return 'T2';
   if (result.type === 'Pending') return 'T3';
   return 'T1';
+}
+
+function getTierReason(result: LineResult): string {
+  if (result.error) return `Error: ${result.error}`;
+  if (result.wasCached) return 'Tier 2 (Cache hit) — bytecode reused from earlier evaluation';
+  if (result.type === 'Pending') return 'Tier 3 (Async pending) — awaiting external data resolution';
+  return 'Tier 1 (Fresh) — full eval: lexer → parser → compiler → VM';
 }
 
 /* ── Copy result ──────────────────────────────────────────────── */

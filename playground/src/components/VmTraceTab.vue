@@ -7,16 +7,24 @@
 
     <!-- Checkpoint markers -->
     <div v-if="checkpoints.length > 0" class="vm-checkpoints-bar">
-      <span class="vm-checkpoints-title">Checkpoints ({{ checkpoints.length }})</span>
+      <div class="vm-checkpoints-bar-top">
+        <span class="vm-checkpoints-title">Checkpoints ({{ checkpoints.length }})</span>
+        <span class="vm-checkpoint-nearest" :title="'Nearest checkpoint to execution point'">
+          ▼ Nearest: L{{ nearestCheckpoint?.lineNumber ?? '—' }}
+          <span class="vm-checkpoint-nearest-vars">({{ nearestCheckpoint?.variableCount ?? 0 }} vars)</span>
+        </span>
+      </div>
       <div class="vm-checkpoints-chips">
         <span
           v-for="cp in checkpoints"
           :key="cp.lineNumber"
           class="vm-checkpoint-chip"
+          :class="{ 'vm-checkpoint-active': cp.lineNumber === nearestCheckpoint?.lineNumber }"
           :title="cp.variables.length + ' variable(s): ' + cp.variables.join(', ')"
         >
           L{{ cp.lineNumber }}
           <span class="vm-checkpoint-var-count">({{ cp.variableCount }} vars)</span>
+          <span v-if="cp.lineNumber === nearestCheckpoint?.lineNumber" class="vm-checkpoint-arrow">◀ active</span>
         </span>
       </div>
       <div class="vm-checkpoints-note">
@@ -67,4 +75,11 @@ import type { VmTraceStep, CheckpointSnapshot } from '../engine.js';
 const engine = useEngineStore();
 const steps = computed<VmTraceStep[]>(() => engine.currentResult?.vmTrace ?? []);
 const checkpoints = computed<CheckpointSnapshot[]>(() => engine.currentResult?.checkpoints ?? []);
+
+/* Nearest checkpoint to the last executed VM instruction (highest lineNumber). */
+const nearestCheckpoint = computed<CheckpointSnapshot | null>(() => {
+  const cps = checkpoints.value;
+  if (cps.length === 0) return null;
+  return cps.reduce((a, b) => (a.lineNumber > b.lineNumber ? a : b));
+});
 </script>

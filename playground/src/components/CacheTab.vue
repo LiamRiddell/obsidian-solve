@@ -8,6 +8,9 @@
           <div class="cache-section-header">
             <span>🗂 Page Heatmap</span>
             <span class="cache-section-count">{{ heatmapEntries.length }} pages · 128 lines/page</span>
+            <span v-if="preloadDirection" class="preload-direction-badge" :class="'preload-' + preloadDirection" :title="preloadDirectionTitle">
+              {{ preloadDirection === 'forward' ? '▶' : preloadDirection === 'backward' ? '◀' : '↕' }} {{ preloadDirection }}
+            </span>
           </div>
           <div class="page-heatmap-grid">
             <div
@@ -100,4 +103,29 @@ const resolvedLineCount = computed(() =>
 );
 
 const heatmapEntries = computed<PageHeatmapEntry[]>(() => engine.currentResult?.pageHeatmap ?? []);
+
+/* Preload direction: compute by examining access sequence number trend across pages.
+ * If pages with higher accessSeq are at higher page indices → forward.
+ * If pages with higher accessSeq are at lower page indices → backward.
+ * Otherwise → stable. */
+const preloadDirection = computed<string | null>(() => {
+  const entries = heatmapEntries.value;
+  if (entries.length < 2) return null;
+  const trend = entries.reduce((acc, entry, i) => {
+    if (i === 0) return 0;
+    const diff = entry.accessSeq - entries[i - 1].accessSeq;
+    return acc + (diff > 0 ? 1 : diff < 0 ? -1 : 0);
+  }, 0);
+  if (trend > 0) return 'forward';
+  if (trend < 0) return 'backward';
+  return 'stable';
+});
+
+const preloadDirectionTitle = computed<string>(() => {
+  const dir = preloadDirection.value;
+  if (dir === 'forward') return 'Cache preloading forward — newer pages have higher access recency';
+  if (dir === 'backward') return 'Cache preloading backward — older pages have higher access recency';
+  if (dir === 'stable') return 'Cache access pattern is stable — no clear preload direction';
+  return '';
+});
 </script>
