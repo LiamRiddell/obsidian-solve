@@ -64,8 +64,8 @@
           </template>
         </pipeline-stage>
 
-        <!-- Connector arrow between stages (hidden after the result stage) -->
-        <div v-if="!isResultStage(stage)" class="flow-stage-connector">
+        <!-- Connector arrow between stages (hidden after the last stage) -->
+        <div v-if="i < displayStages.length - 1" class="flow-stage-connector">
           <span class="connector-arrow">▼</span>
         </div>
       </template>
