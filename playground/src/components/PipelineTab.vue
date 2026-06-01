@@ -487,6 +487,7 @@ function getStageTime(stage: PipelineStageResult): string {
 function getStageInput(stage: PipelineStageResult): string {
   const inputs: Record<string, string> = {
     pipeline_start: "Initialize",
+    line_classification: "Expression → Classification",
     safety_length: "Expression → Limit Check",
     lexer: "Expression → Tokens",
     normalizer: "Tokens → Normalized Tokens",
@@ -512,6 +513,7 @@ function getStageInput(stage: PipelineStageResult): string {
 function getStageOutputLabel(stage: PipelineStageResult): string {
   const labels: Record<string, string> = {
     pipeline_start: "Status",
+    line_classification: "Type",
     safety_length: "Status",
     lexer: "Tokens",
     normalizer: "Fusions",
@@ -721,7 +723,86 @@ const stageRenderers: Record<
     );
   },
 
-  // ── Stage 2: Safety — Expression Length ───────────────────────────────
+  // ── Stage 2: Line Classification ──────────────────────────────────────
+  line_classification(stage) {
+    const o = stage.output as any;
+    const classification = o.classification ?? "—";
+    const skip = o.skip;
+    const hasInlineSolve = o.hasInlineSolve;
+
+    // Compact classification chip
+    const chips: any[] = [];
+
+    // Classification type badge (color by common types)
+    const typeColors: Record<string, string> = {
+      expression: "#4ec9b0",
+      prose: "#6b6b75",
+      heading: "#9b7bec",
+      list: "#5ac8fa",
+      blockquote: "#6b6b75",
+      code_fence: "#ffd866",
+      math_fence: "#ffd866",
+      table: "#5ac8fa",
+      hr: "#6b6b75",
+      wikilink: "#9b7bec",
+      comment: "#6b6b75",
+      empty: "#6b6b75",
+    };
+    const chipColor = typeColors[classification] ?? "#6b6b75";
+
+    chips.push(
+      h("span", {
+        style: {
+          fontSize: "10px",
+          padding: "1px 6px",
+          borderRadius: "3px",
+          background: chipColor + "22",
+          color: chipColor,
+          border: "1px solid " + chipColor + "44",
+          fontWeight: "500",
+        },
+        title: `Classified as: ${classification}`,
+      }, classification),
+    );
+
+    // Skip badge if the line was classified as non-evaluable
+    if (skip) {
+      chips.push(
+        h("span", {
+          style: {
+            fontSize: "9px",
+            padding: "1px 6px",
+            borderRadius: "3px",
+            background: "rgba(244,135,113,0.15)",
+            color: "#f48771",
+            border: "1px solid rgba(244,135,113,0.3)",
+          },
+          title: "Line is not an expression — skipped",
+        }, "Skipped"),
+      );
+    }
+
+    // Inline solve badge
+    if (hasInlineSolve) {
+      chips.push(
+        h("span", {
+          style: {
+            fontSize: "9px",
+            padding: "1px 6px",
+            borderRadius: "3px",
+            background: "rgba(205,132,252,0.15)",
+            color: "#c084fc",
+            border: "1px solid rgba(205,132,252,0.3)",
+          },
+          title: "Contains s`` inline solve markers",
+        }, "Inline Solve"),
+      );
+    }
+
+    return h("div", { style: { display: "flex", alignItems: "center", gap: "4px" } }, chips);
+  },
+
+  // ── Stage 3: Safety — Expression Length ───────────────────────────────
   safety_length(stage) {
     const o = stage.output as any;
     const color = o.passed ? "#4ec9b0" : "#f48771";
