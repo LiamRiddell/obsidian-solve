@@ -1,5 +1,7 @@
 export { Lexer, sharedLexer, LexerState } from "./lexer";
-export type { Token, LexerPlugin, PhraseEntry, ScanLineResult } from "./lexer";
+export type { Token, LexerPlugin, ScanLineResult } from "./lexer";
+export { TokenNormalizer, createBuiltinNormalizerRules, createFusedToken } from "./normalizer";
+export type { NormalizerRule, NormalizerMatch, TokenFusion } from "./normalizer";
 export { TokenTypes, type TokenType } from "./lexer";
 export { TokenRegistry, sharedTokenRegistry } from "./lexer/registry/TokenRegistry";
 

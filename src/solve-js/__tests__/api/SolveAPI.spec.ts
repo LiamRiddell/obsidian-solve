@@ -137,21 +137,17 @@ it("supports registerPackage with prefix parselets", () => {
     expect(tokens[0].value).toBe("tile");
   });
 
-  it("supports registerPackage with lexerPlugin phrases", () => {
+  it("supports registerPackage with normalizer rules", () => {
     const pkg: ISolvePackage = {
-      name: "test-lexer-phrase-package",
-      lexerPlugin: {
-        phrases: [{ phrase: "price of", type: "PRICE_OF" }],
-      },
+      name: "test-normalizer-package",
+      normalizerRules: [{
+        name: "test-rule",
+        priority: 100,
+        match: (_tokens: Token[], _pos: number) => null,
+      }],
     };
 
     expect(() => solve.registerPackage(pkg)).not.toThrow();
-
-    sharedLexer.reset("price of iron");
-    const tokens = Array.from(sharedLexer);
-    const priceOfToken = tokens.find(t => t.type === "PRICE_OF");
-    expect(priceOfToken).toBeDefined();
-    expect(priceOfToken!.value).toBe("price of");
   });
 
   it("combines lexerPlugin with prefix parselets in one package", () => {

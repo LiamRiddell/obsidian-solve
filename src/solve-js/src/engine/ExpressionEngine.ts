@@ -51,6 +51,8 @@ import {
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
 import { abortLogger } from "@app/utilities/AbortControllerLogger";
+import { TokenNormalizer, createBuiltinNormalizerRules } from "@solve-js/normalizer";
+import type { NormalizerRule } from "@solve-js/normalizer";
 
 
 
@@ -114,6 +116,8 @@ export class ExpressionEngine {
      * DAG walk + re-evaluation pass. Replaces the old single-callback pattern.
      */
     private batcher: AsyncResolutionBatcher;
+    /** Post-lexer token normalizer for phrase fusion, implicit multiply, etc. */
+    private normalizer: TokenNormalizer;
 
     /**
 	 * Unsubscribe from DataQueryService cache updates.
@@ -177,6 +181,12 @@ export class ExpressionEngine {
         for (const pkg of pkgList) {
             this.registerPackage(pkg);
         }
+        this.normalizer = new TokenNormalizer();
+        // Register built-in normalizer rules (phrase fusion, implicit multiply)
+        for (const rule of createBuiltinNormalizerRules()) {
+            this.normalizer.register(rule);
+        }
+
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
         this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
 		this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
@@ -266,6 +276,11 @@ export class ExpressionEngine {
         }
         if (pkg.asyncResolver) {
             this.resolverRegistry.register(pkg.asyncResolver);
+        }
+        if (pkg.normalizerRules) {
+            for (const rule of pkg.normalizerRules) {
+                this.normalizer.register(rule);
+            }
         }
     }
 
@@ -704,8 +719,12 @@ export class ExpressionEngine {
             return v;
         }
 
+        // ══ NORMALIZER ══
+        // Normalize tokens for phrase fusion, implicit multiply, domain token merging.
+        const normalizedTokens = this.normalizer.normalize(tokens);
+
         // ══ SAFETY CHECK 2: Complexity scoring ══
-        const complexityCheck = checkExpressionComplexity(tokens, this.config.validation);
+        const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
         if (!complexityCheck.passed) {
             throw ErrorFactory.execution(
                 'EVALUATION_ERROR',
@@ -714,7 +733,7 @@ export class ExpressionEngine {
             );
         }
 
-        const { reads, writes } = extractReadsAndWrites(tokens);
+        const { reads, writes } = extractReadsAndWrites(normalizedTokens);
 
         let program: BytecodeProgram;
         const cachedProgram = this.bytecodeCache.get(expression);
@@ -725,7 +744,7 @@ export class ExpressionEngine {
             const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
             builder.reset();
             try {
-                this.parseExpression(builder, tokens, hasParens);
+                this.parseExpression(builder, normalizedTokens, hasParens);
             } catch (e) {
                 const errorMessage = e instanceof Error ? e.message : String(e);
                 throw ErrorFactory.execution(
@@ -766,7 +785,7 @@ export class ExpressionEngine {
 
         const preflightSignal = preflightController.signal;
         const asyncCheck = this.resolverRegistry.preflightAll(
-            tokens, program, '_engine', preflightSignal
+            normalizedTokens, program, '_engine', preflightSignal
         );
         if (asyncCheck) {
             // Fire-and-forget — resolves asynchronously, re-evaluates on completion
@@ -927,8 +946,49 @@ export class ExpressionEngine {
             return { value: v, tokens, program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, debug: undefined };
         }
 
+        // ══ NORMALIZER STAGE ══
+        // Post-lexer token normalization: phrase fusion, implicit multiply, etc.
+        // Normalized tokens replace raw tokens for parsing and safety checks.
+        let normalizedTokens: Token[] = tokens;
+        if (this.normalizer.ruleCount > 0) {
+            if (hasCollectors) {
+                pipeline.fireNormalizerStart({
+                    type: DiagnosticEventType.NormalizerStart,
+                    elapsedNs: 0,
+                    expression,
+                    inputTokenCount: tokens.length,
+                });
+            }
+
+            let fusionCount = 0;
+            normalizedTokens = this.normalizer.normalize(tokens, (fusion) => {
+                if (hasCollectors) {
+                    fusionCount++;
+                    pipeline.fireTokenFused({
+                        type: DiagnosticEventType.TokenFused,
+                        elapsedNs: 0,
+                        expression,
+                        ruleName: fusion.rule,
+                        sourceTokenCount: fusion.sourceTokens.length,
+                        fusedTokenType: fusion.fusedToken.type,
+                        fusedTokenValue: fusion.fusedToken.value,
+                    });
+                }
+            });
+
+            if (hasCollectors) {
+                pipeline.fireNormalizerEnd({
+                    type: DiagnosticEventType.NormalizerEnd,
+                    elapsedNs: 0,
+                    expression,
+                    outputTokenCount: normalizedTokens.length,
+                    fusionsCount: fusionCount,
+                });
+            }
+        }
+
         // === SAFETY CHECK 2: Complexity scoring ===
-        const complexityCheck = checkExpressionComplexity(tokens, this.config.validation);
+        const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
         if (!complexityCheck.passed) {
             if (hasCollectors) {
                 pipeline.firePipelineEnd({
@@ -949,7 +1009,7 @@ export class ExpressionEngine {
             };
         }
 
-        const { reads, writes } = extractReadsAndWrites(tokens);
+        const { reads, writes } = extractReadsAndWrites(normalizedTokens);
 
         let program: BytecodeProgram;
 
@@ -999,7 +1059,7 @@ export class ExpressionEngine {
             builder.reset();
             try {
                 const parseResult = AllocationTracker.track('parser', () => {
-                    this.parseExpression(builder, tokens, hasParens);
+                    this.parseExpression(builder, normalizedTokens, hasParens);
                     // Use build() which allocates TypedArrays directly from builder arrays.
                     // This is a single copy (builder → TypedArray) instead of the old
                     // double copy (builder → pool buffer → TypedArray for cache).
@@ -1023,7 +1083,7 @@ export class ExpressionEngine {
 
                 return {
                     value: numberValue(0),
-                    tokens,
+                    tokens: normalizedTokens,
                     program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
                     error: errorMessage,
                     debug: undefined
@@ -1066,7 +1126,7 @@ export class ExpressionEngine {
 
         const preflightSignal = preflightController.signal;
         const asyncCheck = this.resolverRegistry.preflightAll(
-            tokens, program, '_engine', preflightSignal
+            normalizedTokens, program, '_engine', preflightSignal
         );
         if (asyncCheck) {
             void this.resolveAsync({
@@ -1099,7 +1159,7 @@ export class ExpressionEngine {
 
             return {
                 value: pending,
-                tokens,
+                tokens: normalizedTokens,
                 program,
                 debug: undefined,
             };
@@ -1170,7 +1230,7 @@ export class ExpressionEngine {
 
             return {
                 value: pending,
-                tokens,
+                tokens: normalizedTokens,
                 program,
                 debug: undefined,
             };
@@ -1217,7 +1277,7 @@ if (hasCollectors) {
             const reports = pipeline.collectReports();
             return {
                 value: result!,
-                tokens,
+                tokens: normalizedTokens,
                 program,
                 debug: reports[0]?.toJSON() || undefined,
             };
@@ -1225,7 +1285,7 @@ if (hasCollectors) {
 
         return {
             value: result!,
-            tokens,
+            tokens: normalizedTokens,
             program,
         };
     }
@@ -1403,13 +1463,16 @@ if (hasCollectors) {
 			};
 		}
 
+		// Normalize tokens for phrase fusion, implicit multiply, domain token merging.
+		const normalizedTokens = this.normalizer.normalize(tokens);
+
 		// Complexity check — delegate to ExpressionEngineSafety.ts
-		const complexityCheck = checkExpressionComplexity(tokens, this.config.validation);
+		const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
 		if (!complexityCheck.passed) {
 			throw ErrorFactory.validation("EXPRESSION_TOO_COMPLEX", complexityCheck.errorMessage!);
 		}
 
-		const { reads, writes } = extractReadsAndWrites(tokens);
+		const { reads, writes } = extractReadsAndWrites(normalizedTokens);
 
 		// Check bytecode cache
 		const cachedProgram = this.bytecodeCache.get(expression);
@@ -1421,7 +1484,7 @@ if (hasCollectors) {
 		const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
 		builder.reset();
 		try {
-			this.parseExpression(builder, tokens, hasParens);
+			this.parseExpression(builder, normalizedTokens, hasParens);
 		} catch (e) {
 			const errorMessage = e instanceof Error ? e.message : String(e);
 			throw ErrorFactory.parsing(

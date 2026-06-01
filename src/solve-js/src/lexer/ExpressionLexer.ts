@@ -233,31 +233,16 @@ const OP_MAP: Record<number, string> = {
   126: 'BIT_NOT', // ~
 };
 
-// ── Phrase entry — multi-word token pattern ──────────────────────────────
-export interface PhraseEntry {
-  /** The full phrase as a lowercase string */
-  phrase: string;
-  /** The token type to emit when matched */
-  type: string;
-}
-
-// ── Phrase Trie ────────────────────────────────────────────────────────
-// Each node in the trie represents a word boundary. The root's children
-// are the first words of all phrases. A `type` field indicates a complete
-// phrase. Traversal is O(word-count) instead of O(phrases×words).
-interface PhraseTrieNode {
-  type?: string;
-  children: Map<string, PhraseTrieNode>;
-}
-
 /**
  * Plugin interface for extending the ExpressionLexer with custom tokens.
  *
  * Plugins can register:
  * - `keywords`: Map identifier strings to custom token types (checked after locale keywords).
  * - `operators`: Map multi-character operator sequences to custom token types.
- * - `phrases`: Map multi-word patterns (e.g., "price of") to custom token types.
  * - `units`: Register additional unit identifiers (checked alongside built-in units).
+ *
+ * Multi-word phrase matching has been moved to the TokenNormalizer post-lexer
+ * stage. To register phrase patterns, use `ISolvePackage.normalizerRules` instead.
  *
  * All registrations are additive — built-in patterns still work.
  */
@@ -279,43 +264,11 @@ export interface LexerPlugin {
   operators?: Record<string, string>;
 
   /**
-   * Multi-word phrase patterns. Each entry is a { phrase, type } pair where
-   * `phrase` is the lowercase multi-word phrase (e.g., "price of") and
-   * `type` is the token type to emit when matched. Greedy matching:
-   * the longest matching phrase wins. Built-in phrases take priority.
-   */
-  phrases?: PhraseEntry[];
-
-  /**
    * Additional unit identifiers to recognize (e.g., "gp", "osrs", "tile").
    * These are checked alongside the built-in `knownUnits` set.
    */
   units?: string[];
 }
-
-// Pre-compute phrase list — these are the multi-word expressions
-// handled as compound tokens (e.g., "to the power of", "increase by").
-function buildPhraseList(): PhraseEntry[] {
-  return [
-    { phrase: 'to the power of', type: 'CARET' }, // 5 words: to the power of
-    { phrase: 'power of', type: 'CARET' },         // 2 words: power of
-    { phrase: 'increase by', type: 'INCREASE_BY' },// 2 words: increase by
-    { phrase: 'decrease by', type: 'DECREASE_BY' },// 2 words: decrease by
-    { phrase: 'times by', type: 'TIMES_BY' },      // 2 words: times by
-    { phrase: 'multiply by', type: 'MULTIPLY_BY' },// 2 words: multiply by
-    { phrase: 'divide by', type: 'DIVIDE_BY' },    // 2 words: divide by
-  ];
-}
-
-// ── Phrase start words set (built once) ──────────────────────────────────
-// Used by tokenizeIdentifier() to detect words that start phrases.
-// When such a word is seen, we emit IDENT and let the phrase matcher
-// combine it with following words into a phrase token. This prevents
-// single-word phrase starts (e.g., "to", "power") from being swallowed
-// by keyword lookup.
-const PHRASE_START_WORDS = new Set<string>(
-  buildPhraseList().map(p => p.phrase.split(' ')[0])
-);
 
 // ── Expression gating (L1) ──────────────────────────────────────────────
 // Pre-computed Set of character codes that indicate an expression might
@@ -353,16 +306,14 @@ const EXPRESSION_INDICATOR_CODES = (() => {
 // ── ExpressionLexer ───────────────────────────────────────────────────────
 export class ExpressionLexer {
   private static readonly CHAR_CLASS = buildCharClassTable();
-  private static readonly PHRASES = buildPhraseList();
-
   /**
    * Configured TokenLookup from TokenClassRegistry. When set, replaces
-   * the internal keyword map, unit set, phrase trie, and phraseStartWords
-   * with registry-built equivalents. Enables data-driven keyword/unit/phrase
-   * registration across locale keywords, provider keywords, and plugins.
+   * the internal keyword map and unit set with registry-built equivalents.
+   * Enables data-driven keyword/unit registration across locale keywords,
+   * provider keywords, and plugins.
    *
    * Set at construction time via the constructor parameter. Plugin-registered
-   * keywords/units/phrases (via registerPlugin()) are checked alongside
+   * keywords/units (via registerPlugin()) are checked alongside
    * the configuredLookup — neither source is bypassed.
    */
   private configuredLookup: TokenLookup | null = null;
@@ -380,9 +331,6 @@ export class ExpressionLexer {
   private keywordMap: Map<string, string>;
 
   // ── Merged lookup collections (keywordMap + pluginKeywordMap, knownUnits + pluginUnits)
-  // Built once at construction and rebuilt on registerPlugin/unregisterPlugin.
-  // tokenizeIdentifier() uses these instead of checking multiple sources separately —
-  // reduces 4-6 Map/Set lookups per identifier to 1-2 for the common no-plugin case.
   private mergedKeywords: Map<string, string>;
   private mergedUnits: Set<string>;
 
@@ -392,31 +340,23 @@ export class ExpressionLexer {
   // Plugin-extensible two-char operators: firstChar → (secondChar → tokenType)
   private pluginOperators: Map<number, Map<number, string>> = new Map();
 
-  // Plugin-extensible phrases (merged with built-in PHRASES)
-  private pluginPhrases: PhraseEntry[] = [];
-
   // Plugin-extensible units (merged with knownUnits)
   private pluginUnits: Set<string> = new Set();
 
   // Fast-path guards: skip plugin lookups entirely when no plugins registered
-  // V8 can predict these as always-false in the no-plugin case, eliminating
-  // the branch and associated hash-map access from the hot path.
   private hasPluginUnits = false;
   private hasPluginKeywords = false;
   private hasPluginOps = false;
-  private hasPluginPhrases = false;
-
-  // Combined phraseStartWords: built-in + plugin phrase first words.
-  // Used to detect IDENT tokens that may start a phrase.
-  private phraseStartWords: Set<string> = new Set(PHRASE_START_WORDS);
-
-  // Phrase trie: O(word-count) lookup vs O(phrases×words) linear scan.
-  // Merges built-in PHRASES with pluginPhrases. Rebuilt on register/unregister.
-  private phraseTrie: PhraseTrieNode;
 
   // Locale for function-identifier lookups
   private localeCode: string;
   private locale: ILocale;
+
+  /** Rebuild merged keyword and unit collections after plugin registration. */
+  private rebuildMergedCollections(): void {
+    this.mergedKeywords = new Map([...this.keywordMap, ...this.pluginKeywordMap]);
+    this.mergedUnits = new Set([...knownUnits, ...this.pluginUnits]);
+  }
 
   constructor(localeCode = 'en', lookup?: TokenLookup) {
     this.localeCode = localeCode;
@@ -428,72 +368,20 @@ export class ExpressionLexer {
     }
     this.mergedKeywords = new Map(this.keywordMap);
     this.mergedUnits = new Set(knownUnits);
-    this.phraseTrie = ExpressionLexer.buildPhraseTrie(ExpressionLexer.PHRASES, []);
-  }
-
-  /**
-   * Rebuild mergedKeywords and mergedUnits from base collections + plugin collections.
-   * Called at construction and after registerPlugin/unregisterPlugin.
-   */
-  private rebuildMergedCollections(): void {
-    // Keywords: locale (base) + plugin
-    this.mergedKeywords = new Map(this.keywordMap);
-    for (const [k, v] of this.pluginKeywordMap) {
-      if (!this.mergedKeywords.has(k)) {
-        this.mergedKeywords.set(k, v);
-      }
-    }
-    // Units: knownUnits (base) + plugin
-    this.mergedUnits = new Set(knownUnits);
-    for (const u of this.pluginUnits) {
-      this.mergedUnits.add(u);
-    }
-  }
-
-  /**
-   * Build a word-level trie from built-in + plugin phrases.
-   * O(total-words) construction. Used at init and on plugin register/unregister.
-   *
-   * NOTE: Uses const + narrowing (existing) instead of let child: PhraseTrieNode | undefined
-   * because TypeScript's control flow analysis cannot properly track recursive types
-   * through mutable variable reassignment.
-   */
-  private static buildPhraseTrie(
-    builtins: PhraseEntry[],
-    plugins: PhraseEntry[],
-  ): PhraseTrieNode {
-    const root: PhraseTrieNode = { children: new Map() };
-    const all = builtins.concat(plugins);
-    for (const entry of all) {
-      const words = entry.phrase.split(' ');
-      let node: PhraseTrieNode = root;
-      for (const word of words) {
-        const existing = node.children.get(word);
-        if (existing) {
-          node = existing;
-        } else {
-          const newNode: PhraseTrieNode = { children: new Map() };
-          node.children.set(word, newNode);
-          node = newNode;
-        }
-      }
-      // Only set type if not already set — built-ins (processed first) take priority
-      if (!node.type) {
-        node.type = entry.type;
-      }
-    }
-    return root;
   }
 
   /**
    * Register a plugin to extend the lexer with custom tokens.
    *
    * All registrations are additive — built-in patterns still work.
-   * Keywords, operators, phrases, and units from the plugin are merged
+   * Keywords, operators, and units from the plugin are merged
    * with existing ones. Calling multiple times adds more entries.
    *
+   * Note: multi-word phrases are now handled by the TokenNormalizer
+   * (see `ISolvePackage.normalizerRules`), not the lexer.
+   *
    * Built-in tokens CANNOT be overridden. Throws a SolveError if the
-   * plugin attempts to register a keyword, operator, phrase, or unit
+   * plugin attempts to register a keyword, operator, or unit
    * that conflicts with a built-in one.
    */
   registerPlugin(plugin: LexerPlugin): void {
@@ -570,32 +458,6 @@ export class ExpressionLexer {
       }
     }
 
-    if (plugin.phrases) {
-      this.hasPluginPhrases = true;
-      for (const entry of plugin.phrases) {
-        const lowerPhrase = entry.phrase.toLowerCase();
-        // Guard: prevent overriding built-in phrases
-        for (let i = 0; i < ExpressionLexer.PHRASES.length; i++) {
-          if (ExpressionLexer.PHRASES[i].phrase === lowerPhrase) {
-            throw ErrorFactory.config(
-              'PLUGIN_PHRASE_COLLISION',
-              `Plugin phrase "${entry.phrase}" conflicts with built-in phrase ` +
-              `(type: ${ExpressionLexer.PHRASES[i].type}). Built-in phrases cannot be overridden.`,
-              { phrase: entry.phrase, builtinType: ExpressionLexer.PHRASES[i].type }
-            );
-          }
-        }
-        this.pluginPhrases.push({
-          phrase: lowerPhrase,
-          type: entry.type,
-        });
-        // Track the first word of the phrase for phraseStartWords
-        this.phraseStartWords.add(lowerPhrase.split(' ')[0]);
-      }
-      // Rebuild phrase trie to include new plugin phrases
-      this.phraseTrie = ExpressionLexer.buildPhraseTrie(ExpressionLexer.PHRASES, this.pluginPhrases);
-    }
-
     if (plugin.units) {
       this.hasPluginUnits = true;
       for (const unit of plugin.units) {
@@ -618,7 +480,7 @@ export class ExpressionLexer {
    * Unregister a plugin, removing its custom tokens from the lexer.
    *
    * This is the inverse of registerPlugin(). All keywords, operators,
-   * phrases, and units registered by the plugin are removed. After
+   * and units registered by the plugin are removed. After
    * unregistration, those tokens will revert to their default behavior
    * (e.g., keywords become IDENT, operators become ERROR).
    *
@@ -649,24 +511,6 @@ export class ExpressionLexer {
         }
       }
       this.hasPluginOps = this.pluginOperators.size > 0;
-    }
-
-    if (plugin.phrases) {
-      for (const entry of plugin.phrases) {
-        const lowerPhrase = entry.phrase.toLowerCase();
-        const idx = this.pluginPhrases.findIndex(p => p.phrase === lowerPhrase);
-        if (idx !== -1) {
-          this.pluginPhrases.splice(idx, 1);
-        }
-        // Rebuild phraseStartWords from scratch
-        this.phraseStartWords = new Set(PHRASE_START_WORDS);
-        for (const p of this.pluginPhrases) {
-          this.phraseStartWords.add(p.phrase.split(' ')[0]);
-        }
-      }
-      this.hasPluginPhrases = this.pluginPhrases.length > 0;
-      // Rebuild phrase trie without the removed plugin phrases
-      this.phraseTrie = ExpressionLexer.buildPhraseTrie(ExpressionLexer.PHRASES, this.pluginPhrases);
     }
 
     if (plugin.units) {
@@ -1163,11 +1007,11 @@ export class ExpressionLexer {
   /**
    * Reads [a-zA-Z_][a-zA-Z0-9_]* and resolves to:
    *   - A unit type (via knownUnits, case-sensitive)
-   *   - A phrase type (multi-word patterns like "to the power of")
    *   - A keyword type (via locale keywordMap, case-insensitive)
    *   - IDENT if none of the above
    *
-   * Advances `this.pos` past the identifier or phrase.
+   * Multi-word phrases (e.g., "to the power of") are handled by the
+   * TokenNormalizer post-lexer pass, not the lexer.
    */
   private tokenizeIdentifier(): Token {
     const input = this.input;
@@ -1204,9 +1048,7 @@ export class ExpressionLexer {
       return new LexerToken('INLINE_SOLVE_START', tokenTypeId('INLINE_SOLVE_START'), fullText, fullText, start, 0, this.line, startCol);
     }
 
-    // ── Unit lookup (case-sensitive, takes priority over phrases/keywords)
-    // Uses pre-merged mergedUnits (knownUnits + pluginUnits), avoiding
-    // a separate pluginUnits.has() lookup for every identifier.
+    // ── Unit lookup (case-sensitive)
     const isKnownUnit = this.mergedUnits.has(identText);
     if (isKnownUnit) {
       if (!this.isFollowedByLParen(pos)) {
@@ -1215,68 +1057,16 @@ export class ExpressionLexer {
       }
     }
 
-    // ── Phrase matching — multi-word patterns (before keyword lookup)
-    // Use configuredLookup.phraseTrie when available (cast — structurally identical).
-    // Falls back to instance phraseTrie (includes plugin phrases) when the
-    // registry-built trie doesn't match — plugin phrases aren't in the lookup.
-    const configuredLookup = this.configuredLookup;
-    const phraseTrieOverride = (configuredLookup?.phraseTrie ?? null) as unknown as PhraseTrieNode | undefined;
-    const phraseResult = this.tryMatchPhrase(input, pos, identLower, identText, phraseTrieOverride);
-    if (phraseResult) {
-      this.pos = phraseResult.endPos;
-      return new LexerToken(
-        phraseResult.type,
-        tokenTypeId(phraseResult.type),
-        phraseResult.text,
-        phraseResult.text,
-        start,
-        0,
-        this.line,
-        startCol,
-      );
-    }
-    // Fall back to instance phraseTrie (includes plugin phrases) when configuredLookup
-    // trie didn't match. Plugin phrases registered via registerPlugin() aren't in
-    // the registry-built lookup.
-    if (phraseTrieOverride && this.hasPluginPhrases) {
-      const fallbackResult = this.tryMatchPhrase(input, pos, identLower, identText);
-      if (fallbackResult) {
-        this.pos = fallbackResult.endPos;
-        return new LexerToken(
-          fallbackResult.type,
-          tokenTypeId(fallbackResult.type),
-          fallbackResult.text,
-          fallbackResult.text,
-          start,
-          0,
-          this.line,
-          startCol,
-        );
-      }
-    }
-
-    // ── Keyword lookup (case-insensitive) — takes priority over phraseStartWords
-    // Keywords must be recognized even if they happen to start phrases, so that
-    // "to the" → TO + IDENT (not IDENT + IDENT when "to" is a keyword).
-    // Uses pre-merged mergedKeywords (keywordMap + pluginKeywordMap),
-    // avoiding a separate pluginKeywordMap.get() for every identifier.
+    // ── Keyword lookup (case-insensitive)
     const localeKwType = this.mergedKeywords.get(identLower);
     if (localeKwType) {
       this.pos = pos;
       return new LexerToken(localeKwType, tokenTypeId(localeKwType), identText, identText, start, 0, this.line, startCol);
     }
 
-    // ── phraseStartWords optimization ─────────────────────────────────
-    // Only applies to non-keyword identifiers. Prevents single-word phrase starts
-    // (e.g., "power" when "power of" is a phrase) from being swallowed by keyword
-    // registration, while still allowing standalone "to" to become a keyword via
-    // locale keywordMap above.
-    const phraseStartWords = configuredLookup?.phraseStartWords ?? this.phraseStartWords;
-    if (phraseStartWords.has(identLower)) {
-      this.pos = pos;
-      return new LexerToken('IDENT', tokenTypeId('IDENT'), identText, identText, start, 0, this.line, startCol);
-    }
-
+    // ── Fall through: emit IDENT
+    // Multi-word phrases are now handled by the TokenNormalizer post-lexer pass,
+    // which keeps the lexer slim and focused on single-token production.
     this.pos = pos;
     return new LexerToken('IDENT', tokenTypeId('IDENT'), identText, identText, start, 0, this.line, startCol);
   }
@@ -1295,75 +1085,6 @@ export class ExpressionLexer {
       lookPos++;
     }
     return false;
-  }
-
-  // ── Phrase matcher (trie-based) ───────────────────────────────────────
-  /**
-   * After reading a first identifier, try to match a multi-word phrase
-   * like "to the power of" or "increase by".
-   *
-   * @param rootOverride - Optional trie root from TokenLookup.phraseTrie.
-   *   When provided, uses the registry-built trie (cast to PhraseTrieNode —
-   *   structurally identical to TokenClassRegistry's PhraseNode).
-   */
-  private tryMatchPhrase(
-    input: string,
-    pos: number,
-    firstWordLower: string,
-    firstWordOriginal: string,
-    rootOverride?: PhraseTrieNode,
-  ): { type: string; text: string; endPos: number } | null {
-    const len = this.len;
-    const root = rootOverride ?? this.phraseTrie;
-
-    const startNode: PhraseTrieNode | undefined = root.children.get(firstWordLower);
-    if (!startNode) return null;
-
-    if (startNode.type && startNode.children.size === 0) {
-      return { type: startNode.type, text: firstWordOriginal, endPos: pos };
-    }
-
-    const wordsOriginal: string[] = [firstWordOriginal];
-    let scanPos = pos;
-    let current: PhraseTrieNode = startNode;
-
-    while (scanPos < len) {
-      if (input.charCodeAt(scanPos) !== 32) break;
-      scanPos++;
-      if (scanPos >= len) break;
-
-      const wordStart = scanPos;
-      let cc: number;
-      while (
-        scanPos < len &&
-        ((cc = input.charCodeAt(scanPos)),
-          (cc >= 65 && cc <= 90) ||
-          (cc >= 97 && cc <= 122))
-      ) {
-        scanPos++;
-      }
-
-      if (scanPos === wordStart) break;
-
-      const word = input.slice(wordStart, scanPos);
-      const wordLower = word.toLowerCase();
-
-      const next: PhraseTrieNode | undefined = current.children.get(wordLower);
-      if (!next) break;
-
-      wordsOriginal.push(word);
-      current = next;
-
-      if (current.type) {
-        return {
-          type: current.type,
-          text: wordsOriginal.join(' '),
-          endPos: scanPos,
-        };
-      }
-    }
-
-    return null;
   }
 
   // ── Inline operator tokenizer ─────────────────────────────────────────

@@ -11,6 +11,9 @@ import { DiagnosticReport } from "./events";
 export abstract class DiagnosticCollector {
   onPipelineStart(event: DiagnosticEvent & { type: "pipeline_start" }): void {}
   onTokenEmitted(event: DiagnosticEvent & { type: "token_emitted" }): void {}
+  onNormalizerStart(event: DiagnosticEvent & { type: "normalizer_start" }): void {}
+  onTokenFused(event: DiagnosticEvent & { type: "token_fused" }): void {}
+  onNormalizerEnd(event: DiagnosticEvent & { type: "normalizer_end" }): void {}
   onParseletMatched(event: DiagnosticEvent & { type: "parselet_matched" }): void {}
   onBytecodeBuilt(event: DiagnosticEvent & { type: "bytecode_built" }): void {}
   onVmStep(event: DiagnosticEvent & { type: "vm_step" }): void {}

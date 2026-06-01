@@ -40,6 +40,18 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
     this.events.push(this.stamp(event));
   }
 
+  onNormalizerStart(event: DiagnosticEvent & { type: "normalizer_start" }): void {
+    this.events.push(this.stamp(event));
+  }
+
+  onTokenFused(event: DiagnosticEvent & { type: "token_fused" }): void {
+    this.events.push(this.stamp(event));
+  }
+
+  onNormalizerEnd(event: DiagnosticEvent & { type: "normalizer_end" }): void {
+    this.events.push(this.stamp(event));
+  }
+
   onParseletMatched(event: DiagnosticEvent & { type: "parselet_matched" }): void {
     this.events.push(this.stamp(event));
 

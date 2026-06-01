@@ -8,6 +8,9 @@ import { OpCode } from "@solve-js/parser/OpCode";
  */
 export const DiagnosticEventType = {
   TokenEmitted: "token_emitted",
+  NormalizerStart: "normalizer_start",
+  TokenFused: "token_fused",
+  NormalizerEnd: "normalizer_end",
   ParseletMatched: "parselet_matched",
   BytecodeBuilt: "bytecode_built",
   VmStep: "vm_step",
@@ -114,9 +117,34 @@ export interface PipelineEndEvent extends BaseEvent {
   readonly totalOpcodes: number;
 }
 
+/** Emitted when the normalizer begins its pass */
+export interface NormalizerStartEvent extends BaseEvent {
+  readonly type: "normalizer_start";
+  readonly inputTokenCount: number;
+}
+
+/** Emitted when the normalizer fuses tokens */
+export interface TokenFusedEvent extends BaseEvent {
+  readonly type: "token_fused";
+  readonly ruleName: string;
+  readonly sourceTokenCount: number;
+  readonly fusedTokenType: string;
+  readonly fusedTokenValue: string;
+}
+
+/** Emitted when the normalizer completes its pass */
+export interface NormalizerEndEvent extends BaseEvent {
+  readonly type: "normalizer_end";
+  readonly outputTokenCount: number;
+  readonly fusionsCount: number;
+}
+
 /** Union of all event types */
 export type DiagnosticEvent =
   | TokenEmittedEvent
+  | NormalizerStartEvent
+  | TokenFusedEvent
+  | NormalizerEndEvent
   | ParseletMatchedEvent
   | BytecodeBuiltEvent
   | VmStepEvent

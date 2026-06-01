@@ -8,6 +8,7 @@ import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 import type { LexerPlugin } from "@solve-js/lexer/ExpressionLexer";
 import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
+import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
 
 /**
  * Public API for registering plugins with the solve-js engine.
@@ -81,6 +82,14 @@ export interface ISolvePackage {
    * and the line re-evaluates when the data resolves.
    */
   asyncResolver?: IAsyncResolver;
+  /**
+   * Normalizer rules for post-lexer token fusion.
+   * Applied by the TokenNormalizer between lexing and parsing.
+   * Used for multi-word phrase matching (e.g., "to the power of" → CARET),
+   * domain-specific token fusion (e.g., item name merging), and implicit
+   * operator insertion.
+   */
+  normalizerRules?: NormalizerRule[];
 }
 
 /**

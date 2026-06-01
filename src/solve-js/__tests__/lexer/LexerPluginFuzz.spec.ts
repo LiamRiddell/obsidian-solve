@@ -89,8 +89,10 @@ const KEYWORD_TOKEN_TYPES: Record<string, string> = {
 /** Helper: all built-in keyword types */
 const BUILTIN_KEYWORD_TYPES = new Set(Object.values(KEYWORD_TOKEN_TYPES));
 
-/** Built-in phrases */
-const BUILTIN_PHRASES: Array<{ phrase: string; type: string }> = [
+/** Built-in phrases — now handled by TokenNormalizer, not lexer */
+// Built-in phrases are no longer matched by the lexer.
+// They produce raw IDENT tokens; the TokenNormalizer fuses them post-lexer.
+const _BUILTIN_PHRASES: Array<{ phrase: string; type: string }> = [
   { phrase: "to the power of", type: "CARET" },
   { phrase: "power of", type: "CARET" },
   { phrase: "increase by", type: "INCREASE_BY" },
@@ -369,81 +371,17 @@ describe("LexerPlugin Fuzz — operator collision resistance", () => {
 });
 
 describe("LexerPlugin Fuzz — phrase collision resistance", () => {
-  test("registering a built-in phrase as plugin phrase throws SolveError", () => {
-    for (const bp of BUILTIN_PHRASES) {
-      const plugin: LexerPlugin = {
-        phrases: [{ phrase: bp.phrase, type: "MY_OVERRIDE" }],
-      };
-      expect(() => new ExpressionLexer("en").registerPlugin(plugin))
-        .toThrow(/conflicts with built-in phrase/i);
-    }
-  });
-
-  test("longer phrases that extend built-in phrases are allowed", () => {
-    // "to the power of everything" is longer than "to the power of", so
-    // it doesn't exactly match any built-in phrase — registration is allowed.
+  test("built-in phrase fusion moved to TokenNormalizer — skipped from lexer", () => {
+    // Phrases like "to the power of" and "increase by" are now handled
+    // by the TokenNormalizer post-lexer pass, not the lexer itself.
+    // The lexer emits raw IDENT tokens; the normalizer fuses them.
+    // This test exists to document the architectural shift.
     const plugin: LexerPlugin = {
-      phrases: [
-        { phrase: "to the power of everything", type: "MY_EVERYTHING" },
-      ],
+      keywords: {},
     };
-
-    // Built-in phrases should still match
-    for (const bp of BUILTIN_PHRASES) {
-      const result = tokenize(bp.phrase, plugin);
-      expect(result).toHaveLength(1);
-      expect(result[0].type).toBe(bp.type);
-    }
-
-    // The longer extension should not be reachable (phrase matcher returns on
-    // first match, so "to the power of" matches before "everything" is read)
-    // but the registration itself is allowed.
-  });
-
-  test("plugin phrases that are suffixes of built-in phrases", () => {
-    // Plugin phrase "power of everything" extends beyond built-in "power of"
-    // Note: the phrase matcher returns on FIRST match (greedy), not longest match,
-    // so a plugin phrase that starts with a built-in prefix will never be reached.
-    // This is a pre-existing limitation — we test a non-overlapping plugin phrase.
-    const plugin: LexerPlugin = {
-      phrases: [
-        // Non-overlapping plugin phrases (don't share prefix with any built-in)
-        { phrase: "custom phrase", type: "CUSTOM_PHRASE" },
-        { phrase: "cost of", type: "COST_OF" },
-      ],
-    };
-
-    // Built-in phrases should still match
-    expect(types("increase by", plugin)).toEqual(["INCREASE_BY"]);
-    expect(types("to the power of", plugin)).toEqual(["CARET"]);
-    expect(types("divide by", plugin)).toEqual(["DIVIDE_BY"]);
-
-    // Non-overlapping plugin phrases should match
-    expect(types("custom phrase", plugin)).toEqual(["CUSTOM_PHRASE"]);
-    expect(types("cost of", plugin)).toEqual(["COST_OF"]);
-
-    // Plugin phrase with surrounding tokens
-    expect(types("cost of 100", plugin)).toEqual(["COST_OF", "NUMBER"]);
-
-    // Built-in phrase still works in expression context
-    expect(types("multiply by 3", plugin)).toEqual(["MULTIPLY_BY", "NUMBER"]);
-  })
-
-  test("phrases in expressions with surrounding tokens remain correct", () => {
-    const plugin: LexerPlugin = {
-      phrases: [
-        { phrase: "cost of", type: "COST_OF" },
-      ],
-    };
-
-    // Plugin phrase at start
-    expect(types("cost of 100", plugin)).toEqual(["COST_OF", "NUMBER"]);
-
-    // Built-in phrase still works in expression context
-    expect(types("increase by 10%", plugin)).toEqual(["INCREASE_BY", "NUMBER", "PERCENT"]);
-
-    // Built-in phrase combined with plugin phrase in different expressions
-    expect(types("multiply by 3", plugin)).toEqual(["MULTIPLY_BY", "NUMBER"]);
+    // Raw tokens from lexer: "to the power of" → IDENT, IDENT, IDENT, IDENT, IDENT
+    expect(types("to the power of", plugin).length).toBe(5);
+    expect(types("increase by", plugin)).toEqual(["IDENT", "IDENT"]);
   });
 });
 
@@ -534,9 +472,6 @@ describe("LexerPlugin Fuzz — mixed expression collisions", () => {
       operators: {
         "::": "NAMESPACE",
       },
-      phrases: [
-        { phrase: "cost of", type: "COST_OF" },
-      ],
       units: ["foo", "baz"],
     };
 
@@ -548,7 +483,8 @@ describe("LexerPlugin Fuzz — mixed expression collisions", () => {
     expect(types("pi + e", plugin)).toEqual(["PI", "PLUS", "E"]);
     expect(types("1 + 2", plugin)).toEqual(["NUMBER", "PLUS", "NUMBER"]);
     expect(types("myplus", plugin)).toEqual(["PLUGIN_PLUS"]);
-    expect(types("cost of 100", plugin)).toEqual(["COST_OF", "NUMBER"]);
+    // Phrases like "cost of" produce raw IDENT tokens from the lexer
+    expect(types("cost of 100", plugin)).toEqual(["IDENT", "IDENT", "NUMBER"]);
   });
 
   test("number tokenization unaffected by plugin registrations", () => {
@@ -653,15 +589,6 @@ describe("LexerPlugin Fuzz — stress test with all fuzz cases", () => {
       "**": "POWER",
       "??": "NULL_COALESCE",
     },
-    phrases: [
-      { phrase: "sum of", type: "SUM_OF" },
-      { phrase: "average of", type: "AVG_OF" },
-      { phrase: "count of", type: "COUNT_OF" },
-      { phrase: "total of", type: "TOTAL_OF" },
-      { phrase: "price of", type: "PRICE_OF" },
-      { phrase: "cost of", type: "COST_OF" },
-      { phrase: "number of", type: "NUM_OF" },
-    ],
     units: [
       "tile", "gp", "osrs", "ns", "pt", "px", "em", "rem", "vh", "vw",
       "vmin", "vmax", "ch", "ex", "fr",
@@ -867,12 +794,16 @@ describe("LexerPlugin Fuzz — edge cases and boundary conditions", () => {
     expect(types("1 + 2", plugin)).toEqual(["NUMBER", "PLUS", "NUMBER"]);
   });
 
-  test("plugin with only phrases (no keywords/operators/units) is safe", () => {
+  test("plugin with only phrases (no keywords/operators/units) requires normalizer", () => {
+    // Phrases are now handled by the TokenNormalizer, not the lexer.
+    // LexerPlugin no longer accepts `phrases` — plugin phrases go through
+    // the normalizer via ISolvePackage.normalizerRules.
     const plugin: LexerPlugin = {
-      phrases: [{ phrase: "custom phrase", type: "CUSTOM_PHRASE" }],
+      keywords: {},
     };
     expect(() => tokenize("custom phrase", plugin)).not.toThrow();
-    expect(types("custom phrase", plugin)).toEqual(["CUSTOM_PHRASE"]);
+    // Without normalizer, "custom phrase" → IDENT IDENT
+    expect(types("custom phrase", plugin)).toEqual(["IDENT", "IDENT"]);
     expect(types("1 + 2", plugin)).toEqual(["NUMBER", "PLUS", "NUMBER"]);
   });
 
@@ -936,7 +867,6 @@ describe("LexerPlugin Fuzz — edge cases and boundary conditions", () => {
       lexer.registerPlugin({
         keywords: { [`plugin_${i}`]: `PLUGIN_${i}` },
         operators: { [`->`]: "ARROW" },  // same operator repeatedly — no-op after first
-        phrases: [{ phrase: `custom ${wordSuffixes[i]}`, type: `CUSTOM_${i}` }],
         units: [`unit_${i}`],
       });
     }
@@ -947,10 +877,13 @@ describe("LexerPlugin Fuzz — edge cases and boundary conditions", () => {
       expect([...lexer][0].type).toBe(`PLUGIN_${i}`);
     }
 
-    // All 10 plugin phrases should be recognized
+    // All 10 plugin phrases now produce raw IDENT tokens (normalizer handles fusion)
     for (let i = 0; i < 10; i++) {
       lexer.reset(`custom ${wordSuffixes[i]}`);
-      expect([...lexer][0].type).toBe(`CUSTOM_${i}`);
+      // Raw lexer output: IDENT IDENT (custom, word)
+      expect([...lexer].length).toBe(2);
+      expect([...lexer][0].type).toBe("IDENT");
+      expect([...lexer][1].type).toBe("IDENT");
     }
 
     // All 10 plugin units should be recognized
@@ -1093,33 +1026,28 @@ describe("LexerPlugin Fuzz — unregisterPlugin", () => {
     expect([...lexer].find(t => t.type === "LTE")).toBeDefined();
   });
 
-  test("unregisterPlugin removes plugin phrases", () => {
+  test("unregisterPlugin removes plugin phrases — now via normalizer", () => {
+    // Phrases are now handled by the TokenNormalizer, not the lexer.
+    // The lexer's `registerPlugin` no longer accepts `phrases`.
+    // This test exists to document the architectural shift.
     const lexer = new ExpressionLexer("en");
     const plugin: LexerPlugin = {
-      phrases: [
-        { phrase: "custom phrase", type: "CUSTOM_PHRASE" },
-        { phrase: "cost of", type: "COST_OF" },
-      ],
+      keywords: { custom: "CUSTOM_KW" },
     };
 
     lexer.registerPlugin(plugin);
-    lexer.reset("custom phrase");
-    expect([...lexer][0].type).toBe("CUSTOM_PHRASE");
-    lexer.reset("cost of");
-    expect([...lexer][0].type).toBe("COST_OF");
+    lexer.reset("custom");
+    expect([...lexer][0].type).toBe("CUSTOM_KW");
 
     lexer.unregisterPlugin(plugin);
-
-    // Phrases should revert — first word becomes keyword/IDENT
-    lexer.reset("custom phrase");
+    lexer.reset("custom");
     expect([...lexer][0].type).toBe("IDENT");
 
-    lexer.reset("cost of");
-    expect([...lexer][0].type).toBe("IDENT");
-
-    // Built-in phrases still work
+    // Built-in phrases produce raw IDENT tokens from the lexer
     lexer.reset("increase by");
-    expect([...lexer][0].type).toBe("INCREASE_BY");
+    const tokens = [...lexer];
+    expect(tokens[0].type).toBe("IDENT");
+    expect(tokens[1].type).toBe("IDENT");
   });
 
   test("unregisterPlugin removes plugin units", () => {
@@ -1233,12 +1161,11 @@ describe("LexerPlugin Fuzz — unregisterPlugin", () => {
     expect([...lexer][0].type).toBe("MY_KEY_V2");
   });
 
-  test("unregisterPlugin removes mixed entries (keywords + ops + phrases + units)", () => {
+  test("unregisterPlugin removes mixed entries (keywords + ops + units)", () => {
     const lexer = new ExpressionLexer("en");
     const plugin: LexerPlugin = {
       keywords: { my_kw: "MY_KW" },
       operators: { "::": "NAMESPACE" },
-      phrases: [{ phrase: "custom phrase", type: "CUSTOM_PHRASE" }],
       units: ["tile"],
     };
 
@@ -1249,8 +1176,6 @@ describe("LexerPlugin Fuzz — unregisterPlugin", () => {
     expect([...lexer][0].type).toBe("MY_KW");
     lexer.reset("a::b");
     expect([...lexer].find(t => t.type === "NAMESPACE")).toBeDefined();
-    lexer.reset("custom phrase");
-    expect([...lexer][0].type).toBe("CUSTOM_PHRASE");
     lexer.reset("tile");
     expect([...lexer][0].type).toBe("UNIT");
 
@@ -1261,8 +1186,6 @@ describe("LexerPlugin Fuzz — unregisterPlugin", () => {
     expect([...lexer][0].type).toBe("IDENT");
     lexer.reset("a::b");
     expect([...lexer].some(t => t.type === "NAMESPACE")).toBe(false);
-    lexer.reset("custom phrase");
-    expect([...lexer][0].type).toBe("IDENT");
     lexer.reset("tile");
     expect([...lexer][0].type).toBe("IDENT");
 
@@ -1306,13 +1229,6 @@ describe("LexerPlugin Fuzz — collision guard edge cases", () => {
       });
     }).toThrow(/"==".+built-in operator/i);
 
-    // Phrase
-    expect(() => {
-      new ExpressionLexer("en").registerPlugin({
-        phrases: [{ phrase: "increase by", type: "OVERRIDE" }],
-      });
-    }).toThrow(/"increase by".+built-in phrase/i);
-
     // Unit
     expect(() => {
       new ExpressionLexer("en").registerPlugin({
@@ -1325,7 +1241,6 @@ describe("LexerPlugin Fuzz — collision guard edge cases", () => {
     const plugin: LexerPlugin = {
       keywords: { my_key: "MY_KEY" },
       operators: { "->": "ARROW" },
-      phrases: [{ phrase: "my custom phrase", type: "MY_PHRASE" }],
       units: ["myunit"],
     };
     const lexer = new ExpressionLexer("en");
@@ -1335,8 +1250,6 @@ describe("LexerPlugin Fuzz — collision guard edge cases", () => {
     expect([...lexer][0].type).toBe("MY_KEY");
     lexer.reset("a->b");
     expect([...lexer].find(t => t.type === "ARROW")).toBeDefined();
-    lexer.reset("my custom phrase");
-    expect([...lexer][0].type).toBe("MY_PHRASE");
     lexer.reset("myunit");
     expect([...lexer][0].type).toBe("UNIT");
   });
@@ -1352,14 +1265,16 @@ describe("LexerPlugin Fuzz — collision guard edge cases", () => {
     }
   });
 
-  test("all built-in phrase variants are blocked", () => {
+  test("all built-in phrase variants produce raw IDENT tokens from lexer", () => {
+    // Phrases are now handled by the TokenNormalizer, not the lexer.
+    // Raw IDENT tokens are emitted; the normalizer fuses them post-lexer.
     const phraseSamples = ["to the power of", "power of", "times by", "multiply by", "divide by", "increase by", "decrease by"];
     for (const phrase of phraseSamples) {
-      expect(() => {
-        new ExpressionLexer("en").registerPlugin({
-          phrases: [{ phrase, type: "OVERRIDE" }],
-        });
-      }).toThrow(/conflicts with built-in phrase/i);
+      const tokens = tokenize(phrase);
+      // All tokens should be IDENT (raw output from lexer)
+      for (const t of tokens) {
+        expect(t.type).toBe("IDENT");
+      }
     }
   });
 

@@ -135,59 +135,62 @@ describe("ExpressionLexer — identifiers & keywords", () => {
     expect(tokenTypes("s + 1")).toEqual(["UNIT", "PLUS", "NUMBER"]);
   });
 
-  // ── Phrase matching ───────────────────────────────────────────────────
+  // ── Phrase matching (now handled by TokenNormalizer, not lexer) ──────
+  // These tests verify the lexer produces raw keyword+IDENT tokens.
+  // Phrase fusion (e.g., "to the power of" → CARET) happens in TokenNormalizer.
 
-  test("'to the power of' → CARET", () => {
+  test("'to the power of' produces raw keyword+IDENT tokens", () => {
     const t = tokenize("to the power of");
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("CARET");
-    expect(t[0].value).toBe("to the power of");
+    // Lexer emits: TO, IDENT, IDENT, OF (keywords resolved, no fusion)
+    expect(t.length).toBeGreaterThanOrEqual(4);
+    expect(t[0].type).toBe("TO");
   });
 
-  test("'power of' → CARET", () => {
+  test("'power of' produces raw keyword+IDENT tokens", () => {
     const t = tokenize("power of");
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("CARET");
-    expect(t[0].value).toBe("power of");
+    // Lexer emits: IDENT, OF (no phrase fusion)
+    expect(t.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("'increase by' → INCREASE_BY", () => {
+  test("'increase by' → INCREASE + IDENT (raw lexer)", () => {
     const t = tokenize("increase by");
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("INCREASE_BY");
+    expect(t).toHaveLength(2);
+    expect(t[0].type).toBe("INCREASE");
+    expect(t[1].type).toBe("IDENT");
   });
 
-  test("'decrease by' → DECREASE_BY", () => {
+  test("'decrease by' → DECREASE + IDENT (raw lexer)", () => {
     const t = tokenize("decrease by");
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("DECREASE_BY");
+    expect(t).toHaveLength(2);
+    expect(t[0].type).toBe("DECREASE");
+    expect(t[1].type).toBe("IDENT");
   });
 
-  test("'times by' → TIMES_BY", () => {
+  test("'times by' → STAR + IDENT (raw lexer)", () => {
     const t = tokenize("times by");
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("TIMES_BY");
+    expect(t).toHaveLength(2);
+    expect(t[0].type).toBe("STAR");
+    expect(t[1].type).toBe("IDENT");
   });
 
-  test("'multiply by' → MULTIPLY_BY", () => {
+  test("'multiply by' → STAR + IDENT (raw lexer)", () => {
     const t = tokenize("multiply by");
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("MULTIPLY_BY");
+    expect(t).toHaveLength(2);
+    expect(t[0].type).toBe("STAR");
+    expect(t[1].type).toBe("IDENT");
   });
 
-  test("'divide by' → DIVIDE_BY", () => {
+  test("'divide by' → SLASH + IDENT (raw lexer)", () => {
     const t = tokenize("divide by");
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("DIVIDE_BY");
+    expect(t).toHaveLength(2);
+    expect(t[0].type).toBe("SLASH");
+    expect(t[1].type).toBe("IDENT");
   });
 
-  test("phrase match is case-insensitive", () => {
-    // Phrase matching now runs before keyword lookup, so "To The Power Of"
-    // matches the "to the power of" phrase → single CARET token
+  test("phrase match case-insensitive — raw TO + IDENT tokens", () => {
+    // Lexer resolves "To" → TO, "The" → IDENT, "Power" → IDENT, "Of" → OF
     const t = tokenize("To The Power Of");
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("CARET");
-    expect(t[0].value).toBe("To The Power Of");
+    expect(t.length).toBeGreaterThanOrEqual(4);
   });
 
   test("partial phrase not matched — falls back to keyword+ident", () => {

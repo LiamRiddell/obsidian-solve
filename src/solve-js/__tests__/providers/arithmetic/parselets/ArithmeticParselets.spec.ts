@@ -8,6 +8,13 @@ import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/pars
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { ValueType } from "@solve-js/vm/Value";
+import { TokenNormalizer, createBuiltinNormalizerRules } from "@solve-js/normalizer";
+
+/** Shared normalizer instance for phrase fusion */
+const normalizer = new TokenNormalizer();
+for (const rule of createBuiltinNormalizerRules()) {
+  normalizer.register(rule);
+}
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -21,7 +28,9 @@ function tokenize(lexer: Lexer, input: string) {
 
 function parseAndExecute(input: string): number {
   const lexer = new Lexer();
-  const tokens = tokenize(lexer, input);
+  const rawTokens = tokenize(lexer, input);
+  // Normalize tokens for phrase fusion (e.g., "to the power of" → CARET)
+  const tokens = normalizer.normalize(rawTokens);
   const registry = new ParseletRegistry();
   registerArithmeticParselets(registry);
   const parser = new Parser(registry);

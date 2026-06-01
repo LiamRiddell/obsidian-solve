@@ -47,6 +47,21 @@ export class DiagnosticPipeline {
     for (const c of this.collectors) c.onTokenEmitted?.(event);
   }
 
+  fireNormalizerStart(event: DiagnosticEvent & { type: "normalizer_start" }): void {
+    if (this.collectors.length === 0) return;
+    for (const c of this.collectors) c.onNormalizerStart?.(event);
+  }
+
+  fireTokenFused(event: DiagnosticEvent & { type: "token_fused" }): void {
+    if (this.collectors.length === 0) return;
+    for (const c of this.collectors) c.onTokenFused?.(event);
+  }
+
+  fireNormalizerEnd(event: DiagnosticEvent & { type: "normalizer_end" }): void {
+    if (this.collectors.length === 0) return;
+    for (const c of this.collectors) c.onNormalizerEnd?.(event);
+  }
+
   fireParseletMatched(event: DiagnosticEvent & { type: "parselet_matched" }): void {
     if (this.collectors.length === 0) return;
     for (const c of this.collectors) c.onParseletMatched?.(event);
