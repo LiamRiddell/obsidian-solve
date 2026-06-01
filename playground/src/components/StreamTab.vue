@@ -10,6 +10,45 @@
       </span>
       <span class="toggle-label" style="font-size:10px;color:var(--text-muted)">Diagnostic event stream</span>
     </div>
+
+    <!-- Batcher Panel -->
+    <div v-if="batcherData" class="batcher-panel">
+      <div class="batcher-panel-header" @click="batcherExpanded = !batcherExpanded">
+        <span class="stream-group-toggle">{{ batcherExpanded ? '▼' : '▶' }}</span>
+        <span class="batcher-panel-title">Async Resolution Batcher</span>
+        <div class="batcher-stats">
+          <span class="batcher-stat">⟳ {{ batcherData.pendingCount }} pending</span>
+          <span class="batcher-stat">⊜ {{ batcherData.dedupCount }} deduped</span>
+          <span class="batcher-stat">⚡ {{ batcherData.workerOffloadCount }} offloaded</span>
+          <span class="batcher-stat">👂 {{ batcherData.listenerCount }} listeners</span>
+        </div>
+      </div>
+      <div v-if="batcherExpanded" class="batcher-panel-body">
+        <div class="batcher-description">
+          The batcher collapses multiple async resolutions into a single DAG walk + re-execution pass.
+          When &gt;50 lines are affected, execution is offloaded to a worker pool to prevent UI freezes.
+        </div>
+        <div class="batcher-metrics-grid">
+          <div class="batcher-metric-card">
+            <span class="batcher-metric-value">{{ batcherData.pendingCount }}</span>
+            <span class="batcher-metric-label">Pending queue</span>
+          </div>
+          <div class="batcher-metric-card">
+            <span class="batcher-metric-value">{{ batcherData.dedupCount }}</span>
+            <span class="batcher-metric-label">Deduped entries</span>
+          </div>
+          <div class="batcher-metric-card">
+            <span class="batcher-metric-value">{{ batcherData.workerOffloadCount }}</span>
+            <span class="batcher-metric-label">Worker offloads</span>
+          </div>
+          <div class="batcher-metric-card">
+            <span class="batcher-metric-value">{{ batcherData.listenerCount }}</span>
+            <span class="batcher-metric-label">Active listeners</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="panel-scroll" id="stream-display" ref="streamContainer">
       <span v-if="stream.events.length === 0" class="empty" style="padding:12px;display:block;text-align:center">No diagnostic events</span>
 
@@ -51,9 +90,15 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { useStreamStore } from '../stores/stream.js';
+import { useEngineStore } from '../stores/engine.js';
 
 const stream = useStreamStore();
+const engine = useEngineStore();
 const streamContainer = ref<HTMLElement | null>(null);
+const batcherExpanded = ref(false);
+
+// Batcher metrics from engine result
+const batcherData = computed(() => engine.currentResult?.batcherMetrics ?? null);
 
 // Groups with async events start expanded; others start collapsed (matching vanilla)
 const collapsedGroups = ref(new Set<string>());

@@ -19,6 +19,7 @@
       <PerfTab v-else-if="ui.activeTab === 'perf'" :key="engine.runId" />
       <WorkersTab v-else-if="ui.activeTab === 'workers'" :key="engine.runId" />
       <CacheTab v-else-if="ui.activeTab === 'cache'" :key="engine.runId" />
+      <DagTab v-else-if="ui.activeTab === 'dag'" :key="engine.runId" />
       <StreamTab v-else-if="ui.activeTab === 'stream'" :key="engine.runId" />
     </KeepAlive>
   </section>
@@ -35,6 +36,7 @@ import PerfTab from './PerfTab.vue';
 import WorkersTab from './WorkersTab.vue';
 import CacheTab from './CacheTab.vue';
 import StreamTab from './StreamTab.vue';
+import DagTab from './DagTab.vue';
 
 const ui = useUiStore();
 const engine = useEngineStore();
@@ -44,6 +46,7 @@ const tabs: { id: ActiveTab; label: string }[] = [
   { id: 'flow', label: 'Pipeline' },
   { id: 'bytecode', label: 'Bytecode' },
   { id: 'vmtrace', label: 'VM Trace' },
+  { id: 'dag', label: 'DAG' },
   { id: 'perf', label: 'Perf' },
   { id: 'workers', label: 'Workers' },
   { id: 'cache', label: 'Cache' },

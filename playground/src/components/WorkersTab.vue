@@ -66,6 +66,37 @@
         </div>
       </div>
 
+      <!-- Compilation Worker Card -->
+      <div class="worker-card">
+        <div class="worker-card-header">
+          <span class="worker-card-icon">📦</span>
+          <span class="worker-card-name">Compilation Worker</span>
+          <span class="worker-card-status" :class="{ 'status-busy': ws.compilationWorker.isActive }">{{ ws.compilationWorker.isActive ? 'active' : 'idle' }}</span>
+        </div>
+        <div class="worker-card-body">
+          <div class="worker-metric">
+            <span class="worker-metric-label">Active compilations</span>
+            <span class="worker-metric-value">{{ ws.compilationWorker.activeCompilations }}</span>
+          </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Bytecode stored</span>
+            <span class="worker-metric-value">{{ ws.compilationWorker.bytecodeStored }}</span>
+          </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Bytecode discarded</span>
+            <span class="worker-metric-value">{{ ws.compilationWorker.bytecodeDiscarded }}</span>
+          </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Transfer size</span>
+            <span class="worker-metric-value">{{ ws.compilationWorker.transferSize }}</span>
+          </div>
+        </div>
+        <div class="worker-card-footer">
+          <span class="worker-metric-label">Status</span>
+          <span class="worker-metric-value">{{ ws.compilationWorker.bytecodeStored > 0 ? 'Ready' : 'Awaiting work' }}</span>
+        </div>
+      </div>
+
       <!-- Activity Log -->
       <div class="worker-log">
         <h4>Activity Log</h4>

@@ -4,6 +4,26 @@
       <span class="bytecode-count">{{ steps.length }} steps</span>
       <span class="toggle-label" style="font-size:10px;color:var(--text-muted)">vmTraceEnabled mode</span>
     </div>
+
+    <!-- Checkpoint markers -->
+    <div v-if="checkpoints.length > 0" class="vm-checkpoints-bar">
+      <span class="vm-checkpoints-title">Checkpoints ({{ checkpoints.length }})</span>
+      <div class="vm-checkpoints-chips">
+        <span
+          v-for="cp in checkpoints"
+          :key="cp.lineNumber"
+          class="vm-checkpoint-chip"
+          :title="cp.variables.length + ' variable(s): ' + cp.variables.join(', ')"
+        >
+          L{{ cp.lineNumber }}
+          <span class="vm-checkpoint-var-count">({{ cp.variableCount }} vars)</span>
+        </span>
+      </div>
+      <div class="vm-checkpoints-note">
+        Checkpoints record VM variable state at definition lines for fast restoration.
+      </div>
+    </div>
+
     <div class="vm-trace-table">
       <div class="vm-trace-header-row">
         <span class="vm-trace-col-step">#</span>
@@ -42,8 +62,9 @@
 import { computed } from 'vue';
 import { useEngineStore } from '../stores/engine.js';
 import { formatStackValue, stackValueTypeClass } from '../utils.js';
-import type { VmTraceStep } from '../engine.js';
+import type { VmTraceStep, CheckpointSnapshot } from '../engine.js';
 
 const engine = useEngineStore();
 const steps = computed<VmTraceStep[]>(() => engine.currentResult?.vmTrace ?? []);
+const checkpoints = computed<CheckpointSnapshot[]>(() => engine.currentResult?.checkpoints ?? []);
 </script>

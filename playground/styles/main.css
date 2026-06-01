@@ -3025,3 +3025,219 @@ html, body {
 }
 .token-line-group { animation: fadeIn 0.2s var(--ease) both; }
 .stat-card { animation: slideIn 0.25s var(--ease) both; }
+
+/* ── Three-Tier Badges (Output Tab line headers) ──────────────── */
+.token-line-header-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  line-height: 1.2;
+  border: 1px solid transparent;
+}
+.tier-badge.tier-1 { background: rgba(41, 206, 153, 0.15); color: var(--accent); border-color: rgba(41, 206, 153, 0.25); }
+.tier-badge.tier-2 { background: rgba(78, 201, 176, 0.15); color: var(--stage-compiler); border-color: rgba(78, 201, 176, 0.25); }
+.tier-badge.tier-3 { background: rgba(255, 216, 102, 0.15); color: var(--stage-vm); border-color: rgba(255, 216, 102, 0.25); }
+.tier-badge.tier-skip { background: rgba(107, 107, 117, 0.2); color: var(--text-muted); border-color: rgba(107, 107, 117, 0.3); }
+
+/* ── VM Checkpoints Bar (VM Trace tab) ──────────────────────────── */
+.vm-checkpoints-bar {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.vm-checkpoints-title {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 6px;
+}
+.vm-checkpoints-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.vm-checkpoint-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(41, 206, 153, 0.2);
+  color: var(--accent);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: help;
+  transition: all var(--transition-fast);
+}
+.vm-checkpoint-chip:hover {
+  background: rgba(41, 206, 153, 0.2);
+  border-color: var(--accent);
+}
+.vm-checkpoint-var-count {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 500;
+}
+.vm-checkpoints-note {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* ── Batcher Panel (Stream tab) ────────────────────────────────── */
+.batcher-panel {
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.batcher-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+.batcher-panel-header:hover {
+  background: var(--bg-tertiary);
+}
+.batcher-panel-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--stage-compiler);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.batcher-stats {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.batcher-stat {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 9px;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+}
+.batcher-panel-body {
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-subtle);
+}
+.batcher-description {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+.batcher-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 6px;
+}
+.batcher-metric-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+}
+.batcher-metric-value {
+  display: block;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.batcher-metric-label {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* ── Page Heatmap (Cache tab) ──────────────────────────────────── */
+.page-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 4px;
+  padding: 8px 12px;
+}
+.page-heatmap-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: help;
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+  border: 1px solid transparent;
+}
+.page-heatmap-cell:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.2);
+}
+.page-heatmap-hot {
+  background: rgba(41, 206, 153, 0.2);
+  border-color: rgba(41, 206, 153, 0.35);
+}
+.page-heatmap-warm {
+  background: rgba(255, 216, 102, 0.12);
+  border-color: rgba(255, 216, 102, 0.2);
+}
+.page-heatmap-cold {
+  background: rgba(107, 107, 117, 0.1);
+  border-color: rgba(107, 107, 117, 0.15);
+}
+.page-heatmap-page-num {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+.page-heatmap-hot .page-heatmap-page-num { color: var(--accent); }
+.page-heatmap-warm .page-heatmap-page-num { color: var(--stage-vm); }
+.page-heatmap-cold .page-heatmap-page-num { color: var(--text-muted); }
+.page-heatmap-range {
+  font-size: 8px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.page-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+.page-heatmap-legend-item {
+  font-size: 10px;
+  font-weight: 600;
+}
+.page-heatmap-legend-item.page-heatmap-hot { color: var(--accent); }
+.page-heatmap-legend-item.page-heatmap-warm { color: var(--stage-vm); }
+.page-heatmap-legend-item.page-heatmap-cold { color: var(--text-muted); }

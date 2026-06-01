@@ -31,7 +31,9 @@
         >
           <div class="token-line-header">
             <div class="token-line-header-left">
-              <span>Line {{ entry.line }}</span>
+              <span class="token-line-header-label">Line {{ entry.line }}</span>
+              <!-- Three-tier badge -->
+              <span v-if="entry.result" class="tier-badge" :class="getTierClass(entry.result)">{{ getTierLabel(entry.result) }}</span>
               <span v-if="entry.result" class="token-line-microstats">
                 <span
                   class="microstat-badge"
@@ -202,6 +204,21 @@ watch(
   () => updateDisplay(),
   { deep: false, immediate: true }
 );
+
+/* ── Three-tier badge helpers ──────────────────────────────── */
+function getTierClass(result: LineResult): string {
+  if (result.error) return 'tier-skip';
+  if (result.wasCached) return 'tier-2';
+  if (result.type === 'Pending') return 'tier-3';
+  return 'tier-1';
+}
+
+function getTierLabel(result: LineResult): string {
+  if (result.error) return 'SKIP';
+  if (result.wasCached) return 'T2';
+  if (result.type === 'Pending') return 'T3';
+  return 'T1';
+}
 
 /* ── Copy result ──────────────────────────────────────────────── */
 function copyResult(e: MouseEvent): void {

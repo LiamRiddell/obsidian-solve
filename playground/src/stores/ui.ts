@@ -9,7 +9,8 @@ export type ActiveTab =
   | 'perf'
   | 'workers'
   | 'cache'
-  | 'stream';
+  | 'stream'
+  | 'dag';
 
 export const useUiStore = defineStore('ui', () => {
   /* ── State ──────────────────────────────────────────────── */

@@ -3,6 +3,33 @@
     <div class="panel-scroll" id="cache-display">
       <span v-if="!cache" class="empty">No cache data</span>
       <template v-else>
+        <!-- Page Heatmap -->
+        <div v-if="heatmapEntries.length > 0" class="cache-section">
+          <div class="cache-section-header">
+            <span>🗂 Page Heatmap</span>
+            <span class="cache-section-count">{{ heatmapEntries.length }} pages · 128 lines/page</span>
+          </div>
+          <div class="page-heatmap-grid">
+            <div
+              v-for="page in heatmapEntries"
+              :key="page.pageNum"
+              class="page-heatmap-cell"
+              :class="'page-heatmap-' + page.temperature"
+              :title="'Page ' + page.pageNum + ' (L' + page.startLine + '-' + page.endLine + ')\nTemp: ' + page.temperature + '\nAccess: #' + page.accessSeq"
+            >
+              <span class="page-heatmap-page-num">{{ page.pageNum }}</span>
+              <span class="page-heatmap-range">{{ page.startLine }}–{{ page.endLine }}</span>
+            </div>
+          </div>
+          <div class="page-heatmap-legend">
+            <span class="page-heatmap-legend-item page-heatmap-hot">● Hot</span>
+            <span class="page-heatmap-legend-item page-heatmap-warm">● Warm</span>
+            <span class="page-heatmap-legend-item page-heatmap-cold">● Cold</span>
+            <span style="font-size:9px;color:var(--text-muted);margin-left:8px">
+              Hot = viewport ±3 pages · Warm = viewport ±6 pages · Cold = beyond
+            </span>
+          </div>
+        </div>
         <!-- Bytecode Cache -->
         <div class="cache-section">
           <div class="cache-section-header">
@@ -63,6 +90,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useEngineStore } from '../stores/engine.js';
+import type { PageHeatmapEntry } from '../engine.js';
 
 const engine = useEngineStore();
 const cache = computed(() => engine.currentResult?.cacheSnapshot ?? null);
@@ -70,4 +98,6 @@ const cache = computed(() => engine.currentResult?.cacheSnapshot ?? null);
 const resolvedLineCount = computed(() =>
   (cache.value?.lineCache ?? []).filter(e => e.resultType !== 'Pending').length,
 );
+
+const heatmapEntries = computed<PageHeatmapEntry[]>(() => engine.currentResult?.pageHeatmap ?? []);
 </script>
