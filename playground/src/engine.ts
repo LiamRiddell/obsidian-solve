@@ -652,6 +652,7 @@ export function runEngineWithStreaming(
 	let lastPipelineStages: PipelineStageResult[] = [];
 
 	let abortHandler: (() => void) | null = null;
+	let allLines: string[] = [];
 
 	const stream = new ReadableStream<DiagnosticEventInfo>({
 		start: (controller) => {
@@ -747,7 +748,7 @@ export function runEngineWithStreaming(
 
 				// ── Evaluate all lines ──
 				markdownOutline = generateMarkdownOutline(expression);
-				const allLines = expression.split("\n");
+				allLines = expression.split("\n");
 
 				for (let idx = 0; idx < allLines.length; idx++) {
 					const trimmed = allLines[idx].trim();

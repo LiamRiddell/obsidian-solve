@@ -221,7 +221,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, watch, ref } from 'vue';
 import { useEngineStore } from '../stores/engine.js';
 import { usePerfStore } from '../stores/perf.js';
 import { usePipelineStore } from '../stores/pipeline.js';
