@@ -8,7 +8,7 @@ import { Lexer } from "@solve-js/lexer/Lexer";
 import { benchmarkFn } from "@tools/testUtils";
 
 describe("Lexer Benchmarks", () => {
-  let results: Record<string, number> = {};
+  const results: Record<string, number> = {};
 
   afterAll(() => {
     console.log("\n📊 LEXER BENCHMARK RESULTS (mean ms, higher iterations = more accurate):");

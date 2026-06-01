@@ -4,7 +4,7 @@
  */
 
 // Pre-existing: __WORKER_URL__ is an esbuild define substitution, not available in ts-jest
-declare var __WORKER_URL__: string | undefined;
+declare let __WORKER_URL__: string | undefined;
 
 import { describe, expect, test, afterAll } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -20,7 +20,7 @@ function generateDoc(lineCount: number): string {
 }
 
 describe("Diagnostic Pipeline Overhead Benchmark", () => {
-  let results: Record<string, number> = {};
+  const results: Record<string, number> = {};
 
   afterAll(() => {
     console.log("\n📊 DIAGNOSTIC PIPELINE BENCHMARK RESULTS:");

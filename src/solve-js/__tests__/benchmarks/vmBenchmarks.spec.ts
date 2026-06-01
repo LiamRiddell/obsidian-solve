@@ -76,7 +76,7 @@ const programs: Array<{ name: string; bytecode: BytecodeProgram }> = [
 ];
 
 describe("VM Benchmarks", () => {
-  let results: Record<string, number> = {};
+  const results: Record<string, number> = {};
 
   afterAll(() => {
     console.log("\n📊 VM BENCHMARK RESULTS (mean µs, isolated VM execution):");

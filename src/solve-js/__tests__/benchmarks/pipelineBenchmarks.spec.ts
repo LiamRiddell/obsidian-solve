@@ -25,7 +25,7 @@ function generateInlineDoc(solveCount: number): string {
 }
 
 describe("Pipeline Benchmarks", () => {
-  let results: Record<string, number> = {};
+  const results: Record<string, number> = {};
 
   afterAll(() => {
     console.log("\n📊 PIPELINE BENCHMARK RESULTS (mean ms, full expression pipeline):");

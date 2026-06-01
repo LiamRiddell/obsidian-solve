@@ -44,7 +44,7 @@ function tokenize(input: string) {
 }
 
 describe("Parser Benchmarks", () => {
-  let results: Record<string, number> = {};
+  const results: Record<string, number> = {};
 
   afterAll(() => {
     console.log("\n📊 PARSER BENCHMARK RESULTS (mean ms):");

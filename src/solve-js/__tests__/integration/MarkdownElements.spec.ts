@@ -204,7 +204,7 @@ describe("Markdown Elements and Multi-line Documents", () => {
     test("handles document with mixed markdown and expressions efficiently", () => {
       const lexer = new Lexer("en");
 
-      let lines: string[] = ["# Document"];
+      const lines: string[] = ["# Document"];
       for (let i = 0; i < 50; i++) {
         lines.push(`- Item ${i}: ${i} + ${i}`);
       }

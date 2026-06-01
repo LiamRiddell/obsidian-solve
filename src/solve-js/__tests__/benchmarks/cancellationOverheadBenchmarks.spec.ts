@@ -24,7 +24,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { benchmarkFn } from "@tools/testUtils";
 
 describe("Cancellation Overhead Benchmarks", () => {
-	let results: Record<string, number> = {};
+	const results: Record<string, number> = {};
 
 	afterAll(() => {
 		console.log(
