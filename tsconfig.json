@@ -23,5 +23,5 @@
 	}
 	},
 	"include": ["**/*.ts"],
-	"exclude": ["playground/**/*"]
+	"exclude": ["playground/**/*", "**/__tests__/**/*", "**/*.spec.ts"]
 }

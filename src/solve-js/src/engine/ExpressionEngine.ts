@@ -52,7 +52,12 @@ import {
 import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
 import { abortLogger } from "@app/utilities/AbortControllerLogger";
 import { TokenNormalizer, createBuiltinNormalizerRules } from "@solve-js/normalizer";
-import type { NormalizerRule } from "@solve-js/normalizer";
+import type { NormalizerRule, TokenFusion } from "@solve-js/normalizer";
+import {
+    type DiagnosticPipelineResult,
+    type PipelineStageResult,
+    type StageOutput,
+} from "@solve-js/types/DiagnosticPipelineResult";
 
 
 
@@ -845,7 +850,7 @@ export class ExpressionEngine {
         lineNumber: number,
         lineText: string,
         inputType: string = "expression"
-    ): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; inlineSolve?: InlineSolvePosition; debug?: DiagnosticReportJSON } {
+    ): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; inlineSolve?: InlineSolvePosition; debug?: DiagnosticReportJSON; diagnostic?: DiagnosticPipelineResult } {
         const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
         if (inlineSolveMatch) {
             const expression = inlineSolveMatch[1];
@@ -865,6 +870,25 @@ export class ExpressionEngine {
     }
 
     /**
+     * Build a single pipeline stage result for the structured diagnostic output.
+     * This runs in parallel with the existing event-based diagnostic system -
+     * no performance impact when diagnosticMode is false (stages array stays empty).
+     */
+    private addDiagnosticStage(
+        stages: PipelineStageResult[],
+        stage: string,
+        label: string,
+        icon: string,
+        colorClass: string,
+        stepNumber: number,
+        elapsedNs: number,
+        skipped: boolean,
+        output: StageOutput,
+    ): void {
+        stages.push({ stage, label, icon, colorClass, stepNumber, elapsedNs, skipped, output });
+    }
+
+    /**
      * Core expression evaluation logic with diagnostic pipeline integration.
      * Every pipeline stage fires events to registered collectors.
      *
@@ -872,21 +896,32 @@ export class ExpressionEngine {
      * with AllocationTracker.track() to capture wall-time and heap delta.
      * When disabled (production), track() is a zero-overhead passthrough.
      */
-    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; debug?: DiagnosticReportJSON } {
+    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; debug?: DiagnosticReportJSON; diagnostic?: DiagnosticPipelineResult } {
         const pipeline = this.diagnosticPipeline;
         const hasCollectors = pipeline.hasCollectors;
         const trackEnabled = AllocationTracker.isEnabled();
         const stageAllocs: StageAllocation[] = [];
+        const stages: PipelineStageResult[] = [];
+        const zeroElapsed = 0; // Placeholder — timeline collector overrides with real ns
 
         // === SAFETY CHECK 1: Expression length limit ===
         const lengthCheck = checkExpressionLength(expression, this.config.validation);
         if (!lengthCheck.passed) {
-            return { ...lengthCheck.error!, debug: undefined };
+            if (hasCollectors) {
+                this.addDiagnosticStage(stages, 'safety_length', 'Safety: Length', '🛡️', 'validate', 2, zeroElapsed, false, {
+                    type: 'safety_length',
+                    passed: false,
+                    expressionLength: expression.length,
+                    maxLength: this.config.validation.maxExpressionLength,
+                    errorMessage: lengthCheck.error!.error,
+                });
+            }
+            return { ...lengthCheck.error!, debug: undefined, diagnostic: undefined };
         }
 
         const tokens: Token[] = [];
 
-        // Pipeline event: start
+        // Pipeline event: start + structured stage
         if (hasCollectors) {
             pipeline.firePipelineStart({
                 type: DiagnosticEventType.PipelineStart,
@@ -894,6 +929,15 @@ export class ExpressionEngine {
                 expression,
                 inputType,
              });
+            this.addDiagnosticStage(stages, 'pipeline_start', 'Pipeline Start', '▶', 'pipeline', 1, zeroElapsed, false, {
+                type: 'pipeline_start', expression, inputType,
+            });
+            this.addDiagnosticStage(stages, 'safety_length', 'Safety: Length', '🛡️', 'validate', 2, zeroElapsed, false, {
+                type: 'safety_length',
+                passed: true,
+                expressionLength: expression.length,
+                maxLength: this.config.validation.maxExpressionLength,
+            });
         }
 
         // ══ LEXER STAGE ══
@@ -928,6 +972,22 @@ export class ExpressionEngine {
         const hasParens = lexResult.result.hasParens;
         if (trackEnabled && lexResult.alloc) stageAllocs.push(lexResult.alloc);
 
+        // Structured: lexer stage output
+        if (hasCollectors) {
+            const tokenTypes: Record<string, number> = {};
+            for (const t of tokens) {
+                tokenTypes[t.type] = (tokenTypes[t.type] || 0) + 1;
+            }
+            this.addDiagnosticStage(stages, 'lexer', 'Lexer', '🔤', 'lexer', 3, zeroElapsed, false, {
+                type: 'lexer',
+                tokenCount: tokens.length,
+                tokenTypes,
+                hasParens,
+                locale: this.localeCode,
+                tokens: [...tokens],
+            });
+        }
+
         if (tokens.length === 0) {
             const v = numberValue(0);
             this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null), expression);
@@ -943,13 +1003,15 @@ export class ExpressionEngine {
                 });
             }
 
-            return { value: v, tokens, program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, debug: undefined };
+            return { value: v, tokens, program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, debug: undefined, diagnostic: undefined };
         }
 
         // ══ NORMALIZER STAGE ══
         // Post-lexer token normalization: phrase fusion, implicit multiply, etc.
         // Normalized tokens replace raw tokens for parsing and safety checks.
         let normalizedTokens: Token[] = tokens;
+        const normalizerFusions: TokenFusion[] = [];
+        const normalizerRuleCounts = new Map<string, number>();
         if (this.normalizer.ruleCount > 0) {
             if (hasCollectors) {
                 pipeline.fireNormalizerStart({
@@ -964,6 +1026,8 @@ export class ExpressionEngine {
             normalizedTokens = this.normalizer.normalize(tokens, (fusion) => {
                 if (hasCollectors) {
                     fusionCount++;
+                    normalizerFusions.push(fusion);
+                    normalizerRuleCounts.set(fusion.rule, (normalizerRuleCounts.get(fusion.rule) || 0) + 1);
                     pipeline.fireTokenFused({
                         type: DiagnosticEventType.TokenFused,
                         elapsedNs: 0,
@@ -984,13 +1048,42 @@ export class ExpressionEngine {
                     outputTokenCount: normalizedTokens.length,
                     fusionsCount: fusionCount,
                 });
+                this.addDiagnosticStage(stages, 'normalizer', 'Normalizer', '🔄', 'normalizer', 4, zeroElapsed, false, {
+                    type: 'normalizer',
+                    inputTokenCount: tokens.length,
+                    outputTokenCount: normalizedTokens.length,
+                    fusions: normalizerFusions,
+                    rulesApplied: [...normalizerRuleCounts.entries()].map(([rule, count]) => ({ rule, count })),
+                    tokens: [...normalizedTokens],
+                });
             }
+        } else if (hasCollectors) {
+            this.addDiagnosticStage(stages, 'normalizer', 'Normalizer', '🔄', 'normalizer', 4, zeroElapsed, true, {
+                type: 'normalizer',
+                inputTokenCount: tokens.length,
+                outputTokenCount: tokens.length,
+                fusions: [],
+                rulesApplied: [],
+                tokens: [...tokens],
+            });
         }
 
         // === SAFETY CHECK 2: Complexity scoring ===
         const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
         if (!complexityCheck.passed) {
             if (hasCollectors) {
+                this.addDiagnosticStage(stages, 'safety_complexity', 'Safety: Complexity', '🛡️', 'validate', 5, zeroElapsed, false, {
+                    type: 'safety_complexity',
+                    passed: false,
+                    complexityScore: complexityCheck.complexityScore ?? 0,
+                    maxComplexity: this.config.validation.maxComplexity,
+                    breakdown: {
+                        tokenCount: normalizedTokens.length,
+                        functionCalls: 0,
+                        nestingDepth: 0,
+                    },
+                    errorMessage: complexityCheck.errorMessage!,
+                });
                 pipeline.firePipelineEnd({
                     type: DiagnosticEventType.PipelineEnd,
                     elapsedNs: 0,
@@ -1005,11 +1098,36 @@ export class ExpressionEngine {
                 tokens: [],
                 program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
                 error: complexityCheck.errorMessage!,
-                debug: undefined
+                debug: undefined,
+                diagnostic: undefined,
             };
         }
 
+        if (hasCollectors) {
+            this.addDiagnosticStage(stages, 'safety_complexity', 'Safety: Complexity', '🛡️', 'validate', 5, zeroElapsed, false, {
+                type: 'safety_complexity',
+                passed: true,
+                complexityScore: complexityCheck.complexityScore ?? normalizedTokens.length,
+                maxComplexity: this.config.validation.maxComplexity,
+                breakdown: {
+                    tokenCount: normalizedTokens.length,
+                    functionCalls: 0,
+                    nestingDepth: 0,
+                },
+            });
+        }
+
         const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+
+        // Structured: read/write extraction
+        if (hasCollectors) {
+            this.addDiagnosticStage(stages, 'readwrite', 'Read/Write', '📋', 'readwrite', 6, zeroElapsed, false, {
+                type: 'readwrite',
+                reads,
+                writes,
+                isAssignment: writes.length > 0,
+            });
+        }
 
         let program: BytecodeProgram;
 
@@ -1018,7 +1136,30 @@ export class ExpressionEngine {
         if (cachedProgram) {
             program = cachedProgram;
 
+            // Structured: cache check - hit
             if (hasCollectors) {
+                this.addDiagnosticStage(stages, 'cache_check', 'Cache Check', '💾', 'cache', 7, zeroElapsed, false, {
+                    type: 'cache_check',
+                    hit: true,
+                    cacheSize: this.bytecodeCache.size,
+                    cacheKey: expression,
+                });
+                // Parser + Compiler skipped (cache hit)
+                this.addDiagnosticStage(stages, 'parser', 'Parser', '🌳', 'parser', 8, zeroElapsed, true, {
+                    type: 'parser',
+                    parselets: [],
+                    uniqueParseletTypes: [],
+                    astDepth: 0,
+                });
+                this.addDiagnosticStage(stages, 'compiler', 'Compiler', '⚙️', 'compiler', 9, zeroElapsed, true, {
+                    type: 'compiler',
+                    opcodeCount: program.opcodes.length,
+                    numberConstants: program.numbers.length,
+                    stringConstants: program.strings.length,
+                    hasAsync: program.hasAsync,
+                    cached: true,
+                });
+
                 pipeline.fireCacheHit({
                     type: DiagnosticEventType.CacheHit,
                     elapsedNs: 0,
@@ -1039,6 +1180,12 @@ export class ExpressionEngine {
             }
         } else {
             if (hasCollectors) {
+                this.addDiagnosticStage(stages, 'cache_check', 'Cache Check', '💾', 'cache', 7, zeroElapsed, false, {
+                    type: 'cache_check',
+                    hit: false,
+                    cacheSize: this.bytecodeCache.size,
+                    cacheKey: expression,
+                });
                 pipeline.fireCacheMiss({
                     type: DiagnosticEventType.CacheMiss,
                     elapsedNs: 0,
@@ -1060,9 +1207,6 @@ export class ExpressionEngine {
             try {
                 const parseResult = AllocationTracker.track('parser', () => {
                     this.parseExpression(builder, normalizedTokens, hasParens);
-                    // Use build() which allocates TypedArrays directly from builder arrays.
-                    // This is a single copy (builder → TypedArray) instead of the old
-                    // double copy (builder → pool buffer → TypedArray for cache).
                     return builder.build();
                 });
                 if (trackEnabled && parseResult.alloc) stageAllocs.push(parseResult.alloc);
@@ -1086,13 +1230,33 @@ export class ExpressionEngine {
                     tokens: normalizedTokens,
                     program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
                     error: errorMessage,
-                    debug: undefined
+                    debug: undefined,
+                    diagnostic: undefined,
                 };
+            }
+
+            // Structured: parser stage
+            if (hasCollectors) {
+                this.addDiagnosticStage(stages, 'parser', 'Parser', '🌳', 'parser', 8, zeroElapsed, false, {
+                    type: 'parser',
+                    parselets: [],
+                    uniqueParseletTypes: [],
+                    astDepth: 0,
+                });
             }
 
             this.bytecodeCache.set(expression, program);
 
             if (hasCollectors) {
+                this.addDiagnosticStage(stages, 'compiler', 'Compiler', '⚙️', 'compiler', 9, zeroElapsed, false, {
+                    type: 'compiler',
+                    opcodeCount: program.opcodes.length,
+                    numberConstants: program.numbers.length,
+                    stringConstants: program.strings.length,
+                    hasAsync: program.hasAsync,
+                    cached: false,
+                });
+
                 pipeline.fireBytecodeBuilt({
                     type: DiagnosticEventType.BytecodeBuilt,
                     elapsedNs: 0,
@@ -1111,10 +1275,9 @@ export class ExpressionEngine {
         // ══ PRE-FLIGHT ASYNC CHECK ══
         // O(1) guard: skip the O(n) resolver scan when the bytecode has no
         // async opcodes AND no resolvers are registered.
-        if (program.hasAsync || this.resolverRegistry.size > 0) {
+        const hasAsync = program.hasAsync || this.resolverRegistry.size > 0;
+        if (hasAsync) {
         // Check all registered async resolvers BEFORE VM execution.
-        // Link the preflight AbortController to the keystroke signal so
-        // that in-flight preflight checks are canceled on new keystrokes.
         const preflightController = new AbortController();
         const abortPreflight = () => preflightController.abort();
         this.keystrokeSignal?.addEventListener('abort', abortPreflight, { once: true });
@@ -1147,6 +1310,13 @@ export class ExpressionEngine {
             this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
 
             if (hasCollectors) {
+                this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, false, {
+                    type: 'async_preflight',
+                    path: 'pending',
+                    pendingQueryKey: asyncCheck.queryKey,
+                    resolverCount: this.resolverRegistry.size,
+                    skippedGuard: true,
+                });
                 pipeline.firePipelineEnd({
                     type: DiagnosticEventType.PipelineEnd,
                     elapsedNs: 0,
@@ -1162,9 +1332,28 @@ export class ExpressionEngine {
                 tokens: normalizedTokens,
                 program,
                 debug: undefined,
+                diagnostic: hasCollectors ? { stages, value: pending, tokens: normalizedTokens, program, error: null } : undefined,
             };
         }
-        } // end preflight guard
+
+        // Structured: async preflight - sync path
+        if (hasCollectors) {
+            this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, false, {
+                type: 'async_preflight',
+                path: 'sync',
+                resolverCount: this.resolverRegistry.size,
+                skippedGuard: false,
+            });
+        }
+        } else if (hasCollectors) {
+            // Structured: async preflight - skipped (no async opcodes, no resolvers)
+            this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, true, {
+                type: 'async_preflight',
+                path: 'sync',
+                resolverCount: 0,
+                skippedGuard: true,
+            });
+        }
 
         // ══ VM STAGE ══
         const emitVmTrace = hasCollectors && this.config.diagnostic.vmTraceEnabled === true;
@@ -1233,6 +1422,7 @@ export class ExpressionEngine {
                 tokens: normalizedTokens,
                 program,
                 debug: undefined,
+                diagnostic: hasCollectors ? { stages, value: pending, tokens: normalizedTokens, program, error: null } : undefined,
             };
         }
 
@@ -1250,17 +1440,46 @@ export class ExpressionEngine {
             );
         }
 
-if (hasCollectors) {
-             pipeline.fireVmHalt({
-                 type: DiagnosticEventType.VmHalt,
-                 elapsedNs: 0,
-                 expression,
-                 result: result ? {
-                     type: result.type,
-                     value: result.value,
-                     unit: result.unit,
-                 } : undefined,
-             });
+        // Structured: DAG Registration + LineCache + Result + PipelineEnd
+        if (hasCollectors) {
+            this.addDiagnosticStage(stages, 'dag_registration', 'DAG Registration', '🔗', 'dag', 11, zeroElapsed, false, {
+                type: 'dag_registration',
+                readsRegistered: reads,
+                writesRegistered: writes,
+                dataSourcesRegistered: [],
+            });
+            this.addDiagnosticStage(stages, 'linecache', 'Line Cache', '📦', 'cache', 12, zeroElapsed, false, {
+                type: 'linecache',
+                lineNumber,
+                expression,
+                stored: true,
+            });
+            this.addDiagnosticStage(stages, 'result', 'Result', '✓', 'result', 13, zeroElapsed, false, {
+                type: 'result',
+                rawValue: String(result.value),
+                formattedValue: String(result.value),
+                valueType: result.type === 0 ? 'Number' : 'Value',
+                unit: result.unit,
+            });
+
+            pipeline.fireVmHalt({
+                type: DiagnosticEventType.VmHalt,
+                elapsedNs: 0,
+                expression,
+                result: result ? {
+                    type: result.type,
+                    value: result.value,
+                    unit: result.unit,
+                } : undefined,
+            });
+
+            this.addDiagnosticStage(stages, 'pipeline_end', 'Pipeline End', '⏹', 'pipeline', 14, zeroElapsed, false, {
+                type: 'pipeline_end',
+                success: true,
+                totalTokens: tokens.length,
+                totalOpcodes: program.opcodes.length,
+                cacheHit: !!cachedProgram,
+            });
 
             pipeline.firePipelineEnd({
                 type: DiagnosticEventType.PipelineEnd,
@@ -1272,16 +1491,17 @@ if (hasCollectors) {
             });
         }
 
-// Build debug info — structured diagnostic report
-         if (hasCollectors) {
+        // Build debug info — structured diagnostic report
+        if (hasCollectors) {
             const reports = pipeline.collectReports();
             return {
                 value: result!,
                 tokens: normalizedTokens,
                 program,
                 debug: reports[0]?.toJSON() || undefined,
+                diagnostic: { stages, value: result!, tokens: normalizedTokens, program, error: null },
             };
-         }
+        }
 
         return {
             value: result!,

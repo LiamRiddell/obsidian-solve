@@ -1,5 +1,5 @@
 <template>
-  <div class="flow-stage" :class="{ executed: executed, error: hasError, collapsed: collapsed, 'flash-pulse': pulsing }">
+  <div class="flow-stage" :class="{ executed: executed, error: hasError, collapsed: collapsed, skipped: skipped, 'flash-pulse': pulsing }">
     <div class="flow-stage-header" :class="[colorClass, { 'header-pulse': pulsing }]" @click="toggle">
       <span class="flow-stage-step">{{ stepNumber }}</span>
       <span class="flow-stage-icon">{{ icon }}</span>
@@ -42,6 +42,7 @@ const props = defineProps<{
   isResult?: boolean;
   executed?: boolean;
   hasError?: boolean;
+  skipped?: boolean;
   pulsing?: boolean;
 }>();
 

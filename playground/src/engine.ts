@@ -5,6 +5,7 @@ import { Value, ValueType } from '@/solve-js/src/vm/Value';
 import type { BytecodeProgram } from '@/solve-js/src/parser/BytecodeBuilder';
 import type { Token } from '@/solve-js/src/lexer/Token';
 import type { ParseletInfo } from '@/solve-js/src/types/ParsingResult';
+import type { PipelineStageResult } from '@/solve-js/src/types/DiagnosticPipelineResult';
 import { dataQueryService } from '@solve-js/services/DataQueryService';
 
 export type { Token };
@@ -29,6 +30,8 @@ export interface DebugResult {
     dqMetrics: DQMetrics;
     cacheSnapshot: CacheSnapshot;
     diagnosticEvents: DiagnosticEventInfo[];
+    /** Structured pipeline stages from engine's DiagnosticPipelineResult (available in diagnostic mode) */
+    pipelineStages: PipelineStageResult[];
 }
 
 export interface LineResult {
@@ -313,6 +316,7 @@ export function runEngineWithStreaming(
     let lastDebugEvents: readonly { type: string; elapsedNs: number }[] | null = null;
     const lineEventSnapshots: { lineNumber: number; events: readonly { type: string; elapsedNs: number }[] }[] = [];
     let cacheSnapshot: CacheSnapshot = { bytecode: [], lineCache: [], asyncCache: [] };
+    let lastPipelineStages: PipelineStageResult[] = [];
 
     let abortHandler: (() => void) | null = null;
 
@@ -403,6 +407,11 @@ export function runEngineWithStreaming(
 
                     const result = engine!.evaluateLineWithDebug(lineNum, trimmed);
                     const parselet = (result.debug?.parselets?.[0] as any)?.parseletType ?? 'Expression';
+
+                    // Collect structured pipeline stages from the last line
+                    if (result.diagnostic?.stages) {
+                        lastPipelineStages = result.diagnostic.stages;
+                    }
 
                     // Emit async_pending if the result is Pending
                     if (result.value?.type === 12) { // ValueType.Pending
@@ -564,7 +573,7 @@ export function runEngineWithStreaming(
         }))
         : [];
 
-    const result: DebugResult = { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, lineStats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics, cacheSnapshot, diagnosticEvents };
+    const result: DebugResult = { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, lineStats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics, cacheSnapshot, diagnosticEvents, pipelineStages: lastPipelineStages };
 
     return { result, stream };
 }
@@ -581,6 +590,7 @@ export function runEngine(expression: string): DebugResult {
     let markdownOutline: MarkdownNode[] = [];
     let lineResults: LineResult[] = [];
     let parselets: ParseletInfo[] = [];
+    let lastPipelineStages: PipelineStageResult[] = [];
 
     // The TimelineDiagnosticCollector accumulates events across ALL
     // evaluateLineWithDebug() calls without resetting, so line N's
@@ -607,6 +617,11 @@ export function runEngine(expression: string): DebugResult {
 
             const result = engine.evaluateLineWithDebug(lineNum, trimmed);
             const parselet = (result.debug?.parselets?.[0] as any)?.parseletType ?? 'Expression';
+
+            // Collect structured pipeline stages from the last line (most complete diagnostic data)
+            if (result.diagnostic?.stages) {
+                lastPipelineStages = result.diagnostic.stages;
+            }
 
             // Capture per-line event snapshot + last valid set (accumulated across all lines)
             if (result.debug?.events && result.debug.events.length > 0) {
@@ -751,5 +766,5 @@ export function runEngine(expression: string): DebugResult {
         }))
         : [];
 
-    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, lineStats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics, cacheSnapshot, diagnosticEvents };
+    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, lineStats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics, cacheSnapshot, diagnosticEvents, pipelineStages: lastPipelineStages };
 }
