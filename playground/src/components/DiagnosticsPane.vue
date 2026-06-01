@@ -12,21 +12,13 @@
       </button>
     </nav>
     <KeepAlive>
-      <OutputTab v-if="ui.activeTab === 'tokens'" :key="engine.runId" />
-      <PipelineTab v-else-if="ui.activeTab === 'flow'" :key="engine.runId" />
-      <BytecodeTab v-else-if="ui.activeTab === 'bytecode'" :key="engine.runId" />
-      <VmTraceTab v-else-if="ui.activeTab === 'vmtrace'" :key="engine.runId" />
-      <PerfTab v-else-if="ui.activeTab === 'perf'" :key="engine.runId" />
-      <WorkersTab v-else-if="ui.activeTab === 'workers'" :key="engine.runId" />
-      <CacheTab v-else-if="ui.activeTab === 'cache'" :key="engine.runId" />
-      <DagTab v-else-if="ui.activeTab === 'dag'" :key="engine.runId" />
-      <ParseletRegistryTab v-else-if="ui.activeTab === 'parselets'" :key="engine.runId" />
-      <StreamTab v-else-if="ui.activeTab === 'stream'" :key="engine.runId" />
+      <component :is="currentTabComponent" :key="engine.runId" />
     </KeepAlive>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed, type Component } from 'vue';
 import { useUiStore, type ActiveTab } from '../stores/ui.js';
 import { useEngineStore } from '../stores/engine.js';
 import OutputTab from './OutputTab.vue';
@@ -55,4 +47,19 @@ const tabs: { id: ActiveTab; label: string }[] = [
   { id: 'parselets', label: 'Parselets' },
   { id: 'stream', label: 'Stream' },
 ];
+
+const tabComponents: Record<ActiveTab, Component> = {
+  tokens: OutputTab,
+  flow: PipelineTab,
+  bytecode: BytecodeTab,
+  vmtrace: VmTraceTab,
+  dag: DagTab,
+  perf: PerfTab,
+  workers: WorkersTab,
+  cache: CacheTab,
+  parselets: ParseletRegistryTab,
+  stream: StreamTab,
+};
+
+const currentTabComponent = computed(() => tabComponents[ui.activeTab]);
 </script>
