@@ -29,6 +29,7 @@ import CacheTab from './CacheTab.vue';
 import StreamTab from './StreamTab.vue';
 import DagTab from './DagTab.vue';
 import ParseletRegistryTab from './ParseletRegistryTab.vue';
+import NormalizerTab from './NormalizerTab.vue';
 
 const ui = useUiStore();
 const engine = useEngineStore();
@@ -44,6 +45,7 @@ const tabs: { id: ActiveTab; label: string }[] = [
   { id: 'cache', label: 'Cache' },
   { id: 'parselets', label: 'Parselets' },
   { id: 'stream', label: 'Stream' },
+  { id: 'normalizer', label: 'Normalizer' },
 ];
 
 const tabComponents: Record<ActiveTab, any> = {
@@ -57,6 +59,7 @@ const tabComponents: Record<ActiveTab, any> = {
   cache: CacheTab,
   parselets: ParseletRegistryTab,
   stream: StreamTab,
+  normalizer: NormalizerTab,
 };
 
 const currentTabComponent = computed(() => tabComponents[ui.activeTab]);

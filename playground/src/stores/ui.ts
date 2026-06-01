@@ -11,7 +11,8 @@ export type ActiveTab =
   | 'cache'
   | 'stream'
   | 'dag'
-  | 'parselets';
+  | 'parselets'
+  | 'normalizer';
 
 export const useUiStore = defineStore('ui', () => {
   /* ── State ──────────────────────────────────────────────── */
