@@ -115,6 +115,30 @@
       </div>
     </div>
 
+    <!-- Value Arena Stats (only when enabled) -->
+    <div v-if="arenaStats.enabled" class="perf-grid" style="padding-bottom:0">
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span class="stat-card-label">Arena Usage</span>
+          <span class="stat-card-icon" style="background:#c084fc"></span>
+        </div>
+        <div class="stat-card-value" style="color:#c084fc">{{ arenaStats.usage }} / {{ arenaStats.capacity }}</div>
+        <div class="stat-card-avg" style="color:#c084fc">
+          {{ (arenaStats.capacity > 0 ? (arenaStats.usage / arenaStats.capacity * 100).toFixed(1) : '0') }}% utilized
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span class="stat-card-label">Arena Capacity</span>
+          <span class="stat-card-icon" style="background:#5ac8fa"></span>
+        </div>
+        <div class="stat-card-value" style="color:#5ac8fa">{{ arenaStats.capacity }}</div>
+        <div class="stat-card-avg" style="color:#5ac8fa">
+          {{ arenaStats.enabled ? 'Bump-allocator active' : 'Not enabled' }}
+        </div>
+      </div>
+    </div>
+
     <!-- Stat cards -->
     <div class="perf-grid">
       <div v-for="card in statCards" :key="card.label" class="stat-card" :class="card.cardClass">
@@ -226,6 +250,7 @@ import { useEngineStore } from '../stores/engine.js';
 import { usePerfStore } from '../stores/perf.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 import { fmt, computeOverhead, getDominantStage, STAGE_COLORS } from '../utils.js';
+import type { ArenaStats } from '../engine.js';
 
 const engine = useEngineStore();
 const perf = usePerfStore();
@@ -446,6 +471,9 @@ const maxTotal = computed(() => Math.max(...perf.statsHistory.map(s => s.totalTi
 
 /** Telemetry section expansion state. */
 const telemetryExpanded = ref(false);
+
+/** Arena stats from the ValueArena bump-allocator. */
+const arenaStats = computed<ArenaStats>(() => engine.currentResult?.arenaStats ?? { enabled: false, usage: 0, capacity: 0 });
 
 /** Pipeline telemetry from the engine's AllocationTracker. */
 const pipelineTelemetry = computed(() => engine.currentResult?.pipelineTelemetry ?? null);

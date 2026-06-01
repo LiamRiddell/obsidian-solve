@@ -4,7 +4,7 @@ import type { Token } from "@/solve-js/src/lexer/Token";
 import { getOpCodeName, OpCode } from "@/solve-js/src/parser/OpCode";
 import type { PipelineStageResult } from "@/solve-js/src/types/DiagnosticPipelineResult";
 import type { ParseletInfo } from "@/solve-js/src/types/ParsingResult";
-import { Value, ValueType } from "@/solve-js/src/vm/Value";
+import { Value, ValueType, enableValueArena, disableValueArena } from "@/solve-js/src/vm/Value";
 import { AllocationTracker } from "@/solve-js/src/telemetry/AllocationTracker";
 import type { PipelineTelemetry } from "@/solve-js/src/telemetry/AllocationTracker";
 import { dataQueryService } from "@solve-js/services/DataQueryService";
@@ -41,6 +41,18 @@ export interface DebugResult {
     pageHeatmap: PageHeatmapEntry[];
     /** Allocation tracker pipeline telemetry (per-stage wall time + bytes). */
     pipelineTelemetry: PipelineTelemetry | null;
+    /** ValueArena stats from bump-allocator (usage/capacity). */
+    arenaStats: ArenaStats;
+}
+
+// ── Arena Stats ───────────────────────────────────────────────────────────
+export interface ArenaStats {
+  /** Whether the arena was active during evaluation */
+  enabled: boolean;
+  /** Number of Values currently allocated from arena */
+  usage: number;
+  /** Total pre-allocated capacity of the arena */
+  capacity: number;
 }
 
 export interface LineResult {
@@ -658,6 +670,9 @@ export function runEngineWithStreaming(
 	let engine: ExpressionEngine | null = null;
 	let unsubAsyncListener: (() => void) | null = null;
 
+	// ── Enable Value Arena for zero-allocation Value reuse ──
+	const arena = enableValueArena(512);
+
 	// ── Synchronous evaluation data (collected before stream is returned) ──
 	const errors: string[] = [];
 	let rawTokens: Token[] = [];
@@ -1071,6 +1086,13 @@ export function runEngineWithStreaming(
 		? engine.getLastTelemetry()
 		: null;
 
+	// ── Capture arena stats ──
+	const arenaStats: ArenaStats = arena ? {
+		enabled: true,
+		usage: arena.usage,
+		capacity: arena.capacity,
+	} : { enabled: false, usage: 0, capacity: 0 };
+
 	const result: DebugResult = {
 		tokens: rawTokens,
 		rawTokens,
@@ -1096,6 +1118,7 @@ export function runEngineWithStreaming(
 		checkpoints,
 		batcherMetrics,
 		pageHeatmap,
+		arenaStats,
 	};
 
 	return { result, stream };
@@ -1136,6 +1159,9 @@ export function runEngine(expression: string): DebugResult {
 	try {
 		// ── Enable allocation tracking for per-stage telemetry ──
 		AllocationTracker.enable();
+
+		// ── Enable Value Arena for zero-allocation Value reuse ──
+		const arena = enableValueArena(512);
 
 		const engine = new ExpressionEngine("en", true, {
 			diagnostic: { enabled: true, vmTraceEnabled: true },
@@ -1298,6 +1324,14 @@ export function runEngine(expression: string): DebugResult {
 		const bm = extractBatcherMetrics(engine);
 		const ph = extractPageHeatmap(engine, allLines.length);
 
+		// ── Capture arena stats ──
+		const arenaStats: ArenaStats = {
+			enabled: true,
+			usage: arena.usage,
+			capacity: arena.capacity,
+		};
+		disableValueArena();
+
 		return {
 			tokens: rawTokens,
 			rawTokens,
@@ -1323,6 +1357,7 @@ export function runEngine(expression: string): DebugResult {
 			checkpoints: ckpts,
 			batcherMetrics: bm,
 			pageHeatmap: ph,
+			arenaStats,
 		};
 	} catch (error) {
 		errors.push(error instanceof Error ? error.message : String(error));
@@ -1437,11 +1472,12 @@ export function runEngine(expression: string): DebugResult {
 		dqMetrics,
 		cacheSnapshot,
 		diagnosticEvents,
-		pipelineTelemetry: null,
-		pipelineStages: lastPipelineStages,
-		dagSnapshot,
-		checkpoints,
-		batcherMetrics,
-		pageHeatmap,
-	};
+		pipelineTelemetry: null,			pipelineStages: lastPipelineStages,
+			dagSnapshot,
+			checkpoints,
+			batcherMetrics,
+			pageHeatmap,
+			arenaStats: { enabled: false, usage: 0, capacity: 0 },
+		};
 }
+
