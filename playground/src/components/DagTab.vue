@@ -38,13 +38,18 @@
         >
           <div class="dag-var-header" @click="toggleVar(entry.variable)">
             <span class="dag-var-toggle">{{ expandedVars.has(entry.variable) ? '▼' : '▶' }}</span>
+            <span
+              class="dag-var-line"
+              :class="{ 'dag-var-line-ext': !entry.producerLine }"
+              :title="entry.producerLine ? 'Go to line ' + entry.producerLine : 'External variable (no producer)'"
+              @click.stop="entry.producerLine ? selectLine(entry.producerLine) : undefined"
+            >
+              {{ entry.producerLine ? 'L' + entry.producerLine : 'ext' }}
+            </span>
             <span class="dag-var-name">{{ entry.variable }}</span>
             <span class="dag-var-counts">
               <span class="dag-badge dag-badge-read" :title="'Read by ' + entry.consumers.length + ' lines'">
                 {{ entry.consumers.length }} read{{ entry.consumers.length !== 1 ? 's' : '' }}
-              </span>
-              <span v-if="entry.producerLine" class="dag-badge dag-badge-write">
-                L{{ entry.producerLine }}
               </span>
             </span>
           </div>
@@ -226,6 +231,38 @@ const dataSourceEntries = computed<DataSourceEntry[]>(() => {
   color: var(--text-muted);
   width: 12px;
   flex-shrink: 0;
+}
+.dag-var-line {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(78, 201, 176, 0.12);
+  color: #4ec9b0;
+  border: 1px solid rgba(78, 201, 176, 0.2);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.dag-var-line:hover {
+  background: rgba(78, 201, 176, 0.2);
+}
+.dag-var-line-ext {
+  background: rgba(107, 107, 117, 0.1);
+  color: var(--text-muted);
+  border-color: rgba(107, 107, 117, 0.15);
+  font-weight: 400;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.dag-var-line-ext:hover {
+  background: rgba(107, 107, 117, 0.16);
 }
 .dag-var-name {
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
