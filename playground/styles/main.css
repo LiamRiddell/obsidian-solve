@@ -2981,6 +2981,157 @@ html, body {
   50% { opacity: 0.5; }
 }
 
+/* ── Pipeline Telemetry Section (Perf tab) ─────────────────────── */
+.perf-telemetry-section {
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.telemetry-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+.telemetry-section-header:hover {
+  background: var(--bg-tertiary);
+}
+.telemetry-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--stage-lexer);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.telemetry-section-count {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+.telemetry-section-chevron {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+  display: inline-block;
+}
+.telemetry-section-chevron.expanded {
+  transform: rotate(90deg);
+}
+.telemetry-section-body {
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-subtle);
+}
+.telemetry-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.telemetry-table thead {
+  background: var(--bg-tertiary);
+}
+.telemetry-table th {
+  padding: 4px 10px;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.telemetry-table td {
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.telemetry-row:last-child td {
+  border-bottom: none;
+}
+.telemetry-row:hover {
+  background: var(--bg-tertiary);
+}
+.telemetry-col-stage { width: 70px; }
+.telemetry-col-time { width: 100px; }
+.telemetry-col-bytes { width: 90px; }
+.telemetry-col-cache { width: 50px; text-align: center; }
+.telemetry-col-sub { text-align: left; }
+.telemetry-stage-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: rgba(0,0,0,0.15);
+}
+.telemetry-time-val {
+  color: var(--accent);
+  font-weight: 600;
+}
+.telemetry-bytes-val {
+  color: var(--text-secondary);
+}
+.telemetry-cache-badge {
+  font-size: 8px;
+  padding: 1px 5px;
+}
+.telemetry-cache-miss {
+  color: var(--text-muted);
+}
+.telemetry-sub-val {
+  color: var(--text-muted);
+}
+.telemetry-total-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+}
+.telemetry-total-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 9px;
+}
+.telemetry-total-time {
+  color: var(--accent);
+  font-weight: 700;
+}
+.telemetry-total-bytes {
+  color: var(--text-muted);
+}
+.telemetry-total-fastpath {
+  margin-left: auto;
+  color: var(--stage-vm);
+  font-weight: 600;
+  font-size: 9px;
+}
+
 /* ── Perf Tab Responsive ───────────────────────────────────────── */
 @media (max-width: 600px) {
   .perf-grid {

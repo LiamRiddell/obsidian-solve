@@ -148,6 +148,62 @@
       </div>
     </div>
 
+    <!--#region Pipeline Telemetry (AllocationTracker) ─────────────────────────-->
+    <div class="perf-telemetry-section" v-if="pipelineTelemetry && pipelineTelemetry.stages.length > 0">
+      <div
+        class="telemetry-section-header"
+        @click="telemetryExpanded = !telemetryExpanded"
+        role="button"
+        :aria-expanded="telemetryExpanded"
+      >
+        <span class="telemetry-section-title">📊 Pipeline Telemetry</span>
+        <span class="telemetry-section-count">{{ pipelineTelemetry.stages.length }} stages</span>
+        <span class="telemetry-section-chevron" :class="{ expanded: telemetryExpanded }">▸</span>
+      </div>
+      <div v-if="telemetryExpanded" class="telemetry-section-body">
+        <table class="telemetry-table">
+          <thead>
+            <tr>
+              <th class="telemetry-col-stage">Stage</th>
+              <th class="telemetry-col-time">Wall Time</th>
+              <th class="telemetry-col-bytes">Alloc Bytes</th>
+              <th class="telemetry-col-cache">Cache</th>
+              <th class="telemetry-col-sub">Sub-Stage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in pipelineTelemetry.stages" :key="s.stage" class="telemetry-row">
+              <td class="telemetry-col-stage">
+                <span class="telemetry-stage-chip" :style="{ color: stageColor(s.stage), borderColor: stageColor(s.stage) + '44' }">
+                  {{ s.stage }}
+                </span>
+              </td>
+              <td class="telemetry-col-time">
+                <span class="telemetry-time-val">{{ fmt(s.wallTimeNs) }}</span>
+              </td>
+              <td class="telemetry-col-bytes">
+                <span class="telemetry-bytes-val">{{ s.allocBytes > 0 ? s.allocBytes + ' B' : '—' }}</span>
+              </td>
+              <td class="telemetry-col-cache">
+                <span v-if="s.cacheHit" class="cache-hit-badge telemetry-cache-badge">Hit</span>
+                <span v-else class="telemetry-cache-miss">—</span>
+              </td>
+              <td class="telemetry-col-sub">
+                <span class="telemetry-sub-val">{{ s.subStage || '—' }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="telemetry-total-row">
+          <span class="telemetry-total-label">Total</span>
+          <span class="telemetry-total-time">{{ fmt(telemetryTotalTime) }}</span>
+          <span class="telemetry-total-bytes">{{ telemetryTotalBytes > 0 ? telemetryTotalBytes + ' B' : '—' }}</span>
+          <span class="telemetry-total-fastpath" v-if="pipelineTelemetry.fastPath">⚡ Fast path</span>
+        </div>
+      </div>
+    </div>
+    <!--#endregion-->
+
     <!-- History -->
     <div class="perf-history">
       <h4 class="perf-section-title">History (last 50)</h4>
@@ -385,4 +441,38 @@ const statCards = computed(() => {
 });
 
 const maxTotal = computed(() => Math.max(...perf.statsHistory.map(s => s.totalTime), 1));
+
+/* ── Pipeline Telemetry (AllocationTracker) ──────────────────────── */
+
+/** Telemetry section expansion state. */
+const telemetryExpanded = ref(false);
+
+/** Pipeline telemetry from the engine's AllocationTracker. */
+const pipelineTelemetry = computed(() => engine.currentResult?.pipelineTelemetry ?? null);
+
+/** Total wall time across all telemetry stages. */
+const telemetryTotalTime = computed(() =>
+  pipelineTelemetry.value?.stages?.reduce((sum: number, s: any) => sum + s.wallTimeNs, 0) ?? 0,
+);
+
+/** Total allocated bytes across all telemetry stages. */
+const telemetryTotalBytes = computed(() =>
+  pipelineTelemetry.value?.stages?.reduce((sum: number, s: any) => sum + s.allocBytes, 0) ?? 0,
+);
+
+/**
+ * Map a stage name to a display color for the telemetry table.
+ * Matches the flamegraph colors for consistency.
+ */
+function stageColor(stage: string): string {
+  const colors: Record<string, string> = {
+    lexer: '#5ac8fa',
+    parser: '#9b7bec',
+    vm: '#ffd866',
+    normalizer: '#4ec9b0',
+    resolver: '#6b6b75',
+    orchestrator: '#29ce99',
+  };
+  return colors[stage] ?? '#6b6b75';
+}
 </script>
