@@ -11,14 +11,12 @@
         {{ tab.label }}
       </button>
     </nav>
-    <KeepAlive>
-      <component :is="currentTabComponent" :key="engine.runId" />
-    </KeepAlive>
+    <component :is="currentTabComponent" :key="engine.runId" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, type Component } from 'vue';
+import { computed } from 'vue';
 import { useUiStore, type ActiveTab } from '../stores/ui.js';
 import { useEngineStore } from '../stores/engine.js';
 import OutputTab from './OutputTab.vue';
@@ -48,7 +46,7 @@ const tabs: { id: ActiveTab; label: string }[] = [
   { id: 'stream', label: 'Stream' },
 ];
 
-const tabComponents: Record<ActiveTab, Component> = {
+const tabComponents: Record<ActiveTab, any> = {
   tokens: OutputTab,
   flow: PipelineTab,
   bytecode: BytecodeTab,
