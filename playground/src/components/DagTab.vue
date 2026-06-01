@@ -167,12 +167,19 @@ const varEntries = computed<VarEntry[]>(() => {
   }
 
   return Array.from(allVars)
-    .sort()
     .map(variable => ({
       variable,
       consumers: snap.consumers[variable] ?? [],
       producerLine: producers[variable] ?? null,
-    }));
+    }))
+    .sort((a, b) => {
+      // Sort by producer line number ascending; null producers last
+      const la = a.producerLine ?? Infinity;
+      const lb = b.producerLine ?? Infinity;
+      if (la !== lb) return la - lb;
+      // Tie-break by variable name
+      return a.variable.localeCompare(b.variable);
+    });
 });
 
 interface DataSourceEntry {
@@ -183,10 +190,18 @@ interface DataSourceEntry {
 const dataSourceEntries = computed<DataSourceEntry[]>(() => {
   const snap = engine.currentResult?.dagSnapshot;
   if (!snap) return [];
-  return Object.entries(snap.dataSourceConsumers).map(([key, consumers]) => ({
-    key,
-    consumers,
-  }));
+  return Object.entries(snap.dataSourceConsumers)
+    .map(([key, consumers]) => ({
+      key,
+      consumers: [...consumers].sort((a, b) => a - b),
+    }))
+    .sort((a, b) => {
+      // Sort by first consumer line number; no consumers last
+      const fa = a.consumers[0] ?? Infinity;
+      const fb = b.consumers[0] ?? Infinity;
+      if (fa !== fb) return fa - fb;
+      return a.key.localeCompare(b.key);
+    });
 });
 </script>
 
