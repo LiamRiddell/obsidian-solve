@@ -1,3 +1,5 @@
+//#region 📦 Imports
+
 import { VM } from "@solve-js/vm/OpRegistry";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
@@ -59,7 +61,7 @@ import {
     type StageOutput,
 } from "@solve-js/types/DiagnosticPipelineResult";
 
-
+//#endregion
 
 /**
  * Core expression evaluation engine — the top-level orchestrator.
@@ -89,7 +91,10 @@ import {
  * console.log(value.toNumber()); // 22
  * ```
  */
+//#region Class: ExpressionEngine
+
 export class ExpressionEngine {
+    //#region Private Properties
     private dag = new DependencyGraph();
     private lineCache = new LineCache();
     private scopeManager = new ScopeManager();
@@ -127,14 +132,10 @@ export class ExpressionEngine {
     /**
 	 * Unsubscribe from DataQueryService cache updates.
 	 * Set in constructor, called in clear()/destroy.
-	 */
-	private _dqsUnsubscribe: (() => void) | null = null;
+	 */    private _dqsUnsubscribe: (() => void) | null = null;
     // Bytecode cache — avoids re-parsing identical expressions
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
-    // Pre-allocated BytecodeBuilder pool — avoids 4 heap allocations per
-    // expression (opcode array, number array, string array, stringIndex Map).
-    // Pool size of 4 handles concurrent evaluation paths. Builders are
-    // reset() and returned to the pool after use rather than discarded.
+    // Pre-allocated BytecodeBuilder pool
     private builderPool: BytecodeBuilder[] = [
         new BytecodeBuilder(),
         new BytecodeBuilder(),
@@ -142,12 +143,13 @@ export class ExpressionEngine {
         new BytecodeBuilder(),
     ];
     // Index into the builder pool — incremented modulo pool size.
-    // Not thread-safe, but ExpressionEngine is single-threaded.
     private builderPoolIndex = 0;
     // Most recent pipeline telemetry — populated when AllocationTracker.isEnabled().
-    // Null when tracking is disabled (production — zero overhead).
     private lastTelemetry: PipelineTelemetry | null = null;
 
+    //#endregion
+
+    //#region Constructor
     constructor(
         localeCode = "en",
         diagnosticMode = false,
@@ -219,7 +221,9 @@ export class ExpressionEngine {
 		);
 	}
 
-    // ── Multi-listener event stream ────────────────────────────────────
+    //#endregion
+
+    //#region Public API — Multi-listener event stream
 
     /**
      * Subscribe to async resolution events.
@@ -237,6 +241,10 @@ export class ExpressionEngine {
     addAsyncListener(listener: AsyncResolutionListener): UnsubscribeFn {
         return this.batcher.addListener(listener);
     }
+
+    //#endregion
+
+    //#region Public API — Package registration
 
     /**
      * Register a package with the engine's isolated registries.
@@ -289,6 +297,10 @@ export class ExpressionEngine {
         }
     }
 
+    //#endregion
+
+    //#region Public API — Configuration & accessors
+
     /**
      * Get the effective engine configuration currently in use.
      * Includes all defaults merged with any constructor overrides.
@@ -305,6 +317,10 @@ export class ExpressionEngine {
     getDiagnosticPipeline(): DiagnosticPipeline {
         return this.diagnosticPipeline;
     }
+
+    //#endregion
+
+    //#region Internal — Execution helpers
 
     /**
      * Store a result in the line cache (with DAG registration).
@@ -487,6 +503,10 @@ export class ExpressionEngine {
         }
     }
 
+    //#endregion
+
+    //#region Public API — Plugin management
+
     /**
      * Register an external plugin with the engine.
      */
@@ -501,6 +521,10 @@ export class ExpressionEngine {
         this.pluginManager.unregister(pluginName);
         this.bytecodeCache.clear();
     }
+
+    //#endregion
+
+    //#region Public API — Document parsing
 
     /**
      * Unified parsing method that handles different input types and returns comprehensive results
@@ -677,6 +701,10 @@ export class ExpressionEngine {
         return this.evaluateWithTokens(lineNumber, expression, tokens, hasParens);
     }
 
+    //#endregion
+
+    //#region Internal — Parsing & compilation
+
     /**
      * Route parse+compile to the active parser (PrecedenceParser or Recursive Descent).
      *
@@ -820,14 +848,18 @@ export class ExpressionEngine {
         return this.executeAndStore(program, lineNumber, expression, reads, writes, '_engine');
     }
 
-    	/**
-	 * Evaluate a single expression line with full DAG and LineCache integration.
-	 *
-	 * @param lineNumber - 1-based line position in the document.
-	 * @param lineText - The raw line text (may contain inline solve syntax).
-	 * @returns The evaluated Value.
-	 * @throws {SolveError} On safety validation failure or parse error.
-	 */
+    //#endregion
+
+    //#region Public API — Line-level evaluation
+
+    /**
+     * Evaluate a single expression line with full DAG and LineCache integration.
+     *
+     * @param lineNumber - 1-based line position in the document.
+     * @param lineText - The raw line text (may contain inline solve syntax).
+     * @returns The evaluated Value.
+     * @throws {SolveError} On safety validation failure or parse error.
+     */
 	evaluateLine(
         lineNumber: number,
         lineText: string
@@ -844,7 +876,19 @@ export class ExpressionEngine {
     }
 
     /**
-     * Evaluate a line with diagnostic information, supporting both regular expressions and inline solves
+     * Evaluate a line with diagnostic information, supporting both regular expressions and inline solves.
+     *
+     * This is the primary entry point for the playground's debug/DIagnostic mode.
+     * It delegates to {@link evaluateExpressionWithDiagnostic} for all actual evaluation,
+     * but first checks for inline solve syntax (`s`expression``) and wraps the result
+     * with inline solve position metadata when found.
+     *
+     * @param lineNumber - 1-based line number in the document.
+     * @param lineText - Raw line text, which may be a regular expression or an inline solve.
+     * @param inputType - Optional input type hint passed through to the diagnostic pipeline.
+     * @returns An object containing the evaluated `value`, the raw `tokens`, the compiled
+     *          `program`, optional `error` message, optional `debug` report JSON, and optional
+     *          structured `diagnostic` pipeline result with all 15 pipeline stages.
      */
     evaluateLineWithDebug(
         lineNumber: number,
@@ -869,10 +913,35 @@ export class ExpressionEngine {
         return this.evaluateExpressionWithDiagnostic(lineText, lineNumber, inputType);
     }
 
+    //#endregion
+
+    //#region Diagnostic Pipeline — Structured stage recording
+
     /**
      * Build a single pipeline stage result for the structured diagnostic output.
-     * This runs in parallel with the existing event-based diagnostic system -
-     * no performance impact when diagnosticMode is false (stages array stays empty).
+     *
+     * Appends a `PipelineStageResult` to the given `stages` array with the provided
+     * metadata. This runs in parallel with the existing event-based diagnostic system
+     * (via `DiagnosticPipeline.fire*` methods). Both paths are enabled by the same
+     * `hasCollectors` guard so there is no performance impact when `diagnosticMode`
+     * is `false` — the stages array stays empty because this method is never called.
+     *
+     * Each stage captures:
+     * - **Identity**: `stage` name (e.g., `"lexer"`), display `label`, `icon`, `colorClass`
+     * - **Position**: `stepNumber` in the pipeline (0-15)
+     * - **Timing**: `elapsedNs` wall-time (overridden by TimelineDiagnosticCollector)
+     * - **State**: `skipped` flag for stages bypassed by cache hits or guard conditions
+     * - **Payload**: `output` — a discriminated union typed per stage
+     *
+     * @param stages - Mutable array being accumulated for the final DiagnosticPipelineResult.
+     * @param stage - Canonical stage identifier (kebab-case, e.g. `"async_preflight"`).
+     * @param label - Human-readable stage name for the dashboard.
+     * @param icon - Single emoji/character icon for visual identification.
+     * @param colorClass - CSS class name for color-coding the stage in the UI.
+     * @param stepNumber - Ordinal position in the 15-stage pipeline.
+     * @param elapsedNs - Wall-clock time in nanoseconds (0 placeholder; timeline overrides).
+     * @param skipped - Whether this stage was bypassed (e.g., cache hit, guard short-circuit).
+     * @param output - Stage-specific data payload typed via the StageOutput discriminated union.
      */
     private addDiagnosticStage(
         stages: PipelineStageResult[],
@@ -890,11 +959,52 @@ export class ExpressionEngine {
 
     /**
      * Core expression evaluation logic with diagnostic pipeline integration.
-     * Every pipeline stage fires events to registered collectors.
      *
-     * When AllocationTracker.isEnabled(), each pipeline stage is wrapped
-     * with AllocationTracker.track() to capture wall-time and heap delta.
-     * When disabled (production), track() is a zero-overhead passthrough.
+     * Executes the full 15-stage evaluation pipeline while simultaneously
+     * populating two diagnostic data structures:
+     *
+     * 1. **Event-based** — fires typed events to registered `DiagnosticCollector`
+     *    instances via `DiagnosticPipeline.fire*()` methods. Supports streaming
+     *    diagnostics via `TimelineDiagnosticCollector`.
+     * 2. **Structured stages** — accumulates a `PipelineStageResult[]` array
+     *    with per-stage typed payloads (see `DiagnosticPipelineResult.ts`).
+     *    This is returned as the `diagnostic` field for declarative rendering.
+     *
+     * The 15 stages, in order:
+     * ```
+     *  1  pipeline_start      — Pipeline initialization + metadata
+     *  2  safety_length       — Expression length validation
+     *  3  lexer               — Tokenization via ExpressionLexer
+     *  4  normalizer          — Token fusion (phrase, implicit multiply)
+     *  5  safety_complexity   — Token-count & nesting-depth check
+     *  6  readwrite           — Variable read/write extraction for DAG
+     *  7  cache_check         — Bytecode cache hit/miss
+     *  8  parser              — AST construction via PrecedenceParser
+     *  9  compiler            — Bytecode generation + constant table
+     * 10  async_preflight     — Async resolver pre-flight check
+     * 11  vm_execute          — Bytecode execution on the VM
+     * 12  dag_registration    — DAG node registration for incremental eval
+     * 13  linecache           — Result stored in LineCache
+     * 14  result              — Final value + formatting
+     * 15  pipeline_end        — Completion summary + statistics
+     * ```
+     *
+     * Early-exit paths are taken for safety violations, empty expressions,
+     * parse failures, and async pending results. Each early exit still
+     * fires relevant pipeline events and records partial stages.
+     *
+     * When `AllocationTracker.isEnabled()`, each pipeline stage is wrapped
+     * with `AllocationTracker.track()` to capture wall-time and heap delta.
+     * When disabled (production), `track()` is a zero-overhead passthrough
+     * that returns the result directly.
+     *
+     * @param expression - The raw expression string to evaluate.
+     * @param lineNumber - 1-based line number for DAG and LineCache entries.
+     * @param inputType - Input type hint (default `"expression"`), passed to
+     *                    the diagnostic pipeline for metadata.
+     * @returns An object with `value`, `tokens`, `program`, optional `error`,
+     *          optional `debug` report JSON, and optional `diagnostic` containing
+     *          the full structured pipeline stages array when collectors are active.
      */
     private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; debug?: DiagnosticReportJSON; diagnostic?: DiagnosticPipelineResult } {
         const pipeline = this.diagnosticPipeline;
@@ -1528,6 +1638,23 @@ export class ExpressionEngine {
         };
     }
 
+    //#endregion
+
+    //#region Incremental Evaluation — DAG-driven re-execution
+
+    /**
+     * Re-evaluate a cached line without reparsing.
+     *
+     * Used when a variable referenced by this line has changed. Skips
+     * lexing, parsing, and compilation — performs only a pre-flight async
+     * check and VM execution against the cached bytecode.
+     *
+     * Returns `undefined` if the line is not in cache.
+     *
+     * @param lineNumber - The line to re-evaluate.
+     * @param expression - The original expression string (used for cache lookup).
+     * @returns The updated `Value`, or `undefined` if uncached.
+     */
     reEvaluateLine(lineNumber: number, expression: string): Value | undefined {
         const entry = this.lineCache.get(lineNumber, expression);
         if (!entry) return undefined;
@@ -1616,6 +1743,10 @@ export class ExpressionEngine {
         return this.diagnosticPipeline.hasCollectors;
     }
 
+    //#endregion
+
+    //#region Public API — Keystroke signal
+
     /**
      * Set the keystroke-level AbortSignal for the current evaluation cycle.
      *
@@ -1649,6 +1780,10 @@ export class ExpressionEngine {
         return this.lastTelemetry;
     }
 
+    //#endregion
+
+    //#region Public API — Evaluation
+
     /**
      * Evaluate a raw expression string without line-number context.
      * Returns the Value result. Throws on error.
@@ -1657,20 +1792,23 @@ export class ExpressionEngine {
         return this.evaluateLine(-1, expression);
     }
 
+//#endregion
+
+//#region Compilation — Bytecode-only path
+
     /**
-     * Fast path: evaluate an expression and return a number directly.
-     * Skips Value object allocation when only a numeric result is needed.
-     * Returns NaN on error or for bare undefined variable references.
-     */    /**
-	 * Compile-only path: lex → parse → bytecode, without execution.
-	 * Used by Tier 3 (background) evaluation to discover reads/writes
-	 * for the dependency graph without running display-only expressions.
-	 *
-	 * Uses the bytecode cache — repeated compilations of the same expression
-	 * return the cached program with zero allocation.
-	 *
-	 * @throws ErrorFactory on parse failure or safety check failure.
-	 */
+     * Compile-only path: lex → parse → bytecode, without execution.
+     *
+     * Used by Tier 3 (background) evaluation to discover reads/writes
+     * for the dependency graph without running display-only expressions.
+     *
+     * Uses the bytecode cache — repeated compilations of the same expression
+     * return the cached program with zero allocation.
+     *
+     * @param expression - The raw expression string to compile.
+     * @returns Object with compiled `program`, lexed `tokens`, and extracted `reads`/`writes`.
+     * @throws ErrorFactory on parse failure or safety check failure.
+     */
 	compileExpression(expression: string): {
 		program: BytecodeProgram;
 		tokens: Token[];
@@ -1762,9 +1900,22 @@ export class ExpressionEngine {
 			return pendingValue(evalResult.queryKey);
 		}
 
-		return evalResult.value;
-	}
+		return evalResult.value;    }
 
+    /**
+     * Fast path: evaluate an expression and return a number directly.
+     *
+     * Skips Value object allocation when only a numeric result is needed.
+     * Returns NaN on error or for bare undefined variable references.
+     *
+     * Performs a pre-check for bare identifiers (single-token variable
+     * references). If the identifier is not a known variable, returns NaN
+     * immediately without attempting evaluation — avoids the ambiguity of
+     * "result === 0" when a variable might legitimately store the value 0.
+     *
+     * @param expression - The raw expression string to evaluate.
+     * @returns The numeric result, or NaN on error/undefined variable.
+     */
     evaluateNumber(expression: string): number {
          const trimmed = expression.trim();
 
@@ -1783,7 +1934,13 @@ export class ExpressionEngine {
          } catch {
              return NaN;
          }
-     }	clear(): void {
+    }
+
+    //#endregion
+
+    //#region State management — Clear / reset
+
+    clear(): void {
         // Cancel pending batcher flushes and clear listeners to prevent
         // stale re-evaluations from in-flight promises that resolve after clear.
 		// NOTE: _dqsUnsubscribe is NOT called here — the bridge must survive
@@ -1797,6 +1954,10 @@ export class ExpressionEngine {
          this.vm.reset();
          this.lastTelemetry = null;
      }
+
+    //#endregion
+
+    //#region Public API — Parallel evaluation
 
     /**
      * Evaluate independent expressions using a worker pool (Web Workers).
@@ -1897,4 +2058,8 @@ export class ExpressionEngine {
         }
         return updated;
     }
+
+    //#endregion
 }
+
+//#endregion
