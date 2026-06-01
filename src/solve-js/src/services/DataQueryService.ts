@@ -394,6 +394,13 @@ export class DataQueryService {
     };
   }
 
+  /**
+   * Returns the list of registered data source IDs (e.g., "currency", "http://...").
+   */
+  getRegisteredSourceIds(): string[] {
+    return Array.from(this.dataSources.keys());
+  }
+
   onCacheUpdate(listener: (dataSourceId: string, queryKey: string[], data: unknown) => void): () => void {
     this.cacheUpdateListeners.add(listener);
     return () => this.cacheUpdateListeners.delete(listener);

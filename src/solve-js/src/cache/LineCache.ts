@@ -75,4 +75,18 @@ get(line: number, expression?: string): LineCacheEntry | undefined {
   clear(): void {
     this.entries.clear();
   }
+
+  /**
+   * Iterate all cache entries for diagnostics/debugging.
+   */
+  forEach(callback: (key: string, entry: LineCacheEntry) => void): void {
+    this.entries.forEach((entry, key) => callback(key, entry));
+  }
+
+  /**
+   * Get all entry keys.
+   */
+  keys(): string[] {
+    return Array.from(this.entries.keys());
+  }
 }

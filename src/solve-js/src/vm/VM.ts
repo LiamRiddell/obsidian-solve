@@ -186,6 +186,11 @@ export function executeBytecode(
       const op = opcodes[ip++] as OpCode;
 
       if (shouldTrace) {
+        const stackSnapshot = stack.map(v => ({
+          type: v.type,
+          value: v.value,
+          unit: v.unit,
+        }));
         pipeline!.fireVmStep({
           type: DiagnosticEventType.VmStep,
           elapsedNs: 0,
@@ -195,6 +200,7 @@ export function executeBytecode(
           ip: ip - 1,
           stackDepth: stack.length,
           instructionNumber: localInstructionCount,
+          stack: stackSnapshot,
         });
       }
 

@@ -68,6 +68,11 @@ export interface VmStepEvent extends BaseEvent {
   readonly ip: number;
   readonly stackDepth: number;
   readonly instructionNumber: number;
+  readonly stack: ReadonlyArray<{
+    readonly type: number;
+    readonly value: number | bigint | string | boolean | number[];
+    readonly unit?: string;
+  }>;
 }
 
 /** Emitted when the VM halts with a result */

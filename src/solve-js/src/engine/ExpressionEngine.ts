@@ -1290,6 +1290,10 @@ if (hasCollectors) {
         return this.lineCache;
     }
 
+    getBytecodeCache(): Map<string, BytecodeProgram> {
+        return this.bytecodeCache;
+    }
+
     /**
      * Get the shared VM instance.
      * Used by VMCheckpointer to create/restore checkpoints.

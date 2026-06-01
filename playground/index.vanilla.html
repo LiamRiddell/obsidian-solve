@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solve Engine — Diagnostic Playground</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <!-- ═══ Header Bar ═══ -->
+    <header class="header-bar">
+        <div class="header-left">
+            <h1 class="header-title">
+                <span class="header-logo">⟐</span>
+                Solve Engine
+                <span class="header-badge">Diagnostic Playground</span>
+            </h1>
+        </div>
+        <div class="header-center">
+            <div class="pipeline-mini" id="pipeline-mini">
+                <span class="pipeline-stage mini-lexer" data-stage="lexer">Lex</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-validate" data-stage="validate">Validate</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-cache" data-stage="cache">Cache</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-parser" data-stage="parser">Parse</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-compiler" data-stage="compiler">Compile</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-async" data-stage="async">Async</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-vm" data-stage="vm">VM</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-stage mini-result" data-stage="result">Result</span>
+            </div>
+            <div class="pipeline-timing" id="pipeline-timing">0 µs</div>
+        </div>
+        <div class="header-right">
+            <button id="btn-sidebar-toggle-mobile" class="header-btn mobile-only" title="Show sidebar">☰</button>
+            <button id="btn-collapse-all" class="header-btn" title="Collapse all pipeline flow stages">⊟</button>
+            <button id="btn-expand-all" class="header-btn" title="Expand all pipeline flow stages">⊞</button>
+            <span id="status-indicator" class="status-dot status-ready" title="Ready"></span>
+        </div>
+    </header>
+
+    <!-- ═══ Main Layout ═══ -->
+    <div class="main-layout" id="main-layout">
+        <div class="main-body" id="main-body">
+
+        <!-- Left Sidebar: Examples -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Examples</h2>
+                <button class="pane-collapse-btn sidebar-collapse-btn" id="btn-collapse-sidebar" title="Collapse sidebar">◀</button>
+                <select id="full-doc-select" class="full-doc-select">
+                    <option value="">📄 Full Documents…</option>
+                </select>
+            </div>
+            <div class="sidebar-content" id="examples-sidebar"></div>
+        </aside>
+
+        <!-- Right-edge examples tab (slides in when sidebar collapses) -->
+        <div class="sidebar-right-tab" id="sidebar-right-tab" title="Toggle sidebar">
+            <span class="sidebar-right-tab-text">Examples</span>
+        </div>
+
+        <!-- Resize handle: sidebar / editor -->
+        <div class="resize-handle" id="resize-handle-sidebar"></div>
+
+        <!-- Center: Editor -->
+        <main class="editor-pane" id="editor-pane">
+            <div class="editor-pane-header">
+                <span class="pane-title">Editor</span>
+                <button class="pane-collapse-btn" id="btn-collapse-editor" title="Collapse editor">◀</button>
+            </div>
+            <div class="editor-wrapper" id="editor-container"></div>
+        </main>
+
+        <!-- Resize handle: editor / diagnostics -->
+        <div class="resize-handle" id="resize-handle-editor"></div>
+
+        <!-- Right: Diagnostic Tabs -->
+        <section class="diagnostics-pane" id="diagnostics-pane">
+            <div class="diagnostics-pane-header">
+                <span class="pane-title">Diagnostics</span>
+                <button class="pane-collapse-btn" id="btn-collapse-diagnostics" title="Collapse diagnostics">▶</button>
+            </div>
+            <!-- Tab Bar -->
+            <nav class="tab-bar" id="tab-bar">
+                <button class="tab-btn active" data-tab="tokens">Output</button>
+                <button class="tab-btn" data-tab="flow">Pipeline</button>
+                <button class="tab-btn" data-tab="bytecode">Bytecode</button>
+                <button class="tab-btn" data-tab="vmtrace">VM Trace</button>
+                <button class="tab-btn" data-tab="perf">Perf</button>
+                <button class="tab-btn" data-tab="workers">Workers</button>
+                <button class="tab-btn" data-tab="cache">Cache</button>
+                <button class="tab-btn" data-tab="stream">Stream</button>
+            </nav>
+
+            <!-- Tab: Pipeline Flow -->
+            <div class="tab-panel" id="panel-flow">
+                <!-- Line selector bar -->
+                <div class="pipeline-line-selector">
+                    <label class="pipeline-line-label">
+                        <span class="pipeline-line-icon">#</span>
+                        <span class="pipeline-line-text">Line</span>
+                    </label>
+                    <select id="pipeline-line-select" class="pipeline-line-select">
+                        <option value="0">All Lines (aggregate)</option>
+                    </select>
+                    <span class="pipeline-active-line-badge" id="pipeline-active-line-badge">All Lines</span>
+                </div>
+                <div class="pipeline-flow">
+                    <!-- Stage 1: Lexer -->
+                    <div class="flow-stage" id="flow-lexer">
+                        <div class="flow-stage-header lexer">
+                            <span class="flow-stage-step">1</span>
+                            <span class="flow-stage-icon">🔤</span>
+                            <span class="flow-stage-name">Lexer</span>
+                            <span class="flow-stage-active-line" id="flow-lexer-line"></span>
+                            <span class="flow-stage-time" id="flow-time-lexer">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Expression → Tokens</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Tokens</div>
+                            <div class="flow-stage-output" id="flow-lexer-output">
+                                <span class="empty">Tokenizing…</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
+
+                    <!-- Stage 2: Validation (Safety Checks) -->
+                    <div class="flow-stage" id="flow-validate">
+                        <div class="flow-stage-header validate">
+                            <span class="flow-stage-step">2</span>
+                            <span class="flow-stage-icon">🛡️</span>
+                            <span class="flow-stage-name">Validation</span>
+                            <span class="flow-stage-active-line" id="flow-validate-line"></span>
+                            <span class="flow-stage-time" id="flow-time-validate">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Length + Complexity</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Status</div>
+                            <div class="flow-stage-output" id="flow-validate-output">
+                                <span class="empty">Passed</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
+
+                    <!-- Stage 3: Cache Check -->
+                    <div class="flow-stage" id="flow-cache">
+                        <div class="flow-stage-header cache">
+                            <span class="flow-stage-step">3</span>
+                            <span class="flow-stage-icon">💾</span>
+                            <span class="flow-stage-name">Cache Check</span>
+                            <span class="flow-stage-active-line" id="flow-cache-line"></span>
+                            <span class="flow-stage-time" id="flow-time-cache">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Bytecode Lookup</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Status</div>
+                            <div class="flow-stage-output" id="flow-cache-output">
+                                <span class="empty">Checking…</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
+
+                    <!-- Stage 4: Parser (Pratt) -->
+                    <div class="flow-stage" id="flow-parser">
+                        <div class="flow-stage-header parser">
+                            <span class="flow-stage-step">4</span>
+                            <span class="flow-stage-icon">🌳</span>
+                            <span class="flow-stage-name">Parser</span>
+                            <span class="flow-stage-active-line" id="flow-parser-line"></span>
+                            <span class="flow-stage-time" id="flow-time-parser">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Tokens → AST</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Parselets</div>
+                            <div class="flow-stage-output" id="flow-parser-output">
+                                <span class="empty">Parsing…</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
+
+                    <!-- Stage 5: Bytecode Compiler -->
+                    <div class="flow-stage" id="flow-compiler">
+                        <div class="flow-stage-header compiler">
+                            <span class="flow-stage-step">5</span>
+                            <span class="flow-stage-icon">⚙️</span>
+                            <span class="flow-stage-name">Compiler</span>
+                            <span class="flow-stage-active-line" id="flow-compiler-line"></span>
+                            <span class="flow-stage-time" id="flow-time-compiler">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">AST → Bytecode</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Opcodes</div>
+                            <div class="flow-stage-output" id="flow-compiler-output">
+                                <span class="empty">Compiling…</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
+
+                    <!-- Stage 6: Async Preflight -->
+                    <div class="flow-stage" id="flow-async">
+                        <div class="flow-stage-header async">
+                            <span class="flow-stage-step">6</span>
+                            <span class="flow-stage-icon">🔮</span>
+                            <span class="flow-stage-name">Async Preflight</span>
+                            <span class="flow-stage-active-line" id="flow-async-line"></span>
+                            <span class="flow-stage-time" id="flow-time-async">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Resolver Registry</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Path</div>
+                            <div class="flow-stage-output" id="flow-async-output">
+                                <span class="empty">Sync path</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
+
+                    <!-- Stage 7: VM Execution -->
+                    <div class="flow-stage" id="flow-vm">
+                        <div class="flow-stage-header vm">
+                            <span class="flow-stage-step">7</span>
+                            <span class="flow-stage-icon">⚡</span>
+                            <span class="flow-stage-name">VM Execute</span>
+                            <span class="flow-stage-active-line" id="flow-vm-line"></span>
+                            <span class="flow-stage-time" id="flow-time-vm">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-input">Bytecode → Stack</div>
+                            <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Type</div>
+                            <div class="flow-stage-output" id="flow-vm-output">
+                                <span class="empty">Executing…</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
+
+                    <!-- Stage 8: Result (no next arrow) -->
+                    <div class="flow-stage" id="flow-result">
+                        <div class="flow-stage-header result">
+                            <span class="flow-stage-step">8</span>
+                            <span class="flow-stage-icon">✓</span>
+                            <span class="flow-stage-name">Result</span>
+                            <span class="flow-stage-active-line" id="flow-result-line"></span>
+                            <span class="flow-stage-time" id="flow-time-total">—</span>
+                        </div>
+                        <div class="flow-stage-body">
+                            <div class="flow-stage-output-result" id="flow-result-output">
+                                <span class="empty">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pipeline Detail Stats -->
+                <div class="pipeline-detail" id="pipeline-detail">
+                    <div class="detail-row">
+                        <span class="detail-label">Tokens</span>
+                        <span class="detail-value" id="detail-tokens">0</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Opcodes</span>
+                        <span class="detail-value" id="detail-opcodes">0</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Numbers</span>
+                        <span class="detail-value" id="detail-numbers">0</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Strings</span>
+                        <span class="detail-value" id="detail-strings">0</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Cache</span>
+                        <span class="detail-value" id="detail-cache">miss</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Async</span>
+                        <span class="detail-value" id="detail-async">no</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Tokens -->
+            <div class="tab-panel active" id="panel-tokens">
+                <div class="panel-toolbar">
+                    <div class="panel-toolbar-left">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="group-tokens" checked>
+                            Group by line
+                        </label>
+                        <input type="text" class="token-filter-input" id="token-filter" placeholder="Filter tokens…" spellcheck="false">
+                    </div>
+                    <span class="token-count" id="token-count">0 tokens</span>
+                </div>
+                <div class="panel-scroll" id="tokens-display"></div>
+            </div>
+
+            <!-- Tab: Bytecode -->
+            <div class="tab-panel" id="panel-bytecode">
+                <div class="panel-toolbar">
+                    <span class="bytecode-count" id="bytecode-count">0 opcodes</span>
+                </div>
+                <div class="bytecode-disasm">
+                    <div class="bytecode-header-row">
+                        <span class="bytecode-col-ip">IP</span>
+                        <span class="bytecode-col-hex">Hex</span>
+                        <span class="bytecode-col-mnem">Mnemonic</span>
+                        <span class="bytecode-col-operand">Operand</span>
+                        <span class="bytecode-col-desc">Description</span>
+                    </div>
+                    <div class="panel-scroll" id="opcodes-display"></div>
+                </div>
+                <div class="bytecode-constants">
+                    <h4>Constants Table</h4>
+                    <div class="constants-grid" id="constants-display"></div>
+                </div>
+                <div class="bytecode-variables">
+                    <h4>Variables</h4>
+                    <div class="variables-chips" id="variables-display"></div>
+                </div>
+            </div>
+
+            <!-- Tab: VM Trace -->
+            <div class="tab-panel" id="panel-vmtrace">
+                <div class="panel-toolbar">
+                    <span class="bytecode-count" id="vmtrace-count">0 steps</span>
+                    <span class="toggle-label" style="font-size:10px;color:var(--text-muted)">vmTraceEnabled mode</span>
+                </div>
+                <div class="vm-trace-table">
+                    <div class="vm-trace-header-row">
+                        <span class="vm-trace-col-step">#</span>
+                        <span class="vm-trace-col-ip">IP</span>
+                        <span class="vm-trace-col-op">Opcode</span>
+                        <span class="vm-trace-col-stack">Stack</span>
+                        <span class="vm-trace-col-time">Elapsed</span>
+                    </div>
+                    <div class="panel-scroll" id="vmtrace-display">
+                        <span class="empty">No trace data — enable vmTraceEnabled</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Performance -->
+            <div class="tab-panel" id="panel-perf">
+                <div class="perf-flamegraph-section" id="perf-flamegraph-container">
+                    <h4 class="perf-section-title">Pipeline Flamegraph</h4>
+                    <div class="perf-flamegraph" id="perf-flamegraph">
+                        <div class="empty">No data yet</div>
+                    </div>
+                    <div class="perf-flamegraph-legend" id="perf-flamegraph-legend"></div>
+                </div>
+                <div class="perf-heatmap-section" id="perf-heatmap-container">
+                    <h4 class="perf-section-title">Pipeline Heatmap <span style="font-weight:400;color:var(--text-muted)">— stage hotness across evaluations</span></h4>
+                    <div class="perf-heatmap-wrapper">
+                        <div class="perf-heatmap" id="perf-heatmap">
+                            <div class="empty">Need 2+ evaluations</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="perf-grid" id="stats-display"></div>
+                <div class="perf-history" id="perf-history">
+                    <h4 class="perf-section-title">History (last 50)</h4>
+                    <div class="perf-history-chart" id="perf-history-chart"></div>
+                </div>
+            </div>
+
+            <!-- Tab: Workers -->
+            <div class="tab-panel" id="panel-workers">
+                <div class="panel-scroll" id="workers-display">
+                    <!-- Engine Worker Card -->
+                    <div class="worker-card" id="worker-card-engine">
+                        <div class="worker-card-header">
+                            <span class="worker-card-icon">⚙️</span>
+                            <span class="worker-card-name">Engine Worker</span>
+                            <span class="worker-card-status" id="worker-engine-status">idle</span>
+                        </div>
+                        <div class="worker-card-body">
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Latency</span>
+                                <span class="worker-metric-value" id="worker-engine-latency">—</span>
+                            </div>
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Queue depth</span>
+                                <span class="worker-metric-value" id="worker-engine-queue">0</span>
+                            </div>
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Last run</span>
+                                <span class="worker-metric-value" id="worker-engine-last-run">—</span>
+                            </div>
+                            <div class="worker-latency-bar">
+                                <div class="worker-latency-fill" id="worker-engine-latency-bar"></div>
+                            </div>
+                            <div class="worker-latency-scale">
+                                <span>0</span><span>10ms</span><span>50ms</span><span>100ms+</span>
+                            </div>
+                        </div>
+                        <div class="worker-card-footer">
+                            <span class="worker-metric-label">Messages received</span>
+                            <span class="worker-metric-value" id="worker-engine-msgs">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Data Query Worker Card -->
+                    <div class="worker-card" id="worker-card-dq">
+                        <div class="worker-card-header">
+                            <span class="worker-card-icon">📡</span>
+                            <span class="worker-card-name">Data Query Worker</span>
+                            <span class="worker-card-status status-offline" id="worker-dq-status">idle</span>
+                        </div>
+                        <div class="worker-card-body">
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Active requests</span>
+                                <span class="worker-metric-value" id="worker-dq-active">0</span>
+                            </div>
+                            <div class="worker-metric worker-metric-sources">
+                                <span class="worker-metric-label">Registered sources</span>
+                                <div class="worker-dq-sources-list" id="worker-dq-sources">
+                                    <span class="empty">none</span>
+                                </div>
+                            </div>
+                            <div class="worker-metric">
+                                <span class="worker-metric-label">Last activity</span>
+                                <span class="worker-metric-value" id="worker-dq-last-activity">—</span>
+                            </div>
+                        </div>
+                        <div class="worker-card-footer">
+                            <span class="worker-metric-label">Total fetches</span>
+                            <span class="worker-metric-value" id="worker-dq-fetches">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Activity Log -->
+                    <div class="worker-log" id="worker-log">
+                        <h4>Activity Log</h4>
+                        <div class="worker-log-entries" id="worker-log-entries">
+                            <span class="empty">No worker activity yet</span>
+                        </div>
+                    </div>
+                </div>
+            </div>            <!-- Tab: Cache Snapshot -->
+            <div class="tab-panel" id="panel-cache">
+                <div class="panel-scroll" id="cache-display">
+                    <span class="empty">No cache data</span>
+                </div>
+            </div>
+
+            <!-- Tab: Stream Diagnostics -->
+            <div class="tab-panel" id="panel-stream">
+                <div class="panel-toolbar">
+                    <span class="stream-event-count" id="stream-event-count">0 events</span>
+                    <span class="toggle-label" style="font-size:10px;color:var(--text-muted)">Diagnostic event stream</span>
+                </div>
+                <div class="panel-scroll" id="stream-display">
+                    <span class="empty">No diagnostic events</span>
+                </div>
+            </div>
+
+        </section>
+
+        </div>
+
+        <!-- ═══ Errors Bar (collapsible, bottom) ═══ -->
+        <div class="errors-bar collapsed" id="errors-bar">
+            <div class="errors-bar-header" id="errors-bar-header">
+                <div class="errors-bar-header-left">
+                    <span class="errors-bar-title">Errors</span>
+                    <span class="errors-bar-count" id="errors-bar-count">0</span>
+                </div>
+                <span class="errors-bar-toggle" id="errors-bar-toggle">▲</span>
+            </div>
+            <div class="errors-bar-content" id="errors-display">
+                <span class="empty">No errors</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Footer Bar ═══ -->
+    <footer class="footer-bar">
+        <span id="footer-status">Ready</span>
+        <span class="footer-sep">·</span>
+        <span id="footer-expression">No expression</span>
+    </footer>
+
+    <script type="module" src="src/main.ts"></script>
+</body>
+</html>

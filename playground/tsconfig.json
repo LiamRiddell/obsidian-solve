@@ -23,6 +23,6 @@
       "@tools/*": ["../src/solve-js/tools/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.vue"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

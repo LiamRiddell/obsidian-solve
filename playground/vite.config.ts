@@ -1,7 +1,9 @@
 import path from "path";
 import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
 
 export default defineConfig({
+	plugins: [vue()],
 	root: __dirname,
 	base: "/",
 	resolve: {
@@ -22,6 +24,9 @@ export default defineConfig({
 		outDir: "dist",
 		emptyOutDir: true,
 		sourcemap: true,
+	},
+	worker: {
+		format: "es",
 	},
 	optimizeDeps: {
 		exclude: ["style-mod", "@marijn/find-cluster-break"],

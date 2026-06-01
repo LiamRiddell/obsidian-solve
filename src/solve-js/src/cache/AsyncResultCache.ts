@@ -171,6 +171,49 @@ export class AsyncResultCache {
 
 	// ── Diagnostics ────────────────────────────────────────────────────
 
+	/**
+	 * Get a structured snapshot of all cache entries for diagnostics.
+	 * Returns per-package breakdown of resolved, in-flight, and error states.
+	 */
+	static getSnapshot(): Array<{
+		packageId: string;
+		resolvedCount: number;
+		inFlightCount: number;
+		errorCount: number;
+		entries: Array<{ key: string; status: 'resolved' | 'in_flight' | 'error'; errorMessage?: string }>;
+	}> {
+		const allPackageIds = new Set<string>();
+		for (const [pkgId] of this.stores) allPackageIds.add(pkgId);
+		for (const [pkgId] of this.inFlights) allPackageIds.add(pkgId);
+		for (const [pkgId] of this.errorStores) allPackageIds.add(pkgId);
+
+		return Array.from(allPackageIds).sort().map(packageId => {
+			const store = this.stores.get(packageId) ?? new Map();
+			const inFlight = this.inFlights.get(packageId) ?? new Map();
+			const errors = this.errorStores.get(packageId) ?? new Map();
+
+			const allKeys = new Set<string>();
+			for (const k of store.keys()) allKeys.add(k);
+			for (const k of inFlight.keys()) allKeys.add(k);
+			for (const k of errors.keys()) allKeys.add(k);
+
+			const entries = Array.from(allKeys).sort().map(key => {
+				if (store.has(key)) return { key, status: 'resolved' as const };
+				if (inFlight.has(key)) return { key, status: 'in_flight' as const };
+				const err = errors.get(key);
+				return { key, status: 'error' as const, errorMessage: err?.message ?? String(err) };
+			});
+
+			return {
+				packageId,
+				resolvedCount: store.size,
+				inFlightCount: inFlight.size,
+				errorCount: errors.size,
+				entries,
+			};
+		});
+	}
+
 	/** Total cached entries across all plugins. */
 	static get size(): number {
 		let total = 0;

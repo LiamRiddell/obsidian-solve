@@ -1131,6 +1131,13 @@ html, body {
 .constant-value.val-bigint  { color: var(--stage-compiler);  background: rgba(78, 201, 176, 0.1);   border-color: rgba(78, 201, 176, 0.25); }
 .constant-value.val-hex     { color: var(--stage-lexer);     background: rgba(90, 200, 250, 0.1);   border-color: rgba(90, 200, 250, 0.25); }
 
+.constant-highlight {
+  background: rgba(255, 216, 102, 0.35);
+  color: var(--stage-vm);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 /* ── Variables Section ─────────────────────────────────────────── */
 .variables-section {
   border-top: 1px solid var(--border-subtle);
