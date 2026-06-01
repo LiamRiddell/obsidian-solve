@@ -21,10 +21,23 @@
     <!-- Three-tier summary bar -->
     <div v-if="engine.currentResult && tierSummary.total > 0" class="tier-summary-bar">
       <span class="tier-summary-label">Evaluation Tiers</span>
-      <span class="tier-summary-pill tier-pill-1">T1: {{ tierSummary.t1 }} fresh</span>
-      <span class="tier-summary-pill tier-pill-2">T2: {{ tierSummary.t2 }} cached</span>
-      <span class="tier-summary-pill tier-pill-3">T3: {{ tierSummary.t3 }} pending</span>
-      <span v-if="tierSummary.skip > 0" class="tier-summary-pill tier-pill-skip">SKIP: {{ tierSummary.skip }} errors</span>
+      <span
+        class="tier-summary-pill tier-pill-1"
+        :title="tierBreakdown.t1.length > 0 ? 'Lines: ' + tierBreakdown.t1.join(', ') : ''"
+      >T1: {{ tierSummary.t1 }} fresh</span>
+      <span
+        class="tier-summary-pill tier-pill-2"
+        :title="tierBreakdown.t2.length > 0 ? 'Lines: ' + tierBreakdown.t2.join(', ') : ''"
+      >T2: {{ tierSummary.t2 }} cached</span>
+      <span
+        class="tier-summary-pill tier-pill-3"
+        :title="tierBreakdown.t3.length > 0 ? 'Lines: ' + tierBreakdown.t3.join(', ') : ''"
+      >T3: {{ tierSummary.t3 }} pending</span>
+      <span
+        v-if="tierSummary.skip > 0"
+        class="tier-summary-pill tier-pill-skip"
+        :title="tierBreakdown.skip.length > 0 ? 'Lines: ' + tierBreakdown.skip.map(l => `L${l.line} "${l.expr}": ${l.error}`).join('\n') : ''"
+      >SKIP: {{ tierSummary.skip }} errors</span>
     </div>
 
     <div class="panel-scroll">
@@ -234,6 +247,22 @@ const tierSummary = computed<TierSummary>(() => {
     s.t1++;
   }
   return s;
+});
+
+/* ── Per-line tier breakdown for tooltips ──────────────────── */
+interface TierBreakdownItem { line: number; error?: string; expr?: string; }
+
+const tierBreakdown = computed<{ t1: number[]; t2: number[]; t3: number[]; skip: TierBreakdownItem[] }>(() => {
+  const results = engine.currentResult?.lineResults ?? [];
+  const b = { t1: [] as number[], t2: [] as number[], t3: [] as number[], skip: [] as TierBreakdownItem[] };
+  for (const r of results) {
+    const ln = r.lineNumber ?? 1;
+    if (r.error) { b.skip.push({ line: ln, error: r.error, expr: r.expression }); continue; }
+    if (r.wasCached) { b.t2.push(ln); continue; }
+    if (r.type === 'Pending') { b.t3.push(ln); continue; }
+    b.t1.push(ln);
+  }
+  return b;
 });
 
 /* ── Three-tier badge helpers ──────────────────────────────── */
