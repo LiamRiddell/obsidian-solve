@@ -1,6 +1,6 @@
 <template>
   <div class="tab-panel active" id="panel-flow">
-    <!-- Line selector bar -->
+    <!--#region Line Selector Bar ────────────────────────────────────────────-->
     <div class="pipeline-line-selector">
       <label class="pipeline-line-label">
         <span class="pipeline-line-icon">#</span>
@@ -8,14 +8,20 @@
       </label>
       <select class="pipeline-line-select" v-model="lineSelectVal">
         <option value="0">All Lines (aggregate)</option>
-        <option v-for="lr in lineResults" :key="lr.lineNumber" :value="String(lr.lineNumber ?? 1)">
-          Line {{ lr.lineNumber ?? 1 }}: {{ lr.expression.slice(0, 30) }}{{ lr.expression.length > 30 ? '…' : '' }}
+        <option
+          v-for="lr in lineResults"
+          :key="lr.lineNumber"
+          :value="String(lr.lineNumber ?? 1)"
+        >
+          Line {{ lr.lineNumber ?? 1 }}: {{ lr.expression.slice(0, 30)
+          }}{{ lr.expression.length > 30 ? "…" : "" }}
         </option>
       </select>
       <span class="pipeline-active-line-badge">{{ activeLineStr }}</span>
     </div>
+    <!--#endregion-->
 
-    <!-- Data-driven pipeline flow stages -->
+    <!--#region Pipeline Flow — Data-driven Stage Rendering ──────────────────-->
     <div class="pipeline-flow" v-if="displayStages.length > 0">
       <template v-for="(stage, i) in displayStages" :key="stage.stage">
         <pipeline-stage
@@ -36,6 +42,7 @@
           :pulsing="pulsingStages.includes(i)"
           @update:model-value="(v: boolean) => onStageToggle(i, v)"
         >
+          <!-- Compact output: rendered by the stage renderer for this stage type -->
           <template #output>
             <component
               v-if="stageRenderers[stage.stage]"
@@ -43,89 +50,236 @@
             />
             <span v-else class="empty">—</span>
           </template>
-          <template v-if="stage.stage === 'normalizer' && hasNormalizerDetail(stage)" #detail>
+
+          <!--
+            Expandable detail: shown only for the normalizer stage when
+            fusions are present. Renders the full fusion table with rule
+            names, source tokens, arrows, and resulting fused tokens.
+          -->
+          <template
+            v-if="stage.stage === 'normalizer' && hasNormalizerDetail(stage)"
+            #detail
+          >
             <component :is="() => normalizerDetailRenderer(stage)" />
           </template>
         </pipeline-stage>
+
+        <!-- Connector arrow between stages (hidden after the result stage) -->
         <div v-if="!isResultStage(stage)" class="flow-stage-connector">
           <span class="connector-arrow">▼</span>
         </div>
       </template>
     </div>
+    <!--#endregion-->
 
-    <!-- Pipeline summary stats -->
+    <!--#region Pipeline Summary Stats ───────────────────────────────────────-->
     <div class="pipeline-detail">
-      <div class="detail-row"><span class="detail-label">Tokens</span><span class="detail-value">{{ tokenCount }}</span></div>
-      <div class="detail-row"><span class="detail-label">Opcodes</span><span class="detail-value">{{ opcodeCount }}</span></div>
-      <div class="detail-row"><span class="detail-label">Cache</span><span class="detail-value">{{ cacheStatus }}</span></div>
-      <div class="detail-row"><span class="detail-label">Async</span><span class="detail-value">{{ asyncStatus }}</span></div>
-      <div v-if="displayStages.length > 0" class="detail-row"><span class="detail-label">Stages</span><span class="detail-value">{{ displayStages.length }} stage{{ displayStages.length !== 1 ? 's' : '' }}</span></div>
+      <div class="detail-row">
+        <span class="detail-label">Tokens</span>
+        <span class="detail-value">{{ tokenCount }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Opcodes</span>
+        <span class="detail-value">{{ opcodeCount }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Cache</span>
+        <span class="detail-value">{{ cacheStatus }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Async</span>
+        <span class="detail-value">{{ asyncStatus }}</span>
+      </div>
+      <div v-if="displayStages.length > 0" class="detail-row">
+        <span class="detail-label">Stages</span>
+        <span class="detail-value"
+          >{{ displayStages.length }} stage{{
+            displayStages.length !== 1 ? "s" : ""
+          }}</span
+        >
+      </div>
     </div>
+    <!--#endregion-->
 
-    <!-- Bytecode Constants Table -->
+    <!--#region Constants Table ──────────────────────────────────────────────-->
     <div v-if="allConstants.length > 0" class="constants-table-section">
-      <div class="constants-section-header" @click="constantsExpanded = !constantsExpanded" role="button" :aria-expanded="constantsExpanded">
+      <div
+        class="constants-section-header"
+        @click="constantsExpanded = !constantsExpanded"
+        role="button"
+        :aria-expanded="constantsExpanded"
+      >
         <span class="constants-section-title">📦 Constants</span>
         <span class="constants-section-total">{{ filteredTotal }}</span>
-        <span class="constants-section-chevron" :class="{ expanded: constantsExpanded }">▸</span>
+        <span
+          class="constants-section-chevron"
+          :class="{ expanded: constantsExpanded }"
+          >▸</span
+        >
       </div>
-      <div v-if="constantsExpanded" class="constants-filter-row" @click.stop>
-        <input class="constants-filter-input" type="text" v-model="constantsFilter" placeholder="Filter by index or value…" spellcheck="false" />
+      <div
+        v-if="constantsExpanded"
+        class="constants-filter-row"
+        @click.stop
+      >
+        <input
+          class="constants-filter-input"
+          type="text"
+          v-model="constantsFilter"
+          placeholder="Filter by index or value…"
+          spellcheck="false"
+        />
       </div>
       <template v-if="constantsExpanded">
-        <div v-for="group in filteredConstantGroups" :key="group.type" class="constant-group">
-          <div class="constant-group-header" @click="group.expanded = !group.expanded" role="button" :aria-expanded="group.expanded">
+        <div
+          v-for="group in filteredConstantGroups"
+          :key="group.type"
+          class="constant-group"
+        >
+          <div
+            class="constant-group-header"
+            @click="group.expanded = !group.expanded"
+            role="button"
+            :aria-expanded="group.expanded"
+          >
             <span class="constant-group-dot" :class="'dot-' + group.type"></span>
             <span class="constant-group-label">{{ group.label }}</span>
-            <span class="constant-group-count">{{ group.matchCount ?? group.items.length }}</span>
-            <span class="constant-group-chevron" :class="{ expanded: group.expanded }">▸</span>
+            <span class="constant-group-count">{{
+              group.matchCount ?? group.items.length
+            }}</span>
+            <span
+              class="constant-group-chevron"
+              :class="{ expanded: group.expanded }"
+              >▸</span
+            >
           </div>
-          <table v-if="group.expanded" class="constant-table"><thead><tr><th class="constant-col-idx">#</th><th class="constant-col-val">Value</th></tr></thead>
-            <tbody><tr v-for="item in (group.filteredItems ?? group.items)" :key="item.index" class="constant-row" :class="'row-' + group.type">
-              <td class="constant-col-idx">{{ item.index }}</td>
-              <td class="constant-col-val"><code class="constant-value" :class="'val-' + group.type">
-                <template v-for="(seg, i) in valueSegments(group.type, item.value)" :key="i"><mark v-if="seg.highlight" class="constant-highlight">{{ seg.text }}</mark><span v-else>{{ seg.text }}</span></template>
-              </code></td>
-            </tr></tbody></table>
+          <table v-if="group.expanded" class="constant-table">
+            <thead>
+              <tr>
+                <th class="constant-col-idx">#</th>
+                <th class="constant-col-val">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in group.filteredItems ?? group.items"
+                :key="item.index"
+                class="constant-row"
+                :class="'row-' + group.type"
+              >
+                <td class="constant-col-idx">{{ item.index }}</td>
+                <td class="constant-col-val">
+                  <code
+                    class="constant-value"
+                    :class="'val-' + group.type"
+                  >
+                    <template
+                      v-for="(seg, i) in valueSegments(group.type, item.value)"
+                      :key="i"
+                    >
+                      <mark v-if="seg.highlight" class="constant-highlight">{{
+                        seg.text
+                      }}</mark>
+                      <span v-else>{{ seg.text }}</span>
+                    </template>
+                  </code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </template>
     </div>
+    <!--#endregion-->
 
-    <!-- Variables -->
+    <!--#region Variables Section ────────────────────────────────────────────-->
     <div v-if="allVariables.length > 0" class="variables-section">
-      <div class="variables-section-header" @click="variablesExpanded = !variablesExpanded" role="button" :aria-expanded="variablesExpanded">
+      <div
+        class="variables-section-header"
+        @click="variablesExpanded = !variablesExpanded"
+        role="button"
+        :aria-expanded="variablesExpanded"
+      >
         <span class="variables-section-title">📋 Variables</span>
-        <span class="variables-section-total">{{ allVariables.length }} variable{{ allVariables.length !== 1 ? 's' : '' }}</span>
-        <span class="variables-section-chevron" :class="{ expanded: variablesExpanded }">▸</span>
+        <span class="variables-section-total"
+          >{{ allVariables.length }} variable{{
+            allVariables.length !== 1 ? "s" : ""
+          }}</span
+        >
+        <span
+          class="variables-section-chevron"
+          :class="{ expanded: variablesExpanded }"
+          >▸</span
+        >
       </div>
       <div v-if="variablesExpanded" class="variables-chips">
-        <span v-for="v in allVariables" :key="v" class="variable-chip" :title="'Variable: :' + v">:{{ v }}</span>
+        <span
+          v-for="v in allVariables"
+          :key="v"
+          class="variable-chip"
+          :title="'Variable: :' + v"
+          >:{{ v }}</span
+        >
       </div>
     </div>
+    <!--#endregion-->
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch, h } from 'vue';
-import { useEngineStore } from '../stores/engine.js';
-import { usePipelineStore } from '../stores/pipeline.js';
-import { fmt } from '../utils.js';
-import PipelineStage from './PipelineStage.vue';
-import type { Token, LineResult, ConstantInfo } from '../engine.js';
-import type { PipelineStageResult, StageOutput } from '@/solve-js/src/types/DiagnosticPipelineResult';
+//#region ─── Imports ──────────────────────────────────────────────────────────
+
+import { computed, onUnmounted, ref, watch, h } from "vue";
+import { useEngineStore } from "../stores/engine.js";
+import { usePipelineStore } from "../stores/pipeline.js";
+import { fmt } from "../utils.js";
+import PipelineStage from "./PipelineStage.vue";
+import type { Token, LineResult, ConstantInfo } from "../engine.js";
+import type {
+  PipelineStageResult,
+  StageOutput,
+} from "@/solve-js/src/types/DiagnosticPipelineResult";
+
+//#endregion
+//#region ─── Store Access ─────────────────────────────────────────────────────
 
 const engine = useEngineStore();
 const pipelineStore = usePipelineStore();
 
+/** The latest evaluation result from the engine store. */
 const result = computed(() => engine.currentResult);
-const hasResult = computed(() => !!result.value);
-const lineResults = computed<LineResult[]>(() => result.value?.lineResults ?? []);
 
-/* ── Structured pipeline stages from engine ──────────────────── */
-const displayStages = computed<PipelineStageResult[]>(() => result.value?.pipelineStages ?? []);
+/** Whether a result has been produced (enables "executed" styling on stages). */
+const hasResult = computed(() => !!result.value);
+
+/** Per-line results extracted from the engine's debug output. */
+const lineResults = computed<LineResult[]>(
+  () => result.value?.lineResults ?? [],
+);
+
+//#endregion
+//#region ─── Structured Pipeline Stages ───────────────────────────────────────
+
+/**
+ * Structured pipeline stages from the engine's DiagnosticPipelineResult.
+ * When the engine runs in diagnostic mode, these are fully populated with
+ * 15 typed stage outputs. In production mode, this array is empty.
+ */
+const displayStages = computed<PipelineStageResult[]>(
+  () => result.value?.pipelineStages ?? [],
+);
+
+/** Number of stages to display (or 8 as a minimum for the fallback). */
 const numStages = computed(() => displayStages.value.length || 8);
 
-/* ── Stage collapse state (driven by store) ──────────────────── */
+//#endregion
+//#region ─── Stage Collapse State ─────────────────────────────────────────────
+
+/**
+ * Per-stage collapse state.
+ * `true` = collapsed (body hidden), `false` = expanded (body visible).
+ * Initialized to all-collapsed and resized when the stage count changes.
+ */
 const stagesCollapsed = ref<boolean[]>(Array(numStages.value).fill(true));
 
 watch(numStages, (n) => {
@@ -135,40 +289,77 @@ watch(numStages, (n) => {
   }
 });
 
+/**
+ * Persist the current expansion state to the pipeline store
+ * so it survives line-switch re-renders.
+ */
 function saveCurrentExpansion(): void {
   const lineKey = pipelineStore.selectedLine ?? 0;
   pipelineStore.saveStageExpansion(lineKey, [...stagesCollapsed.value]);
 }
 
+/**
+ * Handle a stage header click — toggle expand/collapse and persist.
+ * @param index - The stage index in the displayStages array
+ * @param value - New collapse state (true = collapsed)
+ */
 function onStageToggle(index: number, value: boolean): void {
   stagesCollapsed.value[index] = value;
   saveCurrentExpansion();
 }
 
-/* ── Respond to HeaderBar collapse/expand buttons ───────────── */
-watch(() => pipelineStore.collapseAllTrigger, () => {
-  stagesCollapsed.value = Array(numStages.value).fill(true);
-  saveCurrentExpansion();
-});
-watch(() => pipelineStore.expandAllTrigger, () => {
-  stagesCollapsed.value = Array(numStages.value).fill(false);
-  saveCurrentExpansion();
-});
+//#endregion
+//#region ─── Collapse/Expand All (HeaderBar Buttons) ──────────────────────────
 
-/* ── Flash-pulse snapshot logic ──────────────────────────────── */
-const pulsingStages = ref<number[]>([]);
-let pulseTimer: ReturnType<typeof setTimeout> | null = null;
-
-const stageOutputs = computed<string[]>(() =>
-  displayStages.value.map(s => JSON.stringify(s.output)),
+/** Watch the collapse-all trigger from the HeaderBar and collapse all stages. */
+watch(
+  () => pipelineStore.collapseAllTrigger,
+  () => {
+    stagesCollapsed.value = Array(numStages.value).fill(true);
+    saveCurrentExpansion();
+  },
 );
 
-onUnmounted(() => { if (pulseTimer) clearTimeout(pulseTimer); });
+/** Watch the expand-all trigger from the HeaderBar and expand all stages. */
+watch(
+  () => pipelineStore.expandAllTrigger,
+  () => {
+    stagesCollapsed.value = Array(numStages.value).fill(false);
+    saveCurrentExpansion();
+  },
+);
 
+//#endregion
+//#region ─── Flash-Pulse Animation ────────────────────────────────────────────
+
+/**
+ * Stage indices that are currently pulsing.
+ * Set when the selected line changes and stage output data differs
+ * from the previous line's snapshot.
+ */
+const pulsingStages = ref<number[]>([]);
+
+/** Timer handle for clearing the pulse animation after 650ms. */
+let pulseTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Serialized stage outputs for change detection (JSON compare). */
+const stageOutputs = computed<string[]>(() =>
+  displayStages.value.map((s) => JSON.stringify(s.output)),
+);
+
+onUnmounted(() => {
+  if (pulseTimer) clearTimeout(pulseTimer);
+});
+
+/**
+ * Compare current stage outputs with the previous line's snapshot.
+ * Stages with changed data get a brief pulse animation.
+ */
 function detectAndPulseChanges(): void {
   const lineKey = pipelineStore.selectedLine ?? 0;
   const oldSnapshot = pipelineStore.getStageSnapshot(lineKey);
   const newSnapshot = stageOutputs.value;
+
   if (oldSnapshot && oldSnapshot.length === numStages.value) {
     const changed: number[] = [];
     for (let i = 0; i < numStages.value; i++) {
@@ -177,118 +368,216 @@ function detectAndPulseChanges(): void {
     if (changed.length > 0) {
       pulsingStages.value = changed;
       if (pulseTimer) clearTimeout(pulseTimer);
-      pulseTimer = setTimeout(() => { pulsingStages.value = []; pulseTimer = null; }, 650);
+      pulseTimer = setTimeout(() => {
+        pulsingStages.value = [];
+        pulseTimer = null;
+      }, 650);
     }
   }
+
   pipelineStore.saveStageSnapshot(lineKey, [...newSnapshot]);
 }
 
-watch(() => pipelineStore.selectedLine, () => { detectAndPulseChanges(); });
+watch(
+  () => pipelineStore.selectedLine,
+  () => {
+    detectAndPulseChanges();
+  },
+);
 
-/* ── Select line data ────────────────────────────────────────── */
-const lineSelectVal = ref('0');
+//#endregion
+//#region ─── Line Selection ──────────────────────────────────────────────────
+
+/** Currently selected line in the dropdown ("0" = All Lines). */
+const lineSelectVal = ref("0");
+
 watch(lineSelectVal, (val) => {
-  const ln = val === '0' ? null : Number(val);
+  const ln = val === "0" ? null : Number(val);
   if (ln === pipelineStore.selectedLine) return;
   pipelineStore.selectLine(ln, true);
 });
-watch(() => pipelineStore.selectedLine, (ln) => {
-  if (!pipelineStore.dropdownManuallyChanged) lineSelectVal.value = ln === null ? '0' : String(ln);
-});
 
-const activeLineStr = computed(() => pipelineStore.selectedLine !== null ? 'Line ' + pipelineStore.selectedLine : 'All Lines');
-const stageLabel = computed(() => pipelineStore.selectedLine !== null ? 'L' + pipelineStore.selectedLine : 'All');
+watch(
+  () => pipelineStore.selectedLine,
+  (ln) => {
+    if (!pipelineStore.dropdownManuallyChanged)
+      lineSelectVal.value = ln === null ? "0" : String(ln);
+  },
+);
+
+/** Display string for the active line badge. */
+const activeLineStr = computed(() =>
+  pipelineStore.selectedLine !== null
+    ? "Line " + pipelineStore.selectedLine
+    : "All Lines",
+);
+
+/** Compact label for the stage header (e.g., "L3" or "All"). */
+const stageLabel = computed(() =>
+  pipelineStore.selectedLine !== null
+    ? "L" + pipelineStore.selectedLine
+    : "All",
+);
+
+/** Currently selected line number (null = aggregate view). */
 const selectedLine = computed(() => pipelineStore.selectedLine);
 
-/* ── Per-line filtering ──────────────────────────────────────── */
+//#endregion
+//#region ─── Per-Line Filtering ──────────────────────────────────────────────
+
+/** Tokens filtered to the selected line (or all tokens in aggregate view). */
 const lineTokens = computed<Token[]>(() => {
   const t = result.value?.rawTokens ?? [];
   if (selectedLine.value === null) return t;
-  return t.filter(tk => (tk as any).line === selectedLine.value);
+  return t.filter((tk) => (tk as any).line === selectedLine.value);
 });
+
+/** The LineResult for the currently selected single line. */
 const perLineResult = computed(() =>
-  selectedLine.value !== null ? lineResults.value.find(lr => (lr.lineNumber ?? 1) === selectedLine.value) ?? null : null,
+  selectedLine.value !== null
+    ? lineResults.value.find(
+        (lr) => (lr.lineNumber ?? 1) === selectedLine.value,
+      ) ?? null
+    : null,
 );
-const hasErrors = computed(() => perLineResult.value?.error ? true : (selectedLine.value === null && (result.value?.errors?.length ?? 0) > 0));
+
+/** Whether the selected line (or aggregate) has errors. */
+const hasErrors = computed(() =>
+  perLineResult.value?.error
+    ? true
+    : selectedLine.value === null &&
+        (result.value?.errors?.length ?? 0) > 0,
+);
+
+/** Total number of lines evaluated. */
 const totalLines = computed(() => lineResults.value.length);
 
-/* ── Stage helper functions ──────────────────────────────────── */
+//#endregion
+//#region ─── Stage Helper Functions ───────────────────────────────────────────
+
+/** @returns `true` if this stage is the final result stage. */
 function isResultStage(stage: PipelineStageResult): boolean {
-  return stage.stage === 'result';
+  return stage.stage === "result";
 }
+
+/**
+ * @returns `true` if this stage represents a failed safety check.
+ * Safety stages show an error border and red tint when they fail.
+ */
 function isErrorStage(stage: PipelineStageResult): boolean {
-  if (stage.stage === 'safety_length' || stage.stage === 'safety_complexity') {
+  if (stage.stage === "safety_length" || stage.stage === "safety_complexity") {
     const o = stage.output as any;
     return o.passed === false;
   }
   return false;
 }
+
+/**
+ * Format the stage's elapsed time for display.
+ * @returns A human-readable time string (e.g., "1.2 µs") or "—" if untimed.
+ */
 function getStageTime(stage: PipelineStageResult): string {
-  return stage.elapsedNs > 0 ? fmt(stage.elapsedNs) : '—';
+  return stage.elapsedNs > 0 ? fmt(stage.elapsedNs) : "—";
 }
+
+/**
+ * Map a stage to its human-readable input description.
+ * @returns A short description of what the stage transforms (e.g., "Tokens → AST").
+ */
 function getStageInput(stage: PipelineStageResult): string {
   const inputs: Record<string, string> = {
-    pipeline_start: 'Initialize',
-    safety_length: 'Expression → Limit Check',
-    lexer: 'Expression → Tokens',
-    normalizer: 'Tokens → Normalized Tokens',
-    safety_complexity: 'Tokens → Complexity Score',
-    readwrite: 'Tokens → Variable Tracking',
-    cache_check: 'Bytecode Lookup',
-    parser: 'Tokens → AST',
-    compiler: 'AST → Bytecode',
-    async_preflight: 'Resolver Registry',
-    vm_execute: 'Bytecode → Stack',
-    dag_registration: 'Reads/Writes → DAG',
-    linecache: 'Store Result',
-    result: '',
-    pipeline_end: '',
+    pipeline_start: "Initialize",
+    safety_length: "Expression → Limit Check",
+    lexer: "Expression → Tokens",
+    normalizer: "Tokens → Normalized Tokens",
+    safety_complexity: "Tokens → Complexity Score",
+    readwrite: "Tokens → Variable Tracking",
+    cache_check: "Bytecode Lookup",
+    parser: "Tokens → AST",
+    compiler: "AST → Bytecode",
+    async_preflight: "Resolver Registry",
+    vm_execute: "Bytecode → Stack",
+    dag_registration: "Reads/Writes → DAG",
+    linecache: "Store Result",
+    result: "",
+    pipeline_end: "",
   };
   return inputs[stage.stage] || stage.stage;
 }
+
+/**
+ * Map a stage to its output category label.
+ * @returns A short label for the output section (e.g., "Tokens", "Opcodes").
+ */
 function getStageOutputLabel(stage: PipelineStageResult): string {
   const labels: Record<string, string> = {
-    pipeline_start: 'Status',
-    safety_length: 'Status',
-    lexer: 'Tokens',
-    normalizer: 'Fusions',
-    safety_complexity: 'Status',
-    readwrite: 'Variables',
-    cache_check: 'Status',
-    parser: 'Parselets',
-    compiler: 'Opcodes',
-    async_preflight: 'Path',
-    vm_execute: 'Type',
-    dag_registration: 'Registered',
-    linecache: 'Line',
-    result: '',
-    pipeline_end: '',
+    pipeline_start: "Status",
+    safety_length: "Status",
+    lexer: "Tokens",
+    normalizer: "Fusions",
+    safety_complexity: "Status",
+    readwrite: "Variables",
+    cache_check: "Status",
+    parser: "Parselets",
+    compiler: "Opcodes",
+    async_preflight: "Path",
+    vm_execute: "Type",
+    dag_registration: "Registered",
+    linecache: "Line",
+    result: "",
+    pipeline_end: "",
   };
-  return labels[stage.stage] || '';
+  return labels[stage.stage] || "";
 }
 
-/* ── Shared helpers ────────────────────────────────────────── */
+//#endregion
+//#region ─── Shared Helpers ──────────────────────────────────────────────────
 
-/** Map token type to CSS class for token chips in normalizer detail */
+/**
+ * Map a token type to a CSS class for token chip display in the normalizer detail.
+ *
+ * @param t - A token-like object with a `type` string property
+ * @returns A CSS class name: `"val-number"`, `"val-ident"`, `"val-operator"`, `"val-keyword"`, or `"val-default"`
+ */
 function tokClass(t: { type?: string }): string {
-  const type = String(t.type || '').toLowerCase();
-  if (['number','hex','bigint'].includes(type)) return 'val-number';
-  if (type === 'ident') return 'val-ident';
-  if (['star','plus','minus','slash','caret','equals'].includes(type)) return 'val-operator';
-  if (type === 'keyword' || type.includes('_by')) return 'val-keyword';
-  return 'val-default';
+  const type = String(t.type || "").toLowerCase();
+  if (["number", "hex", "bigint"].includes(type)) return "val-number";
+  if (type === "ident") return "val-ident";
+  if (["star", "plus", "minus", "slash", "caret", "equals"].includes(type))
+    return "val-operator";
+  if (type === "keyword" || type.includes("_by")) return "val-keyword";
+  return "val-default";
 }
 
-/* ── Data-driven stage renderers ─────────────────────────────── */
+//#endregion
+//#region ─── Normalizer Detail Rendering ──────────────────────────────────────
 
-/** Whether the normalizer stage has fusion detail to show in the expandable slot */
+/**
+ * Whether the normalizer stage has fusion detail worth showing in the
+ * expandable detail slot.
+ *
+ * @returns `true` if the normalizer stage has at least one fusion event
+ */
 function hasNormalizerDetail(stage: PipelineStageResult): boolean {
-  if (stage.stage !== 'normalizer') return false;
+  if (stage.stage !== "normalizer") return false;
   const o = stage.output as any;
   return (o.fusions?.length ?? 0) > 0;
 }
 
-/** Renders the full fusion table for the normalizer's #detail slot */
+/**
+ * Renders the full fusion detail table for the normalizer's `#detail` slot.
+ *
+ * The table shows, for each fusion:
+ * - **Rule**: Which normalizer rule triggered the fusion
+ * - **Source Tokens**: The original tokens before fusion (color-coded chips)
+ * - **→**: An arrow indicating the transformation
+ * - **Fused Token**: The resulting token type and value
+ *
+ * A stats row at the top shows token count change and per-rule application counts.
+ *
+ * @param stage - The normalizer pipeline stage with fusion data
+ * @returns A VNode tree rendered as the detail slot content
+ */
 function normalizerDetailRenderer(stage: PipelineStageResult) {
   const o = stage.output as any;
   const fusions: any[] = o.fusions ?? [];
@@ -296,217 +585,572 @@ function normalizerDetailRenderer(stage: PipelineStageResult) {
 
   const children: any[] = [];
 
-  // Stats row
-  children.push(h('div', { class: 'normalize-stats' }, [
-    h('span', { class: 'normalize-stat' }, [
-      h('span', { class: 'normalize-stat-label' }, 'Tokens:'),
-      h('span', { class: 'normalize-stat-value' }, `${o.inputTokenCount} → ${o.outputTokenCount}`),
+  // ── Stats row: token count change + per-rule application counts ──
+  children.push(
+    h("div", { class: "normalize-stats" }, [
+      h("span", { class: "normalize-stat" }, [
+        h("span", { class: "normalize-stat-label" }, "Tokens:"),
+        h(
+          "span",
+          { class: "normalize-stat-value" },
+          `${o.inputTokenCount} → ${o.outputTokenCount}`,
+        ),
+      ]),
+      h("span", { class: "normalize-stat" }, [
+        h("span", { class: "normalize-stat-label" }, "Fusions:"),
+        h("span", { class: "normalize-stat-value" }, String(fusions.length)),
+      ]),
+      ...rulesApplied.map((r: any) =>
+        h("span", { class: "normalize-stat" }, [
+          h("span", { class: "normalize-stat-label" }, r.rule + ":"),
+          h("span", { class: "normalize-stat-value" }, String(r.count)),
+        ]),
+      ),
     ]),
-    h('span', { class: 'normalize-stat' }, [
-      h('span', { class: 'normalize-stat-label' }, 'Fusions:'),
-      h('span', { class: 'normalize-stat-value' }, String(fusions.length)),
-    ]),
-    ...rulesApplied.map((r: any) => h('span', { class: 'normalize-stat' }, [
-      h('span', { class: 'normalize-stat-label' }, r.rule + ':'),
-      h('span', { class: 'normalize-stat-value' }, String(r.count)),
-    ])),
-  ]));
+  );
 
-  // Fusion table
+  // ── Fusion table: rule → source tokens → fused token ──
   if (fusions.length > 0) {
-    children.push(h('table', { class: 'normalize-fusion-table' }, [
-      h('thead', {}, h('tr', {}, [
-        h('th', {}, 'Rule'),
-        h('th', {}, 'Source Tokens'),
-        h('th', {}, ''),
-        h('th', {}, 'Fused Token'),
-      ])),
-      h('tbody', {}, fusions.map((f: any) =>
-        h('tr', {}, [
-          h('td', {}, h('span', { class: 'normalize-fusion-rule' }, f.rule)),
-          h('td', {}, h('span', { class: 'normalize-fusion-source-tokens' },
-            (f.sourceTokens ?? []).map((st: any) =>
-              h('span', { class: `normalize-fusion-token ${tokClass(st)}` }, st.value)
-            )
-          )),
-          h('td', {}, h('span', { class: 'normalize-fusion-arrow' }, '→')),
-          h('td', {}, [
-            h('span', { class: 'normalize-fusion-result-type' }, f.fusedToken.type),
-            h('span', { class: 'normalize-fusion-result-token', style: { marginLeft: '6px', color: '#dcdcaa' } }, f.fusedToken.value),
+    children.push(
+      h("table", { class: "normalize-fusion-table" }, [
+        h(
+          "thead",
+          {},
+          h("tr", {}, [
+            h("th", {}, "Rule"),
+            h("th", {}, "Source Tokens"),
+            h("th", {}, ""),
+            h("th", {}, "Fused Token"),
           ]),
-        ])
-      )),
-    ]));
+        ),
+        h(
+          "tbody",
+          {},
+          fusions.map((f: any) =>
+            h("tr", {}, [
+              // Rule name column
+              h(
+                "td",
+                {},
+                h("span", { class: "normalize-fusion-rule" }, f.rule),
+              ),
+
+              // Source tokens column — color-coded chips
+              h(
+                "td",
+                {},
+                h(
+                  "span",
+                  { class: "normalize-fusion-source-tokens" },
+                  (f.sourceTokens ?? []).map((st: any) =>
+                    h(
+                      "span",
+                      {
+                        class: `normalize-fusion-token ${tokClass(st)}`,
+                      },
+                      st.value,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Arrow column
+              h(
+                "td",
+                {},
+                h("span", { class: "normalize-fusion-arrow" }, "→"),
+              ),
+
+              // Fused token column — type badge + value
+              h("td", {}, [
+                h(
+                  "span",
+                  { class: "normalize-fusion-result-type" },
+                  f.fusedToken.type,
+                ),
+                h(
+                  "span",
+                  {
+                    class: "normalize-fusion-result-token",
+                    style: { marginLeft: "6px", color: "#dcdcaa" },
+                  },
+                  f.fusedToken.value,
+                ),
+              ]),
+            ]),
+          ),
+        ),
+      ]),
+    );
   } else if (o.outputTokenCount > 0) {
-    children.push(h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'No tokens were fused in this pass'));
+    // No fusions but tokens were normalized (e.g., implicit multiply only)
+    children.push(
+      h(
+        "span",
+        { style: { color: "#6b6b75", fontSize: "10px" } },
+        "No tokens were fused in this pass",
+      ),
+    );
   }
 
-  return h('div', {}, children);
+  return h("div", {}, children);
 }
 
-const stageRenderers: Record<string, (stage: PipelineStageResult) => ReturnType<typeof h>> = {
-  pipeline_start(stage) { const o = stage.output as any; return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, o.inputType ?? '—'); },
+//#endregion
+//#region ─── Stage Renderers ──────────────────────────────────────────────────
+
+/**
+ * Data-driven stage renderers.
+ *
+ * Each renderer is a function that receives a PipelineStageResult and returns
+ * a VNode tree for the stage's compact output area. The renderer is selected
+ * by `stage.stage` key, ensuring each pipeline stage type gets its own
+ * specialized visualization.
+ */
+const stageRenderers: Record<
+  string,
+  (stage: PipelineStageResult) => ReturnType<typeof h>
+> = {
+  // ── Stage 1: Pipeline Start ───────────────────────────────────────────
+  pipeline_start(stage) {
+    const o = stage.output as any;
+    return h(
+      "span",
+      { style: { color: "#6b6b75", fontSize: "10px" } },
+      o.inputType ?? "—",
+    );
+  },
+
+  // ── Stage 2: Safety — Expression Length ───────────────────────────────
   safety_length(stage) {
     const o = stage.output as any;
-    const color = o.passed ? '#4ec9b0' : '#f48771';
-    const text = o.passed ? `Passed (${o.expressionLength} chars)` : (o.errorMessage ?? 'Failed');
-    return h('span', { style: { color, fontSize: '10px' } }, text);
+    const color = o.passed ? "#4ec9b0" : "#f48771";
+    const text = o.passed
+      ? `Passed (${o.expressionLength} chars)`
+      : o.errorMessage ?? "Failed";
+    return h("span", { style: { color, fontSize: "10px" } }, text);
   },
+
+  // ── Stage 3: Lexer ────────────────────────────────────────────────────
   lexer(stage) {
     const o = stage.output as any;
     const tokens = (o.tokens ?? []) as Token[];
-    if (!tokens.length) return h('span', { class: 'empty' }, '—');
-    return h('span', {}, tokens.slice(0, 8).map((t: Token) =>
-      h('span', { class: `token token-${String(t.type || 'unknown').toLowerCase()}`, style: { fontSize: '9px', cursor: 'default' } }, t.value)
-    ));
+    if (!tokens.length) return h("span", { class: "empty" }, "—");
+    return h(
+      "span",
+      {},
+      tokens.slice(0, 8).map((t: Token) =>
+        h(
+          "span",
+          {
+            class: `token token-${String(t.type || "unknown").toLowerCase()}`,
+            style: { fontSize: "9px", cursor: "default" },
+          },
+          t.value,
+        ),
+      ),
+    );
   },
+
+  // ── Stage 4: Normalizer (compact output) ──────────────────────────────
   normalizer(stage) {
     const o = stage.output as any;
     const fusions: any[] = o.fusions ?? [];
-    const rulesApplied: any[] = o.rulesApplied ?? [];
 
-    if (stage.skipped) return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'No rules active');
+    if (stage.skipped)
+      return h(
+        "span",
+        { style: { color: "#6b6b75", fontSize: "10px" } },
+        "No rules active",
+      );
 
-    // Compact output: token count change + rule summary
+    // Compact output: token count change badge + fusion count badge
     const children: any[] = [];
-    children.push(h('span', { class: 'normalize-compact' }, [
-      h('span', { class: 'normalize-compact-count' }, `${o.inputTokenCount}→${o.outputTokenCount}`),
-      fusions.length > 0
-        ? h('span', { class: 'normalize-compact-fusions' }, `${fusions.length} fusion${fusions.length !== 1 ? 's' : ''}`)
-        : h('span', { style: { color: '#6b6b75', fontSize: '9px' } }, 'no fusions'),
-    ]));
+    children.push(
+      h("span", { class: "normalize-compact" }, [
+        h(
+          "span",
+          { class: "normalize-compact-count" },
+          `${o.inputTokenCount}→${o.outputTokenCount}`,
+        ),
+        fusions.length > 0
+          ? h(
+              "span",
+              { class: "normalize-compact-fusions" },
+              `${fusions.length} fusion${fusions.length !== 1 ? "s" : ""}`,
+            )
+          : h(
+              "span",
+              { style: { color: "#6b6b75", fontSize: "9px" } },
+              "no fusions",
+            ),
+      ]),
+    );
 
-    return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, children);
+    return h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: "8px" } },
+      children,
+    );
   },
+
+  // ── Stage 5: Safety — Complexity ──────────────────────────────────────
   safety_complexity(stage) {
     const o = stage.output as any;
-    const color = o.passed ? '#4ec9b0' : '#f48771';
-    const text = o.passed ? `Passed (score: ${o.complexityScore})` : (o.errorMessage ?? 'Failed');
-    return h('span', { style: { color, fontSize: '10px' } }, text);
+    const color = o.passed ? "#4ec9b0" : "#f48771";
+    const text = o.passed
+      ? `Passed (score: ${o.complexityScore})`
+      : o.errorMessage ?? "Failed";
+    return h("span", { style: { color, fontSize: "10px" } }, text);
   },
+
+  // ── Stage 6: Read/Write Extraction ────────────────────────────────────
   readwrite(stage) {
     const o = stage.output as any;
     const parts: string[] = [];
-    if (o.reads?.length) parts.push(`Reads: ${o.reads.join(', ')}`);
-    if (o.writes?.length) parts.push(`Writes: ${o.writes.join(', ')}`);
-    if (!parts.length) return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'None');
-    return h('span', { style: { color: '#dcdcaa', fontSize: '10px' } }, parts.join(' | '));
+    if (o.reads?.length) parts.push(`Reads: ${o.reads.join(", ")}`);
+    if (o.writes?.length) parts.push(`Writes: ${o.writes.join(", ")}`);
+    if (!parts.length)
+      return h(
+        "span",
+        { style: { color: "#6b6b75", fontSize: "10px" } },
+        "None",
+      );
+    return h(
+      "span",
+      { style: { color: "#dcdcaa", fontSize: "10px" } },
+      parts.join(" | "),
+    );
   },
+
+  // ── Stage 7: Cache Check ──────────────────────────────────────────────
   cache_check(stage) {
     const o = stage.output as any;
-    const color = o.hit ? '#4ec9b0' : '#5ac8fa';
-    return h('span', { style: { color, fontSize: '10px', fontWeight: '600' } }, o.hit ? 'Hit' : 'Miss');
+    const color = o.hit ? "#4ec9b0" : "#5ac8fa";
+    return h(
+      "span",
+      { style: { color, fontSize: "10px", fontWeight: "600" } },
+      o.hit ? "Hit" : "Miss",
+    );
   },
+
+  // ── Stage 8: Parser (Pratt) ───────────────────────────────────────────
   parser(stage) {
-    if (stage.skipped) return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'Skipped (cache hit)');
+    if (stage.skipped)
+      return h(
+        "span",
+        { style: { color: "#6b6b75", fontSize: "10px" } },
+        "Skipped (cache hit)",
+      );
     const o = stage.output as any;
     if (o.uniqueParseletTypes?.length) {
-      return h('span', {}, o.uniqueParseletTypes.map((p: string) =>
-        h('span', { class: 'token token-keyword', style: { fontSize: '9px', cursor: 'default' } }, p)
-      ));
+      return h(
+        "span",
+        {},
+        o.uniqueParseletTypes.map((p: string) =>
+          h(
+            "span",
+            {
+              class: "token token-keyword",
+              style: { fontSize: "9px", cursor: "default" },
+            },
+            p,
+          ),
+        ),
+      );
     }
-    return h('span', { class: 'empty' }, '—');
+    return h("span", { class: "empty" }, "—");
   },
+
+  // ── Stage 9: Compiler ─────────────────────────────────────────────────
   compiler(stage) {
-    if (stage.skipped) return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'Skipped (cache hit)');
+    if (stage.skipped)
+      return h(
+        "span",
+        { style: { color: "#6b6b75", fontSize: "10px" } },
+        "Skipped (cache hit)",
+      );
     const o = stage.output as any;
-    return h('span', { style: { color: '#dcdcaa', fontSize: '10px' } }, `${o.opcodeCount} opcodes, ${o.numberConstants} nums, ${o.stringConstants} strs`);
+    return h(
+      "span",
+      { style: { color: "#dcdcaa", fontSize: "10px" } },
+      `${o.opcodeCount} opcodes, ${o.numberConstants} nums, ${o.stringConstants} strs`,
+    );
   },
+
+  // ── Stage 10: Async Preflight ─────────────────────────────────────────
   async_preflight(stage) {
     const o = stage.output as any;
-    if (o.path === 'pending') return h('span', { style: { color: '#ffd866', fontSize: '10px' } }, `Pending: ${o.pendingQueryKey ?? '?'}`);
-    if (stage.skipped) return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'Skipped (no async)');
-    return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'Sync path');
+    if (o.path === "pending")
+      return h(
+        "span",
+        { style: { color: "#ffd866", fontSize: "10px" } },
+        `Pending: ${o.pendingQueryKey ?? "?"}`,
+      );
+    if (stage.skipped)
+      return h(
+        "span",
+        { style: { color: "#6b6b75", fontSize: "10px" } },
+        "Skipped (no async)",
+      );
+    return h(
+      "span",
+      { style: { color: "#6b6b75", fontSize: "10px" } },
+      "Sync path",
+    );
   },
+
+  // ── Stage 11: VM Execute ──────────────────────────────────────────────
   vm_execute(stage) {
     const o = stage.output as any;
-    return h('span', { style: { color: '#29ce99', fontSize: '10px' } }, o.resultType ?? 'Value');
+    return h(
+      "span",
+      { style: { color: "#29ce99", fontSize: "10px" } },
+      o.resultType ?? "Value",
+    );
   },
+
+  // ── Stage 12: DAG Registration ────────────────────────────────────────
   dag_registration(stage) {
     const o = stage.output as any;
     const parts: string[] = [];
-    if (o.readsRegistered?.length) parts.push(`${o.readsRegistered.length} reads`);
-    if (o.writesRegistered?.length) parts.push(`${o.writesRegistered.length} writes`);
-    if (!parts.length) return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, 'None');
-    return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, parts.join(', '));
+    if (o.readsRegistered?.length)
+      parts.push(`${o.readsRegistered.length} reads`);
+    if (o.writesRegistered?.length)
+      parts.push(`${o.writesRegistered.length} writes`);
+    if (!parts.length)
+      return h(
+        "span",
+        { style: { color: "#6b6b75", fontSize: "10px" } },
+        "None",
+      );
+    return h(
+      "span",
+      { style: { color: "#6b6b75", fontSize: "10px" } },
+      parts.join(", "),
+    );
   },
+
+  // ── Stage 13: LineCache Storage ───────────────────────────────────────
   linecache(stage) {
     const o = stage.output as any;
-    return h('span', { style: { color: '#6b6b75', fontSize: '10px' } }, o.stored ? `Line ${o.lineNumber} cached` : 'Not stored');
+    return h(
+      "span",
+      { style: { color: "#6b6b75", fontSize: "10px" } },
+      o.stored ? `Line ${o.lineNumber} cached` : "Not stored",
+    );
   },
+
+  // ── Stage 14: Result ──────────────────────────────────────────────────
   result(stage) {
     const o = stage.output as any;
-    if (o.error) return h('span', { style: { color: '#f48771' } }, o.error);
-    return h('span', { style: { color: '#29ce99' } }, o.formattedValue ?? String(o.rawValue ?? '—'));
+    if (o.error)
+      return h("span", { style: { color: "#f48771" } }, o.error);
+    return h(
+      "span",
+      { style: { color: "#29ce99" } },
+      o.formattedValue ?? String(o.rawValue ?? "—"),
+    );
   },
+
+  // ── Stage 15: Pipeline End ────────────────────────────────────────────
   pipeline_end(stage) {
     const o = stage.output as any;
-    const color = o.success ? '#4ec9b0' : '#f48771';
-    return h('span', { style: { color, fontSize: '10px' } }, `${o.totalTokens} tokens, ${o.totalOpcodes} opcodes`);
+    const color = o.success ? "#4ec9b0" : "#f48771";
+    return h(
+      "span",
+      { style: { color, fontSize: "10px" } },
+      `${o.totalTokens} tokens, ${o.totalOpcodes} opcodes`,
+    );
   },
 };
 
-/* ── Detail stats (shared by pipeline-detail below) ──────────── */
-const wasCached = computed(() => !(result.value?.parselets?.length ?? 0) && (result.value?.rawTokens?.length ?? 0) > 0);
-const hasAsync = computed(() => {
-  if (selectedLine.value !== null) return perLineResult.value?.type === 'Pending';
-  return lineResults.value.some(lr => lr.type === 'Pending');
-});
-const tokenCount = computed(() => String(result.value?.rawTokens?.length ?? 0));
-const opcodeCount = computed(() => String(result.value?.opcodes?.length ?? 0));
-const cacheStatus = computed(() => wasCached.value ? 'hit' : ((result.value?.parselets?.length ?? 0) > 0 ? 'miss' : '—'));
-const asyncStatus = computed(() => hasAsync.value ? 'yes' : 'no');
+//#endregion
+//#region ─── Detail Stats (Pipeline Summary Bar) ──────────────────────────────
 
-/* ── Constants table ──────────────────────────────────────────── */
+/** Whether the last evaluation was served from the bytecode cache. */
+const wasCached = computed(
+  () =>
+    !(result.value?.parselets?.length ?? 0) &&
+    (result.value?.rawTokens?.length ?? 0) > 0,
+);
+
+/** Whether any line result is in a pending async state. */
+const hasAsync = computed(() => {
+  if (selectedLine.value !== null)
+    return perLineResult.value?.type === "Pending";
+  return lineResults.value.some((lr) => lr.type === "Pending");
+});
+
+/** Total raw token count (pre-normalization). */
+const tokenCount = computed(() =>
+  String(result.value?.rawTokens?.length ?? 0),
+);
+
+/** Total opcode count in the compiled program. */
+const opcodeCount = computed(() =>
+  String(result.value?.opcodes?.length ?? 0),
+);
+
+/** Cache status: "hit", "miss", or "—". */
+const cacheStatus = computed(() =>
+  wasCached.value
+    ? "hit"
+    : (result.value?.parselets?.length ?? 0) > 0
+      ? "miss"
+      : "—",
+);
+
+/** Async status: "yes" or "no". */
+const asyncStatus = computed(() => (hasAsync.value ? "yes" : "no"));
+
+//#endregion
+//#region ─── Constants Table ──────────────────────────────────────────────────
+
+/**
+ * A group of constants of the same type (number, string, bigint, hex)
+ * with expand/collapse state and optional filter results.
+ */
 interface ConstantGroup {
-  readonly type: ConstantInfo['type'];
+  readonly type: ConstantInfo["type"];
   readonly label: string;
   readonly items: readonly ConstantInfo[];
   expanded: boolean;
   filteredItems?: readonly ConstantInfo[];
   matchCount?: number;
 }
-const allConstants = computed<ConstantInfo[]>(() => result.value?.constants ?? []);
+
+/** All constants from the compiled bytecode program. */
+const allConstants = computed<ConstantInfo[]>(
+  () => result.value?.constants ?? [],
+);
+
+/** Whether the constants section is expanded. */
 const constantsExpanded = ref(false);
-const constantsFilter = ref('');
+
+/** Filter input for the constants table (filter by index or value). */
+const constantsFilter = ref("");
+
+/** Total count string for the constants header. */
 const filteredTotal = computed(() => {
   const f = constantsFilter.value.trim();
-  if (!f) return allConstants.value.length + ' total';
-  const matchCount = filteredConstantGroups.value.reduce((sum, g) => sum + (g.matchCount ?? 0), 0);
-  return matchCount + ' / ' + allConstants.value.length + ' total';
+  if (!f) return allConstants.value.length + " total";
+  const matchCount = filteredConstantGroups.value.reduce(
+    (sum, g) => sum + (g.matchCount ?? 0),
+    0,
+  );
+  return matchCount + " / " + allConstants.value.length + " total";
 });
-const allVariables = computed<string[]>(() => result.value?.variables ?? []);
+
+/** All variables extracted from the token stream. */
+const allVariables = computed<string[]>(
+  () => result.value?.variables ?? [],
+);
+
+/** Whether the variables section is expanded. */
 const variablesExpanded = ref(false);
 
-function valueSegments(type: ConstantInfo['type'], value: string | number): Array<{ text: string; highlight: boolean }> {
+/**
+ * Split a constant value into segments, highlighting matches of the filter query.
+ * @param type  - The constant type (determines display format)
+ * @param value - The raw constant value
+ * @returns Array of text segments with highlight flags
+ */
+function valueSegments(
+  type: ConstantInfo["type"],
+  value: string | number,
+): Array<{ text: string; highlight: boolean }> {
   let display: string;
-  switch (type) { case 'string': display = '"' + String(value) + '"'; break; case 'hex': display = '0x' + String(value); break; case 'bigint': display = String(value) + 'n'; break; default: display = String(value); }
+  switch (type) {
+    case "string":
+      display = '"' + String(value) + '"';
+      break;
+    case "hex":
+      display = "0x" + String(value);
+      break;
+    case "bigint":
+      display = String(value) + "n";
+      break;
+    default:
+      display = String(value);
+  }
+
   const query = constantsFilter.value.trim().toLowerCase();
   if (!query) return [{ text: display, highlight: false }];
+
   const lower = display.toLowerCase();
   const segments: Array<{ text: string; highlight: boolean }> = [];
-  let last = 0, idx = lower.indexOf(query);
+  let last = 0,
+    idx = lower.indexOf(query);
+
   while (idx !== -1) {
-    if (idx > last) segments.push({ text: display.slice(last, idx), highlight: false });
-    segments.push({ text: display.slice(idx, idx + query.length), highlight: true });
-    last = idx + query.length; idx = lower.indexOf(query, last);
+    if (idx > last)
+      segments.push({ text: display.slice(last, idx), highlight: false });
+    segments.push({
+      text: display.slice(idx, idx + query.length),
+      highlight: true,
+    });
+    last = idx + query.length;
+    idx = lower.indexOf(query, last);
   }
-  if (last < display.length) segments.push({ text: display.slice(last), highlight: false });
+
+  if (last < display.length)
+    segments.push({ text: display.slice(last), highlight: false });
   return segments.length > 0 ? segments : [{ text: display, highlight: false }];
 }
+
+/** Constants grouped by type (number, string, bigint, hex) in display order. */
 const constantGroups = computed<ConstantGroup[]>(() => {
-  const typeOrder: ConstantInfo['type'][] = ['number', 'string', 'bigint', 'hex'];
-  const typeLabel: Record<ConstantInfo['type'], string> = { number: 'Numbers', string: 'Strings', bigint: 'BigInts', hex: 'Hex Values' };
-  const groups = new Map<ConstantInfo['type'], ConstantInfo[]>();
-  for (const c of allConstants.value) { if (!groups.has(c.type)) groups.set(c.type, []); groups.get(c.type)!.push(c); }
-  return typeOrder.filter(t => groups.has(t)).map(t => ({ type: t, label: typeLabel[t], items: groups.get(t)!, expanded: false }));
+  const typeOrder: ConstantInfo["type"][] = [
+    "number",
+    "string",
+    "bigint",
+    "hex",
+  ];
+  const typeLabel: Record<ConstantInfo["type"], string> = {
+    number: "Numbers",
+    string: "Strings",
+    bigint: "BigInts",
+    hex: "Hex Values",
+  };
+
+  const groups = new Map<ConstantInfo["type"], ConstantInfo[]>();
+  for (const c of allConstants.value) {
+    if (!groups.has(c.type)) groups.set(c.type, []);
+    groups.get(c.type)!.push(c);
+  }
+
+  return typeOrder
+    .filter((t) => groups.has(t))
+    .map((t) => ({
+      type: t,
+      label: typeLabel[t],
+      items: groups.get(t)!,
+      expanded: false,
+    }));
 });
+
+/** Constants groups filtered by the current filter query. */
 const filteredConstantGroups = computed<ConstantGroup[]>(() => {
   const query = constantsFilter.value.trim().toLowerCase();
   if (!query) return constantGroups.value;
-  return constantGroups.value.map(g => {
-    const matches = g.items.filter(item => String(item.index) === query || String(item.value).toLowerCase().includes(query));
-    return { ...g, filteredItems: matches, matchCount: matches.length, expanded: matches.length > 0 || g.expanded };
-  }).filter(g => (g.matchCount ?? 0) > 0);
+
+  return constantGroups.value
+    .map((g) => {
+      const matches = g.items.filter(
+        (item) =>
+          String(item.index) === query ||
+          String(item.value).toLowerCase().includes(query),
+      );
+      return {
+        ...g,
+        filteredItems: matches,
+        matchCount: matches.length,
+        expanded: matches.length > 0 || g.expanded,
+      };
+    })
+    .filter((g) => (g.matchCount ?? 0) > 0);
 });
+
+//#endregion
 </script>
