@@ -18,62 +18,58 @@
       <span class="token-count">{{ countLabel }}</span>
     </div>
     <div class="panel-scroll">
-      <!-- Empty states -->
-      <span v-if="allTokens.length === 0" class="empty">No tokens</span>
-      <span v-else-if="totalVisible === 0" class="empty">No tokens match &ldquo;{{ tokens.filterQuery }}&rdquo;</span>
+      <span v-if="!engine.currentResult" class="empty">No tokens</span>
+      <span v-else-if="visibleCount === 0 && filterActive" class="empty">No tokens match &ldquo;{{ tokens.filterQuery }}&rdquo;</span>
+      <span v-else-if="visibleCount === 0" class="empty">No tokens</span>
 
-      <!-- Grouped by line -->
       <template v-else-if="tokens.groupByLine">
         <div
-          v-for="(lineTokens, ln) in groupedTokens"
-          :key="ln"
+          v-for="entry in groupEntries"
+          :key="entry.line"
           class="token-line-group"
-          :class="{ selected: pipeline.selectedLine === ln }"
+          :class="{ selected: pipeline.selectedLine === entry.line }"
         >
-          <!-- Line header -->
           <div class="token-line-header">
             <div class="token-line-header-left">
-              <span>Line {{ ln }}</span>
-              <span v-if="lrMap.get(ln)" class="token-line-microstats">
+              <span>Line {{ entry.line }}</span>
+              <span v-if="entry.result" class="token-line-microstats">
                 <span
                   class="microstat-badge"
-                  :class="lrMap.get(ln)!.wasCached ? 'microstat-cache-hit' : 'microstat-cache-miss'"
-                >{{ lrMap.get(ln)!.wasCached ? 'HIT' : 'MISS' }}</span>
-                <span class="microstat-badge" :class="statusClass(lrMap.get(ln)!)">
-                  {{ statusLabel(lrMap.get(ln)!) }}
+                  :class="entry.result.wasCached ? 'microstat-cache-hit' : 'microstat-cache-miss'"
+                >{{ entry.result.wasCached ? 'HIT' : 'MISS' }}</span>
+                <span class="microstat-badge" :class="entry.result.error ? 'microstat-status-error' : entry.result.type === 'Pending' ? 'microstat-status-pending' : 'microstat-status-ok'">
+                  {{ entry.result.error ? 'ERROR' : entry.result.type === 'Pending' ? 'PENDING' : 'OK' }}
                 </span>
               </span>
             </div>
             <div class="token-line-counts">
-              <span class="token-count-badge">{{ lineTokens.length }} token{{ lineTokens.length !== 1 ? 's' : '' }}</span>
-              <span class="opcode-count-badge">{{ lrMap.get(ln)?.opcodeCount ?? engine.currentResult?.opcodes?.length ?? 0 }} opcode{{ (lrMap.get(ln)?.opcodeCount ?? 1) !== 1 ? 's' : '' }}</span>
+              <span class="token-count-badge">{{ entry.tokens.length }} token{{ entry.tokens.length !== 1 ? 's' : '' }}</span>
+              <span class="opcode-count-badge">{{ entry.result?.opcodeCount ?? engine.currentResult?.opcodes?.length ?? 0 }} opcode{{ (entry.result?.opcodeCount ?? 1) !== 1 ? 's' : '' }}</span>
             </div>
           </div>
 
-          <!-- Tokens row -->
           <div class="token-line-content">
             <span class="output-label-inline">Tokens</span>
             <span
-              v-for="(t, i) in lineTokens"
+              v-for="(t, i) in entry.tokens"
               :key="i"
               class="token"
-              :class="'token-' + (t.type || 'unknown').toLowerCase()"
-              :title="'Type: ' + (t.type || 'unknown') + '\nValue: ' + t.value + '\nPos: ' + t.offset"
+              :class="'token-' + String(t.type || 'unknown').toLowerCase()"
+              :title="'Type: ' + t.type + '\\nValue: ' + t.value + '\\nPos: ' + t.offset"
             >{{ t.value }}</span>
           </div>
 
-          <!-- Result badge row -->
-          <div v-if="lrMap.get(ln)" class="token-line-result">
-            <span class="token-line-result-type" :style="{ color: typeColor(lrMap.get(ln)!) }">
-              {{ lrMap.get(ln)!.type }}
+          <div v-if="entry.result" class="token-line-result">
+            <span class="token-line-result-type" :style="{ color: entry.result.error ? 'var(--error)' : 'var(--stage-parser)' }">
+              {{ entry.result.type }}
             </span>
             <span class="token-line-result-arrow">→</span>
-            <span class="token-line-result-value" :style="{ color: valueColor(lrMap.get(ln)!) }">
-              {{ lrMap.get(ln)!.error || lrMap.get(ln)!.result }}
+            <span class="token-line-result-value" :style="{ color: entry.result.error ? 'var(--error)' : 'var(--accent)' }">
+              {{ entry.result.error || entry.result.result }}
             </span>
             <button
               class="token-line-result-copy"
-              :data-copy="lrMap.get(ln)!.error || lrMap.get(ln)!.result"
+              :data-copy="entry.result.error || entry.result.result"
               title="Copy result"
               @click="copyResult($event)"
             >📋</button>
@@ -81,14 +77,13 @@
         </div>
       </template>
 
-      <!-- Flat mode -->
       <div v-else class="token-list">
         <span
-          v-for="(t, i) in flatTokens"
+          v-for="(t, i) in flatTokensList"
           :key="i"
           class="token"
-          :class="'token-' + (t.type || 'unknown').toLowerCase()"
-          :title="'Type: ' + (t.type || 'unknown') + '\nValue: ' + t.value + '\nPos: ' + t.offset"
+          :class="'token-' + t.type.toLowerCase()"
+          :title="'Type: ' + t.type + '\\nValue: ' + t.value + '\\nPos: ' + t.offset"
         >{{ t.value }}</span>
       </div>
     </div>
@@ -96,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, watch } from 'vue';
 import { useEngineStore } from '../stores/engine.js';
 import { useTokensStore } from '../stores/tokens.js';
 import { usePipelineStore } from '../stores/pipeline.js';
@@ -106,87 +101,107 @@ const engine = useEngineStore();
 const tokens = useTokensStore();
 const pipeline = usePipelineStore();
 
-/* ── Token data ───────────────────────────────────────────────── */
-const allTokens = computed<Token[]>(() => engine.currentResult?.rawTokens ?? []);
-const lineResults = computed<LineResult[]>(() => engine.currentResult?.lineResults ?? []);
-
-// Line → LineResult lookup
-const lrMap = computed(() => {
-  const m = new Map<number, LineResult>();
-  for (const lr of lineResults.value) m.set(lr.lineNumber, lr);
-  return m;
-});
-
-/* ── Filtering ─────────────────────────────────────────────────── */
-const hasFilter = computed(() => tokens.filterQuery.length > 0);
-
-function filterToken(t: Token): boolean {
-  if (t.type == null || t.type === 'WS' || t.type === 'NEWLINE') return false;
-  if (hasFilter.value && !tokens.matchToken(t, tokens.filterQuery)) return false;
-  return true;
+/* ── Reactive display data (updated by watchers) ──────────────── */
+interface GroupEntry {
+  line: number;
+  tokens: Token[];
+  result: LineResult | null;
 }
 
-/* ── Grouped mode ─────────────────────────────────────────────── */
-const groupedTokens = computed(() => {
-  const lines = new Map<number, Token[]>();
-  for (const t of allTokens.value) {
-    if (!filterToken(t)) continue;
-    const ln = t.line ?? 1;
-    if (!lines.has(ln)) lines.set(ln, []);
-    lines.get(ln)!.push(t);
+const groupEntries = ref<GroupEntry[]>([]);
+const flatTokensList = ref<Token[]>([]);
+const countLabel = ref('0 tokens');
+const visibleCount = ref(0);
+const filterActive = ref(false);
+
+function matchToken(t: Token, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return t.value.toLowerCase().includes(q) || t.type.toLowerCase().includes(q);
+}
+
+function updateDisplay(): void {
+  const result = engine.currentResult;
+  if (!result) {
+    groupEntries.value = [];
+    flatTokensList.value = [];
+    countLabel.value = '0 tokens';
+    visibleCount.value = 0;
+    filterActive.value = false;
+    return;
   }
-  // Sort by line number
-  return new Map([...lines.entries()].sort((a, b) => a[0] - b[0]));
-});
 
-/* ── Flat mode ────────────────────────────────────────────────── */
-const flatTokens = computed(() => {
-  return allTokens.value.filter(t => filterToken(t));
-});
+  const rawTokens = result.rawTokens ?? [];
+  const query = tokens.filterQuery;
+  const hasFilter = query.length > 0;
+  filterActive.value = hasFilter;
+  const groupByLine = tokens.groupByLine;
 
-/* ── Counts ───────────────────────────────────────────────────── */
-const totalCount = computed(() => allTokens.value.filter(t => t.type != null && t.type !== 'WS' && t.type !== 'NEWLINE').length);
+  // Build line result lookup
+  const resultByLine = new Map<number, LineResult>();
+  for (const lr of (result.lineResults ?? [])) {
+    resultByLine.set(lr.lineNumber ?? 1, lr);
+  }
 
-const totalVisible = computed(() => {
-  return tokens.groupByLine
-    ? Array.from(groupedTokens.value.values()).reduce((s, arr) => s + arr.length, 0)
-    : flatTokens.value.length;
-});
+  // Filter tokens: skip WS/NEWLINE, apply text filter
+  const filtered: Token[] = [];
+  for (let i = 0; i < rawTokens.length; i++) {
+    const t = rawTokens[i];
+    if (t.type === 'WS' || t.type === 'NEWLINE') continue;
+    if (hasFilter && !matchToken(t, query)) continue;
+    filtered.push(t);
+  }
 
-const countLabel = computed(() => {
-  const raw = allTokens.value.length;
-  const vis = totalVisible.value;
-  const tot = totalCount.value;
-  const first = allTokens.value[0];
-  const dbg = first ? ` [1st: ${first.type ?? '?type?'} "${first.value}"]` : '';
-  if (raw === 0) return 'Raw: 0 tokens (no result yet)';
-  if (hasFilter.value) return `${vis} / ${tot} tokens${dbg}`;
-  return `${vis} tokens${dbg}`;
-});
+  const totalCount = filtered.length;
 
-/* ── Status badges ────────────────────────────────────────────── */
-function statusLabel(lr: LineResult): string {
-  if (lr.error) return 'ERROR';
-  if (lr.type === 'Pending') return 'PENDING';
-  return 'OK';
+  if (groupByLine) {
+    // Build line groups
+    const lineMap = new Map<number, Token[]>();
+    const lineOrder: number[] = [];
+    for (let i = 0; i < filtered.length; i++) {
+      const t = filtered[i];
+      const ln = t.line ?? 1;
+      if (!lineMap.has(ln)) { lineMap.set(ln, []); lineOrder.push(ln); }
+      lineMap.get(ln)!.push(t);
+    }
+    lineOrder.sort((a, b) => a - b);
+
+    const entries: GroupEntry[] = [];
+    for (const ln of lineOrder) {
+      entries.push({
+        line: ln,
+        tokens: lineMap.get(ln)!,
+        result: resultByLine.get(ln) ?? null,
+      });
+    }
+    groupEntries.value = entries;
+    flatTokensList.value = [];
+
+    let vis = 0;
+    for (const e of entries) vis += e.tokens.length;
+    visibleCount.value = vis;
+  } else {
+    groupEntries.value = [];
+    flatTokensList.value = filtered;
+    visibleCount.value = filtered.length;
+  }
+
+  // Build count label
+  if (rawTokens.length === 0) {
+    countLabel.value = '0 tokens';
+  } else if (hasFilter) {
+    countLabel.value = `${visibleCount.value} / ${totalCount} tokens`;
+  } else {
+    countLabel.value = `${totalCount} tokens`;
+  }
 }
 
-function statusClass(lr: LineResult): string {
-  if (lr.error) return 'microstat-status-error';
-  if (lr.type === 'Pending') return 'microstat-status-pending';
-  return 'microstat-status-ok';
-}
-
-function typeColor(lr: LineResult): string {
-  if (lr.error) return 'var(--error)';
-  if (lr.type === 'Pending') return 'var(--stage-vm)';
-  return 'var(--stage-parser)';
-}
-
-function valueColor(lr: LineResult): string {
-  if (lr.error) return 'var(--error)';
-  return 'var(--accent)';
-}
+// Watch for store changes
+watch(
+  () => [engine.currentResult, tokens.filterQuery, tokens.groupByLine],
+  () => updateDisplay(),
+  { deep: false, immediate: true }
+);
 
 /* ── Copy result ──────────────────────────────────────────────── */
 function copyResult(e: MouseEvent): void {

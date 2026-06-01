@@ -1,0 +1,175 @@
+<template>
+  <main class="editor-pane" id="editor-pane" :class="{ collapsed: ui.editorCollapsed }">
+    <div class="editor-pane-header">
+      <span class="pane-title">Editor</span>
+      <button class="pane-collapse-btn" @click="ui.toggleEditor()" :title="ui.editorCollapsed ? 'Expand editor' : 'Collapse editor'">
+        {{ ui.editorCollapsed ? '▶' : '◀' }}
+      </button>
+    </div>
+    <div class="editor-wrapper" ref="editorRef"></div>
+  </main>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { EditorView, keymap, placeholder, Decoration, WidgetType } from '@codemirror/view';
+import { EditorState, StateField, RangeSetBuilder, RangeSet, StateEffect } from '@codemirror/state';
+import { basicSetup } from 'codemirror';
+import { markdown } from '@codemirror/lang-markdown';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { SolveHighlightProvider } from '@/app/codemirror/SolveHighlightProvider';
+import { useEngineStore } from '../stores/engine.js';
+import { useEditorStore } from '../stores/editor.js';
+import { usePipelineStore } from '../stores/pipeline.js';
+import { useUiStore } from '../stores/ui.js';
+import type { LineResult } from '../engine.js';
+
+const engine = useEngineStore();
+const editorStore = useEditorStore();
+const pipeline = usePipelineStore();
+const ui = useUiStore();
+
+const highlightProvider = new SolveHighlightProvider();
+
+/* ── Inline Result Widget ─────────────────────────────────────── */
+class ResultWidget extends WidgetType {
+  constructor(readonly text: string, readonly type: string) { super(); }
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'os-result-inline';
+    span.textContent = this.text;
+    span.title = this.type;
+    return span;
+  }
+}
+
+const resultEffect = StateEffect.define<{ from: number; to: number; deco: Decoration }[]>();
+const resultField = StateField.define<RangeSet<Decoration>>({
+  create() { return Decoration.none; },
+  update(set, tr) {
+    for (const e of tr.effects) {
+      if (e.is(resultEffect)) {
+        const builder = new RangeSetBuilder<Decoration>();
+        for (const { from, to, deco } of e.value) builder.add(from, to, deco);
+        return builder.finish();
+      }
+    }
+    return set.map(tr.changes);
+  },
+  provide: f => EditorView.decorations.from(f),
+});
+
+const solveHighlightPlugin = StateField.define<RangeSet<Decoration>>({
+  create(state) {
+    const builder = new RangeSetBuilder<Decoration>();
+    const doc = state.doc;
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i);
+      for (const range of highlightProvider.getLineHighlights(line.text, i)) {
+        builder.add(line.from + range.from, line.from + range.to, Decoration.mark({ class: range.className }));
+      }
+    }
+    return builder.finish();
+  },
+  update(decorations, tr) {
+    if (!tr.docChanged) return decorations;
+    const builder = new RangeSetBuilder<Decoration>();
+    const doc = tr.state.doc;
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i);
+      for (const range of highlightProvider.getLineHighlights(line.text, i)) {
+        builder.add(line.from + range.from, line.from + range.to, Decoration.mark({ class: range.className }));
+      }
+    }
+    return builder.finish();
+  },
+  provide: f => EditorView.decorations.from(f),
+});
+
+/* ── Editor Setup ─────────────────────────────────────────────── */
+const editorRef = ref<HTMLElement | null>(null);
+let editorView: EditorView | null = null;
+
+const EDITOR_THEME = EditorView.theme({
+  '&': { height: '100%' },
+  '.cm-scroller': { overflow: 'auto' },
+});
+
+onMounted(() => {
+  if (!editorRef.value) return;
+
+  const initialDoc = '10 + 5 * 2';
+
+  editorView = new EditorView({
+    state: EditorState.create({
+      doc: initialDoc,
+      extensions: [
+        basicSetup, markdown(), oneDark, solveHighlightPlugin, resultField,
+        placeholder('Enter an expression…  e.g. 10 + 5 * 2'),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            const expr = update.state.doc.toString().trim();
+            highlightProvider.invalidateCache();
+            engine.evaluate(expr);
+          }
+          if (update.selectionSet) {
+            const pos = update.state.selection.main.head;
+            const line = update.state.doc.lineAt(pos);
+            editorStore.updateCursorLine(line.number);
+          }
+        }),
+        keymap.of([{ key: 'Ctrl-Enter', run: () => { run(); return true; } }]),
+        EDITOR_THEME,
+      ],
+    }),
+    parent: editorRef.value,
+  });
+
+  // Trigger initial evaluation
+  engine.evaluate(initialDoc);
+});
+
+onUnmounted(() => {
+  editorView?.destroy();
+  editorView = null;
+});
+
+/* ── Public methods ───────────────────────────────────────────── */
+function run(): void {
+  if (!editorView) return;
+  engine.evaluate(editorView.state.doc.toString().trim());
+}
+
+function insertExample(expression: string): void {
+  if (!editorView) return;
+  editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: expression } });
+}
+
+function renderInlineResults(lineResults: LineResult[]): void {
+  if (!editorView) return;
+  // Guard against destroyed editor (HMR unmount leaves stale reference)
+  if (!editorView.dom || !editorView.dom.parentNode) return;
+  const effects: { from: number; to: number; deco: Decoration }[] = [];
+  for (const lr of lineResults) {
+    if (!lr.result || lr.error) continue;
+    const line = editorView.state.doc.line(lr.lineNumber ?? 1);
+    effects.push({ from: line.to, to: line.to, deco: Decoration.widget({ widget: new ResultWidget(lr.result, lr.type), side: 1 }) });
+  }
+  if (effects.length > 0) editorView.dispatch({ effects: resultEffect.of(effects) });
+}
+
+// Expose for parent to call
+defineExpose({ insertExample, renderInlineResults });
+
+// Update cursor line in pipeline when store changes
+watch(() => editorStore.cursorLine, (line) => {
+  pipeline.selectLine(line, false);
+});
+
+// Watch for results to render inline decorators
+watch(() => engine.currentResult, (result) => {
+  if (result) {
+    requestAnimationFrame(() => renderInlineResults(result.lineResults));
+  }
+});
+</script>

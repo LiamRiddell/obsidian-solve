@@ -8,8 +8,8 @@
       </label>
       <select class="pipeline-line-select" v-model="lineSelectVal">
         <option value="0">All Lines (aggregate)</option>
-        <option v-for="lr in lineResults" :key="lr.lineNumber" :value="String(lr.lineNumber)">
-          Line {{ lr.lineNumber }}: {{ lr.expression.slice(0, 30) }}{{ lr.expression.length > 30 ? '…' : '' }}
+        <option v-for="lr in lineResults" :key="lr.lineNumber" :value="String(lr.lineNumber ?? 1)">
+          Line {{ lr.lineNumber ?? 1 }}: {{ lr.expression.slice(0, 30) }}{{ lr.expression.length > 30 ? '…' : '' }}
         </option>
       </select>
       <span class="pipeline-active-line-badge">{{ activeLineStr }}</span>
@@ -24,89 +24,177 @@
         :step-number="1" icon="🔤" label="Lexer" color-class="lexer"
         :time-label="fmt(s.lexerTime)" :active-line="stageLabel"
         input="Expression → Tokens" output-label="Tokens" show-arrow
-        :output-html="lexerOutput" :executed="hasResult"
+        :executed="hasResult"
         :model-value="stagesCollapsed[0]"
         :pulsing="pulsingStages.includes(0)"
         @update:model-value="(v: boolean) => onStageToggle(0, v)"
-      />
+      >
+        <template #output>
+          <template v-if="selectedLine === null && lexerTypeCounts.size > 0">
+            <span style="color:var(--text-secondary);font-size:10px;font-weight:500">{{ lineTokens.length }} total tokens · </span>
+            <span
+              v-for="(count, type) in lexerTypeCounts"
+              :key="type"
+              class="token"
+              :class="'token-' + String(type || 'unknown').toLowerCase()"
+              style="font-size:9px;cursor:default"
+            >{{ count }} {{ String(type || 'unknown').toLowerCase() }}</span>
+          </template>
+          <template v-else>
+            <span v-if="!lexerTokensSlice.length" class="empty">—</span>
+            <span
+              v-for="(t, i) in lexerTokensSlice"
+              :key="i"
+              class="token"
+              :class="'token-' + String(t.type || 'unknown').toLowerCase()"
+              style="font-size:9px;cursor:default"
+            >{{ t.value }}</span>
+          </template>
+        </template>
+      </pipeline-stage>
       <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
       <pipeline-stage
         :step-number="2" icon="🛡️" label="Validation" color-class="validate"
         :time-label="'—'" :active-line="stageLabel"
         input="Length + Complexity" output-label="Status"
-        :output-html="validateOutput" :executed="hasResult"
+        :executed="hasResult"
         :has-error="hasErrors"
         :model-value="stagesCollapsed[1]"
         :pulsing="pulsingStages.includes(1)"
         @update:model-value="(v: boolean) => onStageToggle(1, v)"
-      />
+      >
+        <template #output>
+          <span v-if="!validateOutput.text" class="empty">—</span>
+          <span v-else :style="{ color: validateOutput.color, fontSize: '10px' }">{{ validateOutput.text }}</span>
+        </template>
+      </pipeline-stage>
       <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
       <pipeline-stage
         :step-number="3" icon="💾" label="Cache Check" color-class="cache"
         :time-label="'—'" :active-line="stageLabel"
         input="Bytecode Lookup" output-label="Status"
-        :output-html="cacheOutput" :executed="hasResult"
+        :executed="hasResult"
         :model-value="stagesCollapsed[2]"
         :pulsing="pulsingStages.includes(2)"
         @update:model-value="(v: boolean) => onStageToggle(2, v)"
-      />
+      >
+        <template #output>
+          <span v-if="!cacheOutput.text" class="empty">—</span>
+          <span v-else :style="{ color: cacheOutput.color, fontSize: '10px', fontWeight: '600' }">{{ cacheOutput.text }}</span>
+        </template>
+      </pipeline-stage>
       <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
       <pipeline-stage
         :step-number="4" icon="🌳" label="Parser" color-class="parser"
         :time-label="fmt(s.parserTime)" :active-line="stageLabel"
         input="Tokens → AST" output-label="Parselets"
-        :output-html="parserOutput" :executed="hasResult"
+        :executed="hasResult"
         :model-value="stagesCollapsed[3]"
         :pulsing="pulsingStages.includes(3)"
         @update:model-value="(v: boolean) => onStageToggle(3, v)"
-      />
+      >
+        <template #output>
+          <template v-if="parserOutput.parselets.length">
+            <span
+              v-for="(p, i) in parserOutput.parselets"
+              :key="i"
+              class="token token-keyword"
+              style="font-size:9px;cursor:default"
+            >{{ p }}</span>
+          </template>
+          <span v-else-if="parserOutput.cached" style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>
+          <span v-else class="empty">—</span>
+        </template>
+      </pipeline-stage>
       <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
       <pipeline-stage
         :step-number="5" icon="⚙️" label="Compiler" color-class="compiler"
         :time-label="fmt(s.bytecodeTime)" :active-line="stageLabel"
         input="AST → Bytecode" output-label="Opcodes"
-        :output-html="compilerOutput" :executed="hasResult"
+        :executed="hasResult"
         :model-value="stagesCollapsed[4]"
         :pulsing="pulsingStages.includes(4)"
         @update:model-value="(v: boolean) => onStageToggle(4, v)"
-      />
+      >
+        <template #output>
+          <span v-if="compilerOutput.cached" style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>
+          <span v-else-if="!compilerOutput.rows.length" class="empty">—</span>
+          <div v-else class="pipeline-opcodes-wrap">
+            <table class="pipeline-opcodes-table">
+              <thead>
+                <tr>
+                  <th class="pop-col-ip">IP</th>
+                  <th class="pop-col-hex">Hex</th>
+                  <th class="pop-col-mnem">Mnemonic</th>
+                  <th class="pop-col-oper">Operand</th>
+                  <th class="pop-col-desc">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in compilerOutput.rows" :key="row.ip">
+                  <td class="pop-col-ip">{{ row.ip }}</td>
+                  <td class="pop-col-hex">{{ row.hex }}</td>
+                  <td class="pop-col-mnem">{{ row.mnem }}</td>
+                  <td class="pop-col-oper">{{ row.operand }}</td>
+                  <td class="pop-col-desc">{{ row.desc }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </pipeline-stage>
       <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
       <pipeline-stage
         :step-number="6" icon="🔮" label="Async Preflight" color-class="async"
         :time-label="'—'" :active-line="stageLabel"
         input="Resolver Registry" output-label="Path"
-        :output-html="asyncOutput" :executed="hasResult"
+        :executed="hasResult"
         :model-value="stagesCollapsed[5]"
         :pulsing="pulsingStages.includes(5)"
         @update:model-value="(v: boolean) => onStageToggle(5, v)"
-      />
+      >
+        <template #output>
+          <span v-if="!asyncOutput.text" class="empty">—</span>
+          <span v-else :style="{ color: asyncOutput.color, fontSize: '10px' }">{{ asyncOutput.text }}</span>
+        </template>
+      </pipeline-stage>
       <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
       <pipeline-stage
         :step-number="7" icon="⚡" label="VM Execute" color-class="vm"
         :time-label="fmt(s.executionTime)" :active-line="stageLabel"
         input="Bytecode → Stack" output-label="Type"
-        :output-html="vmOutput" :executed="hasResult"
+        :executed="hasResult"
         :model-value="stagesCollapsed[6]"
         :pulsing="pulsingStages.includes(6)"
         @update:model-value="(v: boolean) => onStageToggle(6, v)"
-      />
+      >
+        <template #output>
+          <span v-if="!vmOutput.text" class="empty">—</span>
+          <span v-else :style="{ color: vmOutput.color, fontSize: '10px' }">{{ vmOutput.text }}</span>
+        </template>
+      </pipeline-stage>
       <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
       <pipeline-stage
         :step-number="8" icon="✓" label="Result" color-class="result"
         :time-label="fmt(result?.stats?.totalTime ?? 0)" :active-line="stageLabel"
-        :output-html="resultOutput" :executed="hasResult"
+        :executed="hasResult"
         :is-result="true"
         :model-value="stagesCollapsed[7]"
         :pulsing="pulsingStages.includes(7)"
         @update:model-value="(v: boolean) => onStageToggle(7, v)"
-      />
+      >
+        <template #output>
+          <span v-if="!resultOutput.text" class="empty">—</span>
+          <span v-else :style="{ color: resultOutput.color }">{{ resultOutput.text }}</span>
+        </template>
+      </pipeline-stage>
     </div>
 
     <!-- Pipeline summary stats -->
@@ -177,10 +265,10 @@
                 <td class="constant-col-idx">{{ item.index }}</td>
                 <td class="constant-col-val">
                   <code class="constant-value" :class="'val-' + group.type">
-                    <template v-if="group.type === 'string'">"{{ item.value }}"</template>
-                    <template v-else-if="group.type === 'hex'">0x{{ item.value }}</template>
-                    <template v-else-if="group.type === 'bigint'">{{ item.value }}n</template>
-                    <template v-else>{{ item.value }}</template>
+                    <template v-for="(seg, i) in valueSegments(group.type, item.value)" :key="i">
+                      <mark v-if="seg.highlight" class="constant-highlight">{{ seg.text }}</mark>
+                      <span v-else>{{ seg.text }}</span>
+                    </template>
                   </code>
                 </td>
               </tr>
@@ -219,7 +307,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useEngineStore } from '../stores/engine.js';
 import { usePipelineStore } from '../stores/pipeline.js';
-import { fmt, escHtml, describeOpcode } from '../utils.js';
+import { fmt, describeOpcode } from '../utils.js';
 import PipelineStage from './PipelineStage.vue';
 import type { Token, LineResult, ConstantInfo } from '../engine.js';
 
@@ -263,14 +351,14 @@ let pulseTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Compute text snapshot of all 8 stage outputs for change detection. */
 const stageOutputs = computed<string[]>(() => [
-  lexerOutput.value,
-  validateOutput.value,
-  cacheOutput.value,
-  parserOutput.value,
-  compilerOutput.value,
-  asyncOutput.value,
-  vmOutput.value,
-  resultOutput.value,
+  JSON.stringify(lexerSnapshot.value),
+  JSON.stringify(validateOutput.value),
+  JSON.stringify(cacheOutput.value),
+  JSON.stringify(parserOutput.value),
+  JSON.stringify(compilerOutput.value),
+  JSON.stringify(asyncOutput.value),
+  JSON.stringify(vmOutput.value),
+  JSON.stringify(resultOutput.value),
 ]);
 
 /** Clean up flash-pulse timer on unmount. */
@@ -346,7 +434,7 @@ const lineTokens = computed<Token[]>(() => {
 
 const perLineResult = computed(() =>
   selectedLine.value !== null
-    ? lineResults.value.find(lr => lr.lineNumber === selectedLine.value) ?? null
+    ? lineResults.value.find(lr => (lr.lineNumber ?? 1) === selectedLine.value) ?? null
     : null,
 );
 
@@ -362,20 +450,22 @@ const hasAsync = computed(() =>
 
 const totalLines = computed(() => lineResults.value.length);
 
-/* ── Stage outputs ────────────────────────────────────────────── */
-const lexerOutput = computed(() => {
-  const tokens = lineTokens.value.filter(t => t.type != null && t.type !== 'WS' && t.type !== 'NEWLINE');
-  if (selectedLine.value === null && tokens.length > 0) {
-    const typeCounts = new Map<string, number>();
-    for (const t of tokens) typeCounts.set(t.type, (typeCounts.get(t.type) ?? 0) + 1);
-    let html = '<span style="color:var(--text-secondary);font-size:10px;font-weight:500">' + tokens.length + ' tokens · </span>';
-    typeCounts.forEach((count, type) => {
-      html += '<span class="token token-' + (type || 'unknown').toLowerCase() + '" style="font-size:9px;cursor:default">' + count + ' ' + (type || 'unknown').toLowerCase() + '</span> ';
-    });
-    return html;
+/* ── Stage outputs (structured data for Vue templates) ─────────── */
+const filteredLineTokens = computed(() => lineTokens.value.filter(t => t.type != null && t.type !== 'WS' && t.type !== 'NEWLINE'));
+
+const lexerTypeCounts = computed(() => {
+  const m = new Map<string, number>();
+  for (const t of filteredLineTokens.value) m.set(t.type, (m.get(t.type) ?? 0) + 1);
+  return m;
+});
+
+const lexerTokensSlice = computed(() => filteredLineTokens.value.slice(0, 8));
+
+const lexerSnapshot = computed(() => {
+  if (selectedLine.value === null && filteredLineTokens.value.length > 0) {
+    return { type: 'aggregate', count: lineTokens.value.length, types: [...lexerTypeCounts.value] };
   }
-  const first = tokens.slice(0, 8);
-  return first.map(t => '<span class="token token-' + (t.type || 'unknown').toLowerCase() + '" style="font-size:9px;cursor:default">' + escHtml(t.value) + '</span>').join(' ') || '—';
+  return { type: 'inline', tokens: lexerTokensSlice.value.map(t => t.value) };
 });
 
 const validateOutput = computed(() => {
@@ -383,104 +473,73 @@ const validateOutput = computed(() => {
   const errors = totalLines.value - passed;
   if (selectedLine.value === null && totalLines.value > 1) {
     const col = errors === 0 ? '#4ec9b0' : errors === totalLines.value ? '#f48771' : '#dcdcaa';
-    return '<span style="color:' + col + ';font-size:10px">' + passed + '/' + totalLines.value + ' lines passed' +
-      (errors > 0 ? ' <span style="color:#f48771;font-weight:500">(' + errors + ' error' + (errors > 1 ? 's' : '') + ')</span>' : ' ✓') + '</span>';
+    const text = passed + '/' + totalLines.value + ' lines passed' + (errors > 0 ? ' (' + errors + ' error' + (errors > 1 ? 's' : '') + ')' : ' ✓');
+    return { text, color: col };
   }
   const perLineTokens = lineTokens.value.filter(t => t.type !== 'WS' && t.type !== 'NEWLINE');
-  return perLineTokens.length > 0
-    ? '<span style="color:' + (hasErrors.value ? '#f48771' : '#4ec9b0') + ';font-size:10px">' + (hasErrors.value ? 'Failed' : perLineTokens.length + ' tokens ✓') + '</span>'
-    : '—';
+  if (perLineTokens.length === 0) return { text: '', color: '#6b6b75' };
+  return { text: hasErrors.value ? 'Failed' : perLineTokens.length + ' tokens ✓', color: hasErrors.value ? '#f48771' : '#4ec9b0' };
 });
 
 const cacheOutput = computed(() => {
-  const tokens = lineTokens.value.filter(t => t.type != null && t.type !== 'WS' && t.type !== 'NEWLINE');
+  const tokens = filteredLineTokens.value;
   if (selectedLine.value === null && totalLines.value > 1) {
     const hitLines = lineResults.value.filter(lr => !lr.parselet).length;
     const missLines = lineResults.value.filter(lr => lr.parselet).length;
-    return '<span style="color:' + (hitLines > missLines ? '#4ec9b0' : '#5ac8fa') + ';font-size:10px;font-weight:600">Hit ' + hitLines + ' / Miss ' + missLines + '</span>';
+    return { text: 'Hit ' + hitLines + ' / Miss ' + missLines, color: hitLines > missLines ? '#4ec9b0' : '#5ac8fa' };
   }
-  if (tokens.length === 0) return '—';
-  return '<span style="color:' + (wasCached.value ? '#4ec9b0' : '#5ac8fa') + ';font-size:10px;font-weight:600">' + (wasCached.value ? 'Hit' : 'Miss') + '</span>';
+  if (tokens.length === 0) return { text: '', color: '#6b6b75' };
+  return { text: wasCached.value ? 'Hit' : 'Miss', color: wasCached.value ? '#4ec9b0' : '#5ac8fa' };
 });
 
 const parserOutput = computed(() => {
   const names = [...new Set(result.value?.parselets?.map((p: any) => p.parseletType) ?? [])] as string[];
-  if (selectedLine.value === null && totalLines.value > 1 && names.length > 0) {
-    return '<span style="color:#9b7bec;font-size:10px">' + names.length + ' parselet type' + (names.length > 1 ? 's' : '') + '</span>';
-  }
-  return names.length > 0
-    ? names.map(p => '<span class="token token-keyword" style="font-size:9px;cursor:default">' + escHtml(p) + '</span>').join(' ')
-    : (wasCached.value ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>' : '—');
+  return { parselets: names, cached: wasCached.value && names.length === 0 };
 });
 
 const compilerOutput = computed(() => {
   const ops = result.value?.opcodes ?? [];
-  if (ops.length === 0) {
-    return wasCached.value
-      ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>'
-      : '—';
-  }
-
-  // Build the opcodes disassembly table (matching vanilla renderOpcodesDisasm)
-  let html = '<div class="pipeline-opcodes-wrap">';
-  html += '<table class="pipeline-opcodes-table"><thead><tr>';
-  html += '<th class="pop-col-ip">IP</th>';
-  html += '<th class="pop-col-hex">Hex</th>';
-  html += '<th class="pop-col-mnem">Mnemonic</th>';
-  html += '<th class="pop-col-oper">Operand</th>';
-  html += '<th class="pop-col-desc">Description</th>';
-  html += '</tr></thead><tbody>';
-
-  for (let i = 0; i < ops.length; i++) {
-    const op = ops[i];
+  if (ops.length === 0) return { rows: [], cached: wasCached.value };
+  const rows = ops.map((op, i) => {
     const hex = '0x' + op.value.toString(16).toUpperCase().padStart(2, '0');
     const operand = op.args.length > 0 ? op.args.join(', ') : '—';
-    const desc = describeOpcode(op.value, op.args);
-    html += '<tr>';
-    html += '<td class="pop-col-ip">' + i + '</td>';
-    html += '<td class="pop-col-hex">' + escHtml(hex) + '</td>';
-    html += '<td class="pop-col-mnem">' + escHtml(op.name) + '</td>';
-    html += '<td class="pop-col-oper">' + escHtml(operand) + '</td>';
-    html += '<td class="pop-col-desc">' + escHtml(desc) + '</td>';
-    html += '</tr>';
-  }
-
-  html += '</tbody></table></div>';
-  return html;
+    return { ip: i, hex, mnem: op.name, operand, desc: describeOpcode(op.value, op.args) };
+  });
+  return { rows, cached: false };
 });
 
 const asyncOutput = computed(() => {
   if (selectedLine.value === null && totalLines.value > 1) {
     const pending = lineResults.value.filter(lr => lr.type === 'Pending').length;
     const sync = totalLines.value - pending;
-    return pending > 0
-      ? '<span style="color:#ffd866;font-size:10px">' + pending + ' pending</span>' + (sync > 0 ? ' <span style="color:#6b6b75;font-size:10px">/ ' + sync + ' sync</span>' : '')
-      : '<span style="color:#6b6b75;font-size:10px">' + sync + ' sync</span>';
+    return {
+      text: pending > 0 ? pending + ' pending' + (sync > 0 ? ' / ' + sync + ' sync' : '') : sync + ' sync',
+      color: pending > 0 ? '#ffd866' : '#6b6b75',
+    };
   }
-  return hasAsync.value
-    ? '<span style="color:#ffd866;font-size:10px">Pending resolution</span>'
-    : '<span style="color:#6b6b75;font-size:10px">Sync path</span>';
+  return {
+    text: hasAsync.value ? 'Pending resolution' : 'Sync path',
+    color: hasAsync.value ? '#ffd866' : '#6b6b75',
+  };
 });
 
 const vmOutput = computed(() => {
   if (selectedLine.value === null && totalLines.value > 1) {
     const errors = lineResults.value.filter(lr => lr.error).length;
-    return '<span style="color:#29ce99;font-size:10px">' + totalLines.value + ' result' + (totalLines.value > 1 ? 's' : '') +
-      (errors > 0 ? ' (' + errors + ' error' + (errors > 1 ? 's' : '') + ')' : '') + '</span>';
+    return { text: totalLines.value + ' result' + (totalLines.value > 1 ? 's' : '') + (errors > 0 ? ' (' + errors + ' error' + (errors > 1 ? 's' : '') + ')' : ''), color: '#29ce99' };
   }
   const t = perLineResult.value ?? lineResults.value[0];
-  return t ? '<span style="color:#29ce99;font-size:10px">' + (t.error ? 'Error' : t.type) + '</span>' : '—';
+  return t ? { text: t.error ? 'Error' : t.type, color: '#29ce99' } : { text: '', color: '#29ce99' };
 });
 
 const resultOutput = computed(() => {
   if (selectedLine.value === null && totalLines.value > 1) {
     const errors = lineResults.value.filter(lr => lr.error).length;
     const passed = totalLines.value - errors;
-    return '<span style="color:#29ce99">' + passed + ' value' + (passed !== 1 ? 's' : '') +
-      (errors > 0 ? ' <span style="color:#f48771">(' + errors + ' error' + (errors > 1 ? 's' : '') + ')</span>' : '') + '</span>';
+    return { text: passed + ' value' + (passed !== 1 ? 's' : '') + (errors > 0 ? ' (' + errors + ' error' + (errors > 1 ? 's' : '') + ')' : ''), color: '#29ce99' };
   }
   const t = perLineResult.value ?? lineResults.value[lineResults.value.length - 1];
-  return t ? '<span style="color:' + (t.error ? '#f48771' : '#29ce99') + '">' + escHtml(t.error || t.result) + '</span>' : '—';
+  return t ? { text: t.error || t.result, color: t.error ? '#f48771' : '#29ce99' } : { text: '', color: '#29ce99' };
 });
 
 /* ── Detail stats ──────────────────────────────────────────────── */
@@ -516,6 +575,37 @@ const filteredTotal = computed(() => {
 /* ── Variables display ──────────────────────────────────────────── */
 const allVariables = computed<string[]>(() => result.value?.variables ?? []);
 const variablesExpanded = ref(false);
+
+/**
+ * Split a constant display value into text segments, marking which ones
+ * should be highlighted based on the current filter query.
+ */
+function valueSegments(type: ConstantInfo['type'], value: string | number): Array<{ text: string; highlight: boolean }> {
+  let display: string;
+  switch (type) {
+    case 'string': display = '"' + String(value) + '"'; break;
+    case 'hex': display = '0x' + String(value); break;
+    case 'bigint': display = String(value) + 'n'; break;
+    default: display = String(value);
+  }
+
+  const query = constantsFilter.value.trim().toLowerCase();
+  if (!query) return [{ text: display, highlight: false }];
+
+  const lower = display.toLowerCase();
+  const segments: Array<{ text: string; highlight: boolean }> = [];
+  let last = 0;
+  let idx = lower.indexOf(query);
+
+  while (idx !== -1) {
+    if (idx > last) segments.push({ text: display.slice(last, idx), highlight: false });
+    segments.push({ text: display.slice(idx, idx + query.length), highlight: true });
+    last = idx + query.length;
+    idx = lower.indexOf(query, last);
+  }
+  if (last < display.length) segments.push({ text: display.slice(last), highlight: false });
+  return segments.length > 0 ? segments : [{ text: display, highlight: false }];
+}
 
 /** Group constants by type, preserving engine order within each group. */
 const constantGroups = computed<ConstantGroup[]>(() => {
