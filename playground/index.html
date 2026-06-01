@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solve Engine — Diagnostic Playground</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -37,9 +40,9 @@
             <div class="pipeline-timing" id="pipeline-timing">0 µs</div>
         </div>
         <div class="header-right">
-            <button id="btn-collapse-all" class="header-btn" title="Collapse all panels">⊟</button>
-            <button id="btn-expand-all" class="header-btn" title="Expand all panels">⊞</button>
-            <button id="btn-sidebar-toggle" class="header-btn active" title="Toggle sidebar">☰</button>
+            <button id="btn-sidebar-toggle-mobile" class="header-btn mobile-only" title="Show sidebar">☰</button>
+            <button id="btn-collapse-all" class="header-btn" title="Collapse all pipeline flow stages">⊟</button>
+            <button id="btn-expand-all" class="header-btn" title="Expand all pipeline flow stages">⊞</button>
             <span id="status-indicator" class="status-dot status-ready" title="Ready"></span>
         </div>
     </header>
@@ -47,10 +50,12 @@
     <!-- ═══ Main Layout ═══ -->
     <div class="main-layout" id="main-layout">
         <div class="main-body" id="main-body">
+
         <!-- Left Sidebar: Examples -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2>Examples</h2>
+                <button class="pane-collapse-btn sidebar-collapse-btn" id="btn-collapse-sidebar" title="Collapse sidebar">◀</button>
                 <select id="full-doc-select" class="full-doc-select">
                     <option value="">📄 Full Documents…</option>
                 </select>
@@ -58,28 +63,43 @@
             <div class="sidebar-content" id="examples-sidebar"></div>
         </aside>
 
+        <!-- Right-edge examples tab (slides in when sidebar collapses) -->
+        <div class="sidebar-right-tab" id="sidebar-right-tab" title="Toggle sidebar">
+            <span class="sidebar-right-tab-text">Examples</span>
+        </div>
+
+        <!-- Resize handle: sidebar / editor -->
+        <div class="resize-handle" id="resize-handle-sidebar"></div>
+
         <!-- Center: Editor -->
-        <main class="editor-pane">
+        <main class="editor-pane" id="editor-pane">
+            <div class="editor-pane-header">
+                <span class="pane-title">Editor</span>
+                <button class="pane-collapse-btn" id="btn-collapse-editor" title="Collapse editor">◀</button>
+            </div>
             <div class="editor-wrapper" id="editor-container"></div>
         </main>
 
+        <!-- Resize handle: editor / diagnostics -->
+        <div class="resize-handle" id="resize-handle-editor"></div>
+
         <!-- Right: Diagnostic Tabs -->
         <section class="diagnostics-pane" id="diagnostics-pane">
+            <div class="diagnostics-pane-header">
+                <span class="pane-title">Diagnostics</span>
+                <button class="pane-collapse-btn" id="btn-collapse-diagnostics" title="Collapse diagnostics">▶</button>
+            </div>
             <!-- Tab Bar -->
             <nav class="tab-bar" id="tab-bar">
-                <button class="tab-btn active" data-tab="results">Results</button>
+                <button class="tab-btn active" data-tab="tokens">Output</button>
                 <button class="tab-btn" data-tab="flow">Pipeline</button>
-                <button class="tab-btn" data-tab="tokens">Tokens</button>
                 <button class="tab-btn" data-tab="bytecode">Bytecode</button>
                 <button class="tab-btn" data-tab="vmtrace">VM Trace</button>
                 <button class="tab-btn" data-tab="perf">Perf</button>
                 <button class="tab-btn" data-tab="workers">Workers</button>
+                <button class="tab-btn" data-tab="cache">Cache</button>
+                <button class="tab-btn" data-tab="stream">Stream</button>
             </nav>
-
-            <!-- Tab: Results -->
-            <div class="tab-panel active" id="panel-results">
-                <div class="panel-scroll" id="line-results-display"></div>
-            </div>
 
             <!-- Tab: Pipeline Flow -->
             <div class="tab-panel" id="panel-flow">
@@ -92,132 +112,156 @@
                     <select id="pipeline-line-select" class="pipeline-line-select">
                         <option value="0">All Lines (aggregate)</option>
                     </select>
+                    <span class="pipeline-active-line-badge" id="pipeline-active-line-badge">All Lines</span>
                 </div>
                 <div class="pipeline-flow">
                     <!-- Stage 1: Lexer -->
                     <div class="flow-stage" id="flow-lexer">
                         <div class="flow-stage-header lexer">
+                            <span class="flow-stage-step">1</span>
                             <span class="flow-stage-icon">🔤</span>
                             <span class="flow-stage-name">Lexer</span>
+                            <span class="flow-stage-active-line" id="flow-lexer-line"></span>
                             <span class="flow-stage-time" id="flow-time-lexer">—</span>
                         </div>
                         <div class="flow-stage-body">
                             <div class="flow-stage-input">Expression → Tokens</div>
                             <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Tokens</div>
                             <div class="flow-stage-output" id="flow-lexer-output">
                                 <span class="empty">Tokenizing…</span>
                             </div>
-                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
                     <!-- Stage 2: Validation (Safety Checks) -->
                     <div class="flow-stage" id="flow-validate">
                         <div class="flow-stage-header validate">
+                            <span class="flow-stage-step">2</span>
                             <span class="flow-stage-icon">🛡️</span>
                             <span class="flow-stage-name">Validation</span>
+                            <span class="flow-stage-active-line" id="flow-validate-line"></span>
                             <span class="flow-stage-time" id="flow-time-validate">—</span>
                         </div>
                         <div class="flow-stage-body">
                             <div class="flow-stage-input">Length + Complexity</div>
                             <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Status</div>
                             <div class="flow-stage-output" id="flow-validate-output">
                                 <span class="empty">Passed</span>
                             </div>
-                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
                     <!-- Stage 3: Cache Check -->
                     <div class="flow-stage" id="flow-cache">
                         <div class="flow-stage-header cache">
+                            <span class="flow-stage-step">3</span>
                             <span class="flow-stage-icon">💾</span>
                             <span class="flow-stage-name">Cache Check</span>
+                            <span class="flow-stage-active-line" id="flow-cache-line"></span>
                             <span class="flow-stage-time" id="flow-time-cache">—</span>
                         </div>
                         <div class="flow-stage-body">
                             <div class="flow-stage-input">Bytecode Lookup</div>
                             <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Status</div>
                             <div class="flow-stage-output" id="flow-cache-output">
                                 <span class="empty">Checking…</span>
                             </div>
-                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
                     <!-- Stage 4: Parser (Pratt) -->
                     <div class="flow-stage" id="flow-parser">
                         <div class="flow-stage-header parser">
+                            <span class="flow-stage-step">4</span>
                             <span class="flow-stage-icon">🌳</span>
                             <span class="flow-stage-name">Parser</span>
+                            <span class="flow-stage-active-line" id="flow-parser-line"></span>
                             <span class="flow-stage-time" id="flow-time-parser">—</span>
                         </div>
                         <div class="flow-stage-body">
                             <div class="flow-stage-input">Tokens → AST</div>
                             <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Parselets</div>
                             <div class="flow-stage-output" id="flow-parser-output">
                                 <span class="empty">Parsing…</span>
                             </div>
-                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
                     <!-- Stage 5: Bytecode Compiler -->
                     <div class="flow-stage" id="flow-compiler">
                         <div class="flow-stage-header compiler">
+                            <span class="flow-stage-step">5</span>
                             <span class="flow-stage-icon">⚙️</span>
                             <span class="flow-stage-name">Compiler</span>
+                            <span class="flow-stage-active-line" id="flow-compiler-line"></span>
                             <span class="flow-stage-time" id="flow-time-compiler">—</span>
                         </div>
                         <div class="flow-stage-body">
                             <div class="flow-stage-input">AST → Bytecode</div>
                             <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Opcodes</div>
                             <div class="flow-stage-output" id="flow-compiler-output">
                                 <span class="empty">Compiling…</span>
                             </div>
-                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
                     <!-- Stage 6: Async Preflight -->
                     <div class="flow-stage" id="flow-async">
                         <div class="flow-stage-header async">
+                            <span class="flow-stage-step">6</span>
                             <span class="flow-stage-icon">🔮</span>
                             <span class="flow-stage-name">Async Preflight</span>
+                            <span class="flow-stage-active-line" id="flow-async-line"></span>
                             <span class="flow-stage-time" id="flow-time-async">—</span>
                         </div>
                         <div class="flow-stage-body">
                             <div class="flow-stage-input">Resolver Registry</div>
                             <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Path</div>
                             <div class="flow-stage-output" id="flow-async-output">
                                 <span class="empty">Sync path</span>
                             </div>
-                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
                     <!-- Stage 7: VM Execution -->
                     <div class="flow-stage" id="flow-vm">
                         <div class="flow-stage-header vm">
+                            <span class="flow-stage-step">7</span>
                             <span class="flow-stage-icon">⚡</span>
                             <span class="flow-stage-name">VM Execute</span>
+                            <span class="flow-stage-active-line" id="flow-vm-line"></span>
                             <span class="flow-stage-time" id="flow-time-vm">—</span>
                         </div>
                         <div class="flow-stage-body">
                             <div class="flow-stage-input">Bytecode → Stack</div>
                             <div class="flow-stage-arrow">↓</div>
+                            <div class="flow-stage-output-label">Type</div>
                             <div class="flow-stage-output" id="flow-vm-output">
                                 <span class="empty">Executing…</span>
                             </div>
-                            <div class="flow-stage-next">→</div>
                         </div>
                     </div>
+                    <div class="flow-stage-connector"><span class="connector-arrow">▼</span></div>
 
                     <!-- Stage 8: Result (no next arrow) -->
                     <div class="flow-stage" id="flow-result">
                         <div class="flow-stage-header result">
+                            <span class="flow-stage-step">8</span>
                             <span class="flow-stage-icon">✓</span>
                             <span class="flow-stage-name">Result</span>
+                            <span class="flow-stage-active-line" id="flow-result-line"></span>
                             <span class="flow-stage-time" id="flow-time-total">—</span>
                         </div>
                         <div class="flow-stage-body">
@@ -258,12 +302,15 @@
             </div>
 
             <!-- Tab: Tokens -->
-            <div class="tab-panel" id="panel-tokens">
+            <div class="tab-panel active" id="panel-tokens">
                 <div class="panel-toolbar">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="group-tokens" checked>
-                        Group by line
-                    </label>
+                    <div class="panel-toolbar-left">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="group-tokens" checked>
+                            Group by line
+                        </label>
+                        <input type="text" class="token-filter-input" id="token-filter" placeholder="Filter tokens…" spellcheck="false">
+                    </div>
                     <span class="token-count" id="token-count">0 tokens</span>
                 </div>
                 <div class="panel-scroll" id="tokens-display"></div>
@@ -386,9 +433,11 @@
                                 <span class="worker-metric-label">Active requests</span>
                                 <span class="worker-metric-value" id="worker-dq-active">0</span>
                             </div>
-                            <div class="worker-metric">
+                            <div class="worker-metric worker-metric-sources">
                                 <span class="worker-metric-label">Registered sources</span>
-                                <span class="worker-metric-value" id="worker-dq-sources">0</span>
+                                <div class="worker-dq-sources-list" id="worker-dq-sources">
+                                    <span class="empty">none</span>
+                                </div>
                             </div>
                             <div class="worker-metric">
                                 <span class="worker-metric-label">Last activity</span>
@@ -409,9 +458,26 @@
                         </div>
                     </div>
                 </div>
+            </div>            <!-- Tab: Cache Snapshot -->
+            <div class="tab-panel" id="panel-cache">
+                <div class="panel-scroll" id="cache-display">
+                    <span class="empty">No cache data</span>
+                </div>
+            </div>
+
+            <!-- Tab: Stream Diagnostics -->
+            <div class="tab-panel" id="panel-stream">
+                <div class="panel-toolbar">
+                    <span class="stream-event-count" id="stream-event-count">0 events</span>
+                    <span class="toggle-label" style="font-size:10px;color:var(--text-muted)">Diagnostic event stream</span>
+                </div>
+                <div class="panel-scroll" id="stream-display">
+                    <span class="empty">No diagnostic events</span>
+                </div>
             </div>
 
         </section>
+
         </div>
 
         <!-- ═══ Errors Bar (collapsible, bottom) ═══ -->

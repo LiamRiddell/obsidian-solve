@@ -70,6 +70,13 @@ export class CurrencyExchangeService {
         EUR: 0.854,
         GBP: 0.739,
         JPY: 151.5,
+        BTC: 60000,
+        ETH: 3000,
+        SOL: 140,
+        XRP: 0.55,
+        ADA: 0.45,
+        DOGE: 0.12,
+        DOT: 6.5,
       };
       
       const fromUpper = from.toUpperCase();
@@ -180,6 +187,7 @@ export class CurrencyExchangeService {
       "TRY", "SAR", "AED", "ILS", "PLN", "CZK", "HUF", "THB", "IDR", "MYR",
       "PHP", "CLP", "COP", "ARS", "NGN", "EGP", "PKR", "BDT", "VND", "KES",
       "MAD", "QAR", "KWD", "OMR", "BHD", "JOD",
+      "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "DOT",
     ];
     return knownCurrencies.includes(code.toUpperCase());
   }

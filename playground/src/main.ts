@@ -4,7 +4,7 @@ import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { SolveHighlightProvider } from '@/app/codemirror/SolveHighlightProvider';
-import type { DebugResult, Token, OpcodeInfo, ConstantInfo, PerformanceStats, LineStats, LineResult, ParseletInfo, VmTraceStep, DQMetrics } from './engine.js';
+import type { DebugResult, Token, OpcodeInfo, ConstantInfo, PerformanceStats, LineStats, LineResult, ParseletInfo, VmTraceStep, VmStackValue, DQMetrics, CacheSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo, DiagnosticEventInfo } from './engine.js';
 import { exampleData, fullDocumentExamples } from './examples.js';
 
 /* ── DOM Refs ──────────────────────────────────────────────────── */
@@ -19,7 +19,6 @@ const editorContainer = $('editor-container');
 const examplesSidebar = $('examples-sidebar');
 const fullDocSelect = $('full-doc-select') as HTMLSelectElement;
 
-const lineResultsDisplay = $('line-results-display');
 const tokensDisplay = $('tokens-display');
 const opcodesDisplay = $('opcodes-display');
 const constantsDisplay = $('constants-display');
@@ -29,6 +28,7 @@ const statsDisplay = $('stats-display');
 const tokenCount = $('token-count');
 const bytecodeCount = $('bytecode-count');
 const groupTokensCheckbox = $('group-tokens') as HTMLInputElement;
+const tokenFilterInput = $('token-filter') as HTMLInputElement;
 
 const flowLexerOutput = $('flow-lexer-output');
 const flowValidateOutput = $('flow-validate-output');
@@ -87,6 +87,39 @@ let currentResult: DebugResult | null = null;
 const statsHistory: PerformanceStats[] = [];
 const MAX_HISTORY = 50;
 let selectedPipelineLine: number | null = null;
+let pipelineDropdownManuallyChanged = false;
+
+/* ── Live Stream Diagnostics State ───────────────────────────── */
+/** Accumulated live stream events from async resolutions. */
+let liveStreamEvents: DiagnosticEventInfo[] = [];
+/** Whether streaming mode is active (auto-scroll to bottom). */
+let streamingActive = false;
+
+/* ── Per-line stage expansion state ───────────────────────────── */
+const stageExpansionState = new Map<number, boolean[]>();
+
+/** Track stage output snapshots per line for change detection on switch. */
+const stageSnapshots = new Map<number, string[]>();
+
+/** Stage output element IDs, in order. */
+const STAGE_OUTPUT_IDS = [
+    'flow-lexer-output',
+    'flow-validate-output',
+    'flow-cache-output',
+    'flow-parser-output',
+    'flow-compiler-output',
+    'flow-async-output',
+    'flow-vm-output',
+    'flow-result-output',
+];
+
+/** Save the current collapsed state of each stage for a given line key. */
+function saveStageExpansion(lineKey: number): void {
+    const stages = document.querySelectorAll('.flow-stage');
+    const state: boolean[] = [];
+    stages.forEach(stage => state.push(!stage.classList.contains('collapsed')));
+    stageExpansionState.set(lineKey, state);
+}
 
 /* ── Flamegraph Click Filter ──────────────────────────────────── */
 let flamegraphFilter: string | null = null;
@@ -134,8 +167,16 @@ const MAX_LOG_ENTRIES = 100;
 
 /* ── Workers ───────────────────────────────────────────────────── */
 const engineWorker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' });
-engineWorker.onmessage = (e: MessageEvent<{ id: number; result?: DebugResult; error?: string }>) => {
-    const { id, result, error } = e.data;
+engineWorker.onmessage = (e: MessageEvent<{ id: number; result?: DebugResult; error?: string; streamEvent?: DiagnosticEventInfo; stream?: boolean }>) => {
+    const { id, result, error, streamEvent, stream } = e.data;
+
+    // ── Handle streaming (incremental) events ──
+    if (stream && streamEvent && id === runId) {
+        liveStreamEvents.push(streamEvent);
+        appendStreamEvent(streamEvent);
+        return;
+    }
+
     if (id !== runId) {
         /* stale response — still count for telemetry */
         engineMsgCount++;
@@ -170,7 +211,7 @@ class ResultWidget extends WidgetType {
     toDOM() {
         const span = document.createElement('span');
         span.className = 'os-result-inline';
-        span.textContent = '\u2192 ' + this.text;
+        span.textContent = this.text;
         span.title = this.type;
         return span;
     }
@@ -258,24 +299,29 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 /* ── Header Buttons ────────────────────────────────────────────── */
-$('btn-sidebar-toggle').addEventListener('click', () => {
-    sidebar.classList.toggle('collapsed');
-    $('btn-sidebar-toggle').classList.toggle('active');
-});
+$('btn-collapse-sidebar').addEventListener('click', toggleSidebar);
 
 $('btn-collapse-all').addEventListener('click', () => {
-    document.querySelectorAll('.flow-stage-body, .example-category-content').forEach(el => {
-        (el as HTMLElement).style.display = 'none';
+    document.querySelectorAll('.flow-stage').forEach(el => el.classList.add('collapsed'));
+    document.querySelectorAll('.example-category-content').forEach(el => {
+        el.classList.add('collapsed');
     });
+    saveStageExpansion(selectedPipelineLine ?? 0);
 });
 
 $('btn-expand-all').addEventListener('click', () => {
-    document.querySelectorAll('.flow-stage-body, .example-category-content').forEach(el => {
-        (el as HTMLElement).style.display = '';
-    });
-    document.querySelectorAll('.example-category-content.collapsed').forEach(el => {
+    document.querySelectorAll('.flow-stage').forEach(el => el.classList.remove('collapsed'));
+    document.querySelectorAll('.example-category-content').forEach(el => {
         el.classList.remove('collapsed');
     });
+    saveStageExpansion(selectedPipelineLine ?? 0);
+});
+
+let tokenFilterQuery = '';
+
+tokenFilterInput.addEventListener('input', () => {
+    tokenFilterQuery = tokenFilterInput.value;
+    if (currentResult) renderTokens(currentResult.rawTokens);
 });
 
 groupTokensCheckbox.addEventListener('change', () => {
@@ -285,19 +331,36 @@ groupTokensCheckbox.addEventListener('change', () => {
 /* ── Pipeline Line Tracking ────────────────────────────────────── */
 let lastCursorLine = 1;
 
-function updatePipelineLineSelection(lineNumber: number): void {
+function updatePipelineLineSelection(lineNumber: number, collapseStages = false): void {
+    /* If the user has manually changed the dropdown, don't override it with cursor tracking */
+    if (pipelineDropdownManuallyChanged) return;
+
     const sel = pipelineLineSelect;
+    let newSelection: number | null = null;
+
     /* Check if this line number exists as an option */
     for (let i = 0; i < sel.options.length; i++) {
         if (sel.options[i].value === String(lineNumber)) {
             sel.value = String(lineNumber);
-            selectedPipelineLine = lineNumber;
-            return;
+            newSelection = lineNumber;
+            break;
         }
     }
+
     /* Line not in options — fall back to All Lines */
-    sel.value = '0';
-    selectedPipelineLine = null;
+    if (newSelection === null) {
+        sel.value = '0';
+    }
+
+    /* Only re-render if the effective selection actually changed AND we're not
+       in initial-render mode (collapseStages=true means renderAll will handle it). */
+    if (selectedPipelineLine !== newSelection) {
+        selectedPipelineLine = newSelection;
+        if (!collapseStages && currentResult) {
+            renderPipelineFlow(currentResult, false);
+            renderTokens(currentResult.rawTokens, currentResult.lineResults, currentResult.opcodes);
+        }
+    }
 }
 
 /* ── Status ────────────────────────────────────────────────────── */
@@ -318,8 +381,25 @@ function run(): void {
         const expression = editor.state.doc.toString().trim();
         if (!expression) {
             footerExpression.textContent = 'No expression';
+            // Send abort to cancel any in-flight evaluation in the worker
+            engineWorker.postMessage({ id: runId, abort: true });
             return;
         }
+
+        // Clear accumulated stream events for fresh evaluation
+        liveStreamEvents = [];
+        streamingActive = true;
+        const streamCountEl = document.getElementById('stream-event-count');
+        if (streamCountEl) {
+            streamCountEl.textContent = '0 events · ⟳ live';
+            streamCountEl.classList.add('stream-live');
+        }
+        // Clear the stream display for fresh start
+        const streamDisplay = document.getElementById('stream-display');
+        if (streamDisplay) {
+            streamDisplay.innerHTML = '<span class="empty" style="padding:12px;display:block;text-align:center">Listening for async events…</span>';
+        }
+
         highlightProvider.invalidateCache();
         setStatus('busy');
         runId++;
@@ -328,15 +408,14 @@ function run(): void {
         footerExpression.textContent = expression.slice(0, 60) + (expression.length > 60 ? '\u2026' : '');
         logWorkerActivity('engine', `Enqueued run #${runId}: ${expression.slice(0, 40)}${expression.length > 40 ? '…' : ''}`);
         updateEngineWorkerTelemetry();
-        engineWorker.postMessage({ id: runId, expression });
+        engineWorker.postMessage({ id: runId, expression, stream: true });
     }, 150);
 }
 
 /* ── Main Render ───────────────────────────────────────────────── */
 function renderAll(result: DebugResult): void {
-    renderLineResults(result.lineResults);
     renderErrors(result.errors);
-    renderTokens(result.rawTokens);
+    renderTokens(result.rawTokens, result.lineResults, result.opcodes);
     renderOpcodesDisasm(result.opcodes);
     renderConstants(result.constants);
     renderVariables(result.variables);
@@ -346,20 +425,31 @@ function renderAll(result: DebugResult): void {
     renderPipelineLineSelector(result);
     /* After selector is populated, re-apply cursor-driven selection */
     const cursorLine = editor.state.doc.lineAt(editor.state.selection.main.head).number;
-    updatePipelineLineSelection(cursorLine);
-    renderPipelineFlow(result);
+    updatePipelineLineSelection(cursorLine, true); // sets selectedPipelineLine only, no render
+    renderPipelineFlow(result, true); // render with collapsed stages
+
+    /* Reset the manual-override flag on each fresh evaluation so cursor tracking resumes */
+    pipelineDropdownManuallyChanged = false;
 
     /* Wire up manual dropdown selection — clicking triggers a full re-render */
     if (!pipelineLineListenerAttached) {
         pipelineLineSelect.addEventListener('change', () => {
+            pipelineDropdownManuallyChanged = true;
             const val = pipelineLineSelect.value;
             selectedPipelineLine = val === '0' ? null : Number(val);
-            if (currentResult) renderPipelineFlow(currentResult);
+            if (currentResult) {
+                renderPipelineFlow(currentResult, false);
+                renderTokens(currentResult.rawTokens, currentResult.lineResults, currentResult.opcodes);
+            }
         });
         pipelineLineListenerAttached = true;
     }
     renderInlineResults(result.lineResults);
     renderVmTrace(result.vmTrace);
+    renderCacheTab(result);
+    // Finalize streaming: show static events + any live ones accumulated
+    streamingActive = false; // Initial result complete — live events still arrive
+    renderStreamTab(result);
 
     /* Update DQ telemetry state from result */
     dqActiveRequests = result.dqMetrics.pendingQueries;
@@ -374,29 +464,6 @@ function renderAll(result: DebugResult): void {
     document.querySelectorAll('.flow-stage').forEach(s => s.classList.add('executed'));
 }
 
-/* ── Line Results ──────────────────────────────────────────────── */
-function renderLineResults(lineResults: LineResult[]): void {
-    lineResultsDisplay.innerHTML = '';
-    if (lineResults.length === 0) {
-        lineResultsDisplay.innerHTML = '<span class="empty">No results</span>';
-        return;
-    }
-    const container = document.createElement('div');
-    container.className = 'line-results';
-    lineResults.forEach(lr => {
-        const row = document.createElement('div');
-        row.className = 'line-result-row' + (lr.error ? ' error' : '');
-        row.innerHTML =
-            '<span class="line-result-num">L' + lr.lineNumber + '</span>' +
-            '<span class="line-result-expr">' + escHtml(lr.expression) + '</span>' +
-            '<span class="line-result-parselet">' + escHtml(lr.parselet) + '</span>' +
-            '<span class="line-result-type">' + escHtml(lr.type) + '</span>' +
-            '<span class="line-result-value">' + (lr.error ? escHtml(lr.error) : escHtml(lr.result)) + '</span>';
-        container.appendChild(row);
-    });
-    lineResultsDisplay.appendChild(container);
-}
-
 function renderInlineResults(lineResults: LineResult[]): void {
     const effects: { from: number; to: number; deco: Decoration }[] = [];
     for (const lr of lineResults) {
@@ -408,13 +475,30 @@ function renderInlineResults(lineResults: LineResult[]): void {
 }
 
 /* ── Tokens ────────────────────────────────────────────────────── */
-function renderTokens(tokens: Token[]): void {
+function matchToken(t: Token, query: string): boolean {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return t.value.toLowerCase().includes(q) || t.type.toLowerCase().includes(q);
+}
+
+function renderTokens(tokens: Token[], lineResults?: LineResult[], opcodes?: OpcodeInfo[]): void {
     tokensDisplay.innerHTML = '';
-    tokenCount.textContent = tokens.length + ' tokens';
+
+    const hasFilter = tokenFilterQuery.length > 0;
+    const totalCount = tokens.filter(t => t.type !== 'WS' && t.type !== 'NEWLINE').length;
 
     if (tokens.length === 0) {
+        tokenCount.textContent = '0 tokens';
         tokensDisplay.innerHTML = '<span class="empty">No tokens</span>';
         return;
+    }
+
+    /* Build a line → result lookup for quick access */
+    const resultByLine = new Map<number, LineResult>();
+    if (lineResults) {
+        for (const lr of lineResults) {
+            resultByLine.set(lr.lineNumber, lr);
+        }
     }
 
     const groupByLine = groupTokensCheckbox.checked;
@@ -422,33 +506,116 @@ function renderTokens(tokens: Token[]): void {
         const lines = new Map<number, Token[]>();
         for (const t of tokens) {
             if (t.type === 'WS' || t.type === 'NEWLINE') continue;
+            if (hasFilter && !matchToken(t, tokenFilterQuery)) continue;
             const ln = t.line || 1;
             if (!lines.has(ln)) lines.set(ln, []);
             lines.get(ln)!.push(t);
         }
+
+        let filteredTotal = 0;
+        for (const [, lineTokens] of lines) filteredTotal += lineTokens.length;
+        tokenCount.textContent = hasFilter
+            ? filteredTotal + ' / ' + totalCount + ' tokens'
+            : totalCount + ' tokens';
+
+        if (filteredTotal === 0) {
+            tokensDisplay.innerHTML = '<span class="empty">No tokens match &ldquo;' + escHtml(tokenFilterQuery) + '&rdquo;</span>';
+            return;
+        }
+
         const wrapper = document.createElement('div');
         Array.from(lines.entries()).sort((a, b) => a[0] - b[0]).forEach(([ln, lineTokens]) => {
             const group = document.createElement('div');
-            group.className = 'token-line-group';
-            group.innerHTML = '<div class="token-line-header">Line ' + ln + '</div>';
-            const content = document.createElement('div');
-            content.className = 'token-line-content';
-            lineTokens.forEach(t => {
-                const span = document.createElement('span');
-                span.className = 'token token-' + t.type.toLowerCase();
-                span.textContent = t.value;
-                span.title = 'Type: ' + t.type + '\nValue: ' + t.value + '\nPos: ' + t.offset;
-                content.appendChild(span);
-            });
-            group.appendChild(content);
+            const isSelected = selectedPipelineLine === ln;
+            group.className = 'token-line-group' + (isSelected ? ' selected' : '');
+
+            /* Line header with microstat badges + token/opcode counts */
+            const tc = lineTokens.length;
+            const lr = resultByLine.get(ln);
+            const opcodeCount = lr?.opcodeCount ?? opcodes?.length ?? 0;
+
+            /* Cache status */
+            let cacheBadgeHtml = '';
+            if (lr) {
+                const cacheLabel = lr.wasCached ? 'HIT' : 'MISS';
+                const cacheClass = lr.wasCached ? 'microstat-cache-hit' : 'microstat-cache-miss';
+                cacheBadgeHtml = '<span class="microstat-badge ' + cacheClass + '">' + cacheLabel + '</span>';
+            }
+
+            /* Line status */
+            let statusBadgeHtml = '';
+            if (lr) {
+                let statusLabel: string, statusClass: string;
+                if (lr.error) {
+                    statusLabel = 'ERROR';
+                    statusClass = 'microstat-status-error';
+                } else if (lr.type === 'Pending') {
+                    statusLabel = 'PENDING';
+                    statusClass = 'microstat-status-pending';
+                } else {
+                    statusLabel = 'OK';
+                    statusClass = 'microstat-status-ok';
+                }
+                statusBadgeHtml = '<span class="microstat-badge ' + statusClass + '">' + statusLabel + '</span>';
+            }
+
+            let headerHtml = '<div class="token-line-header">' +
+                '<span class="token-line-header-left">' +
+                '<span>Line ' + ln + '</span>' +
+                (cacheBadgeHtml || statusBadgeHtml ? '<span class="token-line-microstats">' + cacheBadgeHtml + statusBadgeHtml + '</span>' : '') +
+                '</span>' +
+                '<span class="token-line-counts">' +
+                '<span class="token-count-badge">' + tc + ' token' + (tc !== 1 ? 's' : '') + '</span>' +
+                '<span class="opcode-count-badge">' + opcodeCount + ' opcode' + (opcodeCount !== 1 ? 's' : '') + '</span>' +
+                '</span>' +
+                '</div>';
+
+            /* Tokens row — inline label + chips */
+            const tokensHtml = '<div class="token-line-content">' +
+                '<span class="output-label-inline">Tokens</span>' +
+                lineTokens.map(t => '<span class="token token-' + t.type.toLowerCase() + '" title="Type: ' + t.type + '\nValue: ' + t.value + '\nPos: ' + t.offset + '">' + escHtml(t.value) + '</span>').join('') +
+                '</div>';
+
+            /* Result badge row */
+            let resultHtml = '';
+            if (lr) {
+                const typeColor = lr.error ? 'var(--error)' : lr.type === 'Pending' ? 'var(--stage-vm)' : 'var(--stage-parser)';
+                const valueColor = lr.error ? 'var(--error)' : 'var(--accent)';
+                const rawResult = lr.error ? lr.error : lr.result;
+                const resultLabel = escHtml(rawResult);
+                const copyLabel = escHtml(rawResult).replace(/"/g, '&quot;');
+                resultHtml = '<div class="token-line-result">' +
+                    '<span class="token-line-result-type" style="color:' + typeColor + '">' + escHtml(lr.type) + '</span>' +
+                    '<span class="token-line-result-arrow">→</span>' +
+                    '<span class="token-line-result-value" style="color:' + valueColor + '">' + resultLabel + '</span>' +
+                    '<button class="token-line-result-copy" data-copy="' + copyLabel + '" title="Copy result">📋</button>' +
+                    '</div>';
+            }
+
+            group.innerHTML = headerHtml + tokensHtml + resultHtml;
             wrapper.appendChild(group);
         });
         tokensDisplay.appendChild(wrapper);
     } else {
+        let visibleTokens: Token[] = [];
+        for (const t of tokens) {
+            if (t.type === 'WS' || t.type === 'NEWLINE') continue;
+            if (hasFilter && !matchToken(t, tokenFilterQuery)) continue;
+            visibleTokens.push(t);
+        }
+
+        tokenCount.textContent = hasFilter
+            ? visibleTokens.length + ' / ' + totalCount + ' tokens'
+            : totalCount + ' tokens';
+
+        if (visibleTokens.length === 0) {
+            tokensDisplay.innerHTML = '<span class="empty">No tokens match &ldquo;' + escHtml(tokenFilterQuery) + '&rdquo;</span>';
+            return;
+        }
+
         const container = document.createElement('div');
         container.className = 'token-list';
-        tokens.forEach(t => {
-            if (t.type === 'WS' || t.type === 'NEWLINE') return;
+        visibleTokens.forEach(t => {
             const span = document.createElement('span');
             span.className = 'token token-' + t.type.toLowerCase();
             span.textContent = t.value;
@@ -1007,7 +1174,7 @@ function renderPipelineLineSelector(result: DebugResult): void {
 }
 
 /* ── Pipeline Flow ─────────────────────────────────────────────── */
-function renderPipelineFlow(result: DebugResult): void {
+function renderPipelineFlow(result: DebugResult, collapseStages = true): void {
     const selectedLine = selectedPipelineLine;
 
     /* Determine per-line data if a specific line is selected */
@@ -1025,7 +1192,8 @@ function renderPipelineFlow(result: DebugResult): void {
     flowTimeParser.textContent = fmt(s.parserTime);
     flowTimeCompiler.textContent = fmt(s.bytecodeTime);
     flowTimeVm.textContent = fmt(s.executionTime);
-    flowTimeTotal.textContent = fmt(s.totalTime);
+    // Total always shows full document aggregate time regardless of line selection
+    flowTimeTotal.textContent = fmt(result.stats.totalTime);
 
     // Validation (safety checks) + cache + async don't have individual
     // diagnostic event timestamps, so show "—" instead of fabricated values.
@@ -1045,53 +1213,133 @@ function renderPipelineFlow(result: DebugResult): void {
         ? perLineResult?.type === 'Pending'
         : result.lineResults.some(lr => lr.type === 'Pending');
 
-    // Lexer output: first 8 tokens
-    const firstTokens = lineTokens.slice(0, 8);
-    flowLexerOutput.innerHTML = firstTokens.length > 0
-        ? firstTokens.map(t => '<span class="token token-' + t.type.toLowerCase() + '" style="font-size:9px;cursor:default">' + escHtml(t.value) + '</span>').join(' ')
-        : '<span class="empty">\u2014</span>';
+    // Lexer output
+    const isAggregate = selectedLine === null;
+    if (isAggregate && lineTokens.length > 0) {
+        // Aggregate mode: show token-type breakdown counts
+        const typeCounts = new Map<string, number>();
+        for (const t of lineTokens) {
+            if (t.type === 'WS' || t.type === 'NEWLINE') continue;
+            typeCounts.set(t.type, (typeCounts.get(t.type) ?? 0) + 1);
+        }
+        const parts: string[] = [];
+        typeCounts.forEach((count, type) => {
+            parts.push('<span class="token token-' + type.toLowerCase() + '" style="font-size:9px;cursor:default">' + count + ' ' + type.toLowerCase() + '</span>');
+        });
+        flowLexerOutput.innerHTML = '<span style="color:var(--text-secondary);font-size:10px;font-weight:500">' + lineTokens.length + ' tokens &middot; </span>' + parts.join(' ');
+    } else {
+        // Per-line mode: show first 8 token chips
+        const firstTokens = lineTokens.slice(0, 8);
+        flowLexerOutput.innerHTML = firstTokens.length > 0
+            ? firstTokens.map(t => '<span class="token token-' + t.type.toLowerCase() + '" style="font-size:9px;cursor:default">' + escHtml(t.value) + '</span>').join(' ')
+            : '<span class="empty">\u2014</span>';
+    }
 
-    // Validation output: token count + safety status
-    flowValidateOutput.innerHTML = firstTokens.length > 0
-        ? '<span style="color:' + (hasErrors ? '#f48771' : '#4ec9b0') + ';font-size:10px">' +
-          (hasErrors ? 'Failed' : firstTokens.length + ' tokens ✓') + '</span>'
-        : '<span class="empty">\u2014</span>';
+    // Validation output
+    const totalLines = result.lineResults.length;
+    const passedLines = result.lineResults.filter(lr => !lr.error).length;
+    const errorLines = totalLines - passedLines;
+    if (isAggregate && totalLines > 1) {
+        // Aggregate mode: show "X/Y lines passed"
+        const statusColor = errorLines === 0 ? '#4ec9b0' : errorLines === totalLines ? '#f48771' : '#dcdcaa';
+        flowValidateOutput.innerHTML = '<span style="color:' + statusColor + ';font-size:10px">' +
+            passedLines + '/' + totalLines + ' lines passed' +
+            (errorLines > 0 ? ' <span style="color:#f48771;font-weight:500">(' + errorLines + ' error' + (errorLines > 1 ? 's' : '') + ')</span>' : ' ✓') +
+            '</span>';
+    } else {
+        // Per-line mode or single line
+        const perLineTokens = lineTokens.filter(t => t.type !== 'WS' && t.type !== 'NEWLINE');
+        flowValidateOutput.innerHTML = perLineTokens.length > 0
+            ? '<span style="color:' + (hasErrors ? '#f48771' : '#4ec9b0') + ';font-size:10px">' +
+              (hasErrors ? 'Failed' : perLineTokens.length + ' tokens ✓') + '</span>'
+            : '<span class="empty">\u2014</span>';
+    }
 
     // Cache output: Hit / Miss (derived from parselets presence)
     const cacheLabel = wasCached ? 'Hit' : (hasErrors ? '—' : 'Miss');
     const cacheColor = wasCached ? '#4ec9b0' : '#5ac8fa';
-    flowCacheOutput.innerHTML = firstTokens.length > 0
-        ? '<span style="color:' + cacheColor + ';font-size:10px;font-weight:600">' + cacheLabel + '</span>'
-        : '<span class="empty">\u2014</span>';
+    const hasAnyTokens = lineTokens.filter(t => t.type !== 'WS' && t.type !== 'NEWLINE').length > 0;
+    if (isAggregate && totalLines > 1) {
+        // Aggregate mode: show cache hit/miss counts per line
+        const hitLines = result.lineResults.filter(lr => !lr.parselet).length;
+        const missLines = result.lineResults.filter(lr => lr.parselet).length;
+        flowCacheOutput.innerHTML = '<span style="color:' + (hitLines > missLines ? '#4ec9b0' : '#5ac8fa') + ';font-size:10px;font-weight:600">' +
+            'Hit ' + hitLines + ' / Miss ' + missLines + '</span>';
+    } else {
+        flowCacheOutput.innerHTML = hasAnyTokens
+            ? '<span style="color:' + cacheColor + ';font-size:10px;font-weight:600">' + cacheLabel + '</span>'
+            : '<span class="empty">\u2014</span>';
+    }
 
     // Parser output: unique parselet types
     const parseletNames = [...new Set(result.parselets?.map((p: ParseletInfo) => p.parseletType) ?? [])];
-    flowParserOutput.innerHTML = parseletNames.length > 0
-        ? parseletNames.map((p: string) => '<span class="token token-keyword" style="font-size:9px;cursor:default">' + escHtml(p) + '</span>').join(' ')
-        : (wasCached ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>' : '<span class="empty">\u2014</span>');
+    if (isAggregate && totalLines > 1 && parseletNames.length > 0) {
+        // Aggregate mode: show unique parselet types count
+        flowParserOutput.innerHTML = '<span style="color:#9b7bec;font-size:10px">' + parseletNames.length + ' parselet type' +
+            (parseletNames.length > 1 ? 's' : '') + '</span>';
+    } else {
+        flowParserOutput.innerHTML = parseletNames.length > 0
+            ? parseletNames.map((p: string) => '<span class="token token-keyword" style="font-size:9px;cursor:default">' + escHtml(p) + '</span>').join(' ')
+            : (wasCached ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>' : '<span class="empty">\u2014</span>');
+    }
 
     // Compiler output: first 4 unique opcode names
-    const opcodeNames = [...new Set(result.opcodes.map(o => o.name))].slice(0, 4);
-    flowCompilerOutput.innerHTML = opcodeNames.length > 0
-        ? opcodeNames.map(n => '<span class="token token-func" style="font-size:9px;cursor:default">' + escHtml(n) + '</span>').join(' ')
-        : (wasCached ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>' : '<span class="empty">\u2014</span>');
+    const opcodeNames = [...new Set(result.opcodes.map(o => o.name))];
+    if (isAggregate && totalLines > 1 && opcodeNames.length > 0) {
+        // Aggregate mode: show unique opcode count
+        flowCompilerOutput.innerHTML = '<span style="color:#4ec9b0;font-size:10px">' + opcodeNames.length + ' unique opcode' +
+            (opcodeNames.length > 1 ? 's' : '') +
+            ' (' + result.opcodes.length + ' total)</span>';
+    } else {
+        const firstNames = opcodeNames.slice(0, 4);
+        flowCompilerOutput.innerHTML = firstNames.length > 0
+            ? firstNames.map(n => '<span class="token token-func" style="font-size:9px;cursor:default">' + escHtml(n) + '</span>').join(' ')
+            : (wasCached ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>' : '<span class="empty">\u2014</span>');
+    }
 
     // Async preflight output
-    flowAsyncOutput.innerHTML = hasAsync
-        ? '<span style="color:#ffd866;font-size:10px">Pending resolution</span>'
-        : '<span style="color:#6b6b75;font-size:10px">Sync path</span>';
+    if (isAggregate && totalLines > 1) {
+        // Aggregate mode: show pending vs sync counts
+        const pendingCount = result.lineResults.filter(lr => lr.type === 'Pending').length;
+        const syncCount = totalLines - pendingCount;
+        flowAsyncOutput.innerHTML = pendingCount > 0
+            ? '<span style="color:#ffd866;font-size:10px">' + pendingCount + ' pending</span>' +
+              (syncCount > 0 ? ' <span style="color:#6b6b75;font-size:10px">/ ' + syncCount + ' sync</span>' : '')
+            : '<span style="color:#6b6b75;font-size:10px">' + syncCount + ' sync</span>';
+    } else {
+        flowAsyncOutput.innerHTML = hasAsync
+            ? '<span style="color:#ffd866;font-size:10px">Pending resolution</span>'
+            : '<span style="color:#6b6b75;font-size:10px">Sync path</span>';
+    }
 
-    // VM output: first result type
-    const firstResult = result.lineResults[0];
-    flowVmOutput.innerHTML = firstResult
-        ? '<span style="color:#29ce99;font-size:10px">' + (firstResult.error ? 'Error' : firstResult.type) + '</span>'
-        : '<span class="empty">\u2014</span>';
+    // VM output
+    if (isAggregate && totalLines > 1) {
+        // Aggregate mode: show result count
+        flowVmOutput.innerHTML = '<span style="color:#29ce99;font-size:10px">' + totalLines + ' result' + (totalLines > 1 ? 's' : '') +
+            (errorLines > 0 ? ' (' + errorLines + ' error' + (errorLines > 1 ? 's' : '') + ')' : '') +
+            '</span>';
+    } else {
+        // Per-line mode: show specific result type for the selected line
+        const vmTarget = perLineResult ?? result.lineResults[0];
+        flowVmOutput.innerHTML = vmTarget
+            ? '<span style="color:#29ce99;font-size:10px">' + (vmTarget.error ? 'Error' : vmTarget.type) + '</span>'
+            : '<span class="empty">\u2014</span>';
+    }
 
-    // Result output: last line's final value
-    const lastResult = result.lineResults[result.lineResults.length - 1];
-    flowResultOutput.innerHTML = lastResult
-        ? '<span style="color:' + (lastResult.error ? '#f48771' : '#29ce99') + '">' + escHtml(lastResult.error || lastResult.result) + '</span>'
-        : '<span class="empty">\u2014</span>';
+    // Result output
+    if (isAggregate && totalLines > 1) {
+        // Aggregate mode: show value count summary
+        const valueCount = passedLines;
+        flowResultOutput.innerHTML = '<span style="color:#29ce99">' + valueCount + ' value' + (valueCount !== 1 ? 's' : '') +
+            (errorLines > 0 ? ' <span style="color:#f48771">(' + errorLines + ' error' + (errorLines > 1 ? 's' : '') + ')</span>' : '') +
+            '</span>';
+    } else {
+        // Per-line mode: show specific value for the selected line
+        const resultTarget = perLineResult ?? result.lineResults[result.lineResults.length - 1];
+        flowResultOutput.innerHTML = resultTarget
+            ? '<span style="color:' + (resultTarget.error ? '#f48771' : '#29ce99') + '">' + escHtml(resultTarget.error || resultTarget.result) + '</span>'
+            : '<span class="empty">\u2014</span>';
+    }
 
     detailTokens.textContent = String(result.rawTokens.length);
     detailOpcodes.textContent = String(result.opcodes.length);
@@ -1099,19 +1347,236 @@ function renderPipelineFlow(result: DebugResult): void {
     detailStrings.textContent = String(result.constants.filter(c => c.type === 'string').length);
     detailCache.textContent = wasCached ? 'hit' : (hasParselets ? 'miss' : '—');
     detailAsync.textContent = hasAsync ? 'yes' : 'no';
+
+    /* ── Update active-line indicators ────────────────────────────── */
+    const activeLineStr = selectedLine !== null ? 'Line ' + selectedLine : 'All Lines';
+    const $badge = document.getElementById('pipeline-active-line-badge');
+    if ($badge) $badge.textContent = activeLineStr;
+
+    /* Per-stage line indicator — shows which line each stage's data belongs to */
+    const stageLineIds = [
+        'flow-lexer-line',
+        'flow-validate-line',
+        'flow-cache-line',
+        'flow-parser-line',
+        'flow-compiler-line',
+        'flow-async-line',
+        'flow-vm-line',
+        'flow-result-line',
+    ];
+    const stageLabel = selectedLine !== null ? 'L' + selectedLine : 'All';
+    for (const id of stageLineIds) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = stageLabel;
+    }
+
+    const lineKey = selectedLine ?? 0;
+
+    // Compute stage output snapshot for change detection (do this before expanding/collapsing)
+    const newSnapshot: string[] = [];
+    for (const id of STAGE_OUTPUT_IDS) {
+        const el = document.getElementById(id);
+        newSnapshot.push(el?.textContent ?? '');
+    }
+
+    // Restore or initialize per-line expansion state
+    if (collapseStages) {
+        // Initial render from renderAll — collapse all stages and save
+        document.querySelectorAll('.flow-stage').forEach(el => el.classList.add('collapsed'));
+        saveStageExpansion(lineKey);
+        // Save snapshot so future switches can detect changes
+        stageSnapshots.set(lineKey, newSnapshot);
+    } else {
+        // User-triggered line switch — restore saved expansion state for this line
+        const savedState = stageExpansionState.get(lineKey);
+        if (savedState) {
+            document.querySelectorAll('.flow-stage').forEach((stage, i) => {
+                if (i < savedState.length) {
+                    stage.classList.toggle('collapsed', !savedState[i]);
+                }
+            });
+        } else {
+            // First visit to this line — start collapsed
+            document.querySelectorAll('.flow-stage').forEach(el => el.classList.add('collapsed'));
+            saveStageExpansion(lineKey);
+        }
+
+        // Compare snapshot with previous visit to detect changed stages & flash them
+        const oldSnapshot = stageSnapshots.get(lineKey);
+        if (oldSnapshot) {
+            const stages = document.querySelectorAll('.flow-stage');
+            stages.forEach((stage, i) => {
+                if (i < oldSnapshot.length && i < newSnapshot.length) {
+                    if (oldSnapshot[i] !== newSnapshot[i]) {
+                        stage.classList.add('flash-pulse');
+                        stage.addEventListener('animationend', () => {
+                            stage.classList.remove('flash-pulse');
+                        }, { once: true });
+
+                        // Also pulse the header for a more targeted visual cue
+                        const header = stage.querySelector('.flow-stage-header');
+                        if (header) {
+                            header.classList.add('header-pulse');
+                            header.addEventListener('animationend', () => {
+                                header.classList.remove('header-pulse');
+                            }, { once: true });
+                        }
+                    }
+                }
+            });
+        }
+        // Save new snapshot for next comparison
+        stageSnapshots.set(lineKey, newSnapshot);
+    }
 }
+
+/* ── Pipeline Stage Click-to-Toggle ────────────────────────────── */
+document.querySelectorAll('.flow-stage-header').forEach(header => {
+    header.addEventListener('click', () => {
+        const stage = header.closest('.flow-stage');
+        if (stage) {
+            stage.classList.toggle('collapsed');
+            // Save expansion state for current line
+            const lineKey = selectedPipelineLine ?? 0;
+            saveStageExpansion(lineKey);
+        }
+    });
+});
 
 /* ── Utils ─────────────────────────────────────────────────────── */
 function fmt(ns: number): string {
-    if (ns < 1_000) return ns.toFixed(0) + ' ns';
-    if (ns < 1_000_000) return (ns / 1_000).toFixed(1) + ' \u00b5s';
-    if (ns < 1_000_000_000) return (ns / 1_000_000).toFixed(2) + ' ms';
-    return (ns / 1_000_000_000).toFixed(3) + ' s';
+    return (ns / 1_000_000).toFixed(2) + ' ms';
 }
 
 function escHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+/* Copy result button handler via event delegation */
+tokensDisplay.addEventListener('click', (e: MouseEvent) => {
+    const btn = (e.target as HTMLElement).closest('.token-line-result-copy') as HTMLElement | null;
+    if (!btn) return;
+    const text = btn.dataset.copy ?? '';
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓';
+        btn.classList.add('copied');
+        setTimeout(() => {
+            btn.textContent = orig;
+            btn.classList.remove('copied');
+        }, 1000);
+    }).catch(() => {
+        /* fallback: select from a temp input */
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed'; ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+});
+
+$('btn-sidebar-toggle-mobile').addEventListener('click', toggleSidebar);
+
+/* ── Sidebar Collapse / Expand ──────────────────────────────── */
+function toggleSidebar(): void {
+    const collapsed = sidebar.classList.toggle('collapsed');
+    const btn = $('btn-collapse-sidebar');
+    btn.classList.toggle('active');
+    btn.textContent = collapsed ? '▶' : '◀';
+    btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    $('sidebar-right-tab').classList.toggle('active');
+    $('btn-sidebar-toggle-mobile').classList.toggle('active');
+    $('btn-sidebar-toggle-mobile').title = collapsed ? 'Show sidebar' : 'Hide sidebar';
+}
+
+$('sidebar-right-tab').addEventListener('click', toggleSidebar);
+
+/* ── Resize Handles (drag-to-resize) ──────────────────────────── */
+function makeResizable(
+    handle: HTMLElement,
+    prevEl: HTMLElement,
+    nextEl: HTMLElement,
+    direction: 'grow-prev' | 'grow-next'
+): void {
+    let startX = 0;
+    let startPrevW = 0;
+    let startNextW = 0;
+    let isDragging = false;
+
+    function onStart(e: MouseEvent): void {
+        isDragging = true;
+        handle.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        startX = e.clientX;
+        startPrevW = prevEl.getBoundingClientRect().width;
+        startNextW = nextEl.getBoundingClientRect().width;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onEnd);
+    }
+
+    function onMove(e: MouseEvent): void {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        if (direction === 'grow-prev') {
+            const newPrev = Math.max(80, startPrevW + dx);
+            prevEl.style.width = newPrev + 'px';
+            prevEl.style.flexShrink = '0';
+            nextEl.style.flex = '1';
+        } else {
+            const newNext = Math.max(80, startNextW - dx);
+            // diagnostics has CSS 'flex: 1' (flex-basis: 0) which overrides width — use flex shorthand instead
+            nextEl.style.flex = '0 0 ' + newNext + 'px';
+            prevEl.style.flex = '1';
+        }
+    }
+
+    function onEnd(): void {
+        isDragging = false;
+        handle.classList.remove('active');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onEnd);
+    }
+
+    handle.addEventListener('mousedown', onStart);
+}
+
+const sidebarHandle = $('resize-handle-sidebar');
+const editorHandle = $('resize-handle-editor');
+makeResizable(sidebarHandle, sidebar, $('editor-pane'), 'grow-prev');
+makeResizable(editorHandle, $('editor-pane'), $('diagnostics-pane'), 'grow-next');
+
+/* ── Pane Collapse Buttons ─────────────────────────────────────── */
+$('btn-collapse-editor').addEventListener('click', () => {
+    const pane = $('editor-pane');
+    const btn = $('btn-collapse-editor');
+    pane.classList.toggle('collapsed');
+    if (pane.classList.contains('collapsed')) {
+        btn.textContent = '▶';
+        btn.title = 'Expand editor';
+    } else {
+        btn.textContent = '◀';
+        btn.title = 'Collapse editor';
+    }
+});
+
+$('btn-collapse-diagnostics').addEventListener('click', () => {
+    const pane = $('diagnostics-pane');
+    const btn = $('btn-collapse-diagnostics');
+    pane.classList.toggle('collapsed');
+    if (pane.classList.contains('collapsed')) {
+        btn.textContent = '◀';
+        btn.title = 'Expand diagnostics';
+    } else {
+        btn.textContent = '▶';
+        btn.title = 'Collapse diagnostics';
+    }
+});
 
 /* ── Sidebar ───────────────────────────────────────────────────── */
 function renderExamplesSidebar(): void {
@@ -1167,6 +1632,42 @@ function populateFullDocExamples(): void {
 }
 
 /* ── VM Trace ──────────────────────────────────────────────────── */
+
+/** Format a single stack value into a short, human-readable string. */
+function formatStackValue(v: VmStackValue): string {
+    switch (v.type) {
+        case 0: /* Number */       return String((v.value as number).toFixed(4).replace(/\.?0+$/, ''));
+        case 1: /* Hex */           return '0x' + (v.value as number).toString(16).toUpperCase();
+        case 2: /* BigInt */        return String(v.value) + 'n';
+        case 3: /* String */        return '"' + escHtml(String(v.value)).slice(0, 30) + '"';
+        case 4: /* Datetime */      return new Date(v.value as number).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        case 5: /* Percentage */    return ((v.value as number) * 100).toFixed(1) + '%';
+        case 6: /* Uom */           return (v.value as number).toFixed(2) + ' ' + (v.unit ?? '');
+        case 7: /* Array */         return '[' + (v.value as number[]).map(n => n.toFixed(2).replace(/\.?0+$/, '')).join(', ') + ']';
+        case 10: /* Boolean */      return v.value ? 'true' : 'false';
+        case 11: /* Unit */         return v.unit ?? 'unit';
+        case 12: /* Pending */      return '⏳';
+        case 13: /* Error */        return '⚠' + String(v.unit ?? v.value ?? '');
+        default:                    return '?' + String(v.value);
+    }
+}
+
+/** Get a CSS class name for a stack value chip based on its ValueType. */
+function stackValueTypeClass(type: number): string {
+    switch (type) {
+        case 0:  return 'vm-stack-number';
+        case 1:  return 'vm-stack-hex';
+        case 2:  return 'vm-stack-bigint';
+        case 3:  return 'vm-stack-string';
+        case 4:  return 'vm-stack-datetime';
+        case 5:  return 'vm-stack-percentage';
+        case 6:  return 'vm-stack-uom';
+        case 7:  return 'vm-stack-array';
+        case 10: return 'vm-stack-boolean';
+        default: return 'vm-stack-other';
+    }
+}
+
 function renderVmTrace(steps: VmTraceStep[]): void {
     vmtraceDisplay.innerHTML = '';
     vmtraceCount.textContent = steps.length + ' steps';
@@ -1176,29 +1677,317 @@ function renderVmTrace(steps: VmTraceStep[]): void {
         return;
     }
 
-    const maxStackDepth = Math.max(...steps.map(s => s.stackDepth), 1);
-
     steps.forEach((step, i) => {
         const row = document.createElement('div');
         const isLast = i === steps.length - 1;
         row.className = 'vm-trace-row' + (isLast ? ' halt' : '');
 
-        const barPct = Math.max(2, (step.stackDepth / Math.max(maxStackDepth, 1)) * 100);
-        const timeStr = step.elapsedNs < 1_000
-            ? step.elapsedNs.toFixed(0) + 'ns'
-            : (step.elapsedNs / 1_000).toFixed(1) + 'µs';
+        const timeStr = (step.elapsedNs / 1_000_000).toFixed(2) + ' ms';
+
+        /* Build stack chips HTML */
+        const stack = step.stack ?? [];
+        let chipsHtml = '';
+        for (let si = 0; si < stack.length; si++) {
+            const sv = stack[si];
+            const label = formatStackValue(sv);
+            const typeClass = stackValueTypeClass(sv.type);
+            chipsHtml += '<span class="vm-stack-chip ' + typeClass + '" title="Type ' + sv.type + (sv.unit ? ' Unit: ' + escHtml(sv.unit) : '') + '">' + label + '</span>';
+        }
+        if (chipsHtml === '') {
+            chipsHtml = '<span class="vm-stack-empty">∅</span>';
+        }
 
         row.innerHTML =
             '<span class="vm-trace-col-step">' + step.instructionNumber + '</span>' +
             '<span class="vm-trace-col-ip">' + step.ip + '</span>' +
             '<span class="vm-trace-col-op" title="Opcode 0x' + step.opcode.toString(16).toUpperCase().padStart(2, '0') + '">' + escHtml(step.opcodeName) + '</span>' +
             '<span class="vm-trace-col-stack">' +
-                '<span class="vm-trace-stack-bar" style="width:' + barPct + '%"></span>' +
-                '<span class="vm-trace-stack-depth">' + step.stackDepth + '</span>' +
+                '<span class="vm-trace-stack-depth-badge">' + step.stackDepth + '</span>' +
+                '<span class="vm-trace-stack-chips">' + chipsHtml + '</span>' +
             '</span>' +
             '<span class="vm-trace-col-time">' + timeStr + '</span>';
         vmtraceDisplay.appendChild(row);
     });
+}
+
+/* ── Cache Tab ────────────────────────────────────────────────── */
+function renderCacheTab(result: DebugResult): void {
+    const cacheDisplay = document.getElementById('cache-display');
+    if (!cacheDisplay) return;
+
+    const cs = result.cacheSnapshot ?? { bytecode: [], lineCache: [], asyncCache: [] };
+    cacheDisplay.innerHTML = '';
+
+    // ── Bytecode Cache ───────────────────────────────────────────
+    const bcSection = document.createElement('div');
+    bcSection.className = 'cache-section';
+    bcSection.innerHTML = '<div class="cache-section-header">' +
+        '<span>⬡ Bytecode Cache</span>' +
+        '<span class="cache-section-count">' + cs.bytecode.length + ' entries</span>' +
+        '</div>';
+    if (cs.bytecode.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'cache-entry';
+        empty.innerHTML = '<span class="empty" style="padding:8px;display:block;width:100%;text-align:center">No bytecode cache entries</span>';
+        bcSection.appendChild(empty);
+    } else {
+        for (const entry of cs.bytecode) {
+            const row = document.createElement('div');
+            row.className = 'cache-entry';
+            const hasAsyncStr = entry.hasAsync ? ' async' : '';
+            row.innerHTML =
+                '<span class="cache-entry-expr">' + escHtml(entry.expression) + '</span>' +
+                '<span class="cache-entry-meta">' + entry.opcodesLength + ' op · ' + entry.numbersLength + ' num · ' + entry.stringsLength + ' str' + hasAsyncStr + '</span>';
+            bcSection.appendChild(row);
+        }
+    }
+    cacheDisplay.appendChild(bcSection);
+
+    // ── Line Cache ───────────────────────────────────────────────
+    const lcSection = document.createElement('div');
+    lcSection.className = 'cache-section';
+    const resolvedCount = cs.lineCache.filter(e => e.resultType !== 'Pending').length;
+    lcSection.innerHTML = '<div class="cache-section-header">' +
+        '<span>⊞ Line Cache</span>' +
+        '<span class="cache-section-count">' + cs.lineCache.length + ' entries · ' + resolvedCount + ' resolved</span>' +
+        '</div>';
+    if (cs.lineCache.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'cache-entry';
+        empty.innerHTML = '<span class="empty" style="padding:8px;display:block;width:100%;text-align:center">No line cache entries</span>';
+        lcSection.appendChild(empty);
+    } else {
+        for (const entry of cs.lineCache) {
+            const row = document.createElement('div');
+            row.className = 'cache-entry';
+            const readsHtml = entry.reads.length > 0
+                ? entry.reads.map(r => '<span class="cache-read-chip">' + escHtml(r) + '</span>').join('')
+                : '';
+            const writeInfo = entry.writeVar
+                ? '<span class="cache-read-chip">→ ' + escHtml(entry.writeVar) + '</span>'
+                : '';
+            row.innerHTML =
+                '<span class="cache-entry-key">L' + entry.lineNumber + '</span>' +
+                '<span class="cache-entry-expr">' + escHtml(entry.resultValue) + '</span>' +
+                '<span class="cache-entry-meta">' + escHtml(entry.resultType) + '</span>' +
+                (readsHtml ? '<span class="cache-entry-reads">' + readsHtml + '</span>' : '') +
+                (writeInfo ? '<span class="cache-entry-reads">' + writeInfo + '</span>' : '');
+            lcSection.appendChild(row);
+        }
+    }
+    cacheDisplay.appendChild(lcSection);
+
+    // ── Async Cache ──────────────────────────────────────────────
+    for (const pkg of cs.asyncCache) {
+        const pkgSection = document.createElement('div');
+        pkgSection.className = 'cache-section';
+        const totalEntries = pkg.entries.length;
+        pkgSection.innerHTML = '<div class="cache-section-header">' +
+            '<span>⟳ ' + escHtml(pkg.packageId) + '</span>' +
+            '<span class="cache-section-count">' + pkg.resolvedCount + ' ✓ · ' + pkg.inFlightCount + ' ⟳ · ' + pkg.errorCount + ' ✗</span>' +
+            '</div>';
+        if (totalEntries === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'cache-entry';
+            empty.innerHTML = '<span class="empty" style="padding:8px;display:block;width:100%;text-align:center">No async cache entries</span>';
+            pkgSection.appendChild(empty);
+        } else {
+            for (const entry of pkg.entries) {
+                const row = document.createElement('div');
+                row.className = 'cache-entry';
+                const statusClass = entry.status === 'resolved' ? 'resolved' : entry.status === 'error' ? 'error' : 'in_flight';
+                const statusLabel = entry.status === 'resolved' ? '✓' : entry.status === 'error' ? '✗' : '⟳';
+                row.innerHTML =
+                    '<span class="cache-entry-expr">' + escHtml(entry.key) + '</span>' +
+                    '<span class="cache-entry-status ' + statusClass + '">' + statusLabel + '</span>' +
+                    (entry.errorMessage ? '<span class="cache-entry-meta" style="color:var(--error)">' + escHtml(entry.errorMessage) + '</span>' : '');
+                pkgSection.appendChild(row);
+            }
+        }
+        cacheDisplay.appendChild(pkgSection);
+    }
+}
+
+/* ── Stream Diagnostics Tab ────────────────────────────────────── */
+/* ── Stream Diagnostics Tab ────────────────────────────────────── */
+
+/**
+ * Group a list of diagnostic events by their groupKey.
+ * Returns a Map<groupKey, DiagnosticEventInfo[]>.
+ */
+function groupEventsByKey(events: DiagnosticEventInfo[]): Map<string, DiagnosticEventInfo[]> {
+    const groups = new Map<string, DiagnosticEventInfo[]>();
+    for (const evt of events) {
+        const key = evt.groupKey || 'General';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(evt);
+    }
+    return groups;
+}
+
+/**
+ * Create a collapsible group section for a set of events sharing the same groupKey.
+ */
+function createStreamEventGroup(groupKey: string, events: DiagnosticEventInfo[]): HTMLElement {
+    const section = document.createElement('div');
+    section.className = 'stream-group';
+    section.dataset.groupKey = groupKey;
+
+    const collapsed = !events.some(e =>
+        e.type === 'async_pending' || e.type === 'async_resolved' || e.type === 'async_error'
+    );
+
+    const header = document.createElement('div');
+    header.className = 'stream-group-header' + (collapsed ? '' : ' expanded');
+    header.addEventListener('click', () => {
+        section.classList.toggle('collapsed');
+        header.classList.toggle('expanded');
+    });
+
+    const hasAsync = events.some(e => e.type.startsWith('async_'));
+    const badgeClass = hasAsync ? 'stream-group-badge-async' : 'stream-group-badge-event';
+    const badgeIcon = hasAsync ? '⟳' : '#';
+
+    header.innerHTML =
+        '<span class="stream-group-toggle">' + (collapsed ? '▶' : '▼') + '</span>' +
+        '<span class="stream-group-key ' + badgeClass + '">' + badgeIcon + ' ' + escHtml(groupKey) + '</span>' +
+        '<span class="stream-group-count">' + events.length + ' event' + (events.length !== 1 ? 's' : '') + '</span>';
+
+    section.appendChild(header);
+
+    const content = document.createElement('div');
+    content.className = 'stream-group-content';
+    for (const evt of events) {
+        content.appendChild(createStreamEventRow(evt));
+    }
+    section.appendChild(content);
+
+    if (collapsed) {
+        section.classList.add('collapsed');
+    }
+
+    return section;
+}
+
+function renderStreamTab(result: DebugResult): void {
+    const streamDisplay = document.getElementById('stream-display');
+    const streamCount = document.getElementById('stream-event-count');
+    if (!streamDisplay) return;
+
+    // Merge static diagnostic events with any live stream events
+    const staticEvents = result.diagnosticEvents ?? [];
+    const allEvents = [...staticEvents, ...liveStreamEvents];
+
+    if (streamCount) {
+        const liveLabel = streamingActive ? ' · ⟳ live' : '';
+        streamCount.textContent = allEvents.length + ' events' + liveLabel;
+        streamCount.classList.toggle('stream-live', streamingActive);
+    }
+
+    streamDisplay.innerHTML = '';
+
+    if (allEvents.length === 0) {
+        streamDisplay.innerHTML = '<span class="empty" style="padding:12px;display:block;text-align:center">No diagnostic events</span>';
+        return;
+    }
+
+    // Group events by groupKey and render collapsible sections
+    const groups = groupEventsByKey(allEvents);
+    for (const [groupKey, gEvents] of groups) {
+        const section = createStreamEventGroup(groupKey, gEvents);
+        streamDisplay.appendChild(section);
+    }
+
+    // Auto-scroll to bottom after initial render
+    streamDisplay.scrollTop = streamDisplay.scrollHeight;
+}
+
+/**
+ * Append a single stream event to the Stream tab (called incrementally).
+ * Finds or creates the appropriate group section by groupKey.
+ */
+function appendStreamEvent(evt: DiagnosticEventInfo): void {
+    const streamDisplay = document.getElementById('stream-display');
+    const streamCount = document.getElementById('stream-event-count');
+    if (!streamDisplay) return;
+
+    // Remove the "listening" placeholder if present
+    const emptyEl = streamDisplay.querySelector('.empty');
+    if (emptyEl) streamDisplay.innerHTML = '';
+
+    const groupKey = evt.groupKey || 'General';
+
+    // Try to find an existing group section with this key
+    let groupSection = streamDisplay.querySelector(`[data-group-key="${CSS.escape(groupKey)}"]`) as HTMLElement | null;
+
+    if (groupSection) {
+        // Append the new event row to the existing group's content
+        const content = groupSection.querySelector('.stream-group-content');
+        if (content) {
+            content.appendChild(createStreamEventRow(evt));
+        }
+        // Update the count badge
+        const countEl = groupSection.querySelector('.stream-group-count');
+        if (countEl) {
+            const current = parseInt(countEl.textContent || '0', 10);
+            countEl.textContent = (current + 1) + ' event' + (current + 1 !== 1 ? 's' : '');
+        }
+        // Auto-expand if group was collapsed (user likely wants to see new data)
+        if (groupSection.classList.contains('collapsed')) {
+            groupSection.classList.remove('collapsed');
+            const header = groupSection.querySelector('.stream-group-header');
+            if (header) header.classList.add('expanded');
+        }
+    } else {
+        // Create a new group section for this key
+        const section = createStreamEventGroup(groupKey, [evt]);
+        streamDisplay.appendChild(section);
+    }
+
+    // Update the event count in toolbar
+    if (streamCount) {
+        const total = liveStreamEvents.length;
+        streamCount.textContent = total + ' events · ⟳ live';
+        streamCount.classList.add('stream-live');
+    }
+
+    // Auto-scroll to newest event
+    streamDisplay.scrollTop = streamDisplay.scrollHeight;
+}
+
+/**
+ * Create a single stream event DOM element.
+ */
+function createStreamEventRow(evt: DiagnosticEventInfo): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'stream-event';
+
+    // Class for type styling
+    const typeClass = 'type-' + evt.type;
+
+    // Format elapsed time
+    const timeStr = evt.elapsedNs > 0
+        ? (evt.elapsedNs / 1_000_000).toFixed(2) + 'ms'
+        : '—';
+
+    // Format wall-clock timestamp badge
+    const ts = new Date(evt.timestamp);
+    const clockStr = ts.getHours().toString().padStart(2, '0') + ':' +
+        ts.getMinutes().toString().padStart(2, '0') + ':' +
+        ts.getSeconds().toString().padStart(2, '0') + '.' +
+        ts.getMilliseconds().toString().padStart(3, '0');
+
+    // Determine type label
+    const typeLabel = evt.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    row.innerHTML =
+        '<span class="stream-event-time">' + timeStr + '</span>' +
+        '<span class="stream-event-clock">' + clockStr + '</span>' +
+        '<span class="stream-event-type ' + typeClass + '">' + typeLabel + '</span>' +
+        (evt.expression ? '<span class="stream-event-expr">' + escHtml(evt.expression) + '</span>' : '<span class="stream-event-expr"></span>') +
+        (evt.details ? '<span class="stream-event-details">' + escHtml(evt.details) + '</span>' : '');
+
+    return row;
 }
 
 /* ── Worker Telemetry ──────────────────────────────────────────── */
@@ -1262,7 +2051,7 @@ function updateEngineWorkerTelemetry(): void {
     /* round-trip latency */
     if (engineRoundTripTimes.length > 0) {
         const avg = engineRoundTripTimes.reduce((a, b) => a + b, 0) / engineRoundTripTimes.length;
-        workerEngineLatency.textContent = avg < 1 ? '<1 ms' : avg.toFixed(1) + ' ms';
+        workerEngineLatency.textContent = avg.toFixed(2) + ' ms';
     } else {
         workerEngineLatency.textContent = '—';
     }
@@ -1272,7 +2061,7 @@ function updateEngineWorkerTelemetry(): void {
 
     /* last run timestamp */
     if (engineLastRunTime > 0) {
-        const ago = Date.now() - engineLastRunTime;
+        const ago = performance.now() - engineLastRunTime;
         workerEngineLastRun.textContent = ago < 60_000
             ? (ago < 1_000 ? '<1s ago' : (ago / 1_000).toFixed(0) + 's ago')
             : (ago / 60_000).toFixed(0) + 'm ago';
@@ -1297,7 +2086,19 @@ function updateDataQueryWorkerTelemetry(): void {
     workerDqStatus.className = 'worker-card-status' + (hasData ? '' : ' status-offline');
 
     workerDqActive.textContent = String(dqActiveRequests);
-    workerDqSources.textContent = String(dqSources);
+    // Render registered source names as chip badges
+    if (currentResult) {
+        const names = currentResult.dqMetrics.dataSourceNames;
+        if (names.length > 0) {
+            workerDqSources.innerHTML = names.map(n =>
+                `<span class="worker-dq-source-chip">${escHtml(n)}</span>`
+            ).join('');
+        } else {
+            workerDqSources.innerHTML = '<span class="empty">none</span>';
+        }
+    } else {
+        workerDqSources.innerHTML = '<span class="empty">none</span>';
+    }
     if (dqLastActivityTs > 0) {
         const ago = Date.now() - dqLastActivityTs;
         workerDqLastActivity.textContent = ago < 60_000

@@ -27,6 +27,8 @@ export interface DebugResult {
     parselets: ParseletInfo[];
     vmTrace: VmTraceStep[];
     dqMetrics: DQMetrics;
+    cacheSnapshot: CacheSnapshot;
+    diagnosticEvents: DiagnosticEventInfo[];
 }
 
 export interface LineResult {
@@ -36,14 +38,64 @@ export interface LineResult {
     type: string;
     parselet: string;
     error?: string;
+    opcodeCount: number;
+    wasCached: boolean;
 }
 
 export interface OpcodeInfo { name: string; value: number; args: number[]; }
 export interface ConstantInfo { type: 'number' | 'string' | 'bigint' | 'hex'; value: any; index: number; }
 export interface PerformanceStats { lexerTime: number; parserTime: number; bytecodeTime: number; executionTime: number; totalTime: number; }
 export interface LineStats { lineNumber: number; stats: PerformanceStats; }
-export interface VmTraceStep { ip: number; opcodeName: string; opcode: number; stackDepth: number; instructionNumber: number; elapsedNs: number; }
-export interface DQMetrics { queryCount: number; pendingQueries: number; dataSources: number; cacheSize: number; }
+export interface VmStackValue { type: number; value: number | bigint | string | boolean | number[]; unit?: string; }
+export interface VmTraceStep { ip: number; opcodeName: string; opcode: number; stackDepth: number; instructionNumber: number; elapsedNs: number; stack: VmStackValue[]; }
+export interface DQMetrics { queryCount: number; pendingQueries: number; dataSources: number; cacheSize: number; dataSourceNames: string[]; }
+
+/** Cache snapshot entry for a single bytecode cache item */
+export interface BytecodeCacheEntry {
+    expression: string;
+    opcodesLength: number;
+    numbersLength: number;
+    stringsLength: number;
+    hasAsync: boolean;
+}
+
+/** Cache snapshot entry for a single line cache item */
+export interface LineCacheEntryInfo {
+    key: string;
+    lineNumber: number;
+    resultType: string;
+    resultValue: string;
+    reads: string[];
+    writeVar: string | null;
+}
+
+/** Async result cache snapshot per package */
+export interface AsyncCachePackageInfo {
+    packageId: string;
+    resolvedCount: number;
+    inFlightCount: number;
+    errorCount: number;
+    entries: Array<{ key: string; status: 'resolved' | 'in_flight' | 'error'; errorMessage?: string }>;
+}
+
+/** Full cache snapshot */
+export interface CacheSnapshot {
+    bytecode: BytecodeCacheEntry[];
+    lineCache: LineCacheEntryInfo[];
+    asyncCache: AsyncCachePackageInfo[];
+}
+
+/** Diagnostic event type with elapsedNs and expression */
+export interface DiagnosticEventInfo {
+    type: string;
+    /** Wall-clock timestamp (epoch ms) for the badge */
+    timestamp: number;
+    elapsedNs: number;
+    expression: string;
+    details: string;
+    /** Key used to group related events (e.g. the expression text for async events). */
+    groupKey: string;
+}
 export interface DagNode { id: string; label: string; type: string; lineNumber: number; }
 export interface DagEdge { source: string; target: string; }
 export interface MarkdownNode { id: string; type: string; content: string; children: MarkdownNode[]; hasRun: boolean; depth: number; result?: string; }
@@ -225,6 +277,298 @@ function extractStageTimings(events: readonly { type: string; elapsedNs: number 
     };
 }
 
+/**
+ * Run the engine with live streaming of async resolution events via
+ * the Web Streams API.
+ *
+ * After initial evaluation completes, keeps the engine alive and
+ * subscribes to batcher events. When async data resolves, re-evaluates
+ * the affected lines and pushes synthetic diagnostic events to the
+ * returned ReadableStream.
+ *
+ * The caller should cancel the stream (or its reader) when a new
+ * evaluation starts or the component unmounts to prevent leaks.
+ * Cancelling the stream disposes the engine.
+ */
+export function runEngineWithStreaming(
+    expression: string,
+    signal?: AbortSignal
+): { result: DebugResult; stream: ReadableStream<DiagnosticEventInfo> } {
+    const opcodeCountsByLine = new Map<number, number>();
+    let engine: ExpressionEngine | null = null;
+    let unsubAsyncListener: (() => void) | null = null;
+
+    // ── Synchronous evaluation data (collected before stream is returned) ──
+    const errors: string[] = [];
+    let rawTokens: Token[] = [];
+    let ast = '';
+    let output = '';
+    let outputType = 'unknown';
+    let opcodes: OpcodeInfo[] = [];
+    let constants: ConstantInfo[] = [];
+    let variables: string[] = [];
+    let markdownOutline: MarkdownNode[] = [];
+    let lineResults: LineResult[] = [];
+    let parselets: ParseletInfo[] = [];
+    let lastDebugEvents: readonly { type: string; elapsedNs: number }[] | null = null;
+    const lineEventSnapshots: { lineNumber: number; events: readonly { type: string; elapsedNs: number }[] }[] = [];
+    let cacheSnapshot: CacheSnapshot = { bytecode: [], lineCache: [], asyncCache: [] };
+
+    let abortHandler: (() => void) | null = null;
+
+    const stream = new ReadableStream<DiagnosticEventInfo>({
+        start: (controller) => {
+            const streamStartNs = performance.now() * 1e6;
+            let engineClosed = false;
+
+            // ── External abort (via AbortSignal) ──
+            if (signal?.aborted) {
+                controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+                return;
+            }
+            abortHandler = () => {
+                engineClosed = true;
+                if (unsubAsyncListener) {
+                    unsubAsyncListener();
+                    unsubAsyncListener = null;
+                }
+                if (engine) {
+                    engine.clear();
+                    engine = null;
+                }
+                controller.error(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+            };
+            if (signal) {
+                signal.addEventListener('abort', abortHandler, { once: true });
+            }
+
+            try {
+                engine = new ExpressionEngine('en', true, {
+                    diagnostic: { enabled: true, vmTraceEnabled: true },
+                });
+
+                // ── Subscribe to batcher events ──
+                unsubAsyncListener = engine.addAsyncListener((asyncEvent) => {
+                    if (engineClosed) return;
+
+                    if (asyncEvent.type === 'lines-updated') {
+                        const relNs = performance.now() * 1e6 - streamStartNs;
+                        for (const ln of asyncEvent.lineNumbers) {
+                            try {
+                                const lineText = (allLines[ln - 1] || '').trim();
+                                const reResult = engine!.evaluateLineWithDebug(ln, lineText);
+                                const resultValue = reResult.error
+                                    ? reResult.error
+                                    : formatValue(reResult.value);
+                                controller.enqueue({
+                                    type: 'async_resolved',
+                                    timestamp: Date.now(),
+                                    elapsedNs: relNs,
+                                    expression: lineText || `Line ${ln}`,
+                                    details: `Line ${ln} re-evaluated -> ${resultValue} (keys: ${asyncEvent.affectedQueryKeys.join(', ')})`,
+                                    groupKey: lineText || `Line ${ln}`,
+                                });
+                            } catch {
+                                controller.enqueue({
+                                    type: 'async_resolved',
+                                    timestamp: Date.now(),
+                                    elapsedNs: relNs,
+                                    expression: `Line ${ln}`,
+                                    details: `Line ${ln} re-evaluated (keys: ${asyncEvent.affectedQueryKeys.join(', ')})`,
+                                    groupKey: `Line ${ln}`,
+                                });
+                            }
+                        }
+                    } else if (asyncEvent.type === 'error') {
+                        const relNs = performance.now() * 1e6 - streamStartNs;
+                        controller.enqueue({
+                            type: 'async_error',
+                            timestamp: Date.now(),
+                            elapsedNs: relNs,
+                            expression: asyncEvent.queryKey,
+                            details: `${asyncEvent.packageId}: ${asyncEvent.error.message}`,
+                            groupKey: asyncEvent.queryKey,
+                        });
+                    }
+                });
+
+                // ── Evaluate all lines ──
+                markdownOutline = generateMarkdownOutline(expression);
+                const allLines = expression.split('\n');
+
+                for (let idx = 0; idx < allLines.length; idx++) {
+                    const trimmed = allLines[idx].trim();
+                    if (!trimmed) continue;
+                    const lineNum = idx + 1;
+
+                    const result = engine!.evaluateLineWithDebug(lineNum, trimmed);
+                    const parselet = (result.debug?.parselets?.[0] as any)?.parseletType ?? 'Expression';
+
+                    // Emit async_pending if the result is Pending
+                    if (result.value?.type === 12) { // ValueType.Pending
+                        const relNs = performance.now() * 1e6 - streamStartNs;
+                        controller.enqueue({
+                            type: 'async_pending',
+                            timestamp: Date.now(),
+                            elapsedNs: relNs,
+                            expression: trimmed,
+                            details: `Line ${lineNum}: awaiting async resolution for \`${trimmed}\``,
+                            groupKey: trimmed,
+                        });
+                    }
+
+                    if (result.debug?.events && result.debug.events.length > 0) {
+                        lastDebugEvents = result.debug.events;
+                        lineEventSnapshots.push({ lineNumber: lineNum, events: result.debug.events });
+                    }
+
+                    if (result.tokens) {
+                        const tokensWithLine = result.tokens.map(t => ({
+                            ...t,
+                            line: lineNum,
+                            col: (t as any).col ?? 0,
+                            lineBreaks: (t as any).lineBreaks ?? 0,
+                        } as Token));
+                        rawTokens.push(...tokensWithLine);
+                    }
+
+                    if (result.debug?.parselets) {
+                        for (const p of result.debug.parselets) {
+                            parselets.push({
+                                tokenType: p.tokenType,
+                                tokenValue: p.tokenValue,
+                                parseletType: p.parseletType,
+                                tokenOffset: p.tokenOffset,
+                            });
+                        }
+                    }
+
+                    let perLineOpCount = 0;
+                    if (result.program) {
+                        const opcodeArray = new Uint8Array(result.program.opcodes);
+                        let ip = 0;
+                        let thisLineOpcodeCount = 0;
+                        while (ip < opcodeArray.length) {
+                            const op = opcodeArray[ip];
+                            const name = getOpCodeName(op);
+                            const args = decodeOpcodeArgs(op, opcodeArray, ip);
+                            opcodes.push({ name, value: op, args });
+                            thisLineOpcodeCount++;
+                            ip += 1 + args.length;
+                        }
+                        perLineOpCount = thisLineOpcodeCount;
+                        opcodeCountsByLine.set(lineNum, thisLineOpcodeCount);
+
+                        const numbers = new Float64Array(result.program.numbers);
+                        const strings = result.program.strings;
+                        numbers.forEach((num, i) => { constants.push({ type: 'number', value: num, index: i }); });
+                        strings.forEach((str: string, i: number) => { constants.push({ type: 'string', value: str, index: i }); });
+
+                        ast = JSON.stringify({
+                            opcodes: opcodes.length,
+                            numbers: numbers.length,
+                            strings: strings.length,
+                            hasAsync: result.program.hasAsync,
+                        }, null, 2);
+                    }
+
+                    const wasCached = !(result.debug?.parselets && result.debug.parselets.length > 0) && result.tokens && result.tokens.length > 0;
+
+                    if (result.error) {
+                        lineResults.push({ lineNumber: lineNum, expression: trimmed, result: '', type: 'Error', parselet, error: result.error, opcodeCount: perLineOpCount, wasCached });
+                        errors.push(result.error);
+                    } else {
+                        lineResults.push({ lineNumber: lineNum, expression: trimmed, result: formatValue(result.value), type: formatType(result.value), parselet, opcodeCount: perLineOpCount, wasCached });
+                    }
+                }
+
+                if (lineResults.length > 0) {
+                    const last = lineResults[lineResults.length - 1];
+                    output = last.result || last.expression;
+                    outputType = last.error ? 'Error' : last.type;
+                }
+
+                markdownOutline = markdownOutline.map((node, idx) => {
+                    const lr = lineResults.find(r => r.lineNumber === idx + 1);
+                    return { ...node, hasRun: !!lr && !lr.error, result: lr ? lr.result : undefined };
+                });
+
+                const varTokens = rawTokens.filter(t => t.type === 'IDENT');
+                variables = [...new Set(varTokens.map(t => t.value))];
+
+                cacheSnapshot = (engine as any).getCacheSnapshot
+                    ? (engine as any).getCacheSnapshot()
+                    : { bytecode: [], lineCache: [], asyncCache: [] };
+            } catch (error) {
+                errors.push(error instanceof Error ? error.message : String(error));
+            }
+            // Note: stream stays open indefinitely — async events may arrive later.
+            // The consumer cancels the stream (via reader.cancel() or stream.pipeTo()) to dispose the engine.
+        },
+
+        cancel: () => {
+            if (abortHandler && signal) {
+                signal.removeEventListener('abort', abortHandler);
+            }
+            if (unsubAsyncListener) {
+                unsubAsyncListener();
+                unsubAsyncListener = null;
+            }
+            if (engine) {
+                engine.clear();
+                engine = null;
+            }
+        },
+    });
+
+    const stats: PerformanceStats = lastDebugEvents
+        ? extractStageTimings(lastDebugEvents)
+        : { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
+
+    const lineStats: LineStats[] = [];
+    let prevEventCount = 0;
+    for (const snap of lineEventSnapshots) {
+        const lineOnlyEvents = snap.events.slice(prevEventCount);
+        prevEventCount = snap.events.length;
+        lineStats.push({ lineNumber: snap.lineNumber, stats: extractLineTimings(lineOnlyEvents) });
+    }
+
+    const vmTrace: VmTraceStep[] = lastDebugEvents
+        ? lastDebugEvents
+            .filter(e => e.type === 'vm_step')
+            .map(e => {
+                const step = e as { type: 'vm_step'; ip: number; opcodeName: string; opcode: number; stackDepth: number; instructionNumber: number; elapsedNs: number };
+                return {
+                    ip: step.ip,
+                    opcodeName: step.opcodeName,
+                    opcode: step.opcode,
+                    stackDepth: step.stackDepth,
+                    instructionNumber: step.instructionNumber,
+                    elapsedNs: step.elapsedNs,
+                    stack: (step as any).stack ?? [],
+                };
+            })
+        : [];
+
+    const m = dataQueryService.getMetrics();
+    const dqMetrics: DQMetrics = { queryCount: m.queryCount, pendingQueries: m.pendingQueries, dataSources: m.dataSources, cacheSize: m.cacheSize, dataSourceNames: dataQueryService.getRegisteredSourceIds() };
+
+    const diagnosticEvents: DiagnosticEventInfo[] = lastDebugEvents
+        ? lastDebugEvents.map(e => ({
+            type: e.type,
+            timestamp: Date.now(),
+            elapsedNs: e.elapsedNs,
+            expression: (e as any).expression ?? '',
+            details: (e as any).details ?? '',
+            groupKey: (e as any).expression ?? '',
+        }))
+        : [];
+
+    const result: DebugResult = { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, lineStats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics, cacheSnapshot, diagnosticEvents };
+
+    return { result, stream };
+}
+
 export function runEngine(expression: string): DebugResult {
     const errors: string[] = [];
     let rawTokens: Token[] = [];
@@ -245,6 +589,8 @@ export function runEngine(expression: string): DebugResult {
     // for the aggregate timing.
     let lastDebugEvents: readonly { type: string; elapsedNs: number }[] | null = null;
     const lineEventSnapshots: { lineNumber: number; events: readonly { type: string; elapsedNs: number }[] }[] = [];
+    let cacheSnapshot: CacheSnapshot = { bytecode: [], lineCache: [], asyncCache: [] };
+    const opcodeCountsByLine = new Map<number, number>();
 
     try {
         const engine = new ExpressionEngine('en', true, {
@@ -268,18 +614,11 @@ export function runEngine(expression: string): DebugResult {
                 lineEventSnapshots.push({ lineNumber: lineNum, events: result.debug.events });
             }
 
-            if (result.error) {
-                lineResults.push({ lineNumber: lineNum, expression: trimmed, result: '', type: 'Error', parselet, error: result.error });
-                errors.push(result.error);
-            } else {
-                lineResults.push({ lineNumber: lineNum, expression: trimmed, result: formatValue(result.value), type: formatType(result.value), parselet });
-            }
-
             // Collect tokens
             if (result.tokens) {
                 const tokensWithLine = result.tokens.map(t => ({
                     ...t,
-                    line: (t as any).line ?? lineNum,
+                    line: lineNum,
                     col: (t as any).col ?? 0,
                     lineBreaks: (t as any).lineBreaks ?? 0,
                 } as Token));
@@ -298,16 +637,21 @@ export function runEngine(expression: string): DebugResult {
                 }
             }
 
+            let perLineOpCount = 0;
             if (result.program) {
                 const opcodeArray = new Uint8Array(result.program.opcodes);
                 let ip = 0;
+                let thisLineOpcodeCount = 0;
                 while (ip < opcodeArray.length) {
                     const op = opcodeArray[ip];
                     const name = getOpCodeName(op);
                     const args = decodeOpcodeArgs(op, opcodeArray, ip);
                     opcodes.push({ name, value: op, args });
+                    thisLineOpcodeCount++;
                     ip += 1 + args.length;
                 }
+                perLineOpCount = thisLineOpcodeCount;
+                opcodeCountsByLine.set(lineNum, thisLineOpcodeCount);
 
                 // Collect constants
                 const numbers = new Float64Array(result.program.numbers);
@@ -322,6 +666,15 @@ export function runEngine(expression: string): DebugResult {
                     strings: strings.length,
                     hasAsync: result.program.hasAsync,
                 }, null, 2);
+            }
+
+            const wasCached = !(result.debug?.parselets && result.debug.parselets.length > 0) && result.tokens && result.tokens.length > 0;
+
+            if (result.error) {
+                lineResults.push({ lineNumber: lineNum, expression: trimmed, result: '', type: 'Error', parselet, error: result.error, opcodeCount: perLineOpCount, wasCached });
+                errors.push(result.error);
+            } else {
+                lineResults.push({ lineNumber: lineNum, expression: trimmed, result: formatValue(result.value), type: formatType(result.value), parselet, opcodeCount: perLineOpCount, wasCached });
             }
         });
 
@@ -339,6 +692,11 @@ export function runEngine(expression: string): DebugResult {
         // Collect variables from tokens
         const varTokens = rawTokens.filter(t => t.type === 'IDENT');
         variables = [...new Set(varTokens.map(t => t.value))];
+
+        // Collect cache snapshot from engine internals (inside try block so engine is in scope)
+        cacheSnapshot = (engine as any).getCacheSnapshot
+            ? (engine as any).getCacheSnapshot()
+            : { bytecode: [], lineCache: [], asyncCache: [] };
     } catch (error) {
         errors.push(error instanceof Error ? error.message : String(error));
     }
@@ -372,13 +730,26 @@ export function runEngine(expression: string): DebugResult {
                     stackDepth: step.stackDepth,
                     instructionNumber: step.instructionNumber,
                     elapsedNs: step.elapsedNs,
+                    stack: (step as any).stack ?? [],
                 };
             })
         : [];
 
     // Collect real DataQueryService metrics for the worker telemetry panel
     const m = dataQueryService.getMetrics();
-    const dqMetrics: DQMetrics = { queryCount: m.queryCount, pendingQueries: m.pendingQueries, dataSources: m.dataSources, cacheSize: m.cacheSize };
+    const dqMetrics: DQMetrics = { queryCount: m.queryCount, pendingQueries: m.pendingQueries, dataSources: m.dataSources, cacheSize: m.cacheSize, dataSourceNames: dataQueryService.getRegisteredSourceIds() };
 
-    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, lineStats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics };
+    // Collect diagnostic events from the last run
+    const diagnosticEvents: DiagnosticEventInfo[] = lastDebugEvents
+        ? lastDebugEvents.map(e => ({
+            type: e.type,
+            timestamp: Date.now(),
+            elapsedNs: e.elapsedNs,
+            expression: (e as any).expression ?? '',
+            details: (e as any).details ?? '',
+            groupKey: (e as any).expression ?? '',
+        }))
+        : [];
+
+    return { tokens: rawTokens, rawTokens, ast, output, outputType, errors, opcodes, constants, variables, stats, lineStats, markdownOutline, lineResults, parselets, vmTrace, dqMetrics, cacheSnapshot, diagnosticEvents };
 }

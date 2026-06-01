@@ -85,6 +85,43 @@ export const exampleData: ExampleCategory[] = [
     ]
   },
   {
+    name: "Currency",
+    description: "Currency conversion and arithmetic",
+    examples: [
+      { name: "USD to EUR", expression: "100 USD to EUR", description: "Convert US dollars to Euros" },
+      { name: "USD to GBP", expression: "250 USD to GBP", description: "Convert US dollars to British pounds" },
+      { name: "EUR to JPY", expression: "500 EUR to JPY", description: "Convert Euros to Japanese yen" },
+      { name: "GBP to USD", expression: "75 GBP to USD", description: "Convert British pounds to US dollars" },
+      { name: "Multi-currency add", expression: "100 USD + 200 EUR", description: "Add two different currencies (converts to first)" },
+      { name: "EUR to GBP", expression: "1000 EUR to GBP", description: "Convert Euros to British pounds" },
+      { name: "USD to JPY", expression: "50 USD to JPY", description: "Convert US dollars to Japanese yen" },
+      { name: "GBP to EUR", expression: "200 GBP to EUR", description: "Convert British pounds to Euros" },
+      { name: "Small conversion", expression: "5 USD to EUR", description: "Small amount conversion" },
+      { name: "Large conversion", expression: "10000 USD to JPY", description: "Large amount currency conversion" },
+      { name: "USD to EUR + tax", expression: "100 USD to EUR + 20%", description: "Convert then add 20% tax" },
+      { name: "EUR to GBP - discount", expression: "500 EUR to GBP - 15%", description: "Convert then apply 15% discount" },
+      { name: "Tax on multi-currency", expression: "(100 USD + 200 EUR) + 8%", description: "Add currencies then apply tax" },
+    ]
+  },
+  {
+    name: "CryptoCurrency",
+    description: "Cryptocurrency conversion and arithmetic (BTC, ETH, SOL, etc.)",
+    examples: [
+      { name: "BTC to USD", expression: "1 BTC to USD", description: "Convert Bitcoin to US dollars" },
+      { name: "ETH to USD", expression: "5 ETH to USD", description: "Convert Ethereum to US dollars" },
+      { name: "ETH to BTC", expression: "10 ETH to BTC", description: "Convert Ethereum to Bitcoin" },
+      { name: "BTC to ETH", expression: "0.5 BTC to ETH", description: "Convert Bitcoin to Ethereum" },
+      { name: "SOL to USD", expression: "100 SOL to USD", description: "Convert Solana to US dollars" },
+      { name: "BTC to EUR", expression: "0.1 BTC to EUR", description: "Convert Bitcoin to Euros" },
+      { name: "DOGE to USD", expression: "10000 DOGE to USD", description: "Convert Dogecoin to US dollars" },
+      { name: "Multi-crypto add", expression: "0.01 BTC + 1 ETH", description: "Add Bitcoin and Ethereum (converts to first)" },
+      { name: "Crypto + tax", expression: "1 BTC to USD + 10%", description: "Convert then add 10% capital gains tax" },
+      { name: "Crypto profit", expression: "(2 ETH to USD) - (1 ETH to USD)", description: "Profit from buying low and selling high" },
+      { name: "Small crypto", expression: "0.0001 BTC to USD", description: "Small fraction conversion" },
+      { name: "BTC + ETH to USD", expression: "(0.01 BTC + 1 ETH) to USD", description: "Add crypto then convert to USD" },
+    ]
+  },
+  {
     name: "Functions",
     description: "Built-in function calls",
     examples: [
@@ -159,6 +196,21 @@ export const fullDocumentExamples: FullDocumentExample[] = [
     name: "Fitness Body Measurements",
     description: "Track body measurements with unit conversions",
     content: ":heightCm = 175\n:weightKg = 78\n:heightM = :heightCm to m\n:bmi = :weightKg / (:heightM ^ 2)\n:chestCm = 102\n:waistCm = 86\n:chestIn = :chestCm to in\n:waistIn = :waistCm to in\n:waistToHip = :waistCm / :chestCm\n:weightLbs = :weightKg to lb"
+  },
+  {
+    name: "Currency Travel Budget",
+    description: "Plan a trip budget with live currency conversions",
+    content: ":flightCostUSD = 1200\n:hotelPerNightEUR = 150\n:nights = 5\n:hotelTotalEUR = :hotelPerNightEUR * :nights\n:hotelTotalUSD = :hotelTotalEUR to USD\n:foodPerDayEUR = 60\n:foodTotalEUR = :foodPerDayEUR * :nights\n:foodTotalUSD = :foodTotalEUR to USD\n:totalEUR = :hotelTotalEUR + :foodTotalEUR\n:totalTripUSD = :flightCostUSD + :hotelTotalUSD + :foodTotalUSD\n:spendingMoneyEUR = 200\n:spendingMoneyUSD = :spendingMoneyEUR to USD\n:grandTotalUSD = :totalTripUSD + :spendingMoneyUSD"
+  },
+  {
+    name: "Currency Import Cost",
+    description: "Calculate import cost with conversion, tax, and duty",
+    content: ":itemPriceEUR = 450\n:shippingEUR = 35\n:subtotalEUR = :itemPriceEUR + :shippingEUR\n:subtotalUSD = :subtotalEUR to USD\n:importDuty = 5% of :subtotalUSD\n:afterDuty = :subtotalUSD + :importDuty\n:salesTax = 10% of :afterDuty\n:totalCostUSD = :afterDuty + :salesTax"
+  },
+  {
+    name: "Crypto Portfolio Tracker",
+    description: "Track a diversified crypto portfolio with profit/loss",
+    content: ":btcAmount = 0.05\n:ethAmount = 2\n:solAmount = 50\n:btcValueUSD = :btcAmount BTC to USD\n:ethValueUSD = :ethAmount ETH to USD\n:solValueUSD = :solAmount SOL to USD\n:totalValueUSD = :btcValueUSD + :ethValueUSD + :solValueUSD\n:btcAllocation = :btcValueUSD / :totalValueUSD\n:ethAllocation = :ethValueUSD / :totalValueUSD\n:solAllocation = :solValueUSD / :totalValueUSD\n:tradeProfitBTC = 0.01 BTC to USD\n:tradeProfitETH = 0.5 ETH to USD\n:totalProfit = :tradeProfitBTC + :tradeProfitETH\n:profitAfterTax = :totalProfit - 15%"
   },
   {
     name: "Trip Budget & Timeline",
