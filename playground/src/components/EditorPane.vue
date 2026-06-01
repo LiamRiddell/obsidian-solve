@@ -59,6 +59,13 @@ const resultField = StateField.define<RangeSet<Decoration>>({
   provide: f => EditorView.decorations.from(f),
 });
 
+/**
+ * StateField for syntax highlighting of solve expressions via the
+ * SolveHighlightProvider. Wraps recognized token sequences (numbers,
+ * operators, identifiers, etc.) with CSS class decorations.
+ *
+ * Recomputes on every document change via `tr.docChanged`.
+ */
 const solveHighlightPlugin = StateField.define<RangeSet<Decoration>>({
   create(state) {
     const builder = new RangeSetBuilder<Decoration>();
@@ -86,6 +93,60 @@ const solveHighlightPlugin = StateField.define<RangeSet<Decoration>>({
   provide: f => EditorView.decorations.from(f),
 });
 
+/**
+ * StateField for highlighting inline solve regions (`s`...``) within the editor.
+ *
+ * Inline solves are expressions embedded in markdown lines using the syntax
+ * `s`2 + 3``. These regions get a distinct background decoration so users
+ * can visually identify where inline solves are active.
+ *
+ * The pattern matches `s` followed by any non-backtick content, then a
+ * closing backtick. Highlights are applied as a background tint with rounded
+ * corners, similar to a code-fence inline visual.
+ *
+ * Recomputes on every document change.
+ */
+const inlineSolveField = StateField.define<RangeSet<Decoration>>({
+  create(state) {
+    const builder = new RangeSetBuilder<Decoration>();
+    const doc = state.doc;
+    const re = /s`[^`]*`/g;
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i);
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(line.text)) !== null) {
+        builder.add(
+          line.from + m.index,
+          line.from + m.index + m[0].length,
+          Decoration.mark({ class: 'cm-inline-solve' }),
+        );
+      }
+    }
+    return builder.finish();
+  },
+  update(decorations, tr) {
+    if (!tr.docChanged) return decorations;
+    const builder = new RangeSetBuilder<Decoration>();
+    const doc = tr.state.doc;
+    const re = /s`[^`]*`/g;
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i);
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(line.text)) !== null) {
+        builder.add(
+          line.from + m.index,
+          line.from + m.index + m[0].length,
+          Decoration.mark({ class: 'cm-inline-solve' }),
+        );
+      }
+    }
+    return builder.finish();
+  },
+  provide: f => EditorView.decorations.from(f),
+});
+
 /* ── Editor Setup ─────────────────────────────────────────────── */
 const editorRef = ref<HTMLElement | null>(null);
 let editorView: EditorView | null = null;
@@ -104,7 +165,7 @@ onMounted(() => {
     state: EditorState.create({
       doc: initialDoc,
       extensions: [
-        basicSetup, markdown(), oneDark, solveHighlightPlugin, resultField,
+        basicSetup, markdown(), oneDark, solveHighlightPlugin, inlineSolveField, resultField,
         placeholder('Enter an expression…  e.g. 10 + 5 * 2'),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
@@ -173,3 +234,16 @@ watch(() => engine.currentResult, (result) => {
   }
 });
 </script>
+
+<style scoped>
+:deep(.cm-inline-solve) {
+  background: rgba(155, 123, 236, 0.12);
+  border-radius: 3px;
+  border: 1px solid rgba(155, 123, 236, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(155, 123, 236, 0.08);
+  transition: background 0.2s;
+}
+:deep(.cm-inline-solve:hover) {
+  background: rgba(155, 123, 236, 0.2);
+}
+</style>

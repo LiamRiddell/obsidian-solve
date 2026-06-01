@@ -736,20 +736,62 @@ const stageRenderers: Record<
     const o = stage.output as any;
     const tokens = (o.tokens ?? []) as Token[];
     if (!tokens.length) return h("span", { class: "empty" }, "—");
-    return h(
-      "span",
-      {},
-      tokens.slice(0, 8).map((t: Token) =>
-        h(
-          "span",
-          {
+
+    // Token classification breakdown: count by category
+    const categories: Record<string, { count: number; types: string[] }> = {
+      Literals: { count: 0, types: [] },
+      Operators: { count: 0, types: [] },
+      Keywords: { count: 0, types: [] },
+      Identifiers: { count: 0, types: [] },
+      Other: { count: 0, types: [] },
+    };
+
+    const literalTypes = ["NUMBER", "STRING", "BIGINT", "HEX", "BOOLEAN", "PERCENTAGE"];
+    const operatorTypes = ["PLUS", "MINUS", "STAR", "SLASH", "CARET", "PERCENT", "STAR_STAR",
+      "AMP", "PIPE", "CARET", "TILDE", "LT", "GT", "EQ_EQ", "BANG_EQ", "LT_EQ", "GT_EQ",
+      "AMP_AMP", "PIPE_PIPE", "BANG", "ASSIGN"];
+    const keywordTypes = ["KW_TRUE", "KW_FALSE", "KW_IF", "KW_ELSE", "KW_LET", "KW_CONST",
+      "KW_FN", "KW_RETURN"];
+
+    for (const t of tokens) {
+      const type = String(t.type || "").toUpperCase();
+      if (literalTypes.includes(type)) { categories.Literals.count++; categories.Literals.types.push(type); }
+      else if (operatorTypes.includes(type)) { categories.Operators.count++; categories.Operators.types.push(type); }
+      else if (keywordTypes.includes(type)) { categories.Keywords.count++; categories.Keywords.types.push(type); }
+      else if (type === "IDENT") { categories.Identifiers.count++; categories.Identifiers.types.push(type); }
+      else { categories.Other.count++; categories.Other.types.push(type); }
+    }
+
+    const nonEmpty = Object.entries(categories).filter(([, v]) => v.count > 0);
+
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: "6px", width: "100%" } }, [
+      // Token chips (first 8)
+      h("span", { style: { display: "flex", flexWrap: "wrap", gap: "3px" } },
+        tokens.slice(0, 8).map((t: Token) =>
+          h("span", {
             class: `token token-${String(t.type || "unknown").toLowerCase()}`,
             style: { fontSize: "9px", cursor: "default" },
-          },
-          t.value,
+            title: `Type: ${t.type}\nValue: ${t.value}\nKeyword/Phrase resolution`,
+          }, t.value),
         ),
       ),
-    );
+      // Classification breakdown chips
+      h("span", { style: { display: "flex", flexWrap: "wrap", gap: "4px" } },
+        nonEmpty.map(([label, info]) =>
+          h("span", {
+            style: {
+              fontSize: "8px",
+              padding: "1px 6px",
+              borderRadius: "3px",
+              background: label === "Keywords" ? "rgba(155,123,236,0.15)" : "rgba(107,107,117,0.15)",
+              color: label === "Keywords" ? "#9b7bec" : "#6b6b75",
+              border: "1px solid rgba(107,107,117,0.2)",
+            },
+            title: `${label}: ${info.types.join(", ")}`,
+          }, `${label}: ${info.count}`),
+        ),
+      ),
+    ]);
   },
 
   // ── Stage 4: Normalizer (compact output) ──────────────────────────────
@@ -827,11 +869,21 @@ const stageRenderers: Record<
   cache_check(stage) {
     const o = stage.output as any;
     const color = o.hit ? "#4ec9b0" : "#5ac8fa";
-    return h(
-      "span",
-      { style: { color, fontSize: "10px", fontWeight: "600" } },
-      o.hit ? "Hit" : "Miss",
-    );
+    const cached = result.value?.wasCached ?? false;
+    const totalOps = result.value?.opcodes?.length ?? 0;
+    return h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" } }, [
+      h("span", { style: { color, fontSize: "10px", fontWeight: "600" } },
+        o.hit ? "Cache Hit" : "Cache Miss",
+      ),
+      h("span", { style: { fontSize: "9px", color: "#6b6b75" } }, [
+        o.hit
+          ? `Cache size: ${o.cacheSize ?? "?"} entries`
+          : `Key: ${(o.cacheKey ?? "").slice(0, 30)}`,
+      ]),
+      ...(cached ? [h("span", { style: { fontSize: "9px", color: "#4ec9b0" } },
+        `${totalOps} opcodes served from cache`,
+      )] : []),
+    ]);
   },
 
   // ── Stage 8: Parser (Pratt) ───────────────────────────────────────────
@@ -946,11 +998,25 @@ const stageRenderers: Record<
     const o = stage.output as any;
     if (o.error)
       return h("span", { style: { color: "#f48771" } }, o.error);
-    return h(
-      "span",
-      { style: { color: "#29ce99" } },
-      o.formattedValue ?? String(o.rawValue ?? "—"),
-    );
+
+    const raw = String(o.rawValue ?? "—");
+    const formatted = o.formattedValue ?? raw;
+
+    if (raw === formatted) {
+      return h("span", { style: { color: "#29ce99", fontSize: "14px", fontWeight: "700" } }, formatted);
+    }
+
+    // Show raw value + formatted string side by side
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: "4px", alignItems: "center" } }, [
+      h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } }, [
+        h("span", { style: { fontSize: "9px", color: "#6b6b75", textTransform: "uppercase", letterSpacing: "0.5px" } }, "Raw:"),
+        h("span", { style: { color: "#dcdcaa", fontSize: "11px", fontFamily: "'JetBrains Mono', monospace" } }, raw),
+      ]),
+      h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } }, [
+        h("span", { style: { fontSize: "9px", color: "#6b6b75", textTransform: "uppercase", letterSpacing: "0.5px" } }, "Formatted:"),
+        h("span", { style: { color: "#29ce99", fontSize: "14px", fontWeight: "700" } }, formatted),
+      ]),
+    ]);
   },
 
   // ── Stage 15: Pipeline End ────────────────────────────────────────────

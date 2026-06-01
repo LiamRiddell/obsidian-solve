@@ -20,6 +20,7 @@
       <WorkersTab v-else-if="ui.activeTab === 'workers'" :key="engine.runId" />
       <CacheTab v-else-if="ui.activeTab === 'cache'" :key="engine.runId" />
       <DagTab v-else-if="ui.activeTab === 'dag'" :key="engine.runId" />
+      <ParseletRegistryTab v-else-if="ui.activeTab === 'parselets'" :key="engine.runId" />
       <StreamTab v-else-if="ui.activeTab === 'stream'" :key="engine.runId" />
     </KeepAlive>
   </section>
@@ -37,6 +38,7 @@ import WorkersTab from './WorkersTab.vue';
 import CacheTab from './CacheTab.vue';
 import StreamTab from './StreamTab.vue';
 import DagTab from './DagTab.vue';
+import ParseletRegistryTab from './ParseletRegistryTab.vue';
 
 const ui = useUiStore();
 const engine = useEngineStore();
@@ -50,6 +52,7 @@ const tabs: { id: ActiveTab; label: string }[] = [
   { id: 'perf', label: 'Perf' },
   { id: 'workers', label: 'Workers' },
   { id: 'cache', label: 'Cache' },
+  { id: 'parselets', label: 'Parselets' },
   { id: 'stream', label: 'Stream' },
 ];
 </script>
