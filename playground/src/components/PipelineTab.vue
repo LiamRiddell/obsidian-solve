@@ -126,14 +126,25 @@
         :aria-expanded="constantsExpanded"
       >
         <span class="constants-section-title">📦 Constants</span>
-        <span class="constants-section-total">{{ allConstants.length }} total</span>
+        <span class="constants-section-total">{{ filteredTotal }}</span>
         <span class="constants-section-chevron" :class="{ expanded: constantsExpanded }">▸</span>
+      </div>
+
+      <!-- Filter input (visible when expanded) -->
+      <div v-if="constantsExpanded" class="constants-filter-row" @click.stop>
+        <input
+          class="constants-filter-input"
+          type="text"
+          v-model="constantsFilter"
+          placeholder="Filter by index or value…"
+          spellcheck="false"
+        />
       </div>
 
       <template v-if="constantsExpanded">
         <!-- Per-type groups -->
         <div
-          v-for="group in constantGroups"
+          v-for="group in filteredConstantGroups"
           :key="group.type"
           class="constant-group"
         >
@@ -145,7 +156,7 @@
           >
             <span class="constant-group-dot" :class="'dot-' + group.type"></span>
             <span class="constant-group-label">{{ group.label }}</span>
-            <span class="constant-group-count">{{ group.items.length }}</span>
+            <span class="constant-group-count">{{ group.matchCount ?? group.items.length }}</span>
             <span class="constant-group-chevron" :class="{ expanded: group.expanded }">▸</span>
           </div>
 
@@ -158,7 +169,7 @@
             </thead>
             <tbody>
               <tr
-                v-for="item in group.items"
+                v-for="item in (group.filteredItems ?? group.items)"
                 :key="item.index"
                 class="constant-row"
                 :class="'row-' + group.type"
@@ -178,6 +189,29 @@
         </div>
       </template>
     </div>
+
+    <!-- Variables (matching vanilla renderVariables) -->
+    <div v-if="allVariables.length > 0" class="variables-section">
+      <div
+        class="variables-section-header"
+        @click="variablesExpanded = !variablesExpanded"
+        role="button"
+        :aria-expanded="variablesExpanded"
+      >
+        <span class="variables-section-title">📋 Variables</span>
+        <span class="variables-section-total">{{ allVariables.length }} variable{{ allVariables.length !== 1 ? 's' : '' }}</span>
+        <span class="variables-section-chevron" :class="{ expanded: variablesExpanded }">▸</span>
+      </div>
+
+      <div v-if="variablesExpanded" class="variables-chips">
+        <span
+          v-for="v in allVariables"
+          :key="v"
+          class="variable-chip"
+          :title="'Variable: :' + v"
+        >:{{ v }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -185,7 +219,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useEngineStore } from '../stores/engine.js';
 import { usePipelineStore } from '../stores/pipeline.js';
-import { fmt, escHtml } from '../utils.js';
+import { fmt, escHtml, describeOpcode } from '../utils.js';
 import PipelineStage from './PipelineStage.vue';
 import type { Token, LineResult, ConstantInfo } from '../engine.js';
 
@@ -380,14 +414,39 @@ const parserOutput = computed(() => {
 });
 
 const compilerOutput = computed(() => {
-  const names = [...new Set((result.value?.opcodes ?? []).map(o => o.name))];
-  if (selectedLine.value === null && totalLines.value > 1 && names.length > 0) {
-    return '<span style="color:#4ec9b0;font-size:10px">' + names.length + ' unique opcode' + (names.length > 1 ? 's' : '') + ' (' + (result.value?.opcodes?.length ?? 0) + ' total)</span>';
+  const ops = result.value?.opcodes ?? [];
+  if (ops.length === 0) {
+    return wasCached.value
+      ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>'
+      : '—';
   }
-  const first = names.slice(0, 4);
-  return first.length > 0
-    ? first.map(n => '<span class="token token-func" style="font-size:9px;cursor:default">' + escHtml(n) + '</span>').join(' ')
-    : (wasCached.value ? '<span style="color:#6b6b75;font-size:10px">Skipped (cache hit)</span>' : '—');
+
+  // Build the opcodes disassembly table (matching vanilla renderOpcodesDisasm)
+  let html = '<div class="pipeline-opcodes-wrap">';
+  html += '<table class="pipeline-opcodes-table"><thead><tr>';
+  html += '<th class="pop-col-ip">IP</th>';
+  html += '<th class="pop-col-hex">Hex</th>';
+  html += '<th class="pop-col-mnem">Mnemonic</th>';
+  html += '<th class="pop-col-oper">Operand</th>';
+  html += '<th class="pop-col-desc">Description</th>';
+  html += '</tr></thead><tbody>';
+
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i];
+    const hex = '0x' + op.value.toString(16).toUpperCase().padStart(2, '0');
+    const operand = op.args.length > 0 ? op.args.join(', ') : '—';
+    const desc = describeOpcode(op.value, op.args);
+    html += '<tr>';
+    html += '<td class="pop-col-ip">' + i + '</td>';
+    html += '<td class="pop-col-hex">' + escHtml(hex) + '</td>';
+    html += '<td class="pop-col-mnem">' + escHtml(op.name) + '</td>';
+    html += '<td class="pop-col-oper">' + escHtml(operand) + '</td>';
+    html += '<td class="pop-col-desc">' + escHtml(desc) + '</td>';
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
+  return html;
 });
 
 const asyncOutput = computed(() => {
@@ -437,10 +496,26 @@ interface ConstantGroup {
   readonly label: string;
   readonly items: readonly ConstantInfo[];
   expanded: boolean;
+  /** Filtered subset when filter is active; undefined means no filter applied. */
+  filteredItems?: readonly ConstantInfo[];
+  matchCount?: number;
 }
 
 const allConstants = computed<ConstantInfo[]>(() => result.value?.constants ?? []);
 const constantsExpanded = ref(false);
+const constantsFilter = ref('');
+
+/** Total count display: shows filtered match count when filtering, full total otherwise. */
+const filteredTotal = computed(() => {
+  const f = constantsFilter.value.trim();
+  if (!f) return allConstants.value.length + ' total';
+  const matchCount = filteredConstantGroups.value.reduce((sum, g) => sum + (g.matchCount ?? 0), 0);
+  return matchCount + ' / ' + allConstants.value.length + ' total';
+});
+
+/* ── Variables display ──────────────────────────────────────────── */
+const allVariables = computed<string[]>(() => result.value?.variables ?? []);
+const variablesExpanded = ref(false);
 
 /** Group constants by type, preserving engine order within each group. */
 const constantGroups = computed<ConstantGroup[]>(() => {
@@ -466,5 +541,29 @@ const constantGroups = computed<ConstantGroup[]>(() => {
       items: groups.get(t)!,
       expanded: false,
     }));
+});
+
+/** Filtered groups: when a filter query is active, narrow items and auto-expand matching groups. */
+const filteredConstantGroups = computed<ConstantGroup[]>(() => {
+  const query = constantsFilter.value.trim().toLowerCase();
+  if (!query) return constantGroups.value;
+
+  return constantGroups.value
+    .map(g => {
+      const matches = g.items.filter(item => {
+        // Match by index (exact)
+        if (String(item.index) === query) return true;
+        // Match by value substring (case-insensitive)
+        if (String(item.value).toLowerCase().includes(query)) return true;
+        return false;
+      });
+      return {
+        ...g,
+        filteredItems: matches,
+        matchCount: matches.length,
+        expanded: matches.length > 0 || g.expanded,
+      };
+    })
+    .filter(g => (g.matchCount ?? 0) > 0);
 });
 </script>
