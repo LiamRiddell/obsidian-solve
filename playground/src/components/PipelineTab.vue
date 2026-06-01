@@ -38,7 +38,7 @@
           :executed="hasResult"
           :has-error="isErrorStage(stage)"
           :skipped="stage.skipped"
-          :model-value="stagesCollapsed[i] ?? true"
+          :model-value="stagesCollapsed[i] ?? false"
           :pulsing="pulsingStages.includes(i)"
           @update:model-value="(v: boolean) => onStageToggle(i, v)"
         >
@@ -280,12 +280,12 @@ const numStages = computed(() => displayStages.value.length || 8);
  * `true` = collapsed (body hidden), `false` = expanded (body visible).
  * Initialized to all-collapsed and resized when the stage count changes.
  */
-const stagesCollapsed = ref<boolean[]>(Array(numStages.value).fill(true));
+const stagesCollapsed = ref<boolean[]>(Array(numStages.value).fill(false));
 
 watch(numStages, (n) => {
   if (stagesCollapsed.value.length !== n) {
     const old = stagesCollapsed.value;
-    stagesCollapsed.value = Array.from({ length: n }, (_, i) => old[i] ?? true);
+    stagesCollapsed.value = Array.from({ length: n }, (_, i) => old[i] ?? false);
   }
 });
 
