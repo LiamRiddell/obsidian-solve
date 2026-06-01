@@ -36,30 +36,30 @@ const engine = useEngineStore();
 
 const tabs: { id: ActiveTab; label: string }[] = [
   { id: 'tokens', label: 'Output' },
+  { id: 'normalizer', label: 'Normalizer' },
   { id: 'flow', label: 'Pipeline' },
+  { id: 'cache', label: 'Cache' },
+  { id: 'parselets', label: 'Parselets' },
   { id: 'bytecode', label: 'Bytecode' },
   { id: 'vmtrace', label: 'VM Trace' },
   { id: 'dag', label: 'DAG' },
-  { id: 'perf', label: 'Perf' },
   { id: 'workers', label: 'Workers' },
-  { id: 'cache', label: 'Cache' },
-  { id: 'parselets', label: 'Parselets' },
+  { id: 'perf', label: 'Perf' },
   { id: 'stream', label: 'Stream' },
-  { id: 'normalizer', label: 'Normalizer' },
 ];
 
 const tabComponents: Record<ActiveTab, any> = {
   tokens: OutputTab,
+  normalizer: NormalizerTab,
   flow: PipelineTab,
+  parselets: ParseletRegistryTab,
   bytecode: BytecodeTab,
   vmtrace: VmTraceTab,
   dag: DagTab,
-  perf: PerfTab,
-  workers: WorkersTab,
   cache: CacheTab,
-  parselets: ParseletRegistryTab,
+  workers: WorkersTab,
+  perf: PerfTab,
   stream: StreamTab,
-  normalizer: NormalizerTab,
 };
 
 const currentTabComponent = computed(() => tabComponents[ui.activeTab]);
