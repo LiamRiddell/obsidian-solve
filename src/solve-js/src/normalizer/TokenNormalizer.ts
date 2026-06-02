@@ -32,6 +32,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch, TokenFusion } from "./NormalizerRule";
+import { PhraseTrie } from "./PhraseTrie";
 
 //#endregion
 //#region ─── NormalizerOptions — Configuration ────────────────────────────────
@@ -111,6 +112,51 @@ export function createFusedToken(
 }
 
 //#endregion
+//#region ─── NON_WORD_TOKEN_TYPES — Type-guard skip set ────────────────────────
+
+/**
+ * Token types that can NEVER start a multi-word phrase.
+ *
+ * Used by {@link normalize} to skip the PhraseTrie walk entirely at
+ * positions where the token type makes phrase matching impossible.
+ * This avoids even the O(1) {@link PhraseTrie.canStart} check.
+ *
+ * Types NOT in this set (IDENT, KEYWORD, FUNC, UNIT, and any custom
+ * types registered by packages) still pass through to the trie for
+ * a full match attempt.
+ */
+// ── Non-word type ID lookup table (flat Uint8Array — true O(1) array index) ──
+//
+// Index = token typeId, value = 1 if non-word (skip trie), 0 otherwise.
+// Array indexing avoids ALL hashing: no Set.has(), no Map.get(), no string ops.
+//
+// Custom types from packages get IDs beyond the table length, so the bounds
+// check `tid < TABLE.length` safely passes them through to the trie.
+//
+// Arithmetic operators (PLUS, MINUS, STAR, SLASH, CARET, MOD, PERCENT) are
+// intentionally excluded: in keyword locales the lexer maps "times"→STAR,
+// "divide"→SLASH etc., and those tokens CAN start phrases like "times by".
+const NON_WORD_NAMES = [
+	"NUMBER", "HEX", "BIGINT", "FLOAT",
+	"LSHIFT", "RSHIFT", "BIT_AND", "BIT_OR", "BIT_XOR",
+	"LPAREN", "RPAREN", "LBRACKET", "RBRACKET",
+	"COMMA", "COLON", "EQUALS", "PIPE", "AMPERSAND", "AT",
+	"SEMICOLON", "QUESTION", "EXCLAMATION",
+	"EOF", "WS", "NEWLINE",
+] as const;
+
+const NON_WORD_TABLE: Uint8Array = (() => {
+	// Resolve all non-word type names to their numeric IDs
+	const ids = NON_WORD_NAMES.map(n => tokenTypeId(n));
+	// Size the table to cover the largest ID + 1
+	const len = Math.max(...ids) + 1;
+	const table = new Uint8Array(len);
+	// Mark non-word type positions
+	for (const id of ids) table[id] = 1;
+	return table;
+})();
+
+//#endregion
 //#region ─── TokenNormalizer Class ─────────────────────────────────────────────
 
 /**
@@ -140,6 +186,13 @@ export function createFusedToken(
 export class TokenNormalizer {
   /** Registered rules, unsorted. Sorted on each normalize() call. */
   private rules: NormalizerRule[] = [];
+
+  /**
+   * Phrase trie for single-pass multi-word phrase fusion.
+   * Tried at each token position BEFORE other rules — the trie walk
+   * is O(depth) vs O(R × W) for separate rule matching.
+   */
+  private phraseTrie = new PhraseTrie();
 
   /** Merged options with defaults applied. */
   private options: Required<NormalizerOptions>;
@@ -182,16 +235,45 @@ export class TokenNormalizer {
 
   /**
    * Remove all registered rules, resetting the normalizer to its initial state.
+   * Also clears the phrase trie.
    */
   clear(): void {
     this.rules = [];
+    this.phraseTrie = new PhraseTrie();
   }
 
   /**
-   * Get the number of currently registered rules.
+   * Get the number of currently registered rules (excludes phrase trie entries).
    */
   get ruleCount(): number {
     return this.rules.length;
+  }
+
+  // ── Phrase Registration ────────────────────────────────────────────────
+
+  /**
+   * Register a multi-word phrase for fusion into a single compound token.
+   *
+   * This is the preferred way to add phrase patterns. It inserts into the
+   * internal {@link PhraseTrie}, which collapses all phrase rules into a
+   * single O(depth) trie walk per position — no separate rule scanning.
+   *
+   * @param phrase    - Multi-word phrase (e.g., "to the power of", "abyssal whip")
+   * @param tokenType - Target token type after fusion (e.g., "CARET", "ITEM")
+   */
+  addPhrase(phrase: string, tokenType: string): void {
+    this.phraseTrie.addPhrase(phrase, tokenType);
+  }
+
+  /**
+   * Check whether a word can start any registered phrase.
+   *
+   * Used by {@link implicitMultiplyRule} to suppress `*` insertion
+   * before phrase-starting identifiers (e.g., "2 power of 3" → `2 ^ 3`,
+   * not `2 * power of 3`). Delegates to {@link PhraseTrie.canStart}.
+   */
+  canStartPhrase(word: string): boolean {
+    return this.phraseTrie.canStart(word);
   }
 
   // ── Normalization ────────────────────────────────────────────────────────
@@ -223,9 +305,8 @@ export class TokenNormalizer {
    * @throws {Error} If the normalized token count exceeds maxTokens
    */
   normalize(tokens: Token[], onFusion?: (fusion: TokenFusion) => void): Token[] {
-    // ── Early exits: nothing to normalize ──
+    // ── Early exit: nothing to normalize ──
     if (tokens.length === 0) return tokens;
-    if (this.rules.length === 0) return tokens;
 
     // ── Sort rules once per normalize call ──
     const sorted = [...this.rules].sort((a, b) => b.priority - a.priority);
@@ -248,6 +329,30 @@ export class TokenNormalizer {
       // Single-pass left-to-right greedy walk
       while (pos < current.length) {
         let matched = false;
+
+        // ── Fast path: phrase trie (O(depth) single walk vs O(R × W) per rule) ──
+        // O(1) type-guard: skip trie entirely for tokens that can't start phrases.
+        // Flat Uint8Array indexed by typeId — no hashing, no Set lookup, true O(1).
+        const tid = current[pos].typeId;
+        if (tid >= NON_WORD_TABLE.length || NON_WORD_TABLE[tid] === 0) {
+          const trieMatch = this.phraseTrie.matchAt(current, pos);
+          if (trieMatch) {
+            const sourceTokens = current.slice(pos, pos + trieMatch.consumed);
+            for (const rt of trieMatch.replacement) {
+              result.push(rt);
+            }
+            if (trieMatch.consumed > 1 && trieMatch.replacement.length === 1) {
+              fusionHandler({
+                rule: trieMatch.ruleName ?? "phrase-trie",
+                sourceTokens,
+                fusedToken: trieMatch.replacement[0],
+              });
+            }
+            pos += trieMatch.consumed;
+            changed = true;
+            continue; // trie matched — skip other rules at this position (no need to set matched)
+          }
+        }
 
         // Try every rule in priority order at this position
         for (const rule of sorted) {

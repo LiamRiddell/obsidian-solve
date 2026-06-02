@@ -8,13 +8,19 @@ import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/pars
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { ValueType } from "@solve-js/vm/Value";
-import { TokenNormalizer, createBuiltinNormalizerRules } from "@solve-js/normalizer";
+import { TokenNormalizer, implicitMultiplyRule, BUILTIN_PHRASES } from "@solve-js/normalizer";
 
 /** Shared normalizer instance for phrase fusion */
 const normalizer = new TokenNormalizer();
-for (const rule of createBuiltinNormalizerRules()) {
-  normalizer.register(rule);
+// Register built-in phrases into the PhraseTrie (single-pass O(depth) matching)
+for (const [phrase, tokenType] of Object.entries(BUILTIN_PHRASES)) {
+  normalizer.addPhrase(phrase, tokenType);
 }
+// Register implicit multiply rule with trie-backed phrase guard
+normalizer.register(implicitMultiplyRule(
+  50,
+  (word) => normalizer.canStartPhrase(word),
+));
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);

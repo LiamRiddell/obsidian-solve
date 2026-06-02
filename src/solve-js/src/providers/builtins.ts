@@ -134,7 +134,7 @@ import { CurrencyAsyncResolver } from "@solve-js/uom/CurrencyResolver";
 
 export const CURRENCY_PACKAGE: ISolvePackage = {
   name: "solve-currency",
-  asyncResolver: new CurrencyAsyncResolver(),
+  asyncResolvers: [new CurrencyAsyncResolver()],
   prefixParselets: [
     { tokenType: "DOLLAR", parselet: new CurrencySymbolParselet() },
     { tokenType: "POUND", parselet: new CurrencySymbolParselet() },

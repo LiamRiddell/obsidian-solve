@@ -78,11 +78,22 @@ export class ResolverRegistry {
 
 	/**
 	 * Register an async resolver.
-	 * Overwrites any existing resolver with the same namespace.
+	 *
+	 * Each resolver must have a unique `namespace`. If a resolver with the
+	 * same namespace is already registered, the old one is destroyed and
+	 * replaced (with a console warning). Packages that need multiple async
+	 * operations should use `asyncResolvers: [...]` with distinct namespaces
+	 * (e.g., `"weather:current"`, `"weather:forecast"`).
 	 */
 	register(resolver: IAsyncResolver): void {
 		// Clean up previous resolver with same namespace if any
 		if (this.resolvers.has(resolver.namespace)) {
+			console.warn(
+				`[ResolverRegistry] Namespace "${resolver.namespace}" already registered. ` +
+				`Destroying old resolver and overwriting. Use distinct namespaces ` +
+				`(e.g., "${resolver.namespace}:sub1", "${resolver.namespace}:sub2") ` +
+				`to avoid collisions when a package needs multiple async resolvers.`,
+			);
 			this.resolvers.get(resolver.namespace)!.destroy();
 		}
 		this.resolvers.set(resolver.namespace, resolver);

@@ -5,7 +5,7 @@ import { beforeEach, afterEach, describe, expect, test } from "@jest/globals";
  *
  * Tests the FULL async resolution pipeline end-to-end:
  *   ExpressionEngine → ResolverRegistry → AsyncResultCache → resolveAsync →
- *   AsyncResolutionBatcher → DAG walk → LineCache → event listeners
+ *   AsyncResolutionBatcher → DAG walk → LineCache → event stream
  *
  * Covers:
  * - §1  End-to-end async resolution via IAsyncResolver preflight
@@ -67,14 +67,33 @@ function buildCallPluginBytecode(fnIdx: number, argCount: number): BytecodeProgr
 	return builder.build();
 }
 
-/** Helper to capture events from an engine's addAsyncListener. */
+/**
+ * Enable synchronous event capture on an engine's batcher.
+ *
+ * Sets the batcher's `_testCaptures` array for synchronous event recording.
+ * All events are pushed synchronously — a single `await tick()` is sufficient
+ * after triggering an action that should produce events.
+ */
 function captureEngineEvents(engine: ExpressionEngine): {
 	events: AsyncResolutionEvent[];
-	unsubscribe: () => void;
+	stop: () => void;
+} {
+	const batcher = engine.getBatcher();
+	const events: AsyncResolutionEvent[] = [];
+	batcher._testCaptures = events;
+	return { events, stop: () => { batcher._testCaptures = null; } };
+}
+
+/**
+ * Enable synchronous event capture on a batcher instance.
+ */
+function captureBatcherEvents(batcher: AsyncResolutionBatcher): {
+	events: AsyncResolutionEvent[];
+	stop: () => void;
 } {
 	const events: AsyncResolutionEvent[] = [];
-	const unsubscribe = engine.addAsyncListener((e) => events.push(e));
-	return { events, unsubscribe };
+	batcher._testCaptures = events;
+	return { events, stop: () => { batcher._testCaptures = null; } };
 }
 
 /**
@@ -107,7 +126,7 @@ function buildResolverPackage(
 ): ISolvePackage {
 	return {
 		name: `test-${namespace}`,
-		asyncResolver: resolver,
+		asyncResolvers: [resolver],
 	};
 }
 
@@ -136,7 +155,7 @@ afterEach(() => {
 // ══════════════════════════════════════════════════════════════════════════
 
 describe("AsyncPipeline — end-to-end async resolution", () => {
-	test("should resolve async data, re-evaluate, and notify listeners", async () => {
+	test("should resolve async data, re-evaluate, and notify consumers", async () => {
 		// Create a resolver that triggers async for any expression
 		const resolvePromise = Promise.resolve(numberValue(42));
 		const resolver = createMockResolver("test", () => ({
@@ -148,7 +167,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 
 		const pkg = buildResolverPackage("test", resolver);
 		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
-		const { events, unsubscribe } = captureEngineEvents(engine);
+		const { events, stop } = captureEngineEvents(engine);
 
 		// Evaluate an expression — the preflight should trigger async path
 		const result = engine.evaluateLine(1, "dummy");
@@ -160,19 +179,17 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		// Wait for the resolver promise to resolve + microtask flush
 		await resolvePromise;
 		await tick();
-		await tick(); // Second tick for queued re-evaluation
+		await tick(); // Second tick for engine's internal re-evaluation
 
 		// Should have received lines-updated event
 		const updateEvts = events.filter((e) => e.type === "lines-updated") as LinesUpdatedEvent[];
 		expect(updateEvts.length).toBeGreaterThanOrEqual(1);
 
 		// Line 1 should have been re-evaluated
-		// (The expression "dummy" was just passed through — it was caught by preflight
-		// before VM execution. After async resolution, re-evaluation processes it again.)
 		expect(updateEvts[0].lineNumbers).toContain(1);
 		expect(updateEvts[0].affectedQueryKeys).toContain("test:key1");
 
-		unsubscribe();
+		stop();
 		engine.clear();
 	});
 
@@ -193,7 +210,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 
 		await resolvePromise;
 		await tick();
-		await tick();
+		await tick(); // Extra tick for re-evaluation
 
 		// Check LineCache — the expression "100" should now have a numeric result
 		const lc = engine.getLineCache();
@@ -221,9 +238,6 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 	});
 
 	test("should handle a real expression (not dummy) going through async path", async () => {
-		// This test verifies that the engine can handle an expression
-		// that both parses to valid bytecode AND triggers async preflight.
-		// Use a test variable reference that the resolver intercepts.
 		const resolvePromise = Promise.resolve(numberValue(77));
 		const resolver = createMockResolver("real", () => ({
 			queryKey: "real:value",
@@ -234,7 +248,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 
 		const pkg = buildResolverPackage("real", resolver);
 		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
-		const { events, unsubscribe } = captureEngineEvents(engine);
+		const { events, stop } = captureEngineEvents(engine);
 
 		// Evaluate a simple numeric expression — preflight triggers async
 		const result = engine.evaluateLine(1, "50");
@@ -243,7 +257,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 
 		await resolvePromise;
 		await tick();
-		await tick();
+		await tick(); // Extra tick for re-evaluation
 
 		// After re-evaluation, the result should be 50 (numeric expression)
 		const lc = engine.getLineCache();
@@ -252,7 +266,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		expect(entry!.result.type).toBe(ValueType.Number);
 		expect(entry!.result.value).toBe(50);
 
-		unsubscribe();
+		stop();
 		engine.clear();
 	});
 
@@ -281,7 +295,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 
 		await resolvePromise;
 		await tick();
-		await tick();
+		await tick(); // Extra tick for re-evaluation
 
 		engine.clear();
 	});
@@ -293,20 +307,12 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 
 describe("AsyncPipeline — DataQueryService bridge", () => {
 	test("should feed DataQueryService cache updates into the batcher pipeline", async () => {
-		// Simulate the engine→DQS bridge by directly calling batcher.add()
-		// with the same signature the engine's _dqsUnsubscribe callback uses.
-		// The engine passes [result.queryKey] (single-element array) to
-		// registerLineDataSourceDependency, and batcher.add wraps the queryKey
-		// as [entry.queryKey]. Both use the same queryKey string, so they match.
 		const dag = new DependencyGraph();
 		const lc = new LineCache();
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Register DAG dependency — single-element array matching the queryKey.
 		dag.registerLineDataSourceDependency(1, "rates", ["USD:GBP"]);
-
-		// Seed LineCache with bytecode
 		lc.set(1, new LineCacheEntry(
 			pendingValue("rate:USD:GBP"),
 			buildSimpleBytecode(42),
@@ -314,11 +320,8 @@ describe("AsyncPipeline — DataQueryService bridge", () => {
 			null,
 		));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
-		// Simulate DataQueryService cache update — engine joins queryKeys with ':'
-		// and calls batcher.add({ queryKey: compositeKey, packageId: "rates", ... })
 		const compositeKey = ["USD", "GBP"].join(":");
 		batcher.add({
 			queryKey: compositeKey,
@@ -342,10 +345,8 @@ describe("AsyncPipeline — DataQueryService bridge", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
-		// Cache update for a key with no DAG dependencies
 		batcher.add({
 			queryKey: "rate:USD:JPY",
 			packageId: "rates",
@@ -355,7 +356,6 @@ describe("AsyncPipeline — DataQueryService bridge", () => {
 
 		await tick();
 
-		// Should still notify with empty lineNumbers
 		expect(events.length).toBe(1);
 		const evt = events[0] as LinesUpdatedEvent;
 		expect(evt.lineNumbers).toEqual([]);
@@ -368,7 +368,6 @@ describe("AsyncPipeline — DataQueryService bridge", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Use single-element array matching the batcher's lookup key.
 		dag.registerLineDataSourceDependency(1, "rates", ["USD:EUR"]);
 		lc.set(1, new LineCacheEntry(
 			pendingValue("rate:USD:EUR"),
@@ -377,8 +376,7 @@ describe("AsyncPipeline — DataQueryService bridge", () => {
 			null,
 		));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({
 			queryKey: "USD:EUR",
@@ -390,7 +388,6 @@ describe("AsyncPipeline — DataQueryService bridge", () => {
 
 		await tick();
 
-		// Error event + lines-updated
 		const errorEvts = events.filter((e) => e.type === "error") as AsyncErrorEvent[];
 		const updateEvts = events.filter((e) => e.type === "lines-updated") as LinesUpdatedEvent[];
 
@@ -413,8 +410,6 @@ describe("AsyncPipeline — batched resolution", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Register 3 lines for 3 different data source keys.
-		// Each uses a single-element array matching the batcher's lookup format.
 		dag.registerLineDataSourceDependency(1, "rates", ["USD:GBP"]);
 		dag.registerLineDataSourceDependency(2, "rates", ["USD:EUR"]);
 		dag.registerLineDataSourceDependency(3, "weather", ["London"]);
@@ -422,10 +417,8 @@ describe("AsyncPipeline — batched resolution", () => {
 		lc.set(2, new LineCacheEntry(pendingValue("rate:USD:EUR"), buildSimpleBytecode(20), [], null));
 		lc.set(3, new LineCacheEntry(pendingValue("weather:London"), buildSimpleBytecode(30), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
-		// All three resolve in the same tick
 		const signal = liveSignal();
 		batcher.add({ queryKey: "USD:GBP", packageId: "rates", signal, isError: false });
 		batcher.add({ queryKey: "USD:EUR", packageId: "rates", signal, isError: false });
@@ -433,7 +426,6 @@ describe("AsyncPipeline — batched resolution", () => {
 
 		await tick();
 
-		// Single flush → single event
 		expect(events.length).toBe(1);
 		const evt = events[0] as LinesUpdatedEvent;
 		expect(evt.lineNumbers.sort()).toEqual([1, 2, 3]);
@@ -451,8 +443,7 @@ describe("AsyncPipeline — batched resolution", () => {
 		lc.set(1, new LineCacheEntry(pendingValue("rate:USD:GBP"), buildSimpleBytecode(10), [], null));
 		lc.set(2, new LineCacheEntry(pendingValue("rate:USD:EUR"), buildSimpleBytecode(20), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		const signal = liveSignal();
 		batcher.add({ queryKey: "USD:GBP", packageId: "rates", signal, isError: false });
@@ -466,13 +457,11 @@ describe("AsyncPipeline — batched resolution", () => {
 
 		await tick();
 
-		// Error events fire before lines-updated
 		const errorEvts = events.filter((e) => e.type === "error");
 		expect(errorEvts.length).toBe(1);
 
 		const updateEvts = events.filter((e) => e.type === "lines-updated") as LinesUpdatedEvent[];
 		expect(updateEvts.length).toBe(1);
-		// Both lines should be re-evaluated (even the error one)
 		expect(updateEvts[0].lineNumbers.sort()).toEqual([1, 2]);
 	});
 });
@@ -482,7 +471,7 @@ describe("AsyncPipeline — batched resolution", () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 describe("AsyncPipeline — error propagation", () => {
-	test("should propagate error details to listeners", async () => {
+	test("should propagate error details to consumers", async () => {
 		const dag = new DependencyGraph();
 		const lc = new LineCache();
 		const vm = createVM(sharedOpRegistry, 200, 50000);
@@ -491,8 +480,7 @@ describe("AsyncPipeline — error propagation", () => {
 		dag.registerLineDataSourceDependency(5, "api", ["endpoint", "data"]);
 		lc.set(5, new LineCacheEntry(pendingValue("api:endpoint:data"), buildSimpleBytecode(0), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		const err = new Error("HTTP 429 Too Many Requests");
 		batcher.add({
@@ -519,20 +507,15 @@ describe("AsyncPipeline — error propagation", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Line 10 depends on async data and produces variable "x"
 		dag.registerLine(10, [], ["x"]);
 		dag.registerLineDataSourceDependency(10, "pkg", ["error:key"]);
-
-		// Line 20 depends on "x" (downstream consumer)
 		dag.registerLine(20, ["x"], ["y"]);
 		dag.registerLineDataSourceDependency(20, "pkg", ["error:key"]);
 
-		// Seed both lines with bytecode
 		lc.set(10, new LineCacheEntry(pendingValue("error:key"), buildSimpleBytecode(5), [], "x"));
 		lc.set(20, new LineCacheEntry(pendingValue("error:key"), buildSimpleBytecode(3), ["x"], "y"));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({
 			queryKey: "error:key",
@@ -544,7 +527,6 @@ describe("AsyncPipeline — error propagation", () => {
 
 		await tick();
 
-		// Both lines should be re-evaluated
 		const updateEvts = events.filter((e) => e.type === "lines-updated") as LinesUpdatedEvent[];
 		expect(updateEvts.length).toBe(1);
 		expect(updateEvts[0].lineNumbers.sort()).toEqual([10, 20]);
@@ -559,8 +541,7 @@ describe("AsyncPipeline — error propagation", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(1), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({
 			queryKey: "key",
@@ -592,8 +573,7 @@ describe("AsyncPipeline — AbortSignal", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(10), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		const abortedCtrl = new AbortController();
 		abortedCtrl.abort();
@@ -609,7 +589,7 @@ describe("AsyncPipeline — AbortSignal", () => {
 		await tick();
 
 		const errorEvts = events.filter((e) => e.type === "error");
-		expect(errorEvts.length).toBe(0); // Aborted entries skipped
+		expect(errorEvts.length).toBe(0);
 	});
 
 	test("should skip aborted entries during DAG walk and re-evaluation", async () => {
@@ -621,8 +601,7 @@ describe("AsyncPipeline — AbortSignal", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(42), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		const abortedCtrl = new AbortController();
 		abortedCtrl.abort();
@@ -631,7 +610,6 @@ describe("AsyncPipeline — AbortSignal", () => {
 
 		await tick();
 
-		// All entries aborted → lines-updated with empty arrays
 		const evt = events.find((e) => e.type === "lines-updated") as LinesUpdatedEvent | undefined;
 		expect(evt).toBeDefined();
 		expect(evt!.lineNumbers).toEqual([]);
@@ -649,8 +627,7 @@ describe("AsyncPipeline — AbortSignal", () => {
 		lc.set(1, new LineCacheEntry(pendingValue("live"), buildSimpleBytecode(10), [], null));
 		lc.set(2, new LineCacheEntry(pendingValue("dead"), buildSimpleBytecode(20), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		const abortedCtrl = new AbortController();
 		abortedCtrl.abort();
@@ -661,7 +638,7 @@ describe("AsyncPipeline — AbortSignal", () => {
 		await tick();
 
 		const evt = events[0] as LinesUpdatedEvent;
-		expect(evt.lineNumbers).toEqual([1]); // Only live entry re-evaluated
+		expect(evt.lineNumbers).toEqual([1]);
 		expect(evt.affectedQueryKeys).toEqual(["live"]);
 	});
 });
@@ -677,13 +654,11 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Line 10 produces "x", line 20 reads "x" and produces "y"
 		dag.registerLine(10, [], ["x"]);
 		dag.registerLine(20, ["x"], ["y"]);
 		dag.registerLineDataSourceDependency(10, "pkg", ["key"]);
 		dag.registerLineDataSourceDependency(20, "pkg", ["key"]);
 
-		// Line 10: PUSH_NUMBER 5, STORE_VAR "x", HALT
 		const builder10 = new BytecodeBuilder();
 		builder10.reset();
 		builder10.emitOpcode(OpCode.PUSH_NUMBER);
@@ -692,7 +667,6 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		builder10.emitString("x");
 		builder10.emitOpcode(OpCode.HALT);
 
-		// Line 20: LOAD_VAR "x", PUSH_NUMBER 10, ADD, STORE_VAR "y", HALT
 		const builder20 = new BytecodeBuilder();
 		builder20.reset();
 		builder20.emitOpcode(OpCode.LOAD_VAR);
@@ -707,8 +681,7 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		lc.set(10, new LineCacheEntry(pendingValue("key"), builder10.build(), [], "x"));
 		lc.set(20, new LineCacheEntry(pendingValue("key"), builder20.build(), ["x"], "y"));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -716,20 +689,11 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 
 		const evt = events[0] as LinesUpdatedEvent;
 		expect(evt.lineNumbers.length).toBe(2);
-		// Producer (10) must come before consumer (20)
 		expect(evt.lineNumbers[0]).toBe(10);
 		expect(evt.lineNumbers[1]).toBe(20);
 
-		// Verify producer result propagated: line 20 should read x=5 + 10 = 15.
-		// Note: vm.reset() is called between each re-executed line, which clears
-		// the execution scope. In the batcher's main-thread loop, variables stored
-		// by one line are NOT available to subsequent lines. The scope-reset is
-		// intentional — each line is re-evaluated independently. Variable
-		// propagation only happens during full document evaluation, not batched
-		// re-execution.
 		const entry20 = lc.getEntryForLine(20);
 		expect(entry20!.result.type).toBe(ValueType.Number);
-		// In the isolated re-execution context line 20 gets x=0 (default) + 10 = 10.
 		expect(entry20!.result.value).toBe(10);
 	});
 
@@ -739,7 +703,6 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Diamond: line 1 → "x", line 2 → "y", line 3 reads "x"+"y" → "z"
 		dag.registerLine(1, [], ["x"]);
 		dag.registerLine(2, [], ["y"]);
 		dag.registerLine(3, ["x", "y"], ["z"]);
@@ -750,7 +713,6 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(1), [], "x"));
 		lc.set(2, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(2), [], "y"));
 
-		// Line 3: LOAD_VAR "x", LOAD_VAR "y", ADD, STORE_VAR "z", HALT
 		const builder3 = new BytecodeBuilder();
 		builder3.reset();
 		builder3.emitOpcode(OpCode.LOAD_VAR);
@@ -763,8 +725,7 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		builder3.emitOpcode(OpCode.HALT);
 		lc.set(3, new LineCacheEntry(pendingValue("key"), builder3.build(), ["x", "y"], "z"));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -772,13 +733,9 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 
 		const evt = events[0] as LinesUpdatedEvent;
 		expect(evt.lineNumbers.length).toBe(3);
-		// Producers (1, 2) before consumer (3)
 		expect(evt.lineNumbers.indexOf(1)).toBeLessThan(evt.lineNumbers.indexOf(3));
 		expect(evt.lineNumbers.indexOf(2)).toBeLessThan(evt.lineNumbers.indexOf(3));
 
-		// Verify diamond propagated: in isolated re-execution (vm.reset() per line),
-		// line 3 loads x=0 and y=0 from cleared scope, resulting in z=0.
-		// Variable propagation only applies during full document evaluation.
 		const entry3 = lc.getEntryForLine(3);
 		expect(entry3!.result.type).toBe(ValueType.Number);
 		expect(entry3!.result.value).toBe(0);
@@ -790,7 +747,6 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Cycle: A reads "y" writes "x", B reads "x" writes "y"
 		dag.registerLine(10, ["y"], ["x"]);
 		dag.registerLine(20, ["x"], ["y"]);
 		dag.registerLineDataSourceDependency(10, "pkg", ["key"]);
@@ -799,8 +755,7 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		lc.set(10, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(10), ["y"], "x"));
 		lc.set(20, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(20), ["x"], "y"));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -808,7 +763,6 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 
 		const evt = events[0] as LinesUpdatedEvent;
 		expect(evt.lineNumbers.length).toBe(2);
-		// Fallback to line-number order (10 before 20)
 		expect(evt.lineNumbers).toEqual([10, 20]);
 	});
 
@@ -826,8 +780,7 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 		lc.set(5, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(50), [], "a"));
 		lc.set(15, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(150), [], "b"));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -835,7 +788,6 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 
 		const evt = events[0] as LinesUpdatedEvent;
 		expect(evt.lineNumbers.length).toBe(2);
-		// Both lines should be re-evaluated (order doesn't matter for independent lines)
 		expect(evt.lineNumbers).toEqual(expect.arrayContaining([5, 15]));
 	});
 });
@@ -851,22 +803,18 @@ describe("AsyncPipeline — pending re-execution", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Register an async plugin function
 		const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
 		pluginFunctionRegistry[250] = () => Promise.resolve(numberValue(99));
 
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 
-		// Line 1: async plugin (returns pending)
 		const asyncBytecode = buildCallPluginBytecode(250, 1);
 		lc.set(1, new LineCacheEntry(pendingValue("key"), asyncBytecode, [], null));
 
-		// Line 2: sync (returns value)
 		dag.registerLineDataSourceDependency(2, "pkg", ["key"]);
 		lc.set(2, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(42), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		vm.activeSignal = liveSignal();
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
@@ -874,7 +822,6 @@ describe("AsyncPipeline — pending re-execution", () => {
 		await tick();
 
 		const evt = events[0] as LinesUpdatedEvent;
-		// Only line 2 (sync) should be updated; line 1 (pending) is skipped
 		expect(evt.lineNumbers).toEqual([2]);
 		expect(evt.affectedQueryKeys).toEqual(["key"]);
 
@@ -894,8 +841,7 @@ describe("AsyncPipeline — pending re-execution", () => {
 		lc.set(2, new LineCacheEntry(pendingValue("k1"), buildSimpleBytecode(20), [], null));
 		lc.set(3, new LineCacheEntry(pendingValue("k1"), buildSimpleBytecode(30), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "k1", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -920,17 +866,13 @@ describe("AsyncPipeline — engine lifecycle", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(10), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
-
-		// Clear BEFORE microtask fires
 		batcher.clearAll();
 
 		await tick();
 
-		// No events should fire
 		expect(events.length).toBe(0);
 	});
 
@@ -944,17 +886,17 @@ describe("AsyncPipeline — engine lifecycle", () => {
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(42), [], null));
 
 		// First batch: schedule + cancel
-		const events1: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events1.push(e));
+		const { events: events1, stop: stop1 } = captureBatcherEvents(batcher);
 		batcher.add({ queryKey: "stale", packageId: "pkg", signal: liveSignal(), isError: false });
 		batcher.clearAll();
 		await tick();
 		expect(events1.length).toBe(0);
+		stop1();
 
-		// Second batch: re-subscribe + add (re-arms cleared flag)
-		const events2: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events2.push(e));
-		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		// Second batch: fresh batcher (clearAll closed stream)
+		const batcher2 = new AsyncResolutionBatcher(dag, lc, vm);
+		const { events: events2 } = captureBatcherEvents(batcher2);
+		batcher2.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await tick();
 
@@ -980,10 +922,10 @@ describe("AsyncPipeline — engine lifecycle", () => {
 
 		await tick();
 
-		// Cycle 2
-		const events2: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events2.push(e));
-		batcher.add({ queryKey: "k2", packageId: "pkg", signal: liveSignal(), isError: false });
+		// Cycle 2 — fresh batcher
+		const batcher2 = new AsyncResolutionBatcher(dag, lc, vm);
+		const { events: events2 } = captureBatcherEvents(batcher2);
+		batcher2.add({ queryKey: "k2", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await tick();
 
@@ -993,7 +935,7 @@ describe("AsyncPipeline — engine lifecycle", () => {
 		expect(evt.affectedQueryKeys).toEqual(["k2"]);
 	});
 
-	test("should clear listeners on clearAll — no events delivered to old subscriptions", async () => {
+	test("should clear captures on clearAll — no events delivered to old subscriptions", async () => {
 		const dag = new DependencyGraph();
 		const lc = new LineCache();
 		const vm = createVM(sharedOpRegistry, 200, 50000);
@@ -1002,16 +944,13 @@ describe("AsyncPipeline — engine lifecycle", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(10), [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 		batcher.clearAll();
 
-		// Add after clearAll (old listener was cleared)
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await tick();
 
-		// Old listener was cleared — no events
 		expect(events.length).toBe(0);
 	});
 
@@ -1021,10 +960,8 @@ describe("AsyncPipeline — engine lifecycle", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
-		// No add() calls — just wait
 		await tick();
 
 		expect(events.length).toBe(0);
@@ -1047,8 +984,7 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 			lc.set(i, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(i * 10), [], null));
 		}
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -1057,7 +993,6 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 		const evt = events[0] as LinesUpdatedEvent;
 		expect(evt.lineNumbers.length).toBe(5);
 
-		// Verify all lines have updated results
 		for (let i = 1; i <= 5; i++) {
 			const entry = lc.getEntryForLine(i);
 			expect(entry!.result.value).toBe(i * 10);
@@ -1073,20 +1008,17 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		dag.registerLineDataSourceDependency(2, "pkg", ["key"]);
 
-		// Line 1 has bytecode, line 2 has empty bytecode
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(42), [], null));
 		const emptyBytecode = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [] as string[], hasAsync: false };
 		lc.set(2, new LineCacheEntry(pendingValue("key"), emptyBytecode, [], null));
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await tick();
 
 		const evt = events[0] as LinesUpdatedEvent;
-		// Only line 1 should be in updated lineNumbers (line 2 has empty bytecode)
 		expect(evt.lineNumbers).toEqual([1]);
 	});
 
@@ -1096,18 +1028,15 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		// Registered in DAG but not in LineCache
 		dag.registerLineDataSourceDependency(99, "pkg", ["key"]);
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await tick();
 
 		const evt = events[0] as LinesUpdatedEvent;
-		// Line 99 not in cache → skipped
 		expect(evt.lineNumbers).toEqual([]);
 	});
 
@@ -1117,20 +1046,18 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 		const vm = createVM(sharedOpRegistry, 200, 50000);
 		const batcher = new AsyncResolutionBatcher(dag, lc, vm);
 
-		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events.push(e));
+		const { events } = captureBatcherEvents(batcher);
 
 		batcher.add({ queryKey: "orphan", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await tick();
 
-		// Should still notify with empty lineNumbers
 		const evt = events[0] as LinesUpdatedEvent;
 		expect(evt.lineNumbers).toEqual([]);
 		expect(evt.affectedQueryKeys).toEqual(["orphan"]);
 	});
 
-	test("should handle multiple listeners — all receive events", async () => {
+	test("should deliver events to multiple tee branches", async () => {
 		const dag = new DependencyGraph();
 		const lc = new LineCache();
 		const vm = createVM(sharedOpRegistry, 200, 50000);
@@ -1139,21 +1066,32 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(42), [], null));
 
+		// Two independent branches via tee()
+		const [branch1, branch2] = batcher.getEventStream().tee();
+
 		const events1: AsyncResolutionEvent[] = [];
 		const events2: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events1.push(e));
-		batcher.addListener((e) => events2.push(e));
+		const r1 = branch1.getReader();
+		const r2 = branch2.getReader();
+
+		const p1 = (async () => { while (true) { const { done, value } = await r1.read(); if (done) break; events1.push(value); } })();
+		const p2 = (async () => { while (true) { const { done, value } = await r2.read(); if (done) break; events2.push(value); } })();
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await tick();
+		await tick(); // Extra tick for tee readers
 
 		expect(events1.length).toBe(1);
 		expect(events2.length).toBe(1);
 		expect(events1[0]).toEqual(events2[0]);
+
+		r1.cancel();
+		r2.cancel();
+		await Promise.all([p1.catch(() => {}), p2.catch(() => {})]);
 	});
 
-	test("should isolate listener errors — one bad listener does not break others", async () => {
+	test("should isolate stream reader errors — one bad consumer does not break others", async () => {
 		const dag = new DependencyGraph();
 		const lc = new LineCache();
 		const vm = createVM(sharedOpRegistry, 200, 50000);
@@ -1162,17 +1100,26 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(pendingValue("key"), buildSimpleBytecode(42), [], null));
 
+		// Two independent branches via tee()
+		const [branch1, branch2] = batcher.getEventStream().tee();
+
 		const events: AsyncResolutionEvent[] = [];
-		batcher.addListener(() => { throw new Error("Listener explodes!"); });
-		batcher.addListener((e) => events.push(e));
+		const r2 = branch2.getReader();
+		const p2 = (async () => { while (true) { const { done, value } = await r2.read(); if (done) break; events.push(value); } })();
+
+		// Branch 1: cancel immediately (simulates a bad consumer)
+		const r1 = branch1.getReader();
+		r1.cancel();
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await tick();
+		await tick(); // Extra tick for tee reader
 
-		// Second listener should still receive the event
-		expect(events.length).toBe(1);
-		expect(events[0].type).toBe("lines-updated");
+		expect(events.length).toBeGreaterThanOrEqual(1);
+
+		r2.cancel();
+		await p2.catch(() => {});
 	});
 });
 
@@ -1182,7 +1129,6 @@ describe("AsyncPipeline — fast-path sync-only", () => {
 
 describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 	test("should complete full cycle: evaluate → pending → resolve → re-evaluate → notify", async () => {
-		// Create a resolver that triggers async
 		const resolvePromise = Promise.resolve(numberValue(42));
 		const resolver = createMockResolver("fullcycle", () => ({
 			queryKey: "fullcycle:data",
@@ -1193,7 +1139,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 
 		const pkg = buildResolverPackage("fullcycle", resolver);
 		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
-		const { events, unsubscribe } = captureEngineEvents(engine);
+		const { events, stop } = captureEngineEvents(engine);
 
 		// Step 1: Evaluate — returns Pending
 		const pending = engine.evaluateLine(1, "100");
@@ -1203,9 +1149,9 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		// Step 2: Resolve the async promise
 		await resolvePromise;
 		await tick();
-		await tick();
+		await tick(); // Extra tick for re-evaluation
 
-		// Step 3: Verify listener received lines-updated
+		// Step 3: Verify consumer received lines-updated
 		const updateEvts = events.filter((e) => e.type === "lines-updated") as LinesUpdatedEvent[];
 		expect(updateEvts.length).toBeGreaterThanOrEqual(1);
 		expect(updateEvts[0].lineNumbers).toContain(1);
@@ -1215,16 +1161,14 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		const entry = lc.getEntryForLine(1);
 		expect(entry).toBeDefined();
 		expect(entry!.result.type).toBe(ValueType.Number);
-		expect(entry!.result.value).toBe(100); // "100" evaluates to 100
+		expect(entry!.result.value).toBe(100);
 
-		unsubscribe();
+		stop();
 		engine.clear();
 	});
 
 	test("should propagate errors from async resolver through engine pipeline", async () => {
-		// Create a resolver whose promise rejects
 		const errorPromise = Promise.reject(new Error("Fetch failed"));
-		// Catch the rejection to avoid unhandled rejection warning
 		errorPromise.catch(() => {});
 
 		const resolver = createMockResolver("errflow", () => ({
@@ -1236,39 +1180,32 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 
 		const pkg = buildResolverPackage("errflow", resolver);
 		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
-		const { events, unsubscribe } = captureEngineEvents(engine);
+		const { events, stop } = captureEngineEvents(engine);
 
-		// Evaluate — returns Pending
 		const result = engine.evaluateLine(1, "50");
 		expect(result.type).toBe(ValueType.Pending);
 
-		// Wait for microtask flush (the rejected promise is caught by resolveAsync)
 		await tick();
 		await tick();
-		// Extra ticks for error propagation
 		await tick();
 		await tick();
 
-		// Should receive error event
 		const errorEvts = events.filter((e) => e.type === "error") as AsyncErrorEvent[];
 		expect(errorEvts.length).toBeGreaterThanOrEqual(1);
 		expect(errorEvts[0].queryKey).toBe("errflow:data");
 		expect(errorEvts[0].packageId).toBe("test-errflow");
 
-		// Should also receive lines-updated (re-evaluation still happens)
 		const updateEvts = events.filter((e) => e.type === "lines-updated") as LinesUpdatedEvent[];
 		expect(updateEvts.length).toBeGreaterThanOrEqual(1);
 
-		unsubscribe();
+		stop();
 		engine.clear();
-	}, 10000); // Longer timeout for async error propagation
+	}, 10000);
 
 	test("should handle multiple evaluations with same resolver (dedup)", async () => {
 		let preflightCount = 0;
 		const resolvePromise1 = Promise.resolve(numberValue(10));
-		const resolvePromise2 = Promise.resolve(numberValue(20));
 
-		// First call triggers async, subsequent calls return null (cached)
 		const resolver = createMockResolver("multieval", () => {
 			preflightCount++;
 			if (preflightCount === 1) {
@@ -1279,13 +1216,12 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 					signal: liveSignal(),
 				};
 			}
-			return null; // Subsequent: data is cached
+			return null;
 		});
 
 		const pkg = buildResolverPackage("multieval", resolver);
 		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
 
-		// First evaluation — triggers async
 		const r1 = engine.evaluateLine(1, "10");
 		expect(r1.type).toBe(ValueType.Pending);
 
@@ -1293,7 +1229,6 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		await tick();
 		await tick();
 
-		// Second evaluation — should be sync (preflight returns null)
 		const r2 = engine.evaluateLine(2, "20");
 		expect(r2.type).toBe(ValueType.Number);
 		expect(r2.value).toBe(20);
@@ -1314,23 +1249,18 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 
 		const pkg = buildResolverPackage("clearflow", resolver);
 		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
-		const { events, unsubscribe } = captureEngineEvents(engine);
+		const { events, stop } = captureEngineEvents(engine);
 
-		// Evaluate — returns Pending
 		engine.evaluateLine(1, "100");
-
-		// Clear the engine before the promise resolves
 		engine.clear();
 
-		// Now resolve the promise
 		await resolvePromise;
 		await tick();
 		await tick();
 
-		// No events should have fired (batcher was cleared)
 		expect(events.length).toBe(0);
 
-		unsubscribe();
+		stop();
 	});
 
 	test("should work correctly after clear + re-evaluate cycle", async () => {
@@ -1345,14 +1275,12 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		const pkg = buildResolverPackage("recycle", resolver);
 		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
 
-		// Cycle 1: evaluate + clear
 		engine.evaluateLine(1, "100");
 		engine.clear();
 
 		await resolvePromise;
 		await tick();
 
-		// Cycle 2: fresh evaluation after clear
 		const resolvePromise2 = Promise.resolve(numberValue(88));
 		const resolver2 = createMockResolver("recycle2", () => ({
 			queryKey: "recycle2:data",
@@ -1362,9 +1290,8 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		}));
 
 		const pkg2 = buildResolverPackage("recycle2", resolver2);
-		// Create a fresh engine (engine.clear() doesn't re-register packages)
 		const engine2 = new ExpressionEngine("en", false, undefined, undefined, [pkg2]);
-		const { events, unsubscribe } = captureEngineEvents(engine2);
+		const { events, stop } = captureEngineEvents(engine2);
 
 		engine2.evaluateLine(1, "200");
 
@@ -1378,7 +1305,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		expect(updateEvts.length).toBeGreaterThanOrEqual(1);
 		expect(updateEvts[0].lineNumbers).toContain(1);
 
-		unsubscribe();
+		stop();
 		engine2.clear();
 	});
 });

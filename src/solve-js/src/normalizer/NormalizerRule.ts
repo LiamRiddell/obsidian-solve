@@ -70,6 +70,14 @@ export interface NormalizerMatch {
    * tokens (expansion/splitting).
    */
   replacement: Token[];
+
+  /**
+   * Human-readable rule name for diagnostic fusion tracking.
+   * When set, the normalizer uses this instead of the rule's `name`
+   * in {@link TokenFusion} records. Used by {@link PhraseTrie} to
+   * report which specific phrase matched (e.g., "phrase:to the power of").
+   */
+  ruleName?: string;
 }
 
 //#endregion

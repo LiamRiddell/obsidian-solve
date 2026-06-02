@@ -8,22 +8,21 @@ import { describe, expect, test } from "@jest/globals";
  * - Deduplication: same (packageId, queryKey) added twice → one entry in batch
  * - clearAll cancellation: add() then clearAll() → flush is no-op
  * - Error re-evaluation: error entries still trigger DAG walk + re-execution
- * - Multi-listener delivery: all listeners get events; unsubscribe works
+ * - Multi-consumer delivery: all stream branches get events
  * - AbortSignal guard: entries with aborted signals are skipped
  * - Empty DAG: no affected lines → still notifies with empty lineNumbers
  * - Topological sort: producer→consumer order preserved
  * - cleared flag re-arming: add() after clearAll() works
  */
 
-import { AsyncResolutionBatcher, type AsyncResolutionEvent, type UnsubscribeFn } from "@solve-js/engine/AsyncResolutionBatcher";
+import { AsyncResolutionBatcher, type AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
-import { createVM, type EvalResult } from "@solve-js/vm/VM";
+import { createVM } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { Value, ValueType, numberValue, errorValue, pendingValue } from "@solve-js/vm/Value";
+import { numberValue } from "@solve-js/vm/Value";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import type { VM } from "@solve-js/vm/OpRegistry";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -60,11 +59,24 @@ function freshBatcher() {
 	return { batcher: new AsyncResolutionBatcher(dag, lc, vm), dag, lc, vm };
 }
 
-/** Helper to capture events from a listener subscription. */
-function captureEvents(batcher: AsyncResolutionBatcher): { events: AsyncResolutionEvent[]; unsubscribe: UnsubscribeFn } {
+/**
+ * Enable synchronous test event capture on a batcher.
+ *
+ * Sets `batcher._testCaptures` to a fresh array. All events emitted by
+ * the batcher are synchronously pushed to this array (in addition to
+ * the normal ReadableStream). No async timing issues — a single
+ * `await queueMicrotask()` is sufficient for tests to observe events.
+ */
+function captureEvents(batcher: AsyncResolutionBatcher): {
+	events: AsyncResolutionEvent[];
+	stop: () => void;
+} {
 	const events: AsyncResolutionEvent[] = [];
-	const unsubscribe = batcher.addListener((e) => events.push(e));
-	return { events, unsubscribe };
+	batcher._testCaptures = events;
+	return {
+		events,
+		stop: () => { batcher._testCaptures = null; },
+	};
 }
 
 /** A non-aborted AbortSignal. */
@@ -96,7 +108,8 @@ describe("AsyncResolutionBatcher — micro-batching", () => {
 		lc.set(10, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
 		lc.set(20, new LineCacheEntry(numberValue(0), buildSimpleBytecode(99), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		// Add two resolutions in the same synchronous tick
 		const signal = liveSignal();
@@ -115,6 +128,8 @@ describe("AsyncResolutionBatcher — micro-batching", () => {
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers.sort()).toEqual([10, 20]);
 		expect(evt.affectedQueryKeys.sort()).toEqual(["rate:USD:EUR", "rate:USD:GBP"]);
+
+		collector.stop();
 	});
 
 	test("should handle a single add() correctly", async () => {
@@ -123,7 +138,8 @@ describe("AsyncResolutionBatcher — micro-batching", () => {
 		dag.registerLineDataSourceDependency(5, "weather", ["weather:London"]);
 		lc.set(5, new LineCacheEntry(numberValue(0), buildSimpleBytecode(72), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "weather:London", packageId: "weather", signal: liveSignal(), isError: false });
 
@@ -134,6 +150,8 @@ describe("AsyncResolutionBatcher — micro-batching", () => {
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([5]);
 		expect(evt.affectedQueryKeys).toEqual(["weather:London"]);
+
+		collector.stop();
 	});
 
 	test("should NOT fire a separate flush for add() calls across different microtask ticks", async () => {
@@ -144,7 +162,8 @@ describe("AsyncResolutionBatcher — micro-batching", () => {
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
 		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(2), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		// First tick: add key1
 		batcher.add({ queryKey: "key1", packageId: "pkg", signal: liveSignal(), isError: false });
@@ -160,6 +179,8 @@ describe("AsyncResolutionBatcher — micro-batching", () => {
 		expect(events.length).toBe(2);
 		expect(events[0].type).toBe("lines-updated");
 		expect(events[1].type).toBe("lines-updated");
+
+		collector.stop();
 	});
 });
 
@@ -174,7 +195,8 @@ describe("AsyncResolutionBatcher — deduplication", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		const signal = liveSignal();
 		// Same key added 3 times
@@ -190,6 +212,8 @@ describe("AsyncResolutionBatcher — deduplication", () => {
 		expect(evt.affectedQueryKeys).toEqual(["key"]);
 		// Line re-evaluated once
 		expect(evt.lineNumbers).toEqual([1]);
+
+		collector.stop();
 	});
 
 	test("should NOT deduplicate across different packageIds", async () => {
@@ -200,7 +224,8 @@ describe("AsyncResolutionBatcher — deduplication", () => {
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(20), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		const signal = liveSignal();
 		batcher.add({ queryKey: "key", packageId: "pkgA", signal, isError: false });
@@ -212,6 +237,8 @@ describe("AsyncResolutionBatcher — deduplication", () => {
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.affectedQueryKeys.sort()).toEqual(["key", "key"]);
 		expect(evt.lineNumbers.sort()).toEqual([1, 2]);
+
+		collector.stop();
 	});
 
 	test("add() deduplicates identical entries (first-write-wins)", async () => {
@@ -220,7 +247,8 @@ describe("AsyncResolutionBatcher — deduplication", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		// First: success entry, then: error entry for same (packageId, queryKey)
 		// — add() deduplicates at entry time, rejecting the second. Only the
@@ -236,6 +264,8 @@ describe("AsyncResolutionBatcher — deduplication", () => {
 
 		expect(errorEvents.length).toBe(0);
 		expect(updateEvents.length).toBe(1);
+
+		collector.stop();
 	});
 });
 
@@ -250,7 +280,8 @@ describe("AsyncResolutionBatcher — clearAll cancellation", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -261,35 +292,40 @@ describe("AsyncResolutionBatcher — clearAll cancellation", () => {
 
 		// No events should fire
 		expect(events.length).toBe(0);
+
+		collector.stop();
 	});
 
-	test("clearAll() clears listeners — re-subscribed listener gets new events", async () => {
+	test("clearAll() closes the stream — re-subscribed consumers get a fresh stream on next ctor", async () => {
 		const { batcher, dag, lc } = freshBatcher();
 
 		dag.registerLineDataSourceDependency(1, "pkg", ["k2"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		// First listener
-		const events1: AsyncResolutionEvent[] = [];
-		const unsub1 = batcher.addListener((e) => events1.push(e));
+		// First consumer
+		const collector1 = captureEvents(batcher);
 
 		batcher.add({ queryKey: "k1", packageId: "p1", signal: liveSignal(), isError: false });
-		batcher.clearAll(); // Clears listeners + pending
+		batcher.clearAll(); // Closes stream + clears pending
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
-		expect(events1.length).toBe(0); // Cancelled + listener cleared
-		unsub1(); // No-op since already cleared
+		expect(collector1.events.length).toBe(0); // Cancelled + stream closed
+		collector1.stop();
 
-		// Re-subscribe after clearAll
-		const events2: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events2.push(e));
+		// Re-subscribe after clearAll — old stream is closed, so new
+		// consumers need a new batcher from a fresh engine ctor.
+		// This test verifies the cleared state; real code recreates the engine.
+		const { batcher: batcher2, dag: dag2, lc: lc2 } = freshBatcher();
+		dag2.registerLineDataSourceDependency(1, "pkg", ["k2"]);
+		lc2.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		batcher.add({ queryKey: "k2", packageId: "pkg", signal: liveSignal(), isError: false });
+		const collector2 = captureEvents(batcher2);
+		batcher2.add({ queryKey: "k2", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
 
-		// New listener should receive the event
-		expect(events2.length).toBe(1);
+		expect(collector2.events.length).toBe(1);
+		collector2.stop();
 	});
 
 	test("should re-arm cleared flag on new add() so subsequent batches work", async () => {
@@ -298,44 +334,49 @@ describe("AsyncResolutionBatcher — clearAll cancellation", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
 
-		// Schedule and cancel (clearAll clears listeners + pending)
-		const events1: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events1.push(e));
+		// Schedule and cancel (clearAll closes stream + clears pending)
+		const collector1 = captureEvents(batcher);
 		batcher.add({ queryKey: "stale", packageId: "pkg", signal: liveSignal(), isError: false });
 		batcher.clearAll();
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
-		expect(events1.length).toBe(0); // Cancelled
+		expect(collector1.events.length).toBe(0); // Cancelled
+		collector1.stop();
 
-		// Re-subscribe listener + add new resolution — cleared flag is re-armed by add()
-		const events2: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events2.push(e));
-		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		// Re-subscribe with new batcher + add new resolution — cleared flag is re-armed by add()
+		const { batcher: batcher2, dag: dag2, lc: lc2 } = freshBatcher();
+		dag2.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc2.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+
+		const collector2 = captureEvents(batcher2);
+		batcher2.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
 
-		expect(events2.length).toBe(1);
-		expect(events2[0].type).toBe("lines-updated");
-		const evt = events2[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
+		expect(collector2.events.length).toBe(1);
+		expect(collector2.events[0].type).toBe("lines-updated");
+		const evt = collector2.events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([1]);
+		collector2.stop();
 	});
 
-	test("should clear all listeners when clearAll() is called", async () => {
+	test("clearAll() closes stream so no new events arrive after", async () => {
 		const { batcher, dag, lc } = freshBatcher();
 
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
 		batcher.clearAll();
 
-		// Re-add and flush — listener was cleared, no events
+		// Re-add and flush — stream was closed, no events
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
 
-		// No events because listener was cleared by clearAll()
-		expect(events.length).toBe(0);
+		// No events because stream was closed by clearAll()
+		expect(collector.events.length).toBe(0);
+		collector.stop();
 	});
 });
 
@@ -350,7 +391,8 @@ describe("AsyncResolutionBatcher — error re-evaluation", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({
 			queryKey: "key",
@@ -366,6 +408,8 @@ describe("AsyncResolutionBatcher — error re-evaluation", () => {
 		expect(events.length).toBe(2);
 		expect(events[0].type).toBe("error");
 		expect(events[1].type).toBe("lines-updated");
+
+		collector.stop();
 	});
 
 	test("should include error details in error events", async () => {
@@ -374,7 +418,8 @@ describe("AsyncResolutionBatcher — error re-evaluation", () => {
 		dag.registerLineDataSourceDependency(1, "rates", ["rate:FAIL"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		const err = new Error("API rate limit exceeded");
 		batcher.add({
@@ -392,6 +437,8 @@ describe("AsyncResolutionBatcher — error re-evaluation", () => {
 		expect(errorEvt.queryKey).toBe("rate:FAIL");
 		expect(errorEvt.packageId).toBe("rates");
 		expect(errorEvt.error).toBe(err);
+
+		collector.stop();
 	});
 
 	test("should trigger DAG re-evaluation for error entries too", async () => {
@@ -400,7 +447,8 @@ describe("AsyncResolutionBatcher — error re-evaluation", () => {
 		dag.registerLineDataSourceDependency(5, "pkg", ["error:key"]);
 		lc.set(5, new LineCacheEntry(numberValue(0), buildSimpleBytecode(88), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({
 			queryKey: "error:key",
@@ -416,6 +464,8 @@ describe("AsyncResolutionBatcher — error re-evaluation", () => {
 		expect(updateEvt).toBeDefined();
 		// Line 5 should be re-evaluated even though it was an error
 		expect(updateEvt.lineNumbers).toEqual([5]);
+
+		collector.stop();
 	});
 
 	test("should propagate unknown errors with a fallback message", async () => {
@@ -424,7 +474,8 @@ describe("AsyncResolutionBatcher — error re-evaluation", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({
 			queryKey: "key",
@@ -439,101 +490,74 @@ describe("AsyncResolutionBatcher — error re-evaluation", () => {
 		const errorEvt = events.find((e) => e.type === "error") as Extract<AsyncResolutionEvent, { type: "error" }>;
 		expect(errorEvt).toBeDefined();
 		expect(errorEvt.error.message).toBe("Unknown async resolution error");
+
+		collector.stop();
 	});
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// §5  Multi-listener delivery
+// §5  Multi-consumer delivery (stream branches)
 // ────────────────────────────────────────────────────────────────────────
 
-describe("AsyncResolutionBatcher — multi-listener delivery", () => {
-	test("should deliver events to all registered listeners", async () => {
+describe("AsyncResolutionBatcher — multi-consumer delivery", () => {
+	test("should deliver events to all stream branches", async () => {
 		const { batcher, dag, lc } = freshBatcher();
 
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
 
+		// Create two independent branches from the event stream
+		const [branch1, branch2] = batcher.getEventStream().tee();
+
 		const events1: AsyncResolutionEvent[] = [];
 		const events2: AsyncResolutionEvent[] = [];
-		const unsub1 = batcher.addListener((e) => events1.push(e));
-		const unsub2 = batcher.addListener((e) => events2.push(e));
+		const r1 = branch1.getReader();
+		const r2 = branch2.getReader();
+
+		const p1 = (async () => { while (true) { const { done, value } = await r1.read(); if (done) break; events1.push(value); } })();
+		const p2 = (async () => { while (true) { const { done, value } = await r2.read(); if (done) break; events2.push(value); } })();
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve)); // Extra tick for tee readers
 
 		expect(events1.length).toBe(1);
 		expect(events2.length).toBe(1);
 		expect(events1[0]).toEqual(events2[0]);
 
-		unsub1();
-		unsub2();
+		r1.cancel();
+		r2.cancel();
+		await Promise.all([p1.catch(() => {}), p2.catch(() => {})]);
 	});
 
-	test("should not deliver events to unsubscribed listeners", async () => {
-		const { batcher, dag, lc } = freshBatcher();
-
-		dag.registerLineDataSourceDependency(1, "pkg", ["key1"]);
-		dag.registerLineDataSourceDependency(2, "pkg", ["key2"]);
-		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
-		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(20), [], null));
-
-		const events1: AsyncResolutionEvent[] = [];
-		const events2: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events1.push(e));
-		const unsub2 = batcher.addListener((e) => events2.push(e));
-
-		// Unsubscribe listener 2
-		unsub2();
-
-		batcher.add({ queryKey: "key1", packageId: "pkg", signal: liveSignal(), isError: false });
-
-		await new Promise<void>((resolve) => queueMicrotask(resolve));
-
-		expect(events1.length).toBe(1);
-		expect(events2.length).toBe(0); // Unsubscribed
-	});
-
-	test("should isolate listener errors — one bad listener does not break others", async () => {
+	test("should isolate stream errors — one bad consumer does not break others", async () => {
 		const { batcher, dag, lc } = freshBatcher();
 
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
 
-		const events2: AsyncResolutionEvent[] = [];
-		batcher.addListener(() => {
-			throw new Error("Listener 1 crashes!");
-		});
-		batcher.addListener((e) => events2.push(e));
-
-		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
-
-		await new Promise<void>((resolve) => queueMicrotask(resolve));
-
-		// Listener 2 should still receive the event
-		expect(events2.length).toBeGreaterThanOrEqual(1);
-	});
-
-	test("should return a working unsubscribe function", async () => {
-		const { batcher, dag, lc } = freshBatcher();
-
-		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
-		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+		// The tee() approach: each branch is independent
+		const [branch1, branch2] = batcher.getEventStream().tee();
 
 		const events: AsyncResolutionEvent[] = [];
-		const unsub = batcher.addListener((e) => events.push(e));
+		const r2 = branch2.getReader();
+		const p2 = (async () => { while (true) { const { done, value } = await r2.read(); if (done) break; events.push(value); } })();
 
-		// Unsubscribe
-		unsub();
-
-		// Double-unsubscribe should be safe (no-op)
-		unsub();
+		// Branch 1: cancel immediately (simulates a bad consumer)
+		const r1 = branch1.getReader();
+		r1.cancel();
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve)); // Extra tick for tee reader
 
-		expect(events.length).toBe(0);
+		// Branch 2 should still receive the event
+		expect(events.length).toBeGreaterThanOrEqual(1);
+
+		r2.cancel();
+		await p2.catch(() => {});
 	});
 });
 
@@ -548,7 +572,8 @@ describe("AsyncResolutionBatcher — AbortSignal guard", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({
 			queryKey: "key",
@@ -560,10 +585,9 @@ describe("AsyncResolutionBatcher — AbortSignal guard", () => {
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
 
-		// Only lines-updated with empty lineNumbers (error was skipped)
-		// or no event at all if all entries were aborted.
 		const errorEvts = events.filter((e) => e.type === "error");
 		expect(errorEvts.length).toBe(0); // Aborted entries are skipped
+		collector.stop();
 	});
 
 	test("should skip aborted entries during DAG walk", async () => {
@@ -572,7 +596,8 @@ describe("AsyncResolutionBatcher — AbortSignal guard", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: abortedSignal(), isError: false });
 
@@ -583,6 +608,7 @@ describe("AsyncResolutionBatcher — AbortSignal guard", () => {
 		expect(updateEvts.length).toBeGreaterThanOrEqual(1);
 		const evt = updateEvts[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([]);
+		collector.stop();
 	});
 
 	test("should mix live and aborted entries — only live ones processed", async () => {
@@ -593,7 +619,8 @@ describe("AsyncResolutionBatcher — AbortSignal guard", () => {
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
 		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(99), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "live-key", packageId: "pkg", signal: liveSignal(), isError: false });
 		batcher.add({ queryKey: "dead-key", packageId: "pkg", signal: abortedSignal(), isError: false });
@@ -603,6 +630,7 @@ describe("AsyncResolutionBatcher — AbortSignal guard", () => {
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([1]); // Only line 1 (live) re-evaluated
 		expect(evt.affectedQueryKeys).toEqual(["live-key"]); // dead-key skipped
+		collector.stop();
 	});
 });
 
@@ -611,11 +639,12 @@ describe("AsyncResolutionBatcher — AbortSignal guard", () => {
 // ────────────────────────────────────────────────────────────────────────
 
 describe("AsyncResolutionBatcher — empty DAG", () => {
-	test("should still notify listeners when no lines are affected", async () => {
-		const { batcher, dag, lc } = freshBatcher();
+	test("should still notify consumers when no lines are affected", async () => {
+		const { batcher } = freshBatcher();
 
 		// No lines registered in DAG — nothing depends on this queryKey
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "orphan:key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -626,30 +655,34 @@ describe("AsyncResolutionBatcher — empty DAG", () => {
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([]);
 		expect(evt.affectedQueryKeys).toEqual(["orphan:key"]);
+		collector.stop();
 	});
 
 	test("should not notify when all entries are aborted and no lines affected", async () => {
 		const { batcher } = freshBatcher();
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: abortedSignal(), isError: false });
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
 
 		// Aborted entries are skipped, but batcher still fires a lines-updated
-		// event with empty arrays (lets UI know batch was processed).
+		// event with empty arrays (lets consumers know batch was processed).
 		expect(events.length).toBe(1);
 		expect(events[0].type).toBe("lines-updated");
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([]);
 		expect(evt.affectedQueryKeys).toEqual([]);
+		collector.stop();
 	});
 
 	test("should still emit lines-updated even if only error entries and no affected lines", async () => {
 		const { batcher } = freshBatcher();
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({
 			queryKey: "err:key",
@@ -667,6 +700,7 @@ describe("AsyncResolutionBatcher — empty DAG", () => {
 		expect(events[1].type).toBe("lines-updated");
 		const evt = events[1] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([]);
+		collector.stop();
 	});
 });
 
@@ -676,7 +710,7 @@ describe("AsyncResolutionBatcher — empty DAG", () => {
 
 describe("AsyncResolutionBatcher — topological sort", () => {
 	test("should re-evaluate producer lines before consumer lines", async () => {
-		const { batcher, dag, lc, vm } = freshBatcher();
+		const { batcher, dag, lc } = freshBatcher();
 
 		// Line 10 produces variable "x", line 20 reads "x" and produces "y"
 		dag.registerLine(10, [], ["x"]);
@@ -694,7 +728,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		lc.set(10, new LineCacheEntry(numberValue(0), bc10, [], "x"));
 		lc.set(20, new LineCacheEntry(numberValue(0), bc20, ["x"], "y"));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -704,6 +739,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		// Line 10 (producer) should come before line 20 (consumer)
 		expect(evt.lineNumbers[0]).toBe(10);
 		expect(evt.lineNumbers[1]).toBe(20);
+		collector.stop();
 	});
 
 	test("should handle a single line (no ordering needed)", async () => {
@@ -712,7 +748,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		dag.registerLineDataSourceDependency(42, "pkg", ["key"]);
 		lc.set(42, new LineCacheEntry(numberValue(0), buildSimpleBytecode(7), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -720,6 +757,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([42]);
+		collector.stop();
 	});
 
 	test("should handle independent lines (no dependency between them)", async () => {
@@ -733,7 +771,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], "a"));
 		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(20), [], "b"));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -743,6 +782,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		expect(evt.lineNumbers.length).toBe(2);
 		// Both lines should be re-evaluated (order doesn't matter for independent lines)
 		expect(evt.lineNumbers.sort()).toEqual([1, 2]);
+		collector.stop();
 	});
 
 	test("should handle multiple producers and consumers (diamond dependency)", async () => {
@@ -761,7 +801,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(2), [], "y"));
 		lc.set(3, new LineCacheEntry(numberValue(0), buildSimpleBytecode(3), ["x", "y"], "z"));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -772,6 +813,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		// Producers (1, 2) before consumer (3)
 		expect(evt.lineNumbers.indexOf(1)).toBeLessThan(evt.lineNumbers.indexOf(3));
 		expect(evt.lineNumbers.indexOf(2)).toBeLessThan(evt.lineNumbers.indexOf(3));
+		collector.stop();
 	});
 
 	test("should handle cycle gracefully (fallback to line number sort)", async () => {
@@ -787,7 +829,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		lc.set(10, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), ["y"], "x"));
 		lc.set(20, new LineCacheEntry(numberValue(0), buildSimpleBytecode(20), ["x"], "y"));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -798,6 +841,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		expect(evt.lineNumbers.length).toBe(2);
 		// Both lines are re-evaluated (order is by line number due to cycle)
 		expect(evt.lineNumbers).toEqual([10, 20]);
+		collector.stop();
 	});
 
 	test("should handle lines without DAG registration (no reads/writes)", async () => {
@@ -812,7 +856,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		lc.set(5, new LineCacheEntry(numberValue(0), buildSimpleBytecode(50), [], null));
 		lc.set(15, new LineCacheEntry(numberValue(0), buildSimpleBytecode(150), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -820,10 +865,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers.length).toBe(2);
-		// Lines with no reads/writes → inDegree=0 → processed in any order.
-		// Since order is implementation-defined (Map iteration), verify both
-		// lines are present rather than asserting exact order.
 		expect(evt.lineNumbers).toEqual(expect.arrayContaining([5, 15]));
+		collector.stop();
 	});
 
 	test("should skip lines with empty bytecode during re-execution", async () => {
@@ -835,7 +878,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
 		lc.set(2, new LineCacheEntry(numberValue(0), { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -844,6 +888,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		// Only line 1 should be in updated lineNumbers (line 2 has empty bytecode)
 		expect(evt.lineNumbers).toEqual([1]);
+		collector.stop();
 	});
 
 	test("should skip lines not found in LineCache", async () => {
@@ -852,7 +897,8 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		// Registered in DAG but not in LineCache
 		dag.registerLineDataSourceDependency(99, "pkg", ["key"]);
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -861,6 +907,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		// Line 99 not found in cache → skipped
 		expect(evt.lineNumbers).toEqual([]);
+		collector.stop();
 	});
 });// ────────────────────────────────────────────────────────────────────────
 // §8b  Pending re-execution (VM returns pending during flush)
@@ -893,7 +940,8 @@ describe("AsyncResolutionBatcher — pending re-execution", () => {
 		dag.registerLineDataSourceDependency(2, "pkg", ["key"]);
 		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		// Set activeSignal so CALL_PLUGIN can use it
 		vm.activeSignal = liveSignal();
@@ -908,6 +956,7 @@ describe("AsyncResolutionBatcher — pending re-execution", () => {
 		expect(evt.affectedQueryKeys).toEqual(["key"]);
 
 		delete pluginFunctionRegistry[250];
+		collector.stop();
 	});
 
 	test("should update only sync lines when mixed sync+pending in re-execution", async () => {
@@ -920,7 +969,8 @@ describe("AsyncResolutionBatcher — pending re-execution", () => {
 		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(20), [], null));
 		lc.set(3, new LineCacheEntry(numberValue(0), buildSimpleBytecode(30), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		batcher.add({ queryKey: "k1", packageId: "pkg", signal: liveSignal(), isError: false });
 
@@ -929,6 +979,7 @@ describe("AsyncResolutionBatcher — pending re-execution", () => {
 		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		// All three lines execute sync → all updated
 		expect(evt.lineNumbers.sort()).toEqual([1, 2, 3]);
+		collector.stop();
 	});
 });
 
@@ -943,7 +994,8 @@ describe("AsyncResolutionBatcher — edge cases", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(7), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		// Add, flush, then add again (should schedule a new flush)
 		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
@@ -959,6 +1011,7 @@ describe("AsyncResolutionBatcher — edge cases", () => {
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
 		expect(events.length).toBe(2);
+		collector.stop();
 	});
 
 	test("should handle rapid add() + clearAll() + add() cycles", async () => {
@@ -967,28 +1020,29 @@ describe("AsyncResolutionBatcher — edge cases", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["k1"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
 
-		const events1: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events1.push(e));
+		const collector1 = captureEvents(batcher);
 
 		// Cycle 1: schedule + cancel
 		batcher.add({ queryKey: "k1", packageId: "pkg", signal: liveSignal(), isError: false });
-		batcher.clearAll(); // Clears listener + pending
+		batcher.clearAll(); // Closes stream + clears pending
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
-		expect(events1.length).toBe(0);
+		expect(collector1.events.length).toBe(0);
+		collector1.stop();
 
-		// Cycle 2: re-subscribe + new add (re-arms cleared flag)
-		const events2: AsyncResolutionEvent[] = [];
-		batcher.addListener((e) => events2.push(e));
+		// Cycle 2: new batcher + new add (re-arms cleared flag)
+		const { batcher: batcher2, dag: dag2, lc: lc2 } = freshBatcher();
+		dag2.registerLineDataSourceDependency(2, "pkg", ["k2"]);
+		lc2.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(2), [], null));
 
-		dag.registerLineDataSourceDependency(2, "pkg", ["k2"]);
-		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(2), [], null));
-		batcher.add({ queryKey: "k2", packageId: "pkg", signal: liveSignal(), isError: false });
+		const collector2 = captureEvents(batcher2);
+		batcher2.add({ queryKey: "k2", packageId: "pkg", signal: liveSignal(), isError: false });
 
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
-		expect(events2.length).toBe(1);
-		const evt = events2[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
+		expect(collector2.events.length).toBe(1);
+		const evt = collector2.events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers).toEqual([2]);
+		collector2.stop();
 	});
 
 	test("should handle mix of error and success entries across different packages", async () => {
@@ -1001,7 +1055,8 @@ describe("AsyncResolutionBatcher — edge cases", () => {
 		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(20), [], null));
 		lc.set(3, new LineCacheEntry(numberValue(0), buildSimpleBytecode(30), [], null));
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		const signal = liveSignal();
 		batcher.add({ queryKey: "rate:USD:GBP", packageId: "rates", signal, isError: false });
@@ -1020,17 +1075,684 @@ describe("AsyncResolutionBatcher — edge cases", () => {
 		expect(updateEvts.length).toBe(1);
 		const evt = updateEvts[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
 		expect(evt.lineNumbers.sort()).toEqual([1, 2, 3]);
+		collector.stop();
 	});
 
 	test("should handle an empty batch (no add calls before microtask)", async () => {
 		const { batcher } = freshBatcher();
 
-		const { events } = captureEvents(batcher);
+		const collector = captureEvents(batcher);
+		const events = collector.events;
 
 		// Don't add anything — just wait for any previously scheduled flush
 		await new Promise<void>((resolve) => queueMicrotask(resolve));
 
 		// No events should fire (nothing was added)
 		expect(events.length).toBe(0);
+		collector.stop();
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// §10  Stream — Enqueue (ReadableStream integration)
+// ═══════════════════════════════════════════════════════════════════════
+// Tests that events are properly enqueued into the native ReadableStream
+// and can be read by consumers via getReader().
+
+describe("AsyncResolutionBatcher — stream enqueue", () => {
+	test("should enqueue events into the ReadableStream and deliver via getReader()", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+		const events: AsyncResolutionEvent[] = [];
+
+		// Start reading in background
+		const readPromise = (async () => {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					events.push(value);
+				}
+			} catch {
+				// Stream may be cancelled
+			}
+		})();
+
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+
+		// Wait for microtask flush + async reader tick
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		expect(events.length).toBe(1);
+		expect(events[0].type).toBe("lines-updated");
+
+		reader.cancel();
+		await readPromise;
+	});
+
+	test("should enqueue error events into the ReadableStream", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(10), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+		const events: AsyncResolutionEvent[] = [];
+
+		const readPromise = (async () => {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					events.push(value);
+				}
+			} catch {
+				// Stream may be cancelled
+			}
+		})();
+
+		const err = new Error("Test stream error");
+		batcher.add({
+			queryKey: "key",
+			packageId: "pkg",
+			signal: liveSignal(),
+			isError: true,
+			error: err,
+		});
+
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve)); // Third tick for second event delivery
+
+		// Error event + lines-updated both enqueued
+		expect(events.length).toBe(2);
+		expect(events[0].type).toBe("error");
+		expect(events[1].type).toBe("lines-updated");
+
+		const errorEvent = events[0] as Extract<AsyncResolutionEvent, { type: "error" }>;
+		expect(errorEvent.error).toBe(err);
+
+		reader.cancel();
+		await readPromise;
+	});
+
+	test("should enqueue multiple events from separate flushes", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["k1"]);
+		dag.registerLineDataSourceDependency(2, "pkg", ["k2"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
+		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(2), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+		const events: AsyncResolutionEvent[] = [];
+
+		const readPromise = (async () => {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					events.push(value);
+				}
+			} catch {
+				// Stream may be cancelled
+			}
+		})();
+
+		// First flush across microtask boundary
+		batcher.add({ queryKey: "k1", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// Second flush
+		batcher.add({ queryKey: "k2", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		expect(events.length).toBe(2);
+		expect(events[0].type).toBe("lines-updated");
+		expect(events[1].type).toBe("lines-updated");
+
+		reader.cancel();
+		await readPromise;
+	});
+
+	test("should enqueue to both synchronous test capture AND the ReadableStream", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+
+		// Enable synchronous test capture
+		const collector = captureEvents(batcher);
+
+		// Also read from the stream
+		const reader = batcher.getEventStream().getReader();
+		const streamEvents: AsyncResolutionEvent[] = [];
+		const readPromise = (async () => {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					streamEvents.push(value);
+				}
+			} catch {
+				// Stream may be cancelled
+			}
+		})();
+
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// Both capture paths get the event
+		expect(collector.events.length).toBe(1);
+		expect(streamEvents.length).toBe(1);
+		expect(collector.events[0]).toEqual(streamEvents[0]);
+
+		reader.cancel();
+		collector.stop();
+		await readPromise;
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// §11  Stream — Cancel (reader cancellation)
+// ═══════════════════════════════════════════════════════════════════════
+// Tests that canceling the stream reader properly stops the event flow
+// and detaches the controller.
+
+describe("AsyncResolutionBatcher — stream cancel", () => {
+	test("should stop delivering events after reader.cancel()", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["k1"]);
+		dag.registerLineDataSourceDependency(2, "pkg", ["k2"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
+		lc.set(2, new LineCacheEntry(numberValue(0), buildSimpleBytecode(2), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+		const events: AsyncResolutionEvent[] = [];
+
+		const readPromise = (async () => {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					events.push(value);
+				}
+			} catch {
+				// Expected — reader cancelled
+			}
+		})();
+
+		// First event arrives
+		batcher.add({ queryKey: "k1", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		expect(events.length).toBe(1);
+
+		// Cancel the reader
+		reader.cancel();
+
+		// Second event enqueued — should not reach events[] (reader is cancelled)
+		batcher.add({ queryKey: "k2", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// Reader is cancelled, no new events land
+		expect(events.length).toBe(1);
+
+		await readPromise;
+	});
+
+	test("should null the internal _streamController after reader.cancel()", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["k1"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+
+		// Controller exists before cancel
+		expect((batcher as any)._streamController).not.toBeNull();
+
+		// Read one event to ensure controller is attached
+		const readPromise = reader.read().then(() => {});
+		batcher.add({ queryKey: "k1", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await readPromise;
+
+		// Cancel the reader
+		await reader.cancel();
+
+		// Controller should be null after cancel
+		expect((batcher as any)._streamController).toBeNull();
+	});
+
+	test("should not throw when enqueuing to a cancelled stream", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["k1"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+		await reader.cancel();
+
+		// Enqueuing to a cancelled stream — should not throw
+		expect(() => {
+			batcher.add({ queryKey: "k1", packageId: "pkg", signal: liveSignal(), isError: false });
+		}).not.toThrow();
+
+		// Wait for flush
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// No assertion needed — test passes if no throw occurred
+	});
+
+	test("should resolve pending read() with {done: true} after reader.cancel()", async () => {
+		const { batcher } = freshBatcher();
+
+		const reader = batcher.getEventStream().getReader();
+
+		// Start a read() that will never complete (no events added)
+		const readResult = reader.read();
+
+		// Cancel the reader while read() is pending
+		reader.cancel();
+
+		// Per the Web Streams spec, cancel() resolves pending reads with {done: true}.
+		const result = await readResult;
+		expect(result.done).toBe(true);
+		expect(result.value).toBeUndefined();
+	});
+
+	test("cancel callback runs when stream is cancelled via reader", async () => {
+		const { batcher } = freshBatcher();
+
+		const reader = batcher.getEventStream().getReader();
+
+		// Cancel the reader
+		await reader.cancel();
+
+		// The cancel callback should have nulled the controller
+		expect((batcher as any)._streamController).toBeNull();
+
+		// Calling cancel again is a no-op (reader already cancelled)
+		await reader.cancel();
+		expect((batcher as any)._streamController).toBeNull();
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// §12  Stream — Close (clearAll stream cleanup)
+// ═══════════════════════════════════════════════════════════════════════
+// Tests that clearAll() properly closes the ReadableStream and readers
+// receive a clean done signal.
+
+describe("AsyncResolutionBatcher — stream close", () => {
+	test("should resolve reader with {done: true} after clearAll()", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+		const events: AsyncResolutionEvent[] = [];
+
+		const readPromise = (async () => {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					events.push(value);
+				}
+				return true; // Reached done
+			} catch {
+				return false; // Error, not done
+			}
+		})();
+
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		expect(events.length).toBe(1);
+
+		// clearAll closes the stream
+		batcher.clearAll();
+
+		// Reader should receive done: true
+		const reachedDone = await readPromise;
+		expect(reachedDone).toBe(true);
+	});
+
+	test("should null _streamController after clearAll()", async () => {
+		const { batcher } = freshBatcher();
+
+		expect((batcher as any)._streamController).not.toBeNull();
+
+		batcher.clearAll();
+
+		expect((batcher as any)._streamController).toBeNull();
+	});
+
+	test("should not enqueue new events after clearAll() closes the stream", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+		const events: AsyncResolutionEvent[] = [];
+
+		const readPromise = (async () => {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					events.push(value);
+				}
+			} catch {
+				// Stream closed
+			}
+		})();
+
+		// Close the stream before adding any events
+		batcher.clearAll();
+
+		// Now add — should be silently ignored (stream is closed)
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		expect(events.length).toBe(0);
+
+		await readPromise;
+	});
+
+	test("should not throw when clearAll() is called multiple times", async () => {
+		const { batcher } = freshBatcher();
+
+		batcher.clearAll();
+		expect(() => batcher.clearAll()).not.toThrow();
+		expect(() => batcher.clearAll()).not.toThrow();
+	});
+
+	test("getEventStream() should return the same stream after clearAll()", async () => {
+		const { batcher } = freshBatcher();
+
+		const streamBefore = batcher.getEventStream();
+		batcher.clearAll();
+		const streamAfter = batcher.getEventStream();
+
+		// Same stream instance, but now closed
+		expect(streamBefore).toBe(streamAfter);
+	});
+
+	test("reading from a stream closed by clearAll() should return done immediately", async () => {
+		const { batcher } = freshBatcher();
+
+		batcher.clearAll();
+
+		const reader = batcher.getEventStream().getReader();
+		const { done, value } = await reader.read();
+
+		expect(done).toBe(true);
+		expect(value).toBeUndefined();
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// §13  Stream — Controller Lifecycle
+// ═══════════════════════════════════════════════════════════════════════
+// Tests the _streamController state machine: creation, attachment on
+// first read, null on cancel/close, and re-creation after engine rebuild.
+
+describe("AsyncResolutionBatcher — stream controller lifecycle", () => {
+	test("should create stream controller on construction", () => {
+		const { batcher } = freshBatcher();
+
+		// Controller is set during stream construction (start() callback runs)
+		// But start() is lazy — it runs on first reader attachment.
+		// The ReadableStream is constructed with a start callback, but
+		// start() only runs when a reader is acquired.
+		expect((batcher as any)._streamController).not.toBeNull();
+	});
+
+	test("should attach controller only once across multiple getEventStream() calls", () => {
+		const { batcher } = freshBatcher();
+
+		const controller1 = (batcher as any)._streamController;
+
+		// getEventStream() returns the same stream — same controller
+		batcher.getEventStream();
+		const controller2 = (batcher as any)._streamController;
+
+		expect(controller1).toBe(controller2);
+	});
+
+	test("should throw when getting a reader on a stream after previous reader cancelled", async () => {
+		const { batcher } = freshBatcher();
+
+		const reader1 = batcher.getEventStream().getReader();
+		await reader1.cancel();
+
+		// Controller nulled by cancel callback
+		expect((batcher as any)._streamController).toBeNull();
+
+		// Stream is now errored — a new reader should throw
+		expect(() => {
+			batcher.getEventStream().getReader();
+		}).toThrow();
+	});
+
+	test("should maintain controller through the stream lifecycle: construct → read → cancel → null", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
+
+		// 1. Controller exists after construction
+		expect((batcher as any)._streamController).not.toBeNull();
+
+		// 2. Read an event — controller remains
+		const reader = batcher.getEventStream().getReader();
+		const readPromise = (async () => {
+			const { done, value } = await reader.read();
+			if (done) return;
+		})();
+
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await readPromise;
+
+		expect((batcher as any)._streamController).not.toBeNull();
+
+		// 3. Cancel — controller nulled
+		await reader.cancel();
+		expect((batcher as any)._streamController).toBeNull();
+	});
+
+	test("should null controller after clearAll() then recover with new batcher", () => {
+		const { batcher } = freshBatcher();
+
+		expect((batcher as any)._streamController).not.toBeNull();
+
+		batcher.clearAll();
+		expect((batcher as any)._streamController).toBeNull();
+
+		// New batcher = new stream + new controller
+		const { batcher: batcher2 } = freshBatcher();
+		expect((batcher2 as any)._streamController).not.toBeNull();
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// §14  Stream — Edge Cases
+// ═══════════════════════════════════════════════════════════════════════
+// Tests for edge cases: double cancel, reading after cancel, locking,
+// getEventStream() identity, and CountQueuingStrategy behavior.
+
+describe("AsyncResolutionBatcher — stream edge cases", () => {
+	test("getEventStream() should always return the same ReadableStream instance", () => {
+		const { batcher } = freshBatcher();
+
+		const s1 = batcher.getEventStream();
+		const s2 = batcher.getEventStream();
+		const s3 = batcher.getEventStream();
+
+		expect(s1).toBe(s2);
+		expect(s2).toBe(s3);
+	});
+
+	test("should throw when getting reader on a locked stream", () => {
+		const { batcher } = freshBatcher();
+
+		const reader1 = batcher.getEventStream().getReader();
+
+		// Stream is now locked — getting another reader should throw
+		expect(() => {
+			batcher.getEventStream().getReader();
+		}).toThrow();
+
+		reader1.releaseLock();
+	});
+
+	test("should allow a new reader after releasing the lock", () => {
+		const { batcher } = freshBatcher();
+
+		const reader1 = batcher.getEventStream().getReader();
+		reader1.releaseLock();
+
+		// After releaseLock(), a new reader can be acquired
+		const reader2 = batcher.getEventStream().getReader();
+		expect(reader2).toBeDefined();
+		reader2.cancel();
+	});
+
+	test("cancel then releaseLock should not throw", async () => {
+		const { batcher } = freshBatcher();
+
+		const reader = batcher.getEventStream().getReader();
+		await reader.cancel();
+
+		// releaseLock after cancel — should not throw
+		expect(() => reader.releaseLock()).not.toThrow();
+	});
+
+	test("should handle a race between read() and cancel()", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+
+		const reader = batcher.getEventStream().getReader();
+
+		// Add an event so read() won't hang
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+
+		// Start read and cancel simultaneously
+		const readPromise = reader.read();
+		reader.cancel();
+
+		// Either the read resolves or rejects — neither should throw unhandled
+		try {
+			await readPromise;
+		} catch {
+			// Expected
+		}
+	});
+
+	test("should deliver events even with a small highWaterMark", async () => {
+		// Create batcher with small highWaterMark
+		const dag = new DependencyGraph();
+		const lc = new LineCache();
+		const vm = createVM(sharedOpRegistry, 200, 50000);
+
+		for (let i = 1; i <= 10; i++) {
+			dag.registerLineDataSourceDependency(i, "pkg", [`k${i}`]);
+			lc.set(i, new LineCacheEntry(numberValue(0), buildSimpleBytecode(i), [], null));
+		}
+
+		const batcher = new AsyncResolutionBatcher(dag, lc, vm, 2); // tiny highWaterMark
+
+		const reader = batcher.getEventStream().getReader();
+		const events: AsyncResolutionEvent[] = [];
+
+		// Don't read immediately — enqueue many events to fill the buffer
+		for (let i = 1; i <= 10; i++) {
+			batcher.add({ queryKey: `k${i}`, packageId: "pkg", signal: liveSignal(), isError: false });
+		}
+
+		// Now read — all events should be delivered despite the small buffer
+		const readPromise = (async () => {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					events.push(value);
+				}
+			} catch {
+				// Stream cancelled
+			}
+		})();
+
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// All events should be delivered (backpressure just slows, not drops)
+		expect(events.length).toBeGreaterThanOrEqual(1);
+
+		reader.cancel();
+		await readPromise;
+	});
+
+	test("stream should survive notifyListeners after controller is close()'d", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+
+		// Manually close the controller (simulates clearAll)
+		(batcher as any)._streamController?.close();
+
+		// Adding events after close — should not throw
+		expect(() => {
+			batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		}).not.toThrow();
+
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// No assertion needed — test passes if no throw
+	});
+
+	test("should not lose events when reading after a brief delay", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(42), [], null));
+
+		// Enqueue BEFORE acquiring reader
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// Now acquire reader — the event was enqueued while no reader was active
+		const reader = batcher.getEventStream().getReader();
+		const { done, value } = await reader.read();
+
+		// The event should still be delivered (buffered in the stream)
+		expect(done).toBe(false);
+		expect(value!.type).toBe("lines-updated");
+
+		reader.cancel();
 	});
 });

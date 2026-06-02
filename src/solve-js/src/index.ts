@@ -1,6 +1,6 @@
 export { Lexer, sharedLexer, LexerState } from "./lexer";
 export type { Token, LexerPlugin, ScanLineResult } from "./lexer";
-export { TokenNormalizer, createBuiltinNormalizerRules, createFusedToken } from "./normalizer";
+export { TokenNormalizer, createBuiltinNormalizerRules, createFusedToken, PhraseTrie, BUILTIN_PHRASES } from "./normalizer";
 export type { NormalizerRule, NormalizerMatch, TokenFusion } from "./normalizer";
 export { TokenTypes, type TokenType } from "./lexer";
 export { TokenRegistry, sharedTokenRegistry } from "./lexer/registry/TokenRegistry";
@@ -29,8 +29,6 @@ export {
 	type AsyncResolutionEvent,
 	type LinesUpdatedEvent,
 	type AsyncErrorEvent,
-	type AsyncResolutionListener,
-	type UnsubscribeFn as AsyncUnsubscribeFn
 } from "./engine/AsyncResolutionBatcher";
 export { Solve, solve } from "./api/SolveAPI";
 export type { ISolve, ISolvePackage } from "./api/SolveAPI";

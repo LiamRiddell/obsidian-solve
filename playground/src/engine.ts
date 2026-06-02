@@ -1,6 +1,7 @@
 import { ExpressionEngine } from "@/solve-js/src/engine/ExpressionEngine";
 import { formatValue } from "@/solve-js/src/format/FormatEngine";
 import type { Token } from "@/solve-js/src/lexer/Token";
+import type { AsyncResolutionEvent } from "@/solve-js/src/engine/AsyncResolutionBatcher";
 import { getOpCodeName, OpCode } from "@/solve-js/src/parser/OpCode";
 import type { PipelineStageResult } from "@/solve-js/src/types/DiagnosticPipelineResult";
 import type { ParseletInfo } from "@/solve-js/src/types/ParsingResult";
@@ -665,10 +666,15 @@ function extractPageHeatmap(
 export function runEngineWithStreaming(
 	expression: string,
 	signal?: AbortSignal
-): { result: DebugResult; stream: ReadableStream<DiagnosticEventInfo> } {
+): {
+	result: DebugResult;
+	stream: ReadableStream<DiagnosticEventInfo>;
+	diagnosticsStream: ReadableStream<DiagnosticEventInfo>;
+} {
 	const opcodeCountsByLine = new Map<number, number>();
 	let engine: ExpressionEngine | null = null;
-	let unsubAsyncListener: (() => void) | null = null;
+	/** AbortController for the pipeThrough/pipeTo pipeline. Aborted to cancel the stream. */
+	let pipeAbortController: AbortController | null = null;
 
 	// ── Enable Value Arena for zero-allocation Value reuse ──
 	const arena = enableValueArena(512);
@@ -703,10 +709,9 @@ export function runEngineWithStreaming(
 
 	const stream = new ReadableStream<DiagnosticEventInfo>({
 		start: (controller) => {
-			const streamStartNs = performance.now() * 1e6;
-			let engineClosed = false;
+		const streamStartNs = performance.now() * 1e6;
 
-			// ── Enable allocation tracking for per-stage telemetry ──
+		// ── Enable allocation tracking for per-stage telemetry ──
 			AllocationTracker.enable();
 
 			// ── External abort (via AbortSignal) ──
@@ -716,20 +721,20 @@ export function runEngineWithStreaming(
 				);
 				return;
 			}
-			abortHandler = () => {
-				engineClosed = true;
-				if (unsubAsyncListener) {
-					unsubAsyncListener();
-					unsubAsyncListener = null;
-				}
-				if (engine) {
-					engine.clear();
-					engine = null;
-				}
-				controller.error(
-					signal?.reason ?? new DOMException("Aborted", "AbortError")
-				);
-			};
+		abortHandler = () => {
+			// Abort the pipeThrough/pipeTo pipeline
+			if (pipeAbortController) {
+				pipeAbortController.abort();
+				pipeAbortController = null;
+			}
+			if (engine) {
+				engine.clear();
+				engine = null;
+			}
+			controller.error(
+				signal?.reason ?? new DOMException("Aborted", "AbortError")
+			);
+		};
 			if (signal) {
 				signal.addEventListener("abort", abortHandler, { once: true });
 			}
@@ -737,12 +742,17 @@ export function runEngineWithStreaming(
 			try {
 				engine = new ExpressionEngine("en", true, {
 					diagnostic: { enabled: true, vmTraceEnabled: true },
-				});
+				});			// ── Pipe batcher events through a TransformStream to convert
+			// AsyncResolutionEvent → DiagnosticEventInfo, eliminating the
+			// manual async IIFE reader loop. The pipeline uses Web Streams
+			// API pipeThrough/pipeTo for backpressure, cancellation, and
+			// proper resource cleanup.
+			const eng = engine;
+			pipeAbortController = new AbortController();
 
-				// ── Subscribe to batcher events ──
-				unsubAsyncListener = engine.addAsyncListener((asyncEvent) => {
-					if (engineClosed) return;
-
+			// TransformStream: AsyncResolutionEvent → DiagnosticEventInfo
+			const asyncToDiagnostic = new TransformStream<AsyncResolutionEvent, DiagnosticEventInfo>({
+				transform(asyncEvent, transformController) {
 					if (asyncEvent.type === "lines-updated") {
 						const relNs = performance.now() * 1e6 - streamStartNs;
 						for (const ln of asyncEvent.lineNumbers) {
@@ -751,14 +761,14 @@ export function runEngineWithStreaming(
 									allLines[ln - 1] || ""
 								).trim();
 								lineAccessSeq.set(ln, ++nextAccessSeq);
-								const reResult = engine!.evaluateLineWithDebug(
+								const reResult = eng.evaluateLineWithDebug(
 									ln,
 									lineText
 								);
 								const resultValue = reResult.error
 									? reResult.error
 									: formatValue(reResult.value);
-								controller.enqueue({
+								transformController.enqueue({
 									type: "async_resolved",
 									timestamp: Date.now(),
 									elapsedNs: relNs,
@@ -769,7 +779,7 @@ export function runEngineWithStreaming(
 									groupKey: lineText || `Line ${ln}`,
 								});
 							} catch {
-								controller.enqueue({
+								transformController.enqueue({
 									type: "async_resolved",
 									timestamp: Date.now(),
 									elapsedNs: relNs,
@@ -783,7 +793,7 @@ export function runEngineWithStreaming(
 						}
 					} else if (asyncEvent.type === "error") {
 						const relNs = performance.now() * 1e6 - streamStartNs;
-						controller.enqueue({
+						transformController.enqueue({
 							type: "async_error",
 							timestamp: Date.now(),
 							elapsedNs: relNs,
@@ -792,6 +802,23 @@ export function runEngineWithStreaming(
 							groupKey: asyncEvent.queryKey,
 						});
 					}
+				}
+			});
+
+			// WritableStream: enqueue DiagnosticEventInfo into the output stream
+			const outputSink = new WritableStream<DiagnosticEventInfo>({
+				write(chunk) {
+					controller.enqueue(chunk);
+				}
+			});
+
+			// Pipe: batcher events → transform → output stream
+			// Cancellation via pipeAbortController.abort() in abortHandler/cancel.
+			eng.getEventStream()
+				.pipeThrough(asyncToDiagnostic, { signal: pipeAbortController.signal })
+				.pipeTo(outputSink, { signal: pipeAbortController.signal })
+				.catch(() => {
+					// Expected during cleanup/abort — pipe is torn down.
 				});
 
 				// ── Evaluate all lines ──
@@ -986,9 +1013,10 @@ export function runEngineWithStreaming(
 			if (abortHandler && signal) {
 				signal.removeEventListener("abort", abortHandler);
 			}
-			if (unsubAsyncListener) {
-				unsubAsyncListener();
-				unsubAsyncListener = null;
+			// Abort the pipeThrough/pipeTo pipeline
+			if (pipeAbortController) {
+				pipeAbortController.abort();
+				pipeAbortController = null;
 			}
 			if (engine) {
 				engine.clear();
@@ -1121,7 +1149,14 @@ export function runEngineWithStreaming(
 		arenaStats,
 	};
 
-	return { result, stream };
+	// ── Tee the output stream so multiple UI components can independently
+	// consume diagnostic events, each with their own backpressure and
+	// cancellation. Branch 1 (stream) = primary consumer (Stream tab).
+	// Branch 2 (diagnosticsStream) = secondary consumer (diagnostics pane,
+	// error bar, or any component that wants its own reader).
+	const [primaryBranch, secondaryBranch] = stream.tee();
+
+	return { result, stream: primaryBranch, diagnosticsStream: secondaryBranch };
 }
 
 export function runEngine(expression: string): DebugResult {

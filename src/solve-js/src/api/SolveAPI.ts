@@ -47,8 +47,8 @@ export interface ISolve {
  *
  * A package bundles all the pieces needed for a domain-specific provider:
  * lexer plugins for custom token recognition, parselets for Pratt parsing,
- * opcode handlers for VM bytecode, variable sources, and an optional async
- * resolver for data that loads asynchronously (e.g., exchange rates, game prices).
+ * opcode handlers for VM bytecode, variable sources, and optional async
+ * resolvers for data that loads asynchronously (e.g., exchange rates, game prices).
  *
  * @example
  * ```typescript
@@ -57,7 +57,7 @@ export interface ISolve {
  *   lexerPlugin: myLexerPlugin,
  *   prefixParselets: [{ tokenType: "MY_FUNC", parselet: new MyParselet() }],
  *   opcodeHandlers: [{ opcode: MY_OPCODE, handler: myHandler, pluginName: "MyProvider" }],
- *   asyncResolver: myAsyncResolver,
+ *   asyncResolvers: [myAsyncResolver],
  * };
  * solve.registerPackage(myPackage);
  * ```
@@ -76,18 +76,40 @@ export interface ISolvePackage {
   /** Variable sources that provide values at runtime. */
   variableSources?: IVariableSource[];
   /**
-   * Async resolver for this package's domain.
-   * When set, the ExpressionEngine runs preflight() before VM execution.
-   * If async data is needed, a Pending result is returned immediately
-   * and the line re-evaluates when the data resolves.
+   * Async resolvers for this package's domain.
+   * When set, the ExpressionEngine runs preflight() before VM execution
+   * for each resolver. If async data is needed, a Pending result is
+   * returned immediately and the line re-evaluates when the data resolves.
+   *
+   * Each resolver must have a unique `namespace` — the ResolverRegistry
+   * is keyed by namespace. Multiple resolvers let a package handle
+   * distinct async operations (e.g., `fetch`, `wait`, `poll`) in
+   * separate, focused classes rather than one monolithic preflight().
    */
-  asyncResolver?: IAsyncResolver;
+  asyncResolvers?: IAsyncResolver[];
   /**
-   * Normalizer rules for post-lexer token fusion.
+   * Multi-word phrases to fuse into single compound tokens.
+   * Each key is a space-separated phrase (e.g., "to the power of"),
+   * each value is the target token type after fusion (e.g., "CARET").
+   *
+   * Registered into the engine's {@link PhraseTrie} for single-pass
+   * O(depth) matching — no separate rule scanning per phrase.
+   *
+   * @example
+   * ```ts
+   * phrases: {
+   *   "to the power of": "CARET",
+   *   "abyssal whip": "ITEM",
+   * }
+   * ```
+   */
+  phrases?: Record<string, string>;
+  /**
+   * Normalizer rules for post-lexer token transformation.
    * Applied by the TokenNormalizer between lexing and parsing.
-   * Used for multi-word phrase matching (e.g., "to the power of" → CARET),
-   * domain-specific token fusion (e.g., item name merging), and implicit
-   * operator insertion.
+   * For phrase fusion, prefer the declarative {@link phrases} field
+   * which uses the faster PhraseTrie. Use this for non-phrase rules
+   * like implicit operator insertion.
    */
   normalizerRules?: NormalizerRule[];
 }
@@ -161,6 +183,9 @@ export class Solve implements ISolve {
         this.registerVariableSource(vs);
       }
     }
+    // Note: asyncResolvers are NOT registered here — the shared Solve singleton
+    // doesn't have a ResolverRegistry (that lives inside ExpressionEngine).
+    // Use ExpressionEngine.registerPackage() directly if you need async resolvers.
   }
 
   getOpCode(): typeof OpCode {

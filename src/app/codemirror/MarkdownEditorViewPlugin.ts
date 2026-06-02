@@ -10,7 +10,7 @@ import { DocumentModel, ViewportRange, LineChange } from "@solve-js/engine/Docum
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
-import type { AsyncResolutionEvent, UnsubscribeFn } from "@solve-js/engine/AsyncResolutionBatcher";
+import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -24,7 +24,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
 	private userSettings: UserSettings;
 	private highlightProvider: SolveHighlightProvider;
-	private asyncEventUnsubscribe: UnsubscribeFn | null = null;
+	/** Reader for the engine's async resolution event stream (Web Streams API). */
+	private eventStreamReader: ReadableStreamDefaultReader<AsyncResolutionEvent> | null = null;
 
 	private currentDoc: object | null = null;
 
@@ -64,14 +65,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		this.evaluator.dispatchBackgroundCompiles(this.getViewportFromView(view));
 
 		// Subscribe to batcher event stream — the SINGLE async resolution pipeline.
-		// Engine bridges DataQueryService cache updates into the batcher,
-		// so all async resolutions (engine-originated AND DataQueryService)
-		// flow through this one listener.
-		// This handles lines-updated and error events from the batcher's
-		// single-DAG-walk re-evaluation pass (replaces onAsyncResolved).
-		this.asyncEventUnsubscribe = engine.addAsyncListener((event: AsyncResolutionEvent) => {
-			this.handleAsyncEvent(event, view);
-		});
+		// Uses the Web Streams API via getEventStream().getReader() for built-in
+		// cancellation, backpressure, and proper resource cleanup.
+		const eventStream = engine.getEventStream();
+		this.eventStreamReader = eventStream.getReader();
+		this.startEventStreamReader(view);
 
 		this.currentDoc = view.state.doc;
 		this.decorations = this.buildDecorations(view);
@@ -156,9 +154,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		logger.debug(`[SolveViewPlugin] Destroyed`);
 		// Abort all in-flight async work before teardown
 		this.abortKeystroke('Plugin destroyed');
-		if (this.asyncEventUnsubscribe) {
-			this.asyncEventUnsubscribe();
-			this.asyncEventUnsubscribe = null;
+		// Cancel the event stream reader to stop receiving async events
+		if (this.eventStreamReader) {
+			try { this.eventStreamReader.cancel(); } catch { /* already closed */ }
+			this.eventStreamReader = null;
 		}
 		// Phase 5.2h: Clean up compilation worker through evaluator
 		this.evaluator.terminateWorker();
@@ -185,6 +184,32 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			this.keystrokeController.abort(reason);
 			this.keystrokeController = null;
 		}
+	}
+
+	// ── Event stream reader ───────────────────────────────────────────
+
+	/**
+	 * Start reading from the engine's event stream via the Web Streams API.
+	 *
+	 * Runs as a fire-and-forget async IIFE. Each event is dispatched to
+	 * {@link handleAsyncEvent} for view refresh or error logging.
+	 * The reader is cancelled in {@link destroy}.
+	 */
+	private startEventStreamReader(view: EditorView): void {
+		const reader = this.eventStreamReader;
+		if (!reader) return;
+
+		(async () => {
+			try {
+				while (true) {
+					const { done, value: event } = await reader.read();
+					if (done) break;
+					this.handleAsyncEvent(event, view);
+				}
+			} catch {
+				// Reader cancelled — expected during teardown or document switch.
+			}
+		})();
 	}
 
 	// ── Async event handler ───────────────────────────────────────────

@@ -32,12 +32,6 @@ export interface AsyncErrorEvent {
 
 export type AsyncResolutionEvent = LinesUpdatedEvent | AsyncErrorEvent;
 
-/** Listener function for async resolution events. */
-export type AsyncResolutionListener = (event: AsyncResolutionEvent) => void;
-
-/** Returned by addListener() — call to unsubscribe. */
-export type UnsubscribeFn = () => void;
-
 // ── Internal batch entry ───────────────────────────────────────────────
 
 interface BatchEntry {
@@ -70,6 +64,16 @@ interface BatchEntry {
  *
  * Perf: For N resolutions in a tick, reduces DAG walks from N to 1 and
  * re-executions from N*avgAffected to totalAffected.
+ *
+ * ## Streaming Architecture
+ *	 * Events are published to a native {@link ReadableStream}. Stream-based
+	 * consumers read from the stream via `getReader()`, gaining built-in
+	 * cancellation (`reader.cancel()`), proper resource cleanup
+	 * (`reader.releaseLock()`), and the ability to
+	 * `pipeTo()` / `pipeThrough()` / `tee()` the event flow.
+ *
+ * The stream uses a configurable {@link CountQueuingStrategy} with a default
+ * `highWaterMark` of 64 events to limit the internal buffer size.
  */
 export class AsyncResolutionBatcher {
 	private pending: BatchEntry[] = [];
@@ -88,17 +92,53 @@ export class AsyncResolutionBatcher {
 	 */
 	private executionPool: ExecutionPool | null = null;
 
-	/** Event listeners. */
-	private listeners = new Set<AsyncResolutionListener>();
+	// ── Web Streams API integration ──────────────────────────────────
+
+	/**
+	 * Default high-water mark for the internal event stream.
+	 * Limits the internal buffer size before the stream signals to
+	 * consumers that they need to catch up.
+	 */
+	private static readonly DEFAULT_HIGH_WATER_MARK = 64;
+
+	/**
+	 * Internal {@link ReadableStream} for async resolution events.
+	 * All events (lines-updated and error) are enqueued here.
+	 */
+	private _eventStream: ReadableStream<AsyncResolutionEvent>;
+
+	/**
+	 * Controller for the internal event stream. Set during stream
+	 * initialization; cleared on stream cancellation or clearAll().
+	 */
+	private _streamController: ReadableStreamDefaultController<AsyncResolutionEvent> | null = null;
+
+	/**
+	 * Test-only synchronous capture array. When enabled (non-null), every
+	 * event is synchronously pushed here in addition to the stream.
+	 * Tests read from this array to avoid async stream reader timing issues.
+	 */
+	public _testCaptures: AsyncResolutionEvent[] | null = null;
 
 	constructor(
 		dag: DependencyGraph,
 		lineCache: LineCache,
 		vm: VM,
+		highWaterMark: number = AsyncResolutionBatcher.DEFAULT_HIGH_WATER_MARK,
 	) {
 		this.dag = dag;
 		this.lineCache = lineCache;
 		this.vm = vm;
+
+		// ── Create the internal event stream ──
+		this._eventStream = new ReadableStream<AsyncResolutionEvent>({
+			start: (controller) => {
+				this._streamController = controller;
+			},
+			cancel: () => {
+				this._streamController = null;
+			},
+		}, new CountQueuingStrategy({ highWaterMark }));
 	}
 
 	// ── Public API ────────────────────────────────────────────────────
@@ -131,23 +171,38 @@ export class AsyncResolutionBatcher {
 	}
 
 	/**
-	 * Register a listener for async resolution events.
+	 * Get the native event stream for stream-based consumers.
 	 *
-	 * @returns A function to call to unsubscribe.
+	 * Use this for backpressure, cancellation, or the ability
+	 * to `pipeTo()` / `pipeThrough()` the event flow.
+	 *
+	 * @returns A {@link ReadableStream} that emits {@link AsyncResolutionEvent}
+	 *          items as the batcher processes async resolutions.
 	 */
-	addListener(listener: AsyncResolutionListener): UnsubscribeFn {
-		this.listeners.add(listener);
-		return () => {
-			this.listeners.delete(listener);
-		};
+	getEventStream(): ReadableStream<AsyncResolutionEvent> {
+		return this._eventStream;
 	}
 
 	/** Remove all listeners and cancel pending batch. Called on engine clear. */
 	clearAll(): void {
-		this.listeners.clear();
 		this.pending = [];
 		this.scheduled = false;
 		this.cleared = true;
+
+		// Clear test capture to match stream-close semantics — after
+		// clearAll(), no further events reach old subscribers.
+		this._testCaptures = null;
+
+		// Close the stream gracefully so consumers get a clean done signal.
+		// New consumers of getEventStream() will get a new stream from the
+		// engine's next ctor (engine.clear() recreates the engine).
+		try {
+			this._streamController?.close();
+		} catch {
+			// Controller may already be closed or errored.
+		}
+		this._streamController = null;
+
 		if (this.executionPool) {
 			this.executionPool.clear();
 			this.executionPool = null;
@@ -449,12 +504,24 @@ export class AsyncResolutionBatcher {
 		return updatedLineNumbers;
 	}
 
+	/**
+	 * Notify all consumers of an async resolution event.
+	 *
+	 * Enqueues the event into the internal {@link ReadableStream}.
+	 * If the stream has been closed or errored (consumer cancelled),
+	 * the enqueue silently fails (caught by try/catch).
+	 */
 	private notifyListeners(event: AsyncResolutionEvent): void {
-		for (const listener of this.listeners) {
+		// Test capture — synchronous, no timing issues (enabled only in tests).
+		if (this._testCaptures) {
+			this._testCaptures.push(event);
+		}
+
+		if (this._streamController) {
 			try {
-				listener(event);
+				this._streamController.enqueue(event);
 			} catch {
-				// Don't let one bad listener break others.
+				// Stream closed or errored — consumer may have cancelled.
 			}
 		}
 	}

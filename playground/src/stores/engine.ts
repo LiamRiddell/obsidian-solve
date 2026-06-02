@@ -22,12 +22,19 @@ export const useEngineStore = defineStore('engine', () => {
     error?: string;
     streamEvent?: DiagnosticEventInfo;
     stream?: boolean;
+    branchKey?: string;
   }>) => {
-    const { id, result, error, streamEvent, stream } = e.data;
+    const { id, result, error, streamEvent, stream, branchKey } = e.data;
 
-    // Streaming events are handled by the stream store
+    // Streaming events are routed by branchKey:
+    //   "stream"      → StreamStore (primary consumer, existing behavior)
+    //   "diagnostics" → PipelineStore (secondary consumer, tee branch)
     if (stream && streamEvent && id === runId.value) {
-      useStreamStore().addEvent(streamEvent);
+      if (branchKey === 'diagnostics') {
+        usePipelineStore().addDiagnosticEvent(streamEvent);
+      } else {
+        useStreamStore().addEvent(streamEvent);
+      }
       return;
     }
 
@@ -79,8 +86,9 @@ export const useEngineStore = defineStore('engine', () => {
         return;
       }
 
-      // Reset stream events
+      // Reset stream events — both primary and tee'd diagnostic branches
       useStreamStore().reset();
+      usePipelineStore().resetDiagnosticEvents();
 
       status.value = 'busy';
       runId.value++;

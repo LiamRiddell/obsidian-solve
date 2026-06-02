@@ -11,7 +11,5 @@ export {
 	type AsyncResolutionEvent,
 	type LinesUpdatedEvent,
 	type AsyncErrorEvent,
-	type AsyncResolutionListener,
-	type UnsubscribeFn as AsyncUnsubscribeFn,
 } from "./AsyncResolutionBatcher";
 export { ExecutionPool, WORKER_OFFLOAD_THRESHOLD, reconstructValue } from "./ExecutionPool";

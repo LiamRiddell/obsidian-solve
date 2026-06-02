@@ -24,8 +24,7 @@ import {
 } from "@solve-js/resolvers/ResolverRegistry";
 import {
 	AsyncResolutionBatcher,
-	type AsyncResolutionListener,
-	type UnsubscribeFn,
+	type AsyncResolutionEvent,
 } from "@solve-js/engine/AsyncResolutionBatcher";
 import { dataQueryService } from "@solve-js/services/DataQueryService";
 import { AllocationTracker, type PipelineTelemetry, type StageAllocation } from "@solve-js/telemetry";
@@ -53,7 +52,7 @@ import {
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
 import { abortLogger } from "@app/utilities/AbortControllerLogger";
-import { TokenNormalizer, createBuiltinNormalizerRules } from "@solve-js/normalizer";
+import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import type { NormalizerRule, TokenFusion } from "@solve-js/normalizer";
 import {
     type DiagnosticPipelineResult,
@@ -184,14 +183,29 @@ export class ExpressionEngine {
         // Each package's parselets go into the engine's isolated registry
         // (not sharedParseletRegistry), lexer plugins into the engine's
         // isolated lexer, and opcode/variable handlers into shared registries.
+
+        // ── Create normalizer BEFORE package registration ──
+        // Packages may register phrases and normalizer rules, so the normalizer
+        // must exist before registerPackage() is called.
+        this.normalizer = new TokenNormalizer();
+
+        // Register built-in phrases into the PhraseTrie — single-pass
+        // O(depth) matching per position instead of separate rule scans.
+        for (const [phrase, tokenType] of Object.entries(BUILTIN_PHRASES)) {
+            this.normalizer.addPhrase(phrase, tokenType);
+        }
+
+        // Register built-in normalizer rules (implicit multiply, etc.)
+        // Pass the trie's canStart predicate so the implicit multiply rule
+        // stays in sync with package-registered phrases.
+        this.normalizer.register(implicitMultiplyRule(
+            50,
+            (word) => this.normalizer.canStartPhrase(word),
+        ));
+
         const pkgList = packages ?? BUILTIN_PACKAGES;
         for (const pkg of pkgList) {
             this.registerPackage(pkg);
-        }
-        this.normalizer = new TokenNormalizer();
-        // Register built-in normalizer rules (phrase fusion, implicit multiply)
-        for (const rule of createBuiltinNormalizerRules()) {
-            this.normalizer.register(rule);
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
@@ -223,23 +237,36 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Multi-listener event stream
+    //#region Public API — Event stream
 
     /**
-     * Subscribe to async resolution events.
+     * Get the native event stream from the batcher for stream-based consumers.
      *
-     * Receives either `{ type: 'lines-updated', lineNumbers, affectedQueryKeys }`
-     * or `{ type: 'error', queryKey, packageId, error }`.
+     * Use this instead of `addAsyncListener()` when you need:
+     * - **Backpressure**: the stream buffers up to `highWaterMark` events;
+     *   when full, `enqueue()` blocks until the consumer reads, preventing
+     *   unbounded memory growth.
+     * - **Cancellation**: call `reader.cancel()` or pass an `AbortSignal` to
+     *   `pipeTo()` to stop receiving events.
+     * - **Piping**: use `stream.pipeTo(writable)` or `stream.pipeThrough(transform)`
+     *   to build a reactive pipeline.
+     * - **Teeing**: use `stream.tee()` to serve multiple independent consumers.
      *
-     * Use this instead of the deprecated `onAsyncResolved` callback for:
-     * - Triggering view re-renders after async data loads
-     * - Showing transient error toasts for failed resolutions
-     * - Updating loading spinners for specific query keys
-     *
-     * @returns An unsubscribe function — call it in your `destroy()` method.
+     * @returns A {@link ReadableStream} that emits {@link AsyncResolutionEvent}
+     *          items as the batcher processes async resolutions.
      */
-    addAsyncListener(listener: AsyncResolutionListener): UnsubscribeFn {
-        return this.batcher.addListener(listener);
+    getEventStream(): ReadableStream<AsyncResolutionEvent> {
+        return this.batcher.getEventStream();
+    }
+
+    /**
+     * Get the batcher instance (for test infrastructure).
+     *
+     * Tests use this to access `batcher._testCaptures` for synchronous
+     * event observation without async stream reader timing issues.
+     */
+    getBatcher(): AsyncResolutionBatcher {
+        return this.batcher;
     }
 
     //#endregion
@@ -287,8 +314,15 @@ export class ExpressionEngine {
                 sharedVariableResolver.registerSource(vs);
             }
         }
-        if (pkg.asyncResolver) {
-            this.resolverRegistry.register(pkg.asyncResolver);
+        if (pkg.asyncResolvers) {
+            for (const resolver of pkg.asyncResolvers) {
+                this.resolverRegistry.register(resolver);
+            }
+        }
+        if (pkg.phrases) {
+            for (const [phrase, tokenType] of Object.entries(pkg.phrases)) {
+                this.normalizer.addPhrase(phrase, tokenType);
+            }
         }
         if (pkg.normalizerRules) {
             for (const rule of pkg.normalizerRules) {

@@ -19,12 +19,18 @@
  *
  * @example
  * ```typescript
- * import { TokenNormalizer, createBuiltinNormalizerRules } from "./index";
+ * import { TokenNormalizer, implicitMultiplyRule, BUILTIN_PHRASES } from "./index";
  *
  * const normalizer = new TokenNormalizer();
- * for (const rule of createBuiltinNormalizerRules()) {
- *   normalizer.register(rule);
+ * // Register phrases into the PhraseTrie (single-pass O(depth) matching)
+ * for (const [phrase, tokenType] of Object.entries(BUILTIN_PHRASES)) {
+ *   normalizer.addPhrase(phrase, tokenType);
  * }
+ * // Register non-phrase rules with trie-backed phrase guard
+ * normalizer.register(implicitMultiplyRule(
+ *   50,
+ *   (word) => normalizer.canStartPhrase(word),
+ * ));
  * const fused = normalizer.normalize(tokens);
  * ```
  */
@@ -34,6 +40,7 @@
 export { TokenNormalizer } from "./TokenNormalizer";
 export type { NormalizerOptions } from "./TokenNormalizer";
 export { createFusedToken } from "./TokenNormalizer";
+export { PhraseTrie } from "./PhraseTrie";
 //#endregion
 
 //#region Exports — Rule types and interfaces
@@ -43,7 +50,7 @@ export type { NormalizerRule, NormalizerMatch, TokenFusion } from "./NormalizerR
 //#region Exports — Built-in rules
 export {
   createBuiltinNormalizerRules,
-  phraseFusionRule,
   implicitMultiplyRule,
+  BUILTIN_PHRASES,
 } from "./BuiltinNormalizerRules";
 //#endregion

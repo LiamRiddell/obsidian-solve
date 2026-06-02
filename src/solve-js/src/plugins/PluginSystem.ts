@@ -56,11 +56,11 @@ export interface SolvePlugin {
   lexerPlugin?: LexerPlugin;
 
   /**
-   * Optional async resolver for data that needs to be fetched.
-   * The engine calls preflight() before VM execution and returns
-   * Pending if data is not yet cached.
+   * Optional async resolvers for data that needs to be fetched.
+   * The engine calls preflight() before VM execution for each resolver
+   * and returns Pending if data is not yet cached.
    */
-  asyncResolver?: IAsyncResolver;
+  asyncResolvers?: IAsyncResolver[];
   
   /**
    * Register plugin functionality with the engine
@@ -168,9 +168,11 @@ export class PluginManager {
       sharedLexer.registerPlugin(plugin.lexerPlugin);
     }
 
-    // Register async resolver if the plugin provides one
-    if (plugin.asyncResolver && this.resolverRegistry) {
-      this.resolverRegistry.register(plugin.asyncResolver);
+    // Register async resolvers if the plugin provides them
+    if (plugin.asyncResolvers && this.resolverRegistry) {
+      for (const resolver of plugin.asyncResolvers) {
+        this.resolverRegistry.register(resolver);
+      }
     }
 
     try {
@@ -178,8 +180,10 @@ export class PluginManager {
       this.plugins.set(plugin.name, { id: packageId, plugin });
     } catch (error) {
       // Clean up on failure
-      if (plugin.asyncResolver && this.resolverRegistry) {
-        this.resolverRegistry.unregister(plugin.asyncResolver.namespace);
+      if (plugin.asyncResolvers && this.resolverRegistry) {
+        for (const resolver of plugin.asyncResolvers) {
+          this.resolverRegistry.unregister(resolver.namespace);
+        }
       }
       throw ErrorFactory.config(
         'PLUGIN_REGISTRATION_FAILED',
@@ -213,9 +217,11 @@ export class PluginManager {
       sharedLexer.unregisterPlugin(meta.plugin.lexerPlugin);
     }
 
-    // Unregister async resolver
-    if (meta.plugin.asyncResolver && this.resolverRegistry) {
-      this.resolverRegistry.unregister(meta.plugin.asyncResolver.namespace);
+    // Unregister async resolvers
+    if (meta.plugin.asyncResolvers && this.resolverRegistry) {
+      for (const resolver of meta.plugin.asyncResolvers) {
+        this.resolverRegistry.unregister(resolver.namespace);
+      }
     }
 
     // Clear all cached data for this plugin
@@ -281,9 +287,11 @@ export class PluginManager {
       if (meta.plugin.lexerPlugin) {
         sharedLexer.unregisterPlugin(meta.plugin.lexerPlugin);
       }
-      // Unregister async resolver
-      if (meta.plugin.asyncResolver && this.resolverRegistry) {
-        this.resolverRegistry.unregister(meta.plugin.asyncResolver.namespace);
+      // Unregister async resolvers
+      if (meta.plugin.asyncResolvers && this.resolverRegistry) {
+        for (const resolver of meta.plugin.asyncResolvers) {
+          this.resolverRegistry.unregister(resolver.namespace);
+        }
       }
       // Clear all cached data for this plugin
       AsyncResultCache.clearPackage(meta.id);
