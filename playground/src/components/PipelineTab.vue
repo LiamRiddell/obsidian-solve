@@ -836,6 +836,15 @@ const stageRenderers: Record<
       else { categories.Other.count++; categories.Other.types.push(type); }
     }
 
+    // Color scheme per category
+    const catColors: Record<string, { bg: string; fg: string; border: string }> = {
+      Literals:    { bg: "rgba(90,200,250,0.12)",  fg: "#5ac8fa", border: "rgba(90,200,250,0.25)" },
+      Operators:   { bg: "rgba(255,216,102,0.12)", fg: "#ffd866", border: "rgba(255,216,102,0.25)" },
+      Keywords:    { bg: "rgba(155,123,236,0.15)", fg: "#9b7bec", border: "rgba(155,123,236,0.3)" },
+      Identifiers: { bg: "rgba(78,201,176,0.12)",  fg: "#4ec9b0", border: "rgba(78,201,176,0.25)" },
+      Other:       { bg: "rgba(107,107,117,0.1)",  fg: "#6b6b75", border: "rgba(107,107,117,0.15)" },
+    };
+
     const nonEmpty = Object.entries(categories).filter(([, v]) => v.count > 0);
 
     return h("div", { style: { display: "flex", flexDirection: "column", gap: "6px", width: "100%" } }, [
@@ -849,21 +858,22 @@ const stageRenderers: Record<
           }, t.value),
         ),
       ),
-      // Classification breakdown chips
-      h("span", { style: { display: "flex", flexWrap: "wrap", gap: "4px" } },
-        nonEmpty.map(([label, info]) =>
-          h("span", {
+      // Graphical chip layout: [LITERALS: 3] [OPERATORS: 2] …
+      h("span", { style: { display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" } },
+        nonEmpty.map(([label, info]) => {
+          const c = catColors[label] ?? catColors.Other;
+          return h("span", {
             style: {
-              fontSize: "8px",
-              padding: "1px 6px",
-              borderRadius: "3px",
-              background: label === "Keywords" ? "rgba(155,123,236,0.15)" : "rgba(107,107,117,0.15)",
-              color: label === "Keywords" ? "#9b7bec" : "#6b6b75",
-              border: "1px solid rgba(107,107,117,0.2)",
+              display: "inline-flex", alignItems: "center", gap: "4px",
+              background: c.bg, border: "1px solid " + c.border,
+              borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
             },
             title: `${label}: ${info.types.join(", ")}`,
-          }, `${label}: ${info.count}`),
-        ),
+          }, [
+            h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, label.toUpperCase()),
+            h("span", { style: { color: c.fg, fontWeight: "700", fontVariantNumeric: "tabular-nums" } }, String(info.count)),
+          ]);
+        }),
       ),
     ]);
   },
@@ -947,34 +957,75 @@ const stageRenderers: Record<
   // ── Stage 6: Read/Write Extraction ────────────────────────────────────
   readwrite(stage) {
     const o = stage.output as any;
-    const parts: string[] = [];
-    if (o.reads?.length) parts.push(`Reads: ${o.reads.join(", ")}`);
-    if (o.writes?.length) parts.push(`Writes: ${o.writes.join(", ")}`);
-    if (!parts.length)
+    const reads: string[] = o.reads ?? [];
+    const writes: string[] = o.writes ?? [];
+    if (!reads.length && !writes.length)
       return h(
         "span",
         { style: { color: "#6b6b75", fontSize: "10px" } },
         "None",
       );
-    return h(
-      "span",
-      { style: { color: "#dcdcaa", fontSize: "10px" } },
-      parts.join(" | "),
-    );
+
+    const chips: any[] = [];
+    if (reads.length) {
+      chips.push(
+        h("span", {
+          style: {
+            display: "inline-flex", alignItems: "center", gap: "4px",
+            background: "rgba(90,200,250,0.12)", border: "1px solid rgba(90,200,250,0.25)",
+            borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
+          },
+          title: `Reads: ${reads.join(", ")}`,
+        }, [
+          h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, "READS"),
+          h("span", { style: { color: "#5ac8fa", fontWeight: "700", fontVariantNumeric: "tabular-nums" } }, String(reads.length)),
+        ]),
+      );
+    }
+    if (writes.length) {
+      chips.push(
+        h("span", {
+          style: {
+            display: "inline-flex", alignItems: "center", gap: "4px",
+            background: "rgba(255,216,102,0.12)", border: "1px solid rgba(255,216,102,0.25)",
+            borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
+          },
+          title: `Writes: ${writes.join(", ")}`,
+        }, [
+          h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, "WRITES"),
+          h("span", { style: { color: "#ffd866", fontWeight: "700", fontVariantNumeric: "tabular-nums" } }, String(writes.length)),
+        ]),
+      );
+    }
+
+    return h("span", { style: { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" } }, chips);
   },
 
   // ── Stage 7: Cache Check ──────────────────────────────────────────────
   cache_check(stage) {
     const o = stage.output as any;
-    const color = o.hit ? "#4ec9b0" : "#5ac8fa";
+    const hit = o.hit as boolean;
+    const statusColor = hit ? "#4ec9b0" : "#5ac8fa";
+    const statusBg = hit ? "rgba(78,201,176,0.12)" : "rgba(90,200,250,0.12)";
+    const statusBorder = hit ? "rgba(78,201,176,0.25)" : "rgba(90,200,250,0.25)";
     const cached = dr.wasCached;
     const totalOps = dr.opcodes.length;
+
     return h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" } }, [
-      h("span", { style: { color, fontSize: "10px", fontWeight: "600" } },
-        o.hit ? "Cache Hit" : "Cache Miss",
-      ),
+      // Status chip
+      h("span", {
+        style: {
+          display: "inline-flex", alignItems: "center", gap: "4px",
+          background: statusBg, border: "1px solid " + statusBorder,
+          borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
+        },
+      }, [
+        h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, "STATUS"),
+        h("span", { style: { color: statusColor, fontWeight: "700" } }, hit ? "HIT" : "MISS"),
+      ]),
+      // Detail line
       h("span", { style: { fontSize: "9px", color: "#6b6b75" } }, [
-        o.hit
+        hit
           ? `Cache size: ${o.cacheSize ?? "?"} entries`
           : `Key: ${(o.cacheKey ?? "").slice(0, 30)}`,
       ]),
@@ -994,18 +1045,19 @@ const stageRenderers: Record<
       );
     const o = stage.output as any;
     if (o.uniqueParseletTypes?.length) {
-      return h(
-        "span",
-        {},
+      return h("span", { style: { display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" } },
         o.uniqueParseletTypes.map((p: string) =>
-          h(
-            "span",
-            {
-              class: "token token-keyword",
-              style: { fontSize: "9px", cursor: "default" },
+          h("span", {
+            style: {
+              display: "inline-flex", alignItems: "center", gap: "4px",
+              background: "rgba(155,123,236,0.12)", border: "1px solid rgba(155,123,236,0.2)",
+              borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
             },
-            p,
-          ),
+            title: `Parselet: ${p}`,
+          }, [
+            h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, "PARSELET"),
+            h("span", { style: { color: "#9b7bec", fontWeight: "700", fontFamily: "'JetBrains Mono', monospace" } }, p),
+          ]),
         ),
       );
     }
@@ -1021,10 +1073,32 @@ const stageRenderers: Record<
         "Skipped (cache hit)",
       );
     const o = stage.output as any;
-    return h(
-      "span",
-      { style: { color: "#dcdcaa", fontSize: "10px" } },
-      `${o.opcodeCount} opcodes, ${o.numberConstants} nums, ${o.stringConstants} strs`,
+    const chips: any[] = [
+      { label: "OPCODES", count: o.opcodeCount ?? 0, bg: "rgba(155,123,236,0.15)", fg: "#9b7bec", border: "rgba(155,123,236,0.3)" },
+      { label: "NUMS",    count: o.numberConstants ?? 0, bg: "rgba(90,200,250,0.12)",  fg: "#5ac8fa", border: "rgba(90,200,250,0.25)" },
+      { label: "STRS",    count: o.stringConstants ?? 0, bg: "rgba(78,201,176,0.12)",  fg: "#4ec9b0", border: "rgba(78,201,176,0.25)" },
+    ];
+
+    return h("span", { style: { display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" } },
+      chips.map((c, i, arr) => {
+        const nodes: any[] = [
+          h("span", {
+            style: {
+              display: "inline-flex", alignItems: "center", gap: "4px",
+              background: c.bg, border: "1px solid " + c.border,
+              borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
+            },
+            title: `${c.label}: ${c.count}`,
+          }, [
+            h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, c.label),
+            h("span", { style: { color: c.fg, fontWeight: "700", fontVariantNumeric: "tabular-nums" } }, String(c.count)),
+          ]),
+        ];
+        if (i < arr.length - 1) {
+          nodes.push(h("span", { style: { color: "#6b6b75", fontSize: "11px", margin: "0 2px" } }, "→"));
+        }
+        return nodes;
+      }).flat(),
     );
   },
 
