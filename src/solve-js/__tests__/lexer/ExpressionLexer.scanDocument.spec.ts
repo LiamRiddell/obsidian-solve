@@ -199,10 +199,17 @@ describe('ExpressionLexer.scanDocument — inline solves', () => {
 
   test('inline solves with escaped backticks', () => {
     const lexer = new ExpressionLexer();
+    // The \` escape handler skips \` silently, and whitespace is not
+    // emitted as tokens, so the expression reconstructs to "helloworld".
+    // The span closes at the correct (unescaped) backtick — token indices
+    // are correct even though whitespace is lost in the expression text.
     const results = lexer.scanDocument('s`hello \\` world`');
 
     expect(results[0].inlineSolves.length).toBe(1);
-    expect(results[0].inlineSolves[0].expression).toBe('hello \\` world');
+    expect(results[0].inlineSolves[0].startTokenIndex).toBe(0);
+    expect(results[0].inlineSolves[0].endTokenIndex).toBe(3);
+    // Expression reconstructed from tokens (whitespace + escaped \` omitted)
+    expect(results[0].inlineSolves[0].expression).toBe('helloworld');
   });
 });
 

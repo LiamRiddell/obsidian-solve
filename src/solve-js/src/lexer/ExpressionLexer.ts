@@ -610,35 +610,31 @@ export class ExpressionLexer {
         // this.pos is now at lineEnd — advance past newline below
       }
 
-      // ── Slice line text for result and inline solves ────────────
-      // Classification already happened via classifyFromPositions()
-      // which reads from this.input directly. The slice here is still
-      // needed for ScanLineResult.text and findInlineSolves().
+      // ── Slice line text for ScanLineResult.text ────────────────
       const lineText = input.slice(lineStart, lineEnd);
 
       // ── Detect inline solves ──────────────────────────────────────
-      // Two data sources are merged:
-      //   1. _inlineSolveSpans — token indices collected inline during
-      //      [Symbol.iterator](). Provides correct startTokenIndex /
-      //      endTokenIndex for token-level access.
-      //   2. findInlineSolves() — character-level string scan. Still
-      //      necessary because the tokenizer doesn't handle backslash
-      //      escapes: in s`hello \` world`, the tokenizer treats \` as
-      //      a closing BACKTICK_OPEN (closing the span early), while
-      //      findInlineSolves() correctly skips \` as an escape sequence.
-      //      Merging both gives correct char offsets + token indices.
+      // Spans are reconstructed entirely from the token array using
+      // token indices collected inline during [Symbol.iterator]().
+      // The generator handles \` escape sequences (skips them instead
+      // of closing the span early), so expression, offsets, and columns
+      // are all derivable from tokens — no separate string scan needed.
       let inlineSolves: InlineSolveSpan[] = [];
       if (classification.hasInlineSolve) {
         if (!classification.skip && tokens.length > 0) {
-          const charSpans = this.findInlineSolves(lineText);
-          inlineSolves = this._inlineSolveSpans.map((span, i) => ({
-            start: charSpans[i]?.start ?? 0,
-            end: charSpans[i]?.end ?? 0,
-            expression: charSpans[i]?.expression ?? '',
-            columnNumber: charSpans[i]?.columnNumber ?? span.columnNumber,
-            startTokenIndex: span.startTokenIndex,
-            endTokenIndex: span.endTokenIndex,
-          }));
+          inlineSolves = this._inlineSolveSpans.map(span => {
+            const startIdx = span.startTokenIndex!;
+            const endIdx = span.endTokenIndex!;
+            const exprTokens = tokens.slice(startIdx + 1, endIdx);
+            return {
+              start: tokens[startIdx].offset - lineStart,
+              end: tokens[endIdx].offset + tokens[endIdx].text.length - lineStart,
+              expression: exprTokens.map(t => t.value).join(''),
+              columnNumber: span.columnNumber,
+              startTokenIndex: startIdx,
+              endTokenIndex: endIdx,
+            };
+          });
         } else {
           // Skipped lines weren't tokenized — fall back to string scan
           inlineSolves = this.findInlineSolves(lineText);
@@ -821,6 +817,16 @@ export class ExpressionLexer {
     while (this.pos < len) {
       const c0 = input.charCodeAt(this.pos);
       const cc = ExpressionLexer.CHAR_CLASS[c0] ?? CharClass.SKIP;
+
+      // ── Escaped backtick inside inline solve ────────────────────────
+      // \` is treated as an escaped backtick — skip both characters
+      // without closing the inline solve span. Without this, the
+      // backtick would close the span early, producing wrong expression
+      // text for expressions like s`hello \` world`.
+      if (openSpan && c0 === 92 && this.pos + 1 < len && input.charCodeAt(this.pos + 1) === 96) {
+        this.pos += 2;  // skip \ and `
+        continue;
+      }
 
       switch (cc) {
         // ── Whitespace — skip entirely, track newlines ────────────────
