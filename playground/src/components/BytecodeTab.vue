@@ -97,16 +97,16 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { describeOpcode } from '../utils.js';
 import type { OpcodeInfo, ConstantInfo } from '../engine.js';
 
-const engine = useEngineStore();
+const dr = useDiagnosticReportStore();
 const sidebarOpen = ref(true);
 
-const opcodes = computed<OpcodeInfo[]>(() => engine.currentResult?.opcodes ?? []);
-const constants = computed<ConstantInfo[]>(() => engine.currentResult?.constants ?? []);
-const variables = computed(() => engine.currentResult?.variables ?? []);
+const opcodes = computed<OpcodeInfo[]>(() => dr.opcodes);
+const constants = computed<ConstantInfo[]>(() => dr.constants);
+const variables = computed(() => dr.variables);
 
 const hasSidebarContent = computed(() => constants.value.length > 0 || variables.value.length > 0);
 

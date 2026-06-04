@@ -92,17 +92,17 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import type { PageHeatmapEntry } from '../engine.js';
 
-const engine = useEngineStore();
-const cache = computed(() => engine.currentResult?.cacheSnapshot ?? null);
+const dr = useDiagnosticReportStore();
+const cache = computed(() => dr.cacheSnapshot);
 
 const resolvedLineCount = computed(() =>
   (cache.value?.lineCache ?? []).filter(e => e.resultType !== 'Pending').length,
 );
 
-const heatmapEntries = computed<PageHeatmapEntry[]>(() => engine.currentResult?.pageHeatmap ?? []);
+const heatmapEntries = computed<PageHeatmapEntry[]>(() => dr.pageHeatmap);
 
 /* Preload direction: compute by examining access sequence number trend across pages.
  * If pages with higher accessSeq are at higher page indices → forward.

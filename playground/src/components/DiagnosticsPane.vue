@@ -2,23 +2,20 @@
   <section class="diagnostics-pane" id="diagnostics-pane" :class="{ collapsed: ui.diagnosticsCollapsed }">
     <div class="diagnostics-pane-header">
       <span class="pane-title">Diagnostics</span>
-      <button class="pane-collapse-btn" @click="ui.toggleDiagnostics()" :title="ui.diagnosticsCollapsed ? 'Expand diagnostics' : 'Collapse diagnostics'">
-        {{ ui.diagnosticsCollapsed ? '◀' : '▶' }}
-      </button>
     </div>
     <nav class="tab-bar">
       <button v-for="tab in tabs" :key="tab.id" class="tab-btn" :class="{ active: ui.activeTab === tab.id }" @click="ui.setActiveTab(tab.id)">
         {{ tab.label }}
       </button>
     </nav>
-    <component :is="currentTabComponent" :key="engine.runId" />
+    <component :is="currentTabComponent" :key="dr.runId" />
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useUiStore, type ActiveTab } from '../stores/ui.js';
-import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import OutputTab from './OutputTab.vue';
 import PipelineTab from './PipelineTab.vue';
 import BytecodeTab from './BytecodeTab.vue';
@@ -32,7 +29,7 @@ import ParseletRegistryTab from './ParseletRegistryTab.vue';
 import NormalizerTab from './NormalizerTab.vue';
 
 const ui = useUiStore();
-const engine = useEngineStore();
+const dr = useDiagnosticReportStore();
 
 const tabs: { id: ActiveTab; label: string }[] = [
   { id: 'tokens', label: 'Output' },

@@ -37,11 +37,9 @@ import EditorPane from './components/EditorPane.vue';
 import DiagnosticsPane from './components/DiagnosticsPane.vue';
 import ErrorsBar from './components/ErrorsBar.vue';
 import { useEditorStore } from './stores/editor.js';
-import { useEngineStore } from './stores/engine.js';
 import { usePipelineStore } from './stores/pipeline.js';
 
 const editorStore = useEditorStore();
-const engine = useEngineStore();
 const pipeline = usePipelineStore();
 
 // Reference to editor component for insertExample

@@ -103,10 +103,10 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 
-const engine = useEngineStore();
+const dr = useDiagnosticReportStore();
 const pipeline = usePipelineStore();
 
 const expandedVars = ref(new Set<string>());
@@ -127,19 +127,19 @@ function selectLine(ln: number): void {
 }
 
 const hasData = computed(() => {
-  const snap = engine.currentResult?.dagSnapshot;
+  const snap = dr.dagSnapshot;
   if (!snap) return false;
   return Object.keys(snap.consumers).length > 0 || Object.keys(snap.reads).length > 0 || Object.keys(snap.dataSourceConsumers).length > 0;
 });
 
 const nodeCount = computed(() => {
-  const snap = engine.currentResult?.dagSnapshot;
+  const snap = dr.dagSnapshot;
   if (!snap) return 0;
   return Object.keys(snap.consumers).length;
 });
 
 const edgeCount = computed(() => {
-  const snap = engine.currentResult?.dagSnapshot;
+  const snap = dr.dagSnapshot;
   if (!snap) return 0;
   let count = 0;
   for (const consumers of Object.values(snap.consumers)) count += consumers.length;
@@ -147,7 +147,7 @@ const edgeCount = computed(() => {
 });
 
 const sourceCount = computed(() => {
-  return Object.keys(engine.currentResult?.dagSnapshot?.dataSourceConsumers ?? {}).length;
+  return Object.keys(dr.dagSnapshot?.dataSourceConsumers ?? {}).length;
 });
 
 interface VarEntry {
@@ -157,7 +157,7 @@ interface VarEntry {
 }
 
 const varEntries = computed<VarEntry[]>(() => {
-  const snap = engine.currentResult?.dagSnapshot;
+  const snap = dr.dagSnapshot;
   if (!snap) return [];
   const allVars = new Set<string>();
   for (const v of Object.keys(snap.consumers)) allVars.add(v);
@@ -193,7 +193,7 @@ interface DataSourceEntry {
 }
 
 const dataSourceEntries = computed<DataSourceEntry[]>(() => {
-  const snap = engine.currentResult?.dagSnapshot;
+  const snap = dr.dagSnapshot;
   if (!snap) return [];
   return Object.entries(snap.dataSourceConsumers)
     .map(([key, consumers]) => ({

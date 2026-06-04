@@ -18,12 +18,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 
-const engine = useEngineStore();
+const dr = useDiagnosticReportStore();
 const expanded = ref(false);
 
-const errors = computed(() => engine.currentResult?.errors ?? []);
+const errors = computed(() => dr.errors);
 
 // Auto-expand when errors arrive
 watch(errors, (val) => {

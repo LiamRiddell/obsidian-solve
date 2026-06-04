@@ -86,7 +86,7 @@
     </div>
 
     <!-- Heatmap -->
-    <div class="perf-heatmap-section" v-if="perf.statsHistory.length >= 2">
+    <div class="perf-heatmap-section" v-if="dr.statsHistory.length >= 2">
       <h4 class="perf-section-title">Pipeline Heatmap</h4>
       <div class="perf-heatmap-wrapper">
         <div class="perf-heatmap">
@@ -233,7 +233,7 @@
       <h4 class="perf-section-title">History (last 50)</h4>
       <div class="perf-history-chart">
         <div
-          v-for="(s, i) in perf.statsHistory.slice(-50)"
+          v-for="(s, i) in dr.statsHistory.slice(-50)"
           :key="i"
           :style="{ width: '3px', height: Math.max(2, (s.totalTime / maxTotal) * 48) + 'px', background: '#29ce99', borderRadius: '1px', opacity: 0.3 + (s.totalTime / maxTotal) * 0.7 }"
           :title="fmt(s.totalTime)"
@@ -245,27 +245,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue';
-import { useEngineStore } from '../stores/engine.js';
-import { usePerfStore } from '../stores/perf.js';
+import { computed, ref } from 'vue';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 import { fmt, computeOverhead, getDominantStage, STAGE_COLORS } from '../utils.js';
 import type { ArenaStats } from '../engine.js';
 
-const engine = useEngineStore();
-const perf = usePerfStore();
+const dr = useDiagnosticReportStore();
 const pipeline = usePipelineStore();
 
-/* ── Push stats on new results ────────────────────────────────── */
-watch(() => engine.currentResult, (result) => {
-  if (result) {
-    perf.pushStats(result.stats);
-    perf.setLineStats(result.lineStats ?? null);
-  }
-});
-
-/* ── Data ──────────────────────────────────────────────────────── */
-const stats = computed(() => engine.currentResult?.stats ?? { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 });
+/* ── Data (populated by engine store's onmessage handler) ──────── */
+const stats = computed(() => dr.stats ?? { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 });
 const overhead = computed(() => computeOverhead(stats.value));
 const total = computed(() => stats.value.totalTime || 1);
 
@@ -318,7 +308,7 @@ function onFlameClick(label: string): void {
 /* ── Per-Line Flamegraph (multi-line documents) ─────────────────── */
 
 const lineFlameBars = computed(() => {
-  const lineStats = perf.currentLineStats;
+  const lineStats = dr.lineStats;
   if (!lineStats || lineStats.length === 0) return [];
 
   const mergedTotal = lineStats.reduce((a, ls) => a + ls.stats.totalTime, 0) || 1;
@@ -380,12 +370,12 @@ const heatmapStages = [
 ];
 
 const heatmapRows = computed(() => {
-  const history = perf.statsHistory.slice(-50).reverse();
+  const history = dr.statsHistory.slice(-50).reverse();
   if (history.length < 2) return [];
   const filter = pipeline.flamegraphFilter;
   return history.map((s, i) => {
     const t = s.totalTime || 1;
-    const evalNum = perf.statsHistory.length - i;
+    const evalNum = dr.statsHistory.length - i;
     const cells = heatmapStages.map(stage => {
       const val = stage.getValue(s);
       const pct = (val / t) * 100;
@@ -419,7 +409,7 @@ function sparklineData(values: number[], color: string): { points: string; avgY:
 const statCards = computed(() => {
   const s = stats.value;
   const filter = pipeline.flamegraphFilter;
-  const history = perf.statsHistory;
+  const history = dr.statsHistory;
   const ov = overhead.value;
 
   const timed: Record<string, { label: string; value: number; color: string; icon: string; key?: string }> = {
@@ -465,7 +455,7 @@ const statCards = computed(() => {
   return cards;
 });
 
-const maxTotal = computed(() => Math.max(...perf.statsHistory.map(s => s.totalTime), 1));
+const maxTotal = computed(() => Math.max(...dr.statsHistory.map(s => s.totalTime), 1));
 
 /* ── Pipeline Telemetry (AllocationTracker) ──────────────────────── */
 
@@ -473,10 +463,10 @@ const maxTotal = computed(() => Math.max(...perf.statsHistory.map(s => s.totalTi
 const telemetryExpanded = ref(false);
 
 /** Arena stats from the ValueArena bump-allocator. */
-const arenaStats = computed<ArenaStats>(() => engine.currentResult?.arenaStats ?? { enabled: false, usage: 0, capacity: 0 });
+const arenaStats = computed<ArenaStats>(() => dr.arenaStats);
 
 /** Pipeline telemetry from the engine's AllocationTracker. */
-const pipelineTelemetry = computed(() => engine.currentResult?.pipelineTelemetry ?? null);
+const pipelineTelemetry = computed(() => dr.pipelineTelemetry);
 
 /** Total wall time across all telemetry stages. */
 const telemetryTotalTime = computed(() =>

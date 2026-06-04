@@ -90,15 +90,15 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { useStreamStore } from '../stores/stream.js';
-import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 
 const stream = useStreamStore();
-const engine = useEngineStore();
+const dr = useDiagnosticReportStore();
 const streamContainer = ref<HTMLElement | null>(null);
 const batcherExpanded = ref(false);
 
 // Batcher metrics from engine result
-const batcherData = computed(() => engine.currentResult?.batcherMetrics ?? null);
+const batcherData = computed(() => dr.batcherMetrics);
 
 // Groups with async events start expanded; others start collapsed (matching vanilla)
 const collapsedGroups = ref(new Set<string>());

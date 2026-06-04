@@ -19,7 +19,7 @@
     </div>
 
     <!-- Three-tier summary bar -->
-    <div v-if="engine.currentResult && tierSummary.total > 0" class="tier-summary-bar">
+    <div v-if="dr.result && tierSummary.total > 0" class="tier-summary-bar">
       <span class="tier-summary-label">Evaluation Tiers</span>
       <span
         class="tier-summary-pill tier-pill-1"
@@ -41,7 +41,7 @@
     </div>
 
     <div class="panel-scroll">
-      <span v-if="!engine.currentResult" class="empty">No tokens</span>
+      <span v-if="!dr.result" class="empty">No tokens</span>
       <span v-else-if="visibleCount === 0 && filterActive" class="empty">No tokens match &ldquo;{{ tokens.filterQuery }}&rdquo;</span>
       <span v-else-if="visibleCount === 0" class="empty">No tokens</span>
 
@@ -69,7 +69,7 @@
             </div>
             <div class="token-line-counts">
               <span class="token-count-badge">{{ entry.tokens.length }} token{{ entry.tokens.length !== 1 ? 's' : '' }}</span>
-              <span class="opcode-count-badge">{{ entry.result?.opcodeCount ?? engine.currentResult?.opcodes?.length ?? 0 }} opcode{{ (entry.result?.opcodeCount ?? 1) !== 1 ? 's' : '' }}</span>
+              <span class="opcode-count-badge">{{ entry.result?.opcodeCount ?? dr.opcodes.length ?? 0 }} opcode{{ (entry.result?.opcodeCount ?? 1) !== 1 ? 's' : '' }}</span>
             </div>
           </div>
 
@@ -117,12 +117,12 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { useTokensStore } from '../stores/tokens.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 import type { Token, LineResult } from '../engine.js';
 
-const engine = useEngineStore();
+const dr = useDiagnosticReportStore();
 const tokens = useTokensStore();
 const pipeline = usePipelineStore();
 
@@ -146,7 +146,7 @@ function matchToken(t: Token, query: string): boolean {
 }
 
 function updateDisplay(): void {
-  const result = engine.currentResult;
+  const result = dr.result;
   if (!result) {
     groupEntries.value = [];
     flatTokensList.value = [];
@@ -223,7 +223,7 @@ function updateDisplay(): void {
 
 // Watch for store changes
 watch(
-  () => [engine.currentResult, tokens.filterQuery, tokens.groupByLine],
+  () => [dr.result, tokens.filterQuery, tokens.groupByLine],
   () => updateDisplay(),
   { deep: false, immediate: true }
 );
@@ -238,7 +238,7 @@ interface TierSummary {
 }
 
 const tierSummary = computed<TierSummary>(() => {
-  const results = engine.currentResult?.lineResults ?? [];
+  const results = dr.lineResults;
   const s = { t1: 0, t2: 0, t3: 0, skip: 0, total: results.length };
   for (const r of results) {
     if (r.error) { s.skip++; continue; }
@@ -251,7 +251,7 @@ const tierSummary = computed<TierSummary>(() => {
 
 /* ── Per-line tier breakdown for tooltips ──────────────────── */
 const tierBreakdown = computed<{ t1: number[]; t2: number[]; t3: number[]; skip: { line: number; error: string; expr: string }[] }>(() => {
-  const results = engine.currentResult?.lineResults ?? [];
+  const results = dr.lineResults;
   const b = { t1: [] as number[], t2: [] as number[], t3: [] as number[], skip: [] as { line: number; error: string; expr: string }[] };
   for (const r of results) {
     const ln = r.lineNumber ?? 1;

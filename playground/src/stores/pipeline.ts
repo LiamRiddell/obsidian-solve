@@ -3,8 +3,10 @@ import { ref } from 'vue';
 import type { DiagnosticEventInfo } from '../engine.js';
 
 export const usePipelineStore = defineStore('pipeline', () => {
-  /* ── State ──────────────────────────────────────────────── */
+  /* ── UI State ──────────────────────────────────────────── */
+  /** Currently selected line in the pipeline dropdown (null = aggregate view). */
   const selectedLine = ref<number | null>(null);
+  /** Whether the dropdown was manually changed by the user. */
   const dropdownManuallyChanged = ref(false);
 
   /** Per-line stage expansion state: Map<lineKey, boolean[]> */
@@ -18,6 +20,13 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
   /** Diagnostic events from the tee() secondary branch — independent consumption. */
   const diagnosticEvents = ref<DiagnosticEventInfo[]>([]);
+
+  /** Reactive trigger incremented when collapse-all is clicked. */
+  const collapseAllTrigger = ref(0);
+  /** Reactive trigger incremented when expand-all is clicked. */
+  const expandAllTrigger = ref(0);
+
+  /* ── Actions ──────────────────────────────────────────── */
 
   function addDiagnosticEvent(event: DiagnosticEventInfo): void {
     diagnosticEvents.value.push(event);
@@ -60,11 +69,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
     flamegraphFilter.value = null;
   }
 
-  /** Reactive trigger incremented when collapse-all is clicked. */
-  const collapseAllTrigger = ref(0);
-  /** Reactive trigger incremented when expand-all is clicked. */
-  const expandAllTrigger = ref(0);
-
   function collapseAllStages(): void {
     collapseAllTrigger.value++;
   }
@@ -74,14 +78,18 @@ export const usePipelineStore = defineStore('pipeline', () => {
   }
 
   return {
+    // UI state
     selectedLine,
     dropdownManuallyChanged,
     stageExpansionState,
     stageSnapshots,
+    flamegraphFilter,
     diagnosticEvents,
+    collapseAllTrigger,
+    expandAllTrigger,
+    // Actions
     addDiagnosticEvent,
     resetDiagnosticEvents,
-    flamegraphFilter,
     selectLine,
     resetDropdownOverride,
     saveStageExpansion,
@@ -90,8 +98,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
     getStageSnapshot,
     setFlamegraphFilter,
     clearFlamegraphFilter,
-    collapseAllTrigger,
-    expandAllTrigger,
     collapseAllStages,
     expandAllStages,
   };

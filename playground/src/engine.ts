@@ -378,6 +378,38 @@ function extractStageTimings(
 	};
 }
 
+// ── Line classification helper ──────────────────────────────────────────
+
+/**
+ * Determine whether a line of markdown text should be evaluated as an expression.
+ *
+ * Uses the engine's lexer to classify the line (headings, blockquotes, code
+ * fences, comments, horizontal rules, tables, wikilinks are all skipped).
+ * Additionally, skips pure-prose lines that contain no expression indicators
+ * (digits, operators, equals, colon, currency, backticks).
+ *
+ * Lines with inline solve markers (`s`...``) are always evaluated.
+ */
+function shouldEvaluateLine(engine: ExpressionEngine, text: string): boolean {
+	// Use the engine's lexer for markdown structure classification.
+	const classification = engine.getLexer().classifyLine(text);
+	if (classification.skip) return false;
+
+	// Inline solves always evaluate — they contain explicit expression markers.
+	if (classification.hasInlineSolve) return true;
+
+	// Prose gating: skip multi-word lines with no expression indicators.
+	// A multi-word line without digits, operators, currency, equals, colon,
+	// or backticks is almost certainly prose (e.g., "Hello my name is dave").
+	// Single-word identifiers like "pi" or "hello" are allowed through —
+	// they may be valid keyword expressions or variable references.
+	if (!/[0-9+\-*/^%=<>!&|~(){}\[\],;?#`$£€:\\]/.test(text) && text.includes(' ')) {
+		return false;
+	}
+
+	return true;
+}
+
 // ── Page heatmap extraction helper ──────────────────────────────────────
 
 /**
@@ -626,6 +658,9 @@ export function runEngineWithStreaming(
 					const trimmed = allLines[idx].trim();
 					if (!trimmed) continue;
 					const lineNum = idx + 1;
+
+					// Skip markdown structure and pure-prose lines.
+					if (!shouldEvaluateLine(engine!, trimmed)) continue;
 
 					const result = engine!.evaluateLineWithDebug(
 						lineNum,
@@ -1002,6 +1037,9 @@ export function runEngine(expression: string): DebugResult {
 			const trimmed = line.trim();
 			if (!trimmed) return;
 			const lineNum = idx + 1;
+
+			// Skip markdown structure and pure-prose lines.
+			if (!shouldEvaluateLine(engine, trimmed)) return;
 
 			const result = engine.evaluateLineWithDebug(lineNum, trimmed);
 			const parselet =

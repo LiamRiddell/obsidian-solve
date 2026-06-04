@@ -2,9 +2,6 @@
   <main class="editor-pane" id="editor-pane" :class="{ collapsed: ui.editorCollapsed }">
     <div class="editor-pane-header">
       <span class="pane-title">Editor</span>
-      <button class="pane-collapse-btn" @click="ui.toggleEditor()" :title="ui.editorCollapsed ? 'Expand editor' : 'Collapse editor'">
-        {{ ui.editorCollapsed ? '▶' : '◀' }}
-      </button>
     </div>
     <div class="editor-wrapper" ref="editorRef"></div>
   </main>
@@ -19,12 +16,14 @@ import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { SolveHighlightProvider } from '@/app/codemirror/SolveHighlightProvider';
 import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { useEditorStore } from '../stores/editor.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 import { useUiStore } from '../stores/ui.js';
 import type { LineResult } from '../engine.js';
 
 const engine = useEngineStore();
+const dr = useDiagnosticReportStore();
 const editorStore = useEditorStore();
 const pipeline = usePipelineStore();
 const ui = useUiStore();
@@ -228,7 +227,7 @@ watch(() => editorStore.cursorLine, (line) => {
 });
 
 // Watch for results to render inline decorators
-watch(() => engine.currentResult, (result) => {
+watch(() => dr.result, (result) => {
   if (result) {
     requestAnimationFrame(() => renderInlineResults(result.lineResults));
   }

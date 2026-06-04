@@ -230,11 +230,11 @@
 //#region ─── Imports ──────────────────────────────────────────────────────────
 
 import { computed, onUnmounted, ref, watch, h } from "vue";
-import { useEngineStore } from "../stores/engine.js";
+import { useDiagnosticReportStore } from "../stores/diagnosticReport.js";
 import { usePipelineStore } from "../stores/pipeline.js";
 import { fmt } from "../utils.js";
 import PipelineStage from "./PipelineStage.vue";
-import type { Token, LineResult, ConstantInfo } from "../engine.js";
+import type { Token, ConstantInfo } from "../engine.js";
 import type {
   PipelineStageResult,
   StageOutput,
@@ -243,34 +243,29 @@ import type {
 //#endregion
 //#region ─── Store Access ─────────────────────────────────────────────────────
 
-const engine = useEngineStore();
-const pipelineStore = usePipelineStore();
+const dr = useDiagnosticReportStore();
+const pl = usePipelineStore();
 
-/** The latest evaluation result from the engine store. */
-const result = computed(() => engine.currentResult);
+/** The latest evaluation result from the diagnostic report store. */
+const result = computed(() => dr.result);
 
 /** Whether a result has been produced (enables "executed" styling on stages). */
 const hasResult = computed(() => !!result.value);
 
-/** Per-line results extracted from the engine's debug output. */
-const lineResults = computed<LineResult[]>(
-  () => result.value?.lineResults ?? [],
-);
+/** Per-line results from the pipeline store (populated by engine store). */
+const lineResults = computed(() => dr.lineResults);
 
 //#endregion
 //#region ─── Structured Pipeline Stages ───────────────────────────────────────
 
 /**
- * Structured pipeline stages from the engine's DiagnosticPipelineResult.
- * When the engine runs in diagnostic mode, these are fully populated with
- * 15 typed stage outputs. In production mode, this array is empty.
+ * Structured pipeline stages from the diagnostic report store.
+ * Populated by the engine store's onmessage handler via dr.setResult().
  */
-const displayStages = computed<PipelineStageResult[]>(
-  () => result.value?.pipelineStages ?? [],
-);
+const displayStages = computed<PipelineStageResult[]>(() => dr.stages);
 
 /** Number of stages to display (or 8 as a minimum for the fallback). */
-const numStages = computed(() => displayStages.value.length || 8);
+const numStages = computed(() => dr.stageCount);
 
 //#endregion
 //#region ─── Stage Collapse State ─────────────────────────────────────────────
@@ -294,8 +289,8 @@ watch(numStages, (n) => {
  * so it survives line-switch re-renders.
  */
 function saveCurrentExpansion(): void {
-  const lineKey = pipelineStore.selectedLine ?? 0;
-  pipelineStore.saveStageExpansion(lineKey, [...stagesCollapsed.value]);
+  const lineKey = pl.selectedLine ?? 0;
+  pl.saveStageExpansion(lineKey, [...stagesCollapsed.value]);
 }
 
 /**
@@ -313,7 +308,7 @@ function onStageToggle(index: number, value: boolean): void {
 
 /** Watch the collapse-all trigger from the HeaderBar and collapse all stages. */
 watch(
-  () => pipelineStore.collapseAllTrigger,
+  () => pl.collapseAllTrigger,
   () => {
     stagesCollapsed.value = Array(numStages.value).fill(true);
     saveCurrentExpansion();
@@ -322,7 +317,7 @@ watch(
 
 /** Watch the expand-all trigger from the HeaderBar and expand all stages. */
 watch(
-  () => pipelineStore.expandAllTrigger,
+  () => pl.expandAllTrigger,
   () => {
     stagesCollapsed.value = Array(numStages.value).fill(false);
     saveCurrentExpansion();
@@ -356,8 +351,8 @@ onUnmounted(() => {
  * Stages with changed data get a brief pulse animation.
  */
 function detectAndPulseChanges(): void {
-  const lineKey = pipelineStore.selectedLine ?? 0;
-  const oldSnapshot = pipelineStore.getStageSnapshot(lineKey);
+  const lineKey = pl.selectedLine ?? 0;
+  const oldSnapshot = pl.getStageSnapshot(lineKey);
   const newSnapshot = stageOutputs.value;
 
   if (oldSnapshot && oldSnapshot.length === numStages.value) {
@@ -375,12 +370,27 @@ function detectAndPulseChanges(): void {
     }
   }
 
-  pipelineStore.saveStageSnapshot(lineKey, [...newSnapshot]);
+  pl.saveStageSnapshot(lineKey, [...newSnapshot]);
 }
 
 watch(
-  () => pipelineStore.selectedLine,
+  () => pl.selectedLine,
   () => {
+    // Restore expansion state from store for this line
+    const lineKey = pl.selectedLine ?? 0;
+    const saved = pl.getStageExpansion(lineKey);
+    if (saved && saved.length === numStages.value) {
+      stagesCollapsed.value = [...saved];
+    } else if (saved && saved.length !== numStages.value) {
+      // Stage count changed since last save — resize while preserving saved state
+      stagesCollapsed.value = Array.from(
+        { length: numStages.value },
+        (_, i) => saved[i] ?? false,
+      );
+    } else {
+      // No saved state for this line — default to all collapsed
+      stagesCollapsed.value = Array(numStages.value).fill(false);
+    }
     detectAndPulseChanges();
   },
 );
@@ -393,41 +403,41 @@ const lineSelectVal = ref("0");
 
 watch(lineSelectVal, (val) => {
   const ln = val === "0" ? null : Number(val);
-  if (ln === pipelineStore.selectedLine) return;
-  pipelineStore.selectLine(ln, true);
+  if (ln === pl.selectedLine) return;
+  pl.selectLine(ln, true);
 });
 
 watch(
-  () => pipelineStore.selectedLine,
+  () => pl.selectedLine,
   (ln) => {
-    if (!pipelineStore.dropdownManuallyChanged)
+    if (!pl.dropdownManuallyChanged)
       lineSelectVal.value = ln === null ? "0" : String(ln);
   },
 );
 
 /** Display string for the active line badge. */
 const activeLineStr = computed(() =>
-  pipelineStore.selectedLine !== null
-    ? "Line " + pipelineStore.selectedLine
+  pl.selectedLine !== null
+    ? "Line " + pl.selectedLine
     : "All Lines",
 );
 
 /** Compact label for the stage header (e.g., "L3" or "All"). */
 const stageLabel = computed(() =>
-  pipelineStore.selectedLine !== null
-    ? "L" + pipelineStore.selectedLine
+  pl.selectedLine !== null
+    ? "L" + pl.selectedLine
     : "All",
 );
 
 /** Currently selected line number (null = aggregate view). */
-const selectedLine = computed(() => pipelineStore.selectedLine);
+const selectedLine = computed(() => pl.selectedLine);
 
 //#endregion
 //#region ─── Per-Line Filtering ──────────────────────────────────────────────
 
 /** Tokens filtered to the selected line (or all tokens in aggregate view). */
 const lineTokens = computed<Token[]>(() => {
-  const t = result.value?.rawTokens ?? [];
+  const t = dr.rawTokens;
   if (selectedLine.value === null) return t;
   return t.filter((tk) => (tk as any).line === selectedLine.value);
 });
@@ -1137,40 +1147,22 @@ const stageRenderers: Record<
 //#region ─── Detail Stats (Pipeline Summary Bar) ──────────────────────────────
 
 /** Whether the last evaluation was served from the bytecode cache. */
-const wasCached = computed(
-  () =>
-    !(result.value?.parselets?.length ?? 0) &&
-    (result.value?.rawTokens?.length ?? 0) > 0,
-);
+const wasCached = computed(() => dr.wasCached);
 
 /** Whether any line result is in a pending async state. */
-const hasAsync = computed(() => {
-  if (selectedLine.value !== null)
-    return perLineResult.value?.type === "Pending";
-  return lineResults.value.some((lr) => lr.type === "Pending");
-});
+const hasAsync = computed(() => dr.hasAsync);
 
 /** Total raw token count (pre-normalization). */
-const tokenCount = computed(() =>
-  String(result.value?.rawTokens?.length ?? 0),
-);
+const tokenCount = computed(() => String(dr.tokenCount));
 
 /** Total opcode count in the compiled program. */
-const opcodeCount = computed(() =>
-  String(result.value?.opcodes?.length ?? 0),
-);
+const opcodeCount = computed(() => String(dr.opcodeCount));
 
 /** Cache status: "hit", "miss", or "—". */
-const cacheStatus = computed(() =>
-  wasCached.value
-    ? "hit"
-    : (result.value?.parselets?.length ?? 0) > 0
-      ? "miss"
-      : "—",
-);
+const cacheStatus = computed(() => dr.cacheStatus);
 
 /** Async status: "yes" or "no". */
-const asyncStatus = computed(() => (hasAsync.value ? "yes" : "no"));
+const asyncStatus = computed(() => dr.asyncStatus);
 
 //#endregion
 //#region ─── Constants Table ──────────────────────────────────────────────────
@@ -1189,9 +1181,7 @@ interface ConstantGroup {
 }
 
 /** All constants from the compiled bytecode program. */
-const allConstants = computed<ConstantInfo[]>(
-  () => result.value?.constants ?? [],
-);
+const allConstants = computed<ConstantInfo[]>(() => dr.constants);
 
 /** Whether the constants section is expanded. */
 const constantsExpanded = ref(false);
@@ -1211,9 +1201,7 @@ const filteredTotal = computed(() => {
 });
 
 /** All variables extracted from the token stream. */
-const allVariables = computed<string[]>(
-  () => result.value?.variables ?? [],
-);
+const allVariables = computed<string[]>(() => dr.variables);
 
 /** Whether the variables section is expanded. */
 const variablesExpanded = ref(false);

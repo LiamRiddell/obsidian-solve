@@ -1,17 +1,12 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
 import type { DebugResult, DiagnosticEventInfo } from '../engine.js';
 import { useStreamStore } from './stream.js';
 import { useWorkersStore } from './workers.js';
+import { useDiagnosticReportStore } from './diagnosticReport.js';
 import { usePipelineStore } from './pipeline.js';
 import EngineWorker from '../engine.worker.ts?worker';
 
 export const useEngineStore = defineStore('engine', () => {
-  /* ── State ──────────────────────────────────────────────── */
-  const status = ref<'ready' | 'busy' | 'error'>('ready');
-  const runId = ref(0);
-  const currentResult = ref<DebugResult | null>(null);
-
   /* ── Engine Worker ──────────────────────────────────────── */
   const engineWorker = new EngineWorker();
 
@@ -25,11 +20,12 @@ export const useEngineStore = defineStore('engine', () => {
     branchKey?: string;
   }>) => {
     const { id, result, error, streamEvent, stream, branchKey } = e.data;
+    const dr = useDiagnosticReportStore();
 
     // Streaming events are routed by branchKey:
-    //   "stream"      → StreamStore (primary consumer, existing behavior)
+    //   "stream"      → StreamStore (primary consumer)
     //   "diagnostics" → PipelineStore (secondary consumer, tee branch)
-    if (stream && streamEvent && id === runId.value) {
+    if (stream && streamEvent && id === dr.runId) {
       if (branchKey === 'diagnostics') {
         usePipelineStore().addDiagnosticEvent(streamEvent);
       } else {
@@ -38,7 +34,7 @@ export const useEngineStore = defineStore('engine', () => {
       return;
     }
 
-    if (id !== runId.value) {
+    if (id !== dr.runId) {
       // Stale response — update telemetry only
       const ws = useWorkersStore();
       ws.engine.msgCount++;
@@ -55,7 +51,7 @@ export const useEngineStore = defineStore('engine', () => {
     ws.engine.queueDepth = Math.max(0, ws.engine.queueDepth - 1);
     ws.updateEngineTelemetry();
 
-    status.value = 'ready';
+    dr.setStatus('ready');
 
     // Reset pipeline cursor tracking on new result
     usePipelineStore().resetDropdownOverride();
@@ -66,7 +62,8 @@ export const useEngineStore = defineStore('engine', () => {
     }
     if (!result) return;
 
-    currentResult.value = result;
+    // ── Populate diagnostic report store — single source of truth ──
+    dr.setResult(result);
 
     // Finalize streaming: initial result complete, live events may still arrive
     useStreamStore().finalize();
@@ -82,7 +79,7 @@ export const useEngineStore = defineStore('engine', () => {
     if (runTimeout) clearTimeout(runTimeout);
     runTimeout = setTimeout(() => {
       if (!expression) {
-        engineWorker.postMessage({ id: runId.value, abort: true });
+        engineWorker.postMessage({ id: useDiagnosticReportStore().runId, abort: true });
         return;
       }
 
@@ -90,49 +87,29 @@ export const useEngineStore = defineStore('engine', () => {
       useStreamStore().reset();
       usePipelineStore().resetDiagnosticEvents();
 
-      status.value = 'busy';
-      runId.value++;
+      useDiagnosticReportStore().setStatus('busy');
+      useDiagnosticReportStore().incrementRunId();
       const ws = useWorkersStore();
       ws.engine.queueDepth++;
       ws.engine.lastRunTime = window.performance.now();
-      ws.logActivity('engine', `Enqueued run #${runId.value}: ${expression.slice(0, 40)}${expression.length > 40 ? '…' : ''}`);
+      ws.logActivity('engine', `Enqueued run #${useDiagnosticReportStore().runId}: ${expression.slice(0, 40)}${expression.length > 40 ? '…' : ''}`);
       ws.updateEngineTelemetry();
 
-      engineWorker.postMessage({ id: runId.value, expression, stream: true });
+      engineWorker.postMessage({ id: useDiagnosticReportStore().runId, expression, stream: true });
     }, 150);
   }
 
   function abort(): void {
-    engineWorker.postMessage({ id: runId.value, abort: true });
+    engineWorker.postMessage({ id: useDiagnosticReportStore().runId, abort: true });
     if (runTimeout) {
       clearTimeout(runTimeout);
       runTimeout = null;
     }
-    status.value = 'ready';
+    useDiagnosticReportStore().setStatus('ready');
   }
 
-  /* ── Getters ────────────────────────────────────────────── */
-  const hasErrors = computed(() =>
-    (currentResult.value?.errors?.length ?? 0) > 0,
-  );
-
-  const lineResults = computed(() =>
-    currentResult.value?.lineResults ?? [],
-  );
-
-  const expression = computed(() => {
-    if (!currentResult.value) return '';
-    return lineResults.value.map(lr => lr.expression).join('\n');
-  });
-
   return {
-    status,
-    runId,
-    currentResult,
     evaluate,
     abort,
-    hasErrors,
-    lineResults,
-    expression,
   };
 });

@@ -68,13 +68,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useEngineStore } from '../stores/engine.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { formatStackValue, stackValueTypeClass } from '../utils.js';
 import type { VmTraceStep, CheckpointSnapshot } from '../engine.js';
 
-const engine = useEngineStore();
-const steps = computed<VmTraceStep[]>(() => engine.currentResult?.vmTrace ?? []);
-const checkpoints = computed<CheckpointSnapshot[]>(() => engine.currentResult?.checkpoints ?? []);
+const dr = useDiagnosticReportStore();
+const steps = computed<VmTraceStep[]>(() => dr.vmTrace);
+const checkpoints = computed<CheckpointSnapshot[]>(() => dr.checkpoints);
 
 /* Nearest checkpoint to the last executed VM instruction (highest lineNumber). */
 const nearestCheckpoint = computed<CheckpointSnapshot | null>(() => {
