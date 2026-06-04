@@ -44,6 +44,7 @@ import type { MarkdownLineType } from "@solve-js/lexer/ExpressionLexer";
 import type { TokenFusion } from "@solve-js/normalizer/NormalizerRule";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import type { Value } from "@solve-js/vm/Value";
+import type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
 
 //#endregion
 //#region ─── PipelineStageResult — Individual Stage Container ──────────────────
@@ -449,6 +450,70 @@ export interface DiagnosticPipelineResult {
 
   /** Error message if evaluation failed, `null` otherwise */
   error: string | null;
+
+  /** DAG dependency graph snapshot (consumers, writes, reads, dataSourceDeps) */
+  dagSnapshot?: DagSnapshot;
+
+  /** Engine-wide cache snapshot (bytecode, line cache, async cache) */
+  cacheSnapshot?: CacheSnapshot;
+
+  /** AsyncResolutionBatcher metrics (pending, dedup, worker, listener counts) */
+  batcherMetrics?: BatcherMetrics;
+
+  /** VM checkpoints from the ThreeTierEvaluator's checkpointer */
+  checkpoints?: CheckpointSnapshot[];
 }
 
 //#endregion
+
+//#region ─── Diagnostic Snapshot Sub-types ────────────────────────────────
+
+/** Bytecode cache entry for diagnostic rendering. */
+export interface BytecodeCacheEntry {
+  expression: string;
+  opcodesLength: number;
+  numbersLength: number;
+  stringsLength: number;
+  hasAsync: boolean;
+}
+
+/** Line cache entry info for diagnostic rendering. */
+export interface LineCacheEntryInfo {
+  key: string;
+  lineNumber: number;
+  resultType: string;
+  resultValue: string;
+  reads: string[];
+  writeVar: string | null;
+}
+
+/** Async cache package info for diagnostic rendering. */
+export interface AsyncCachePackageInfo {
+  packageId: string;
+  resolvedCount: number;
+  inFlightCount: number;
+  errorCount: number;
+  entries: Array<{ key: string; status: "resolved" | "in_flight" | "error"; errorMessage?: string }>;
+}
+
+/** Full cache snapshot for diagnostic rendering. */
+export interface CacheSnapshot {
+  bytecode: BytecodeCacheEntry[];
+  lineCache: LineCacheEntryInfo[];
+  asyncCache: AsyncCachePackageInfo[];
+}
+
+/** Batcher metrics for Workers diagnostic tab. */
+export interface BatcherMetrics {
+  pendingCount: number;
+  dedupCount: number;
+  workerOffloadCount: number;
+  listenerCount: number;
+}
+
+/** VM checkpoint snapshot for diagnostic rendering. */
+export interface CheckpointSnapshot {
+  lineNumber: number;
+  variables: string[];
+  variableCount: number;
+}

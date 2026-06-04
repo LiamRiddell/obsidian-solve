@@ -1,3 +1,12 @@
+/** Serialized snapshot of the dependency graph for diagnostic rendering. */
+export interface DagSnapshot {
+  consumers: Record<string, number[]>;
+  writes: Record<number, string[]>;
+  reads: Record<number, string[]>;
+  dataSourceDeps: Record<number, string[]>;
+  dataSourceConsumers: Record<string, number[]>;
+}
+
 /**
  * Dependency graph for variable and data-source tracking across document lines.
  *
@@ -275,6 +284,41 @@ export class DependencyGraph {
    */
   getWrites(lineNumber: number): Set<string> {
     return this.writes.get(lineNumber) ?? new Set();
+  }
+
+  /**
+   * Get a serializable snapshot of the entire dependency graph for diagnostics.
+   *
+   * Returns plain objects (not Maps/Sets) so consumers don't need to reach
+   * into private fields. Used by playground diagnostic tabs for DAG visualization.
+   */
+  getSnapshot(): DagSnapshot {
+    const consumers: Record<string, number[]> = {};
+    for (const [variable, lines] of this.consumers) {
+      consumers[variable] = Array.from(lines);
+    }
+
+    const writes: Record<number, string[]> = {};
+    for (const [line, vars] of this.writes) {
+      writes[line] = Array.from(vars);
+    }
+
+    const reads: Record<number, string[]> = {};
+    for (const [line, vars] of this.lineReads) {
+      reads[line] = Array.from(vars);
+    }
+
+    const dataSourceDeps: Record<number, string[]> = {};
+    for (const [line, keys] of this.dataSourceDependencies) {
+      dataSourceDeps[line] = Array.from(keys);
+    }
+
+    const dataSourceConsumers: Record<string, number[]> = {};
+    for (const [key, lines] of this.dataSourceConsumers) {
+      dataSourceConsumers[key] = Array.from(lines);
+    }
+
+    return { consumers, writes, reads, dataSourceDeps, dataSourceConsumers };
   }
 
   /** Clear all dependency graph state. Called on document switch or engine reset. */

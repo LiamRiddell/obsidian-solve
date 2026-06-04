@@ -1,4 +1,6 @@
 import { ExpressionEngine } from "@/solve-js/src/engine/ExpressionEngine";
+export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo } from "@/solve-js/src/engine/ExpressionEngine";
+export type { DagSnapshot } from "@/solve-js/src/vm/DependencyGraph";
 import { formatValue } from "@/solve-js/src/format/FormatEngine";
 import type { Token } from "@/solve-js/src/lexer/Token";
 import type { AsyncResolutionEvent } from "@/solve-js/src/engine/AsyncResolutionBatcher";
@@ -110,45 +112,6 @@ export interface DQMetrics {
 	dataSourceNames: string[];
 }
 
-/** Cache snapshot entry for a single bytecode cache item */
-export interface BytecodeCacheEntry {
-	expression: string;
-	opcodesLength: number;
-	numbersLength: number;
-	stringsLength: number;
-	hasAsync: boolean;
-}
-
-/** Cache snapshot entry for a single line cache item */
-export interface LineCacheEntryInfo {
-	key: string;
-	lineNumber: number;
-	resultType: string;
-	resultValue: string;
-	reads: string[];
-	writeVar: string | null;
-}
-
-/** Async result cache snapshot per package */
-export interface AsyncCachePackageInfo {
-	packageId: string;
-	resolvedCount: number;
-	inFlightCount: number;
-	errorCount: number;
-	entries: Array<{
-		key: string;
-		status: "resolved" | "in_flight" | "error";
-		errorMessage?: string;
-	}>;
-}
-
-/** Full cache snapshot */
-export interface CacheSnapshot {
-	bytecode: BytecodeCacheEntry[];
-	lineCache: LineCacheEntryInfo[];
-	asyncCache: AsyncCachePackageInfo[];
-}
-
 /** Diagnostic event type with elapsedNs and expression */
 export interface DiagnosticEventInfo {
 	type: string;
@@ -176,34 +139,7 @@ const lineAccessSeq = new Map<number, number>();
 /** Incrementing counter for access sequence numbers. */
 let nextAccessSeq = 0;
 
-// ── DAG Snapshot ───────────────────────────────────────────────────────
-export interface DagSnapshot {
-	/** Variable → line numbers that read it */
-	consumers: Record<string, number[]>;
-	/** Line number → variables it writes */
-	writes: Record<number, string[]>;
-	/** Line number → variables it reads */
-	reads: Record<number, string[]>;
-	/** Line number → data source dependency keys */
-	dataSourceDeps: Record<number, string[]>;
-	/** Data source key → line numbers that depend on it */
-	dataSourceConsumers: Record<string, number[]>;
-}
 
-// ── VM Checkpoint Snapshot ─────────────────────────────────────────────
-export interface CheckpointSnapshot {
-	lineNumber: number;
-	variables: string[];
-	variableCount: number;
-}
-
-// ── Batcher Metrics ────────────────────────────────────────────────────
-export interface BatcherMetrics {
-	pendingCount: number;
-	dedupCount: number;
-	workerOffloadCount: number;
-	listenerCount: number;
-}
 
 // ── Page Heatmap Entry ─────────────────────────────────────────────────
 export interface PageHeatmapEntry {
@@ -447,125 +383,25 @@ function extractStageTimings(
 /**
  * Extract a serializable DAG snapshot from the engine instance.
  *
- * Reads the DependencyGraph's private Map<string, Set<number>> fields
- * via `(dag as any)` access — acceptable since this is playground-only
- * debugging code. Maps must be iterated with `.keys()` not `Object.keys()`.
+ * @deprecated Use result.diagnostic.dagSnapshot instead — the diagnostic
+ * report now contains all snapshot data. Keep wrapper for backward compat.
  */
 function extractDagSnapshot(engine: ExpressionEngine): DagSnapshot {
-	const dag = engine.getDag();
-	const d = dag as any;
-	const consumers: Record<string, number[]> = {};
-	const writes: Record<number, string[]> = {};
-	const reads: Record<number, string[]> = {};
-	const dataSourceDeps: Record<number, string[]> = {};
-	const dataSourceConsumers: Record<string, number[]> = {};
-
-	// Consumers: Map<variable, Set<lineNumber>> — iterate with .keys()
-	if (d.consumers instanceof Map) {
-		for (const variable of d.consumers.keys()) {
-			const lines = dag.getConsumers(variable);
-			if (lines.size > 0) consumers[variable] = Array.from(lines);
-		}
-	}
-
-	// Reads (lineReads): Map<lineNumber, Set<variable>>
-	if (d.lineReads instanceof Map) {
-		for (const lineNumber of d.lineReads.keys()) {
-			const ln = Number(lineNumber);
-			const deps = dag.getDependencies(ln);
-			if (deps.size > 0) reads[ln] = Array.from(deps);
-		}
-	}
-
-	// Writes: Map<lineNumber, Set<variable>>
-	if (d.writes instanceof Map) {
-		for (const lineNumber of d.writes.keys()) {
-			const ln = Number(lineNumber);
-			const w = dag.getWrites(ln);
-			if (w.size > 0) writes[ln] = Array.from(w);
-		}
-	}
-
-	// Data source deps: Map<lineNumber, Set<key>>
-	if (d.dataSourceDependencies instanceof Map) {
-		for (const [ln, keys] of d.dataSourceDependencies.entries()) {
-			dataSourceDeps[ln] = Array.from(keys);
-		}
-	}
-
-	// Data source consumers: Map<key, Set<lineNumber>>
-	if (d.dataSourceConsumers instanceof Map) {
-		for (const [key, lines] of d.dataSourceConsumers.entries()) {
-			dataSourceConsumers[key] = Array.from(lines);
-		}
-	}
-
-	return { consumers, writes, reads, dataSourceDeps, dataSourceConsumers };
-}
-
-/** Extract checkpoints from the engine via the VM's checkpointer. */
-function extractCheckpoints(engine: ExpressionEngine): CheckpointSnapshot[] {
-	try {
-		const vm = engine.getVM();
-		// The VM has a checkpointer accessible via the vm's prototype chain.
-		// VMCheckpointer stores checkpoints with lineNumber, variables.
-		const checkpointer = (vm as any).checkpointer;
-		if (!checkpointer) return [];
-		const allCheckpoints: any[] = checkpointer.getAllCheckpoints?.() ?? [];
-		if (allCheckpoints.length === 0) return [];
-		return allCheckpoints.map((cp: any) => ({
-			lineNumber: cp.lineNumber,
-			variables: Object.keys(cp.variables ?? {}),
-			variableCount: Object.keys(cp.variables ?? {}).length,
-		}));
-	} catch {
-		return [];
-	}
+	return engine.getDag().getSnapshot();
 }
 
 /**
- * Extract batcher metrics from the engine's internal AsyncResolutionBatcher.
- *
- * Accesses the batcher via `(engine as any).batcher` — the batcher is a private
- * field on ExpressionEngine. This is acceptable for playground debugging code.
+ * @deprecated Use result.diagnostic.checkpoints instead.
+ */
+function extractCheckpoints(engine: ExpressionEngine): CheckpointSnapshot[] {
+	return engine.getCheckpoints();
+}
+
+/**
+ * @deprecated Use result.diagnostic.batcherMetrics instead.
  */
 function extractBatcherMetrics(engine: ExpressionEngine): BatcherMetrics {
-	try {
-		const batcher = (engine as any).batcher;
-		if (!batcher) {
-			return {
-				pendingCount: 0,
-				dedupCount: 0,
-				workerOffloadCount: 0,
-				listenerCount: 0,
-			};
-		}
-		const pending = (batcher.pending as any[]) ?? [];
-		const listeners = (batcher.listeners as Set<unknown>) ?? new Set();
-		const pool = batcher.executionPool as any;
-		const offloadCount = pool?.executionCount ?? 0;
-
-		// Dedup count: pending entries that share the same (packageId, queryKey)
-		const dedup = new Set<string>();
-		for (const entry of pending) {
-			dedup.add(`${entry.packageId}:${entry.queryKey}`);
-		}
-		const dedupCount = pending.length - dedup.size;
-
-		return {
-			pendingCount: pending.length,
-			dedupCount: Math.max(0, dedupCount),
-			workerOffloadCount: offloadCount,
-			listenerCount: listeners.size,
-		};
-	} catch {
-		return {
-			pendingCount: 0,
-			dedupCount: 0,
-			workerOffloadCount: 0,
-			listenerCount: 0,
-		};
-	}
+	return engine.getBatcherMetrics();
 }
 
 /**
@@ -996,10 +832,6 @@ export function runEngineWithStreaming(
 
 				const varTokens = rawTokens.filter((t) => t.type === "IDENT");
 				variables = [...new Set(varTokens.map((t) => t.value))];
-
-				cacheSnapshot = (engine as any).getCacheSnapshot
-					? (engine as any).getCacheSnapshot()
-					: { bytecode: [], lineCache: [], asyncCache: [] };
 			} catch (error) {
 				errors.push(
 					error instanceof Error ? error.message : String(error)
@@ -1091,24 +923,23 @@ export function runEngineWithStreaming(
 		  }))
 		: [];
 
-	const dagSnapshot = engine
-		? extractDagSnapshot(engine)
-		: {
-				consumers: {},
-				writes: {},
-				reads: {},
-				dataSourceDeps: {},
-				dataSourceConsumers: {},
-		  };
-	const checkpoints = engine ? extractCheckpoints(engine) : [];
-	const batcherMetrics = engine
-		? extractBatcherMetrics(engine)
-		: {
-				pendingCount: 0,
-				dedupCount: 0,
-				workerOffloadCount: 0,
-				listenerCount: 0,
-		  };
+	// ── Read all snapshot data from the last line's diagnostic result ──
+	const lastDiagnostic = lastPipelineStages.length > 0 ? { ... } as { dagSnapshot?: DagSnapshot; cacheSnapshot?: CacheSnapshot; checkpoints?: CheckpointSnapshot[]; batcherMetrics?: BatcherMetrics } : undefined;
+	cacheSnapshot = lastDiagnostic?.cacheSnapshot ?? cacheSnapshot;
+	const dagSnapshot = lastDiagnostic?.dagSnapshot ?? {
+		consumers: {},
+		writes: {},
+		reads: {},
+		dataSourceDeps: {},
+		dataSourceConsumers: {},
+	};
+	const checkpoints = lastDiagnostic?.checkpoints ?? [];
+	const batcherMetrics = lastDiagnostic?.batcherMetrics ?? {
+		pendingCount: 0,
+		dedupCount: 0,
+		workerOffloadCount: 0,
+		listenerCount: 0,
+	};
 	const pageHeatmap = extractPageHeatmap(engine!, allLines.length);
 	const pipelineTelemetry = engine
 		? engine.getLastTelemetry()
@@ -1348,15 +1179,24 @@ export function runEngine(expression: string): DebugResult {
 		const varTokens = rawTokens.filter((t) => t.type === "IDENT");
 		variables = [...new Set(varTokens.map((t) => t.value))];
 
-		// Collect cache snapshot from engine internals
-		cacheSnapshot = (engine as any).getCacheSnapshot
-			? (engine as any).getCacheSnapshot()
-			: { bytecode: [], lineCache: [], asyncCache: [] };
+		// Collect cache snapshot from the last line's diagnostic result
+		cacheSnapshot = lastDiagnostic?.cacheSnapshot ?? { bytecode: [], lineCache: [], asyncCache: [] };
 
-		// ── Extract DAG, checkpoint, batcher, page data ──
-		const dagSnap = extractDagSnapshot(engine);
-		const ckpts = extractCheckpoints(engine);
-		const bm = extractBatcherMetrics(engine);
+		// ── Extract DAG, checkpoint, batcher from last diagnostic ──
+		const dagSnap = lastDiagnostic?.dagSnapshot ?? {
+			consumers: {},
+			writes: {},
+			reads: {},
+			dataSourceDeps: {},
+			dataSourceConsumers: {},
+		};
+		const ckpts = lastDiagnostic?.checkpoints ?? [];
+		const bm = lastDiagnostic?.batcherMetrics ?? {
+			pendingCount: 0,
+			dedupCount: 0,
+			workerOffloadCount: 0,
+			listenerCount: 0,
+		};
 		const ph = extractPageHeatmap(engine, allLines.length);
 
 		// ── Capture arena stats ──

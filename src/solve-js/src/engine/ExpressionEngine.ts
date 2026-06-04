@@ -59,7 +59,17 @@ import {
     type PipelineStageResult,
     type StageOutput,
     type InlineSolveSpanInfo,
+    type CacheSnapshot,
+    type BatcherMetrics,
+    type CheckpointSnapshot,
+    type BytecodeCacheEntry,
+    type LineCacheEntryInfo,
+    type AsyncCachePackageInfo,
 } from "@solve-js/types/DiagnosticPipelineResult";
+
+// Re-export for consumers (playground imports these from ExpressionEngine)
+export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
+export type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
 
 //#endregion
 
@@ -1511,7 +1521,7 @@ export class ExpressionEngine {
                 tokens: normalizedTokens,
                 program,
                 debug: undefined,
-                diagnostic: hasCollectors ? { stages, value: pending, tokens: normalizedTokens, program, error: null } : undefined,
+                diagnostic: hasCollectors ? this.buildDiagnosticResult(stages, pending, normalizedTokens, program, null) : undefined,
             };
         }
 
@@ -1619,7 +1629,7 @@ export class ExpressionEngine {
                 tokens: normalizedTokens,
                 program,
                 debug: undefined,
-                diagnostic: hasCollectors ? { stages, value: pending, tokens: normalizedTokens, program, error: null } : undefined,
+                diagnostic: hasCollectors ? this.buildDiagnosticResult(stages, pending, normalizedTokens, program, null) : undefined,
             };
         }
 
@@ -1696,7 +1706,7 @@ export class ExpressionEngine {
                 tokens: normalizedTokens,
                 program,
                 debug: reports[0]?.toJSON() || undefined,
-                diagnostic: { stages, value: result!, tokens: normalizedTokens, program, error: null },
+                diagnostic: this.buildDiagnosticResult(stages, result!, normalizedTokens, program, null),
             };
         }
 
@@ -1704,6 +1714,37 @@ export class ExpressionEngine {
             value: result!,
             tokens: normalizedTokens,
             program,
+        };
+    }
+
+    //#endregion
+
+    //#region Diagnostic Result — Snapshot population
+
+    /**
+     * Build a complete DiagnosticPipelineResult with engine-wide snapshot data.
+     *
+     * Populates dagSnapshot, cacheSnapshot, batcherMetrics, and checkpoints
+     * alongside the per-line pipeline stages, value, tokens, and program.
+     * Previously the playground made separate engine method calls for each.
+     */
+    private buildDiagnosticResult(
+        stages: PipelineStageResult[],
+        value: Value,
+        tokens: Token[],
+        program: BytecodeProgram,
+        error: string | null,
+    ): DiagnosticPipelineResult {
+        return {
+            stages,
+            value,
+            tokens,
+            program,
+            error,
+            dagSnapshot: this.dag.getSnapshot(),
+            cacheSnapshot: this.getCacheSnapshot(),
+            batcherMetrics: this.getBatcherMetrics(),
+            checkpoints: this.getCheckpoints(),
         };
     }
 
@@ -1833,6 +1874,101 @@ export class ExpressionEngine {
             abortLogger.keystrokeSignalCleared();
         }
         this.keystrokeSignal = signal;
+    }
+
+    /**
+     * Get a serializable cache snapshot for diagnostic rendering.
+     *
+     * Returns bytecode cache entries, line cache entries, and async cache
+     * packages — all as plain objects with no internal references. Previously
+     * the playground accessed this via `(engine as any).getCacheSnapshot?.()`.
+     */
+    getCacheSnapshot(): CacheSnapshot {
+        const bytecode: BytecodeCacheEntry[] = [];
+        for (const [expression, program] of this.bytecodeCache) {
+            bytecode.push({
+                expression,
+                opcodesLength: program.opcodes.length,
+                numbersLength: program.numbers.length,
+                stringsLength: program.strings.length,
+                hasAsync: program.hasAsync,
+            });
+        }
+
+        const lineCacheEntries: LineCacheEntryInfo[] = [];
+        for (const key of this.lineCache.keys()) {
+            // Keys are "lineNumber" or "lineNumber:expression" — parse out both parts.
+            const colonIdx = key.indexOf(':');
+            const lineNumber = colonIdx > 0
+                ? (parseInt(key.slice(0, colonIdx), 10) || 0)
+                : (parseInt(key, 10) || 0);
+            const expressionPart = colonIdx > 0 ? key.slice(colonIdx + 1) : undefined;
+
+            const entry = expressionPart !== undefined
+                ? this.lineCache.get(lineNumber, expressionPart)
+                : this.lineCache.getEntryForLine(lineNumber);
+            if (!entry) continue;
+
+            lineCacheEntries.push({
+                key,
+                lineNumber,
+                resultType: String(entry.result?.type ?? ''),
+                resultValue: String(entry.result?.value ?? ''),
+                reads: entry.readVariables ?? [],
+                writeVar: entry.writeVariable ?? null,
+            });
+        }
+
+        const asyncCache = AsyncResultCache.getSnapshot();
+
+        return { bytecode, lineCache: lineCacheEntries, asyncCache };
+    }
+
+    /**
+     * Get serializable batcher metrics for the Workers diagnostic tab.
+     *
+     * Previously accessed via `(engine as any).batcher` with manual
+     * extraction of pending/listener/dedup counts.
+     */
+    getBatcherMetrics(): BatcherMetrics {
+        const pending = (this.batcher as any).pending as unknown[] ?? [];
+        const listeners = (this.batcher as any).listeners as Set<unknown> ?? new Set();
+        const pool = (this.batcher as any).executionPool as { executionCount?: number } | null;
+
+        const dedup = new Set<string>();
+        for (const entry of pending) {
+            dedup.add(`${(entry as any).packageId}:${(entry as any).queryKey}`);
+        }
+
+        return {
+            pendingCount: pending.length,
+            dedupCount: Math.max(0, pending.length - dedup.size),
+            workerOffloadCount: pool?.executionCount ?? 0,
+            listenerCount: listeners.size,
+        };
+    }
+
+    /**
+     * Get a serializable snapshot of VM checkpoints for diagnostics.
+     *
+     * The checkpointer lives on the ThreeTierEvaluator (not the engine),
+     * so this returns an empty array when no checkpointer is available.
+     * Previously accessed via `(vm as any).checkpointer.getAllCheckpoints?.()`.
+     */
+    getCheckpoints(): CheckpointSnapshot[] {
+        // The checkpointer is set on the VM by ThreeTierEvaluator.
+        // Access it via the VM — same pattern the playground used via (vm as any).checkpointer.
+        const checkpointer = (this.vm as any).checkpointer as
+            | { getAllCheckpoints(): readonly { lineNumber: number; variables: Record<string, unknown> }[] }
+            | undefined;
+        if (!checkpointer) return [];
+
+        const raw = checkpointer.getAllCheckpoints();
+        return raw.map(cp => ({
+            lineNumber: cp.lineNumber,
+            variables: Object.keys(cp.variables),
+            variableCount: Object.keys(cp.variables).length,
+        }));
     }
 
     /**
