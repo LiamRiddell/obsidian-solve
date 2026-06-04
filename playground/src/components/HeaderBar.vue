@@ -9,6 +9,8 @@
     </div>
     <div class="header-center">
       <div class="pipeline-mini" :class="{ active: dr.status === 'busy' }">
+        <span class="pipeline-stage" data-stage="classify" :class="{ executed: dr.result }">🔍 Classify</span>
+        <span class="pipeline-arrow">→</span>
         <span class="pipeline-stage" data-stage="lexer" :class="{ executed: dr.result }">🔤 Lexer</span>
         <span class="pipeline-arrow">→</span>
         <span class="pipeline-stage" data-stage="validate" :class="{ executed: dr.result }">🛡️ Validation</span>

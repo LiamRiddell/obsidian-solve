@@ -428,39 +428,7 @@ const stageLabel = computed(() =>
     : "All",
 );
 
-/** Currently selected line number (null = aggregate view). */
-const selectedLine = computed(() => pl.selectedLine);
-
 //#endregion
-//#region ─── Per-Line Filtering ──────────────────────────────────────────────
-
-/** Tokens filtered to the selected line (or all tokens in aggregate view). */
-const lineTokens = computed<Token[]>(() => {
-  const t = dr.rawTokens;
-  if (selectedLine.value === null) return t;
-  return t.filter((tk) => (tk as any).line === selectedLine.value);
-});
-
-/** The LineResult for the currently selected single line. */
-const perLineResult = computed(() =>
-  selectedLine.value !== null
-    ? lineResults.value.find(
-        (lr) => (lr.lineNumber ?? 1) === selectedLine.value,
-      ) ?? null
-    : null,
-);
-
-/** Whether the selected line (or aggregate) has errors. */
-const hasErrors = computed(() =>
-  perLineResult.value?.error
-    ? true
-    : selectedLine.value === null &&
-        (result.value?.errors?.length ?? 0) > 0,
-);
-
-/** Total number of lines evaluated. */
-const totalLines = computed(() => lineResults.value.length);
-
 //#endregion
 //#region ─── Stage Helper Functions ───────────────────────────────────────────
 
@@ -572,7 +540,7 @@ function tokClass(t: { type?: string }): string {
 function hasNormalizerDetail(stage: PipelineStageResult): boolean {
   if (stage.stage !== "normalizer") return false;
   const o = stage.output as any;
-  return (o.fusions?.length ?? 0) > 0;
+  return (o.outputTokenCount ?? 0) > 0 || (o.fusions?.length ?? 0) > 0 || (o.rulesApplied?.length ?? 0) > 0;
 }
 
 /**
@@ -593,7 +561,7 @@ function normalizerDetailRenderer(stage: PipelineStageResult) {
   const o = stage.output as any;
   const fusions: any[] = o.fusions ?? [];
   const rulesApplied: any[] = o.rulesApplied ?? [];
-
+  const tokens: any[] = o.tokens ?? [];
   const children: any[] = [];
 
   // ── Stats row: token count change + per-rule application counts ──
@@ -601,11 +569,7 @@ function normalizerDetailRenderer(stage: PipelineStageResult) {
     h("div", { class: "normalize-stats" }, [
       h("span", { class: "normalize-stat" }, [
         h("span", { class: "normalize-stat-label" }, "Tokens:"),
-        h(
-          "span",
-          { class: "normalize-stat-value" },
-          `${o.inputTokenCount} → ${o.outputTokenCount}`,
-        ),
+        h("span", { class: "normalize-stat-value" }, `${o.inputTokenCount} → ${o.outputTokenCount}`),
       ]),
       h("span", { class: "normalize-stat" }, [
         h("span", { class: "normalize-stat-label" }, "Fusions:"),
@@ -620,87 +584,86 @@ function normalizerDetailRenderer(stage: PipelineStageResult) {
     ]),
   );
 
-  // ── Fusion table: rule → source tokens → fused token ──
-  if (fusions.length > 0) {
+  // ── Rules Applied: colored chip grid ──
+  if (rulesApplied.length > 0) {
     children.push(
-      h("table", { class: "normalize-fusion-table" }, [
-        h(
-          "thead",
-          {},
-          h("tr", {}, [
-            h("th", {}, "Rule"),
-            h("th", {}, "Source Tokens"),
-            h("th", {}, ""),
-            h("th", {}, "Fused Token"),
-          ]),
-        ),
-        h(
-          "tbody",
-          {},
-          fusions.map((f: any) =>
-            h("tr", {}, [
-              // Rule name column
-              h(
-                "td",
-                {},
-                h("span", { class: "normalize-fusion-rule" }, f.rule),
-              ),
-
-              // Source tokens column — color-coded chips
-              h(
-                "td",
-                {},
-                h(
-                  "span",
-                  { class: "normalize-fusion-source-tokens" },
-                  (f.sourceTokens ?? []).map((st: any) =>
-                    h(
-                      "span",
-                      {
-                        class: `normalize-fusion-token ${tokClass(st)}`,
-                      },
-                      st.value,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Arrow column
-              h(
-                "td",
-                {},
-                h("span", { class: "normalize-fusion-arrow" }, "→"),
-              ),
-
-              // Fused token column — type badge + value
-              h("td", {}, [
-                h(
-                  "span",
-                  { class: "normalize-fusion-result-type" },
-                  f.fusedToken.type,
-                ),
-                h(
-                  "span",
-                  {
-                    class: "normalize-fusion-result-token",
-                    style: { marginLeft: "6px", color: "#dcdcaa" },
-                  },
-                  f.fusedToken.value,
-                ),
-              ]),
+      h("div", { style: { marginTop: "10px" } }, [
+        h("div", { style: { fontSize: "9px", color: "#6b6b75", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" } }, "Rules Applied"),
+        h("div", { style: { display: "flex", flexWrap: "wrap", gap: "6px" } },
+          rulesApplied.map((r: any) =>
+            h("span", {
+              style: {
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                background: "rgba(78,201,176,0.1)",
+                border: "1px solid rgba(78,201,176,0.2)",
+                borderRadius: "4px",
+                padding: "3px 8px",
+                fontSize: "10px",
+              },
+            }, [
+              h("span", { style: { color: "#d4d4d8", fontFamily: "'JetBrains Mono', monospace" } }, r.rule),
+              h("span", { style: { color: "#4ec9b0", fontWeight: "600" } }, "×" + r.count),
             ]),
           ),
         ),
       ]),
     );
-  } else if (o.outputTokenCount > 0) {
-    // No fusions but tokens were normalized (e.g., implicit multiply only)
+  }
+
+  // ── Fusion table: rule → source tokens → fused token ──
+  if (fusions.length > 0) {
     children.push(
-      h(
-        "span",
-        { style: { color: "#6b6b75", fontSize: "10px" } },
-        "No tokens were fused in this pass",
-      ),
+      h("div", { style: { marginTop: "10px" } }, [
+        h("div", { style: { fontSize: "9px", color: "#6b6b75", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" } }, "Token Fusions"),
+        h("table", { class: "normalize-fusion-table" }, [
+          h("thead", {}, h("tr", {}, [
+            h("th", {}, "Rule"),
+            h("th", {}, "Source Tokens"),
+            h("th", {}, ""),
+            h("th", {}, "Fused Token"),
+          ])),
+          h("tbody", {},
+            fusions.map((f: any) =>
+              h("tr", {}, [
+                h("td", {}, h("span", { class: "normalize-fusion-rule" }, f.rule)),
+                h("td", {},
+                  h("span", { class: "normalize-fusion-source-tokens" },
+                    (f.sourceTokens ?? []).map((st: any) =>
+                      h("span", { class: `normalize-fusion-token ${tokClass(st)}` }, st.value),
+                    ),
+                  ),
+                ),
+                h("td", {}, h("span", { class: "normalize-fusion-arrow" }, "→")),
+                h("td", {}, [
+                  h("span", { class: "normalize-fusion-result-type" }, f.fusedToken.type),
+                  h("span", { class: "normalize-fusion-result-token", style: { marginLeft: "6px", color: "#dcdcaa" } }, f.fusedToken.value),
+                ]),
+              ]),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  // ── Normalized token stream (post-normalization output) ──
+  if (tokens.length > 0) {
+    const tokenChips = tokens.slice(0, 24).map((t: any) =>
+      h("span", {
+        class: `normalize-fusion-token ${tokClass({ type: t.type })}`,
+        style: { fontSize: "9px" },
+        title: `Type: ${t.type}\nValue: ${t.value}`,
+      }, t.value),
+    );
+    children.push(
+      h("div", { style: { marginTop: "10px" } }, [
+        h("div", { style: { fontSize: "9px", color: "#6b6b75", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" } },
+          `Normalized Tokens (${tokens.length} total${tokens.length > 24 ? `, showing first 24` : ""})`,
+        ),
+        h("div", { style: { display: "flex", flexWrap: "wrap", gap: "3px" } }, tokenChips),
+      ]),
     );
   }
 
@@ -917,34 +880,58 @@ const stageRenderers: Record<
         "No rules active",
       );
 
-    // Compact output: token count change badge + fusion count badge
-    const children: any[] = [];
-    children.push(
-      h("span", { class: "normalize-compact" }, [
-        h(
-          "span",
-          { class: "normalize-compact-count" },
-          `${o.inputTokenCount}→${o.outputTokenCount}`,
-        ),
-        fusions.length > 0
-          ? h(
-              "span",
-              { class: "normalize-compact-fusions" },
-              `${fusions.length} fusion${fusions.length !== 1 ? "s" : ""}`,
-            )
-          : h(
-              "span",
-              { style: { color: "#6b6b75", fontSize: "9px" } },
-              "no fusions",
-            ),
+    // Compact graphical chip layout: IN → FUSION → OUT
+    const removed = o.inputTokenCount - o.outputTokenCount;
+    return h("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: "4px",
+        flexWrap: "wrap",
+      },
+    }, [
+      // IN badge
+      h("span", {
+        style: {
+          display: "inline-flex", alignItems: "center", gap: "4px",
+          background: "rgba(90,200,250,0.12)", border: "1px solid rgba(90,200,250,0.25)",
+          borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
+        },
+      }, [
+        h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, "IN"),
+        h("span", { style: { color: "#5ac8fa", fontWeight: "700", fontVariantNumeric: "tabular-nums" } }, String(o.inputTokenCount)),
+        h("span", { style: { color: "#6b6b75", fontSize: "8px" } }, o.inputTokenCount === 1 ? "TOKEN" : "TOKENS"),
       ]),
-    );
-
-    return h(
-      "div",
-      { style: { display: "flex", alignItems: "center", gap: "8px" } },
-      children,
-    );
+      // Arrow
+      h("span", { style: { color: "#6b6b75", fontSize: "11px", margin: "0 2px" } }, "→"),
+      // FUSION badge
+      h("span", {
+        style: {
+          display: "inline-flex", alignItems: "center", gap: "4px",
+          background: fusions.length > 0 ? "rgba(155,123,236,0.15)" : "rgba(107,107,117,0.1)",
+          border: fusions.length > 0 ? "1px solid rgba(155,123,236,0.3)" : "1px solid rgba(107,107,117,0.15)",
+          borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
+        },
+      }, [
+        h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, "FUSION"),
+        h("span", { style: { color: fusions.length > 0 ? "#9b7bec" : "#6b6b75", fontWeight: "700", fontVariantNumeric: "tabular-nums" } }, String(fusions.length)),
+        h("span", { style: { color: removed > 0 ? "#f48771" : "#6b6b75", fontSize: "8px" } }, removed > 0 ? `−${removed}` : "TOKENS"),
+      ]),
+      // Arrow
+      h("span", { style: { color: "#6b6b75", fontSize: "11px", margin: "0 2px" } }, "→"),
+      // OUT badge
+      h("span", {
+        style: {
+          display: "inline-flex", alignItems: "center", gap: "4px",
+          background: "rgba(78,201,176,0.12)", border: "1px solid rgba(78,201,176,0.25)",
+          borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
+        },
+      }, [
+        h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, "OUT"),
+        h("span", { style: { color: "#4ec9b0", fontWeight: "700", fontVariantNumeric: "tabular-nums" } }, String(o.outputTokenCount)),
+        h("span", { style: { color: "#6b6b75", fontSize: "8px" } }, o.outputTokenCount === 1 ? "TOKEN" : "TOKENS"),
+      ]),
+    ]);
   },
 
   // ── Stage 5: Safety — Complexity ──────────────────────────────────────
@@ -980,8 +967,8 @@ const stageRenderers: Record<
   cache_check(stage) {
     const o = stage.output as any;
     const color = o.hit ? "#4ec9b0" : "#5ac8fa";
-    const cached = result.value?.wasCached ?? false;
-    const totalOps = result.value?.opcodes?.length ?? 0;
+    const cached = dr.wasCached;
+    const totalOps = dr.opcodes.length;
     return h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" } }, [
       h("span", { style: { color, fontSize: "10px", fontWeight: "600" } },
         o.hit ? "Cache Hit" : "Cache Miss",
@@ -1144,12 +1131,6 @@ const stageRenderers: Record<
 
 //#endregion
 //#region ─── Detail Stats (Pipeline Summary Bar) ──────────────────────────────
-
-/** Whether the last evaluation was served from the bytecode cache. */
-const wasCached = computed(() => dr.wasCached);
-
-/** Whether any line result is in a pending async state. */
-const hasAsync = computed(() => dr.hasAsync);
 
 /** Total raw token count (pre-normalization). */
 const tokenCount = computed(() => String(dr.tokenCount));
