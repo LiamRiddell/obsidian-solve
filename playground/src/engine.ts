@@ -5,7 +5,7 @@ import { formatValue } from "@/solve-js/src/format/FormatEngine";
 import type { Token } from "@/solve-js/src/lexer/Token";
 import type { AsyncResolutionEvent } from "@/solve-js/src/engine/AsyncResolutionBatcher";
 import { getOpCodeName, OpCode } from "@/solve-js/src/parser/OpCode";
-import type { PipelineStageResult } from "@/solve-js/src/types/DiagnosticPipelineResult";
+import type { DiagnosticPipelineResult, PipelineStageResult } from "@/solve-js/src/types/DiagnosticPipelineResult";
 import type { ParseletInfo } from "@/solve-js/src/types/ParsingResult";
 import { Value, ValueType, enableValueArena, disableValueArena } from "@/solve-js/src/vm/Value";
 import { AllocationTracker } from "@/solve-js/src/telemetry/AllocationTracker";
@@ -378,37 +378,13 @@ function extractStageTimings(
 	};
 }
 
-// ── DAG/Checkpoint/Batcher/Page extraction helpers ─────────────────────
+// ── Page heatmap extraction helper ──────────────────────────────────────
 
 /**
- * Extract a serializable DAG snapshot from the engine instance.
- *
- * @deprecated Use result.diagnostic.dagSnapshot instead — the diagnostic
- * report now contains all snapshot data. Keep wrapper for backward compat.
- */
-function extractDagSnapshot(engine: ExpressionEngine): DagSnapshot {
-	return engine.getDag().getSnapshot();
-}
-
-/**
- * @deprecated Use result.diagnostic.checkpoints instead.
- */
-function extractCheckpoints(engine: ExpressionEngine): CheckpointSnapshot[] {
-	return engine.getCheckpoints();
-}
-
-/**
- * @deprecated Use result.diagnostic.batcherMetrics instead.
- */
-function extractBatcherMetrics(engine: ExpressionEngine): BatcherMetrics {
-	return engine.getBatcherMetrics();
-}
-
-/**
- * Extract page heatmap from the engine's line cache and DAG.
+ * Extract page heatmap from the diagnostic cache snapshot.
  *
  * Pages are 128-line chunks. Temperature is inferred from the
- * line cache state — lines with cached results are "hot", those
+ * line cache entries — lines with cached results are "hot", those
  * with only bytecode are "warm", and those with nothing are "cold".
  *
  * accessSeq is calculated from the module-level `lineAccessSeq` map,
@@ -416,7 +392,7 @@ function extractBatcherMetrics(engine: ExpressionEngine): BatcherMetrics {
  * Higher accessSeq = more recently accessed.
  */
 function extractPageHeatmap(
-	engine: ExpressionEngine | null,
+	cacheSnapshot: CacheSnapshot,
 	lineCount: number
 ): PageHeatmapEntry[] {
 	const pages: PageHeatmapEntry[] = [];
@@ -424,26 +400,10 @@ function extractPageHeatmap(
 	const linesPerPage = 128;
 	const totalPages = Math.ceil(lineCount / linesPerPage);
 
-	// Build a set of line numbers that have cached bytecode or results
-	// using actual LineCache entry keys rather than a placeholder range.
+	// Build a set of line numbers from the cache snapshot's lineCache entries
 	const cachedLines = new Set<number>();
-	if (engine) {
-		try {
-			const lc = engine.getLineCache();
-			for (const key of lc.keys()) {
-				// Keys are "{line}:{expression}" or "{line}" — extract line number
-				const colonIdx = key.indexOf(":");
-				if (colonIdx > 0) {
-					const ln = parseInt(key.substring(0, colonIdx), 10);
-					if (!isNaN(ln)) cachedLines.add(ln);
-				} else {
-					const ln = parseInt(key, 10);
-					if (!isNaN(ln)) cachedLines.add(ln);
-				}
-			}
-		} catch {
-			/* fall through */
-		}
+	for (const entry of cacheSnapshot.lineCache) {
+		cachedLines.add(entry.lineNumber);
 	}
 
 	// Compute global max accessSeq for normalization
@@ -539,6 +499,7 @@ export function runEngineWithStreaming(
 		asyncCache: [],
 	};
 	let lastPipelineStages: PipelineStageResult[] = [];
+	let lastDiagnostic: DiagnosticPipelineResult | undefined;
 
 	let abortHandler: (() => void) | null = null;
 	let allLines: string[] = [];
@@ -677,10 +638,11 @@ export function runEngineWithStreaming(
 					// Record LRU access sequence for page heatmap
 					lineAccessSeq.set(lineNum, ++nextAccessSeq);
 
-					// Collect structured pipeline stages from the last line
-					if (result.diagnostic?.stages) {
-						lastPipelineStages = result.diagnostic.stages;
-					}
+				// Collect structured pipeline stages from the last line
+				if (result.diagnostic) {
+					lastDiagnostic = result.diagnostic;
+					lastPipelineStages = result.diagnostic.stages;
+				}
 
 					// Emit async_pending if the result is Pending
 					if (result.value?.type === 12) {
@@ -924,7 +886,6 @@ export function runEngineWithStreaming(
 		: [];
 
 	// ── Read all snapshot data from the last line's diagnostic result ──
-	const lastDiagnostic = lastPipelineStages.length > 0 ? { ... } as { dagSnapshot?: DagSnapshot; cacheSnapshot?: CacheSnapshot; checkpoints?: CheckpointSnapshot[]; batcherMetrics?: BatcherMetrics } : undefined;
 	cacheSnapshot = lastDiagnostic?.cacheSnapshot ?? cacheSnapshot;
 	const dagSnapshot = lastDiagnostic?.dagSnapshot ?? {
 		consumers: {},
@@ -940,7 +901,7 @@ export function runEngineWithStreaming(
 		workerOffloadCount: 0,
 		listenerCount: 0,
 	};
-	const pageHeatmap = extractPageHeatmap(engine!, allLines.length);
+	const pageHeatmap = extractPageHeatmap(cacheSnapshot, allLines.length);
 	const pipelineTelemetry = engine
 		? engine.getLastTelemetry()
 		: null;
@@ -1003,6 +964,7 @@ export function runEngine(expression: string): DebugResult {
 	let lineResults: LineResult[] = [];
 	let parselets: ParseletInfo[] = [];
 	let lastPipelineStages: PipelineStageResult[] = [];
+	let lastDiagnostic: DiagnosticPipelineResult | undefined;
 
 	// The TimelineDiagnosticCollector accumulates events across ALL
 	// evaluateLineWithDebug() calls without resetting, so line N's
@@ -1050,7 +1012,8 @@ export function runEngine(expression: string): DebugResult {
 			lineAccessSeq.set(lineNum, ++nextAccessSeq);
 
 			// Collect structured pipeline stages from the last line (most complete diagnostic data)
-			if (result.diagnostic?.stages) {
+			if (result.diagnostic) {
+				lastDiagnostic = result.diagnostic;
 				lastPipelineStages = result.diagnostic.stages;
 			}
 
@@ -1197,7 +1160,7 @@ export function runEngine(expression: string): DebugResult {
 			workerOffloadCount: 0,
 			listenerCount: 0,
 		};
-		const ph = extractPageHeatmap(engine, allLines.length);
+		const ph = extractPageHeatmap(cacheSnapshot, allLines.length);
 
 		// ── Capture arena stats ──
 		const arenaStats: ArenaStats = {
