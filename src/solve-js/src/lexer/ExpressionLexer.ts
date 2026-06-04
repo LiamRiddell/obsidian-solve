@@ -43,6 +43,10 @@ export interface InlineSolveSpan {
   expression: string;
   /** 1-based column of the `s`` marker */
   columnNumber: number;
+  /** Token index of INLINE_SOLVE_START in the line's token array (set during tokenization). */
+  startTokenIndex?: number;
+  /** Token index of closing BACKTICK_OPEN in the line's token array (set during tokenization). */
+  endTokenIndex?: number;
 }
 
 /**
@@ -352,6 +356,12 @@ export class ExpressionLexer {
   private localeCode: string;
   private locale: ILocale;
 
+  /**
+   * Inline solve spans collected during the most recent tokenization pass.
+   * Populated by [Symbol.iterator]() and consumed by scanDocument().
+   */
+  _inlineSolveSpans: InlineSolveSpan[] = [];
+
   /** Rebuild merged keyword and unit collections after plugin registration. */
   private rebuildMergedCollections(): void {
     this.mergedKeywords = new Map([...this.keywordMap, ...this.pluginKeywordMap]);
@@ -606,10 +616,33 @@ export class ExpressionLexer {
       // needed for ScanLineResult.text and findInlineSolves().
       const lineText = input.slice(lineStart, lineEnd);
 
-      // ── Detect inline solves (only for lines that may have them) ─
+      // ── Detect inline solves ──────────────────────────────────────
+      // Two data sources are merged:
+      //   1. _inlineSolveSpans — token indices collected inline during
+      //      [Symbol.iterator](). Provides correct startTokenIndex /
+      //      endTokenIndex for token-level access.
+      //   2. findInlineSolves() — character-level string scan. Still
+      //      necessary because the tokenizer doesn't handle backslash
+      //      escapes: in s`hello \` world`, the tokenizer treats \` as
+      //      a closing BACKTICK_OPEN (closing the span early), while
+      //      findInlineSolves() correctly skips \` as an escape sequence.
+      //      Merging both gives correct char offsets + token indices.
       let inlineSolves: InlineSolveSpan[] = [];
       if (classification.hasInlineSolve) {
-        inlineSolves = this.findInlineSolves(lineText);
+        if (!classification.skip && tokens.length > 0) {
+          const charSpans = this.findInlineSolves(lineText);
+          inlineSolves = this._inlineSolveSpans.map((span, i) => ({
+            start: charSpans[i]?.start ?? 0,
+            end: charSpans[i]?.end ?? 0,
+            expression: charSpans[i]?.expression ?? '',
+            columnNumber: charSpans[i]?.columnNumber ?? span.columnNumber,
+            startTokenIndex: span.startTokenIndex,
+            endTokenIndex: span.endTokenIndex,
+          }));
+        } else {
+          // Skipped lines weren't tokenized — fall back to string scan
+          inlineSolves = this.findInlineSolves(lineText);
+        }
       }
 
       results.push({
@@ -682,7 +715,12 @@ export class ExpressionLexer {
     const len = this.len;
 
     // ── 0-char fast path ────────────────────────────────────────────────
-    if (len === 0) return;
+    if (len === 0) { this._inlineSolveSpans = []; return; }
+
+    // Inline solve tracking state — collected inline during tokenization
+    let tokenIndex = 0;
+    let openSpan: { startTokenIndex: number; startColumn: number } | null = null;
+    const collectedSpans: InlineSolveSpan[] = [];
 
     // ── 1-char fast path ────────────────────────────────────────────────
     if (len === 1) {
@@ -693,6 +731,7 @@ export class ExpressionLexer {
         case CharClass.DIGIT:
         case CharClass.DOT:
           yield new LexerToken('NUMBER', tokenTypeId('NUMBER'), this.input, this.input, 0, 0, 1, 1);
+          tokenIndex++;
           break;
 
         case CharClass.ALPHA: {
@@ -709,6 +748,7 @@ export class ExpressionLexer {
               yield new LexerToken('IDENT', tokenTypeId('IDENT'), input, input, 0, 0, 1, 1);
             }
           }
+          tokenIndex++;
           break;
         }
 
@@ -716,6 +756,7 @@ export class ExpressionLexer {
           const opType = OP_MAP[c0];
           if (opType) {
             yield new LexerToken(opType, tokenTypeId(opType), this.input, this.input, 0, 0, 1, 1);
+            tokenIndex++;
           }
           break;
         }
@@ -724,41 +765,53 @@ export class ExpressionLexer {
           // Delegate to tokenizeString for correctness (handles unterminated)
           this.pos = 0;
           yield this.tokenizeString();
+          tokenIndex++;
           break;
 
         case CharClass.HASH:
           // Delegate to tokenizeComment for correctness
           this.pos = 0;
           yield this.tokenizeComment();
+          tokenIndex++;
           break;
 
         case CharClass.DOLLAR:
           yield new LexerToken('DOLLAR', tokenTypeId('DOLLAR'), '$', '$', 0, 0, 1, 1);
+          tokenIndex++;
           break;
 
         case CharClass.BACKTICK:
+          // s` is 2 chars — openSpan can never be set in the 1-char fast path
           yield new LexerToken('BACKTICK_OPEN', tokenTypeId('BACKTICK_OPEN'), '`', '`', 0, 0, 1, 1);
+          tokenIndex++;
           break;
 
         default: {
           // CharClass.SKIP — includes non-ASCII characters (code >= 128)
           if (c0 === 0x00D7) {  // × → STAR
             yield new LexerToken('STAR', tokenTypeId('STAR'), '\u00D7', '\u00D7', 0, 0, 1, 1);
+            tokenIndex++;
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
             yield new LexerToken('SLASH', tokenTypeId('SLASH'), '\u00F7', '\u00F7', 0, 0, 1, 1);
+            tokenIndex++;
           } else if (c0 === 0x2260) {  // ≠ → NEQ
             yield new LexerToken('NEQ', tokenTypeId('NEQ'), '\u2260', '\u2260', 0, 0, 1, 1);
+            tokenIndex++;
           } else if (c0 === 0x00A3) {  // £
             yield new LexerToken('POUND', tokenTypeId('POUND'), '\u00A3', '\u00A3', 0, 0, 1, 1);
+            tokenIndex++;
           } else if (c0 === 0x20AC) {  // €
             yield new LexerToken('EURO', tokenTypeId('EURO'), '\u20AC', '\u20AC', 0, 0, 1, 1);
+            tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode — treat as IDENT for forward compatibility
             yield new LexerToken('IDENT', tokenTypeId('IDENT'), this.input, this.input, 0, 0, 1, 1);
+            tokenIndex++;
           }
           break;
         }
       }
+      this._inlineSolveSpans = collectedSpans;
       return;
     }
 
@@ -788,12 +841,19 @@ export class ExpressionLexer {
         // ── Digit — inline number tokenizer ───────────────────────────
         case CharClass.DIGIT:
           yield this.tokenizeNumber();
+          tokenIndex++;
           break;
 
         // ── Alpha / underscore — identifier or keyword ────────────────
-        case CharClass.ALPHA:
-          yield this.tokenizeIdentifier();
+        case CharClass.ALPHA: {
+          const token = this.tokenizeIdentifier();
+          if (token.type === 'INLINE_SOLVE_START') {
+            openSpan = { startTokenIndex: tokenIndex, startColumn: token.col };
+          }
+          yield token;
+          tokenIndex++;
           break;
+        }
 
         // ── Dot — could be decimal (.5) or DOT token ─────────────────
         case CharClass.DOT:
@@ -811,21 +871,25 @@ export class ExpressionLexer {
             yield new LexerToken('DOT', tokenTypeId('DOT'), '.', '.', this.pos, 0, this.line, col);
             this.pos++;
           }
+          tokenIndex++;
           break;
 
         // ── Operator / punctuation ────────────────────────────────────
         case CharClass.OPERATOR:
           yield this.tokenizeOperator();
+          tokenIndex++;
           break;
 
         // ── String literal ────────────────────────────────────────────
         case CharClass.QUOTE:
           yield this.tokenizeString();
+          tokenIndex++;
           break;
 
         // ── Comment (# or //) ─────────────────────────────────────────
         case CharClass.HASH:
           yield this.tokenizeComment();
+          tokenIndex++;
           break;
 
         // ── Dollar sign $ ─────────────────────────────────────────────
@@ -833,6 +897,7 @@ export class ExpressionLexer {
           const col = this.pos - this.lineStartPos + 1;
           yield new LexerToken('DOLLAR', tokenTypeId('DOLLAR'), '$', '$', this.pos, 0, this.line, col);
           this.pos++;
+          tokenIndex++;
           break;
         }
 
@@ -841,6 +906,17 @@ export class ExpressionLexer {
           const col = this.pos - this.lineStartPos + 1;
           yield new LexerToken('BACKTICK_OPEN', tokenTypeId('BACKTICK_OPEN'), '`', '`', this.pos, 0, this.line, col);
           this.pos++;
+          if (openSpan) {
+            const span = openSpan;  // narrow for TS
+            collectedSpans.push({
+              start: 0, end: 0, expression: '',
+              columnNumber: span.startColumn,
+              startTokenIndex: span.startTokenIndex,
+              endTokenIndex: tokenIndex,
+            });
+            openSpan = null;
+          }
+          tokenIndex++;
           break;
         }
 
@@ -850,23 +926,29 @@ export class ExpressionLexer {
           if (c0 === 0x00D7) {  // × → STAR
             yield new LexerToken('STAR', tokenTypeId('STAR'), '\u00D7', '\u00D7', this.pos, 0, this.line, col);
             this.pos++;
+            tokenIndex++;
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
             yield new LexerToken('SLASH', tokenTypeId('SLASH'), '\u00F7', '\u00F7', this.pos, 0, this.line, col);
             this.pos++;
+            tokenIndex++;
           } else if (c0 === 0x2260) {  // ≠ → NEQ
             yield new LexerToken('NEQ', tokenTypeId('NEQ'), '\u2260', '\u2260', this.pos, 0, this.line, col);
             this.pos++;
+            tokenIndex++;
           } else if (c0 === 0x00A3) {  // £
             yield new LexerToken('POUND', tokenTypeId('POUND'), '\u00A3', '\u00A3', this.pos, 0, this.line, col);
             this.pos++;
+            tokenIndex++;
           } else if (c0 === 0x20AC) {  // €
             yield new LexerToken('EURO', tokenTypeId('EURO'), '\u20AC', '\u20AC', this.pos, 0, this.line, col);
             this.pos++;
+            tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode — treat as IDENT for forward compatibility.
             // tokenizeIdentifier() now includes cc >= 128 in its reading loop,
             // so this properly advances past all consecutive Unicode chars.
             yield this.tokenizeIdentifier();
+            tokenIndex++;
           } else {
             // Unknown ASCII — silently skip
             this.pos++;
@@ -875,6 +957,7 @@ export class ExpressionLexer {
         }
       }
     }
+    this._inlineSolveSpans = collectedSpans;
   }
 
   // ── Inline number tokenizer ────────────────────────────────────────────

@@ -133,6 +133,28 @@ export interface PipelineStartOutput {
 }
 
 //#endregion
+//#region ─── Inline Solve Span Info ─────────────────────────────────────────
+
+/**
+ * Lightweight inline solve span with token indices for diagnostic rendering.
+ *
+ * Unlike {@link InlineSolveSpan} (which carries full character offsets),
+ * this is a diagnostics-only struct focused on token-level access. The
+ * playground uses `startTokenIndex`/`endTokenIndex` to highlight tokens
+ * within the inline solve, and `expression` to show what was evaluated.
+ */
+export interface InlineSolveSpanInfo {
+  /** Token index of INLINE_SOLVE_START in the expression's token array */
+  startTokenIndex: number;
+  /** Token index of closing BACKTICK_OPEN in the expression's token array */
+  endTokenIndex: number;
+  /** The expression text between the backticks */
+  expression: string;
+  /** 1-based column of the `s`` marker */
+  columnNumber: number;
+}
+
+//#endregion
 //#region ─── Stage 2 – Line Classification ────────────────────────────────────
 
 /** Stage 2: Markdown line classification (used by scanDocument path). */
@@ -144,6 +166,8 @@ export interface LineClassificationOutput {
   skip: boolean;
   /** Whether the line contains inline solve markers (`s`...``) */
   hasInlineSolve: boolean;
+  /** Inline solve spans with token indices (empty if none detected). */
+  inlineSolveSpans: InlineSolveSpanInfo[];
 }
 
 //#endregion

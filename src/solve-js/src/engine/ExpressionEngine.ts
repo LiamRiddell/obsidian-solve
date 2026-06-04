@@ -58,6 +58,7 @@ import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
     type StageOutput,
+    type InlineSolveSpanInfo,
 } from "@solve-js/types/DiagnosticPipelineResult";
 
 //#endregion
@@ -1129,6 +1130,40 @@ export class ExpressionEngine {
                 hasParens,
                 locale: this.localeCode,
                 tokens: [...tokens],
+            });
+
+            // Structured: line classification — detect inline solve spans from token stream
+            const inlineSolveSpans: InlineSolveSpanInfo[] = [];
+            for (let i = 0; i < tokens.length; i++) {
+                const t = tokens[i];
+                if (t.type === 'INLINE_SOLVE_START') {
+                    // Find closing backtick
+                    let endIdx = -1;
+                    for (let j = i + 1; j < tokens.length; j++) {
+                        if (tokens[j].type === 'BACKTICK_OPEN') {
+                            endIdx = j;
+                            break;
+                        }
+                    }
+                    if (endIdx > i) {
+                        const exprTokens = tokens.slice(i + 1, endIdx);
+                        const expression = exprTokens.map(et => et.value).join('');
+                        inlineSolveSpans.push({
+                            startTokenIndex: i,
+                            endTokenIndex: endIdx,
+                            expression,
+                            columnNumber: t.col || 1,
+                        });
+                        i = endIdx;  // skip past this span
+                    }
+                }
+            }
+            this.addDiagnosticStage(stages, 'line_classification', 'Line Classification', '📋', 'classify', 3.5, zeroElapsed, false, {
+                type: 'line_classification',
+                classification: 'expression',
+                skip: false,
+                hasInlineSolve: inlineSolveSpans.length > 0,
+                inlineSolveSpans,
             });
         }
 

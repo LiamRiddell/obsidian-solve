@@ -206,6 +206,148 @@ describe('ExpressionLexer.scanDocument — inline solves', () => {
   });
 });
 
+describe('ExpressionLexer.scanDocument — inline solve token indices', () => {
+  test('single inline solve: startTokenIndex and endTokenIndex are populated', () => {
+    const lexer = new ExpressionLexer();
+    // Tokens: 0=INLINE_SOLVE_START, 1=NUMBER"2", 2=PLUS, 3=NUMBER"2", 4=BACKTICK_OPEN
+    const results = lexer.scanDocument('s`2+2`');
+
+    expect(results[0].inlineSolves.length).toBe(1);
+    const span = results[0].inlineSolves[0];
+    expect(span.startTokenIndex).toBe(0);  // INLINE_SOLVE_START
+    expect(span.endTokenIndex).toBe(4);     // BACKTICK_OPEN
+    // Expression tokens are indices [1..4): tokens[1], tokens[2], tokens[3]
+    const exprTokens = results[0].tokens.slice(
+      span.startTokenIndex! + 1,
+      span.endTokenIndex!,
+    );
+    expect(exprTokens.map(t => t.value).join('')).toBe('2+2');
+  });
+
+  test('multiple inline solves: each span has correct token indices', () => {
+    const lexer = new ExpressionLexer();
+    // Tokens: 0=INLINE_SOLVE_START, 1=NUM"2", 2=PLUS, 3=NUM"2", 4=BACKTICK_OPEN,
+    //         5=IDENT"plus", 6=INLINE_SOLVE_START, 7=NUM"3", 8=STAR, 9=NUM"3", 10=BACKTICK_OPEN
+    const results = lexer.scanDocument('s`2+2` plus s`3*3`');
+
+    expect(results[0].inlineSolves.length).toBe(2);
+
+    // First span
+    expect(results[0].inlineSolves[0].startTokenIndex).toBe(0);
+    expect(results[0].inlineSolves[0].endTokenIndex).toBe(4);
+    expect(results[0].inlineSolves[0].expression).toBe('2+2');
+
+    // Second span
+    expect(results[0].inlineSolves[1].startTokenIndex).toBe(6);
+    expect(results[0].inlineSolves[1].endTokenIndex).toBe(10);
+    expect(results[0].inlineSolves[1].expression).toBe('3*3');
+  });
+
+  test('inline solve mid-line: token indices offset by preceding tokens', () => {
+    const lexer = new ExpressionLexer();
+    // Tokens: 0=IDENT"prefix", 1=INLINE_SOLVE_START, 2=NUM"2", 3=PLUS, 4=NUM"2",
+    //         5=BACKTICK_OPEN, 6=IDENT"suffix"
+    const results = lexer.scanDocument('prefix s`2+2` suffix');
+
+    expect(results[0].inlineSolves.length).toBe(1);
+    const span = results[0].inlineSolves[0];
+    expect(span.startTokenIndex).toBe(1);  // after "prefix"
+    expect(span.endTokenIndex).toBe(5);     // before "suffix"
+    expect(span.expression).toBe('2+2');
+  });
+
+  test('line without inline solves: no spans, no stale token indices', () => {
+    const lexer = new ExpressionLexer();
+    const results = lexer.scanDocument('1 + 2');
+
+    expect(results[0].classification.hasInlineSolve).toBe(false);
+    expect(results[0].inlineSolves).toEqual([]);
+  });
+
+  test('inline solve with unit expression: token indices are correct', () => {
+    const lexer = new ExpressionLexer();
+    // Tokens: 0=INLINE_SOLVE_START, 1=NUM"5", 2=UNIT"km", 3=BACKTICK_OPEN
+    const results = lexer.scanDocument('s`5km`');
+
+    expect(results[0].inlineSolves.length).toBe(1);
+    const span = results[0].inlineSolves[0];
+    expect(span.startTokenIndex).toBe(0);
+    expect(span.endTokenIndex).toBe(3);
+    expect(span.expression).toBe('5km');
+
+    // Verify token indices reconstruct correctly
+    const exprTokens = results[0].tokens.slice(
+      span.startTokenIndex! + 1,
+      span.endTokenIndex!,
+    );
+    expect(exprTokens.map(t => t.value).join('')).toBe('5km');
+  });
+
+  test('inline solve on multi-line document: indices are per-line', () => {
+    const lexer = new ExpressionLexer();
+    // Line 1: s`a+b` — tokens: 0=INLINE_SOLVE_START, 1=IDENT"a", 2=PLUS, 3=IDENT"b", 4=BACKTICK_OPEN
+    // Line 2: s`x*y` — tokens: 0=INLINE_SOLVE_START, 1=IDENT"x", 2=STAR, 3=IDENT"y", 4=BACKTICK_OPEN
+    const results = lexer.scanDocument('s`a+b`\ns`x*y`');
+
+    expect(results.length).toBe(2);
+
+    // Line 1 span
+    expect(results[0].inlineSolves.length).toBe(1);
+    expect(results[0].inlineSolves[0].startTokenIndex).toBe(0);
+    expect(results[0].inlineSolves[0].endTokenIndex).toBe(4);
+    expect(results[0].inlineSolves[0].expression).toBe('a+b');
+
+    // Line 2 span — indices should reset to 0 for the new line
+    expect(results[1].inlineSolves.length).toBe(1);
+    expect(results[1].inlineSolves[0].startTokenIndex).toBe(0);
+    expect(results[1].inlineSolves[0].endTokenIndex).toBe(4);
+    expect(results[1].inlineSolves[0].expression).toBe('x*y');
+  });
+
+  test('hasInlineSolve is consistent with span presence', () => {
+    const lexer = new ExpressionLexer();
+
+    // Line with inline solve
+    const r1 = lexer.scanDocument('s`2+2`');
+    expect(r1[0].classification.hasInlineSolve).toBe(true);
+    expect(r1[0].inlineSolves.length).toBeGreaterThan(0);
+
+    // Line without inline solve
+    const r2 = lexer.scanDocument('2 + 2');
+    expect(r2[0].classification.hasInlineSolve).toBe(false);
+    expect(r2[0].inlineSolves).toEqual([]);
+  });
+
+  test('token indices are -1 on skipped lines (not tokenized)', () => {
+    const lexer = new ExpressionLexer();
+    // s` inside a heading is still skipped and not tokenized
+    // findInlineSolves runs but inline collector doesn't
+    const results = lexer.scanDocument('# s`test`');
+
+    expect(results[0].classification.skip).toBe(true);
+    expect(results[0].classification.hasInlineSolve).toBe(false);
+    expect(results[0].inlineSolves).toEqual([]);
+  });
+
+  test('expression line with s` at col > 0: startTokenIndex derived from token position', () => {
+    const lexer = new ExpressionLexer();
+    // "x = s`5`; y" tokens: 0=IDENT"x", 1=EQUALS, 2=INLINE_SOLVE_START,
+    //   3=NUM"5", 4=BACKTICK_OPEN, 5=SEMICOLON, 6=IDENT"y"
+    const results = lexer.scanDocument('x = s`5`; y');
+
+    expect(results[0].inlineSolves.length).toBe(1);
+    const span = results[0].inlineSolves[0];
+    expect(span.startTokenIndex).toBe(2);
+    expect(span.endTokenIndex).toBe(4);
+    expect(span.expression).toBe('5');
+
+    // Expression is just the NUMBER "5" at token index 3
+    const exprToken = results[0].tokens[span.startTokenIndex! + 1];
+    expect(exprToken.type).toBe('NUMBER');
+    expect(exprToken.value).toBe('5');
+  });
+});
+
 describe('ExpressionLexer.scanDocument — tokenization correctness', () => {
   test('tokens match standalone tokenizeAll for simple expression', () => {
     const lexer1 = new ExpressionLexer();

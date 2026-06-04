@@ -729,6 +729,7 @@ const stageRenderers: Record<
     const classification = o.classification ?? "—";
     const skip = o.skip;
     const hasInlineSolve = o.hasInlineSolve;
+    const inlineSolveSpans: any[] = o.inlineSolveSpans ?? [];
 
     // Compact classification chip
     const chips: any[] = [];
@@ -782,8 +783,28 @@ const stageRenderers: Record<
       );
     }
 
-    // Inline solve badge
-    if (hasInlineSolve) {
+    // Per-span detail chips: s`expr` [start..end]
+    if (inlineSolveSpans.length > 0) {
+      for (const span of inlineSolveSpans) {
+        const expr = span.expression ?? "?";
+        const start = span.startTokenIndex ?? 0;
+        const end = span.endTokenIndex ?? 0;
+        chips.push(
+          h("span", {
+            style: {
+              fontSize: "9px",
+              padding: "1px 6px",
+              borderRadius: "3px",
+              background: "rgba(205,132,252,0.15)",
+              color: "#c084fc",
+              border: "1px solid rgba(205,132,252,0.3)",
+            },
+            title: `s\`${expr}\`\nTokens: [${start}..${end}]\nColumn: ${span.columnNumber ?? 1}`,
+          }, `s\`${expr}\` [${start}..${end}]`),
+        );
+      }
+    } else if (hasInlineSolve) {
+      // Fallback: old-style badge (no span details available)
       chips.push(
         h("span", {
           style: {
@@ -799,7 +820,7 @@ const stageRenderers: Record<
       );
     }
 
-    return h("div", { style: { display: "flex", alignItems: "center", gap: "4px" } }, chips);
+    return h("div", { style: { display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" } }, chips);
   },
 
   // ── Stage 3: Safety — Expression Length ───────────────────────────────
