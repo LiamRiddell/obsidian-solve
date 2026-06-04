@@ -237,7 +237,6 @@ import PipelineStage from "./PipelineStage.vue";
 import type { Token, ConstantInfo } from "../engine.js";
 import type {
   PipelineStageResult,
-  StageOutput,
 } from "@/solve-js/src/types/DiagnosticPipelineResult";
 
 //#endregion
