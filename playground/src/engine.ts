@@ -497,7 +497,6 @@ export function runEngineWithStreaming(
 ): {
 	result: DebugResult;
 	stream: ReadableStream<DiagnosticEventInfo>;
-	diagnosticsStream: ReadableStream<DiagnosticEventInfo>;
 } {
 	const opcodeCountsByLine = new Map<number, number>();
 	let engine: ExpressionEngine | null = null;
@@ -976,14 +975,10 @@ export function runEngineWithStreaming(
 		arenaStats,
 	};
 
-	// ── Tee the output stream so multiple UI components can independently
-	// consume diagnostic events, each with their own backpressure and
-	// cancellation. Branch 1 (stream) = primary consumer (Stream tab).
-	// Branch 2 (diagnosticsStream) = secondary consumer (diagnostics pane,
-	// error bar, or any component that wants its own reader).
-	const [primaryBranch, secondaryBranch] = stream.tee();
-
-	return { result, stream: primaryBranch, diagnosticsStream: secondaryBranch };
+	// ── Return the stream directly — no tee() needed.
+	// The engine store's onmessage handler receives stream events and
+	// populates the StreamStore (and any other consumers) directly.
+	return { result, stream };
 }
 
 export function runEngine(expression: string): DebugResult {

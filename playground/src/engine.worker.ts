@@ -76,61 +76,6 @@ function serializeResult(result: DebugResult): DebugResult {
  * session automatically aborts the previous one.
  */
 let currentAbortController: AbortController | null = null;
-
-/**
- * Number of tee() branch readers still active for the current session.
- *
- * When both branches complete (or error), `currentAbortController` is
- * nulled. This avoids the race condition where two finally blocks
- * compete to null the same controller.
- */
-let pendingBranches = 0;
-//#endregion
-
-//#region Stream branch forwarding helper
-/**
- * Forward all events from a diagnostic stream branch to the main thread.
- *
- * Reads chunks from the given `ReadableStream<DiagnosticEventInfo>` and
- * posts each one via `self.postMessage()`. The `branchKey` distinguishes
- * which branch the event came from (`"stream"` or `"diagnostics"`).
- *
- * When the reader completes or errors, the branch is released and the
- * abort controller is cleaned up if this was the active session.
- *
- * @param branchStream - A tee() branch of the diagnostic event stream.
- * @param branchKey - Discriminator for routing on the main thread
- *                    (`"stream"` for primary, `"diagnostics"` for secondary).
- */
-function forwardBranch(
-    id: number,
-    branchStream: ReadableStream<DiagnosticEventInfo>,
-    branchKey: string,
-    abortController: AbortController,
-): void {
-    const reader = branchStream.getReader();
-    (async () => {
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                self.postMessage({
-                    id,
-                    streamEvent: value,
-                    stream: true,
-                    branchKey,
-                });
-            }
-        } catch {
-            // Stream was aborted/cancelled — expected during session cleanup
-        } finally {
-            reader.releaseLock();
-            if (--pendingBranches === 0) {
-                currentAbortController = null;
-            }
-        }
-    })();
-}
 //#endregion
 
 //#region Message Handler — Inbound command dispatcher
@@ -156,7 +101,6 @@ self.onmessage = (e: MessageEvent<{ id: number; expression: string; stream?: boo
             currentAbortController.abort();
             currentAbortController = null;
         }
-        pendingBranches = 0;
         return;
     }
 
@@ -165,7 +109,6 @@ self.onmessage = (e: MessageEvent<{ id: number; expression: string; stream?: boo
         currentAbortController.abort();
         currentAbortController = null;
     }
-    pendingBranches = 0;
 
     if (stream) {
         // ── Streaming mode: keep engine alive for async resolution events ──
@@ -173,7 +116,7 @@ self.onmessage = (e: MessageEvent<{ id: number; expression: string; stream?: boo
             const abortController = new AbortController();
             currentAbortController = abortController;
 
-            const { result, stream: eventStream, diagnosticsStream } = runEngineWithStreaming(expression, abortController.signal);
+            const { result, stream: eventStream } = runEngineWithStreaming(expression, abortController.signal);
 
             // If aborted during synchronous evaluation, don't send stale result
             if (abortController.signal.aborted) {
@@ -183,12 +126,24 @@ self.onmessage = (e: MessageEvent<{ id: number; expression: string; stream?: boo
             const serialized = serializeResult(result);
             self.postMessage({ id, result: serialized });
 
-            // ── Tee branches: forward each independently to the main thread.
-            // Branch "stream" = primary consumer (Stream tab).
-            // Branch "diagnostics" = secondary consumer (diagnostics pane, error bar, etc.).
-            pendingBranches = 2;
-            forwardBranch(id, eventStream, 'stream', abortController);
-            forwardBranch(id, diagnosticsStream, 'diagnostics', abortController);
+            // ── Forward the single event stream to the main thread.
+            // The engine store's onmessage handler receives each event and
+            // populates the StreamStore directly — no tee() or branch routing needed.
+            const reader = eventStream.getReader();
+            (async () => {
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        self.postMessage({ id, streamEvent: value, stream: true });
+                    }
+                } catch {
+                    // Stream was aborted/cancelled — expected during session cleanup
+                } finally {
+                    reader.releaseLock();
+                    currentAbortController = null;
+                }
+            })();
         } catch (error) {
             self.postMessage({ id, error: error instanceof Error ? error.message : String(error) });
         }

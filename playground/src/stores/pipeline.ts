@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { DiagnosticEventInfo } from '../engine.js';
 
 export const usePipelineStore = defineStore('pipeline', () => {
   /* ── UI State ──────────────────────────────────────────── */
@@ -18,23 +17,12 @@ export const usePipelineStore = defineStore('pipeline', () => {
   /** Active flamegraph filter stage label. */
   const flamegraphFilter = ref<string | null>(null);
 
-  /** Diagnostic events from the tee() secondary branch — independent consumption. */
-  const diagnosticEvents = ref<DiagnosticEventInfo[]>([]);
-
   /** Reactive trigger incremented when collapse-all is clicked. */
   const collapseAllTrigger = ref(0);
   /** Reactive trigger incremented when expand-all is clicked. */
   const expandAllTrigger = ref(0);
 
   /* ── Actions ──────────────────────────────────────────── */
-
-  function addDiagnosticEvent(event: DiagnosticEventInfo): void {
-    diagnosticEvents.value.push(event);
-  }
-
-  function resetDiagnosticEvents(): void {
-    diagnosticEvents.value = [];
-  }
 
   function selectLine(lineNumber: number | null, manual = false): void {
     if (manual) dropdownManuallyChanged.value = true;
@@ -84,12 +72,9 @@ export const usePipelineStore = defineStore('pipeline', () => {
     stageExpansionState,
     stageSnapshots,
     flamegraphFilter,
-    diagnosticEvents,
     collapseAllTrigger,
     expandAllTrigger,
     // Actions
-    addDiagnosticEvent,
-    resetDiagnosticEvents,
     selectLine,
     resetDropdownOverride,
     saveStageExpansion,

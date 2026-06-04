@@ -17,20 +17,15 @@ export const useEngineStore = defineStore('engine', () => {
     error?: string;
     streamEvent?: DiagnosticEventInfo;
     stream?: boolean;
-    branchKey?: string;
   }>) => {
-    const { id, result, error, streamEvent, stream, branchKey } = e.data;
+    const { id, result, error, streamEvent, stream } = e.data;
     const dr = useDiagnosticReportStore();
 
-    // Streaming events are routed by branchKey:
-    //   "stream"      → StreamStore (primary consumer)
-    //   "diagnostics" → PipelineStore (secondary consumer, tee branch)
+    // Streaming events — populate the StreamStore directly.
+    // No more tee() branch routing; the single event stream is forwarded
+    // from the worker and popped into the store here.
     if (stream && streamEvent && id === dr.runId) {
-      if (branchKey === 'diagnostics') {
-        usePipelineStore().addDiagnosticEvent(streamEvent);
-      } else {
-        useStreamStore().addEvent(streamEvent);
-      }
+      useStreamStore().addEvent(streamEvent);
       return;
     }
 
@@ -83,9 +78,8 @@ export const useEngineStore = defineStore('engine', () => {
         return;
       }
 
-      // Reset stream events — both primary and tee'd diagnostic branches
+      // Reset stream events
       useStreamStore().reset();
-      usePipelineStore().resetDiagnosticEvents();
 
       useDiagnosticReportStore().setStatus('busy');
       useDiagnosticReportStore().incrementRunId();
