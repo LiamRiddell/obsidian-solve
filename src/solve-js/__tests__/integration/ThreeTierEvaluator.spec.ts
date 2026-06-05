@@ -93,8 +93,8 @@ describe("ThreeTierEvaluator — Tier 1 (Full Pipeline)", () => {
 
 		const state = doc.getLineAt(1)!;
 		expect(state.dirty).toBe(false);
-		expect(state.result).not.toBeNull();
-		expect(state.result!.toNumber()).toBe(15);
+		expect(state.results.length).toBe(1);
+		expect(state.results[0].toNumber()).toBe(15);
 	});
 
 	test("keeps line dirty on evaluation error", () => {
@@ -226,16 +226,16 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 
 		// Line 3 ("x * 2") is a non-variable-def expression — should be compiled but NOT executed
 		const line3 = doc.getLineAt(3)!;
-		expect(line3.bytecode).not.toBeNull(); // compiled
-		expect(line3.dirty).toBe(true);        // NOT executed, stays dirty
-		expect(line3.result).toBeNull();       // no result (wasn't executed)
+		expect(line3.bytecodes.length).toBe(1); // compiled
+		expect(line3.dirty).toBe(true);         // NOT executed, stays dirty
+		expect(line3.results.length).toBe(0);   // no result (wasn't executed)
 
 		// Line 2 (":x = 10") is a variable def — compiled + executed → clean
 		const line2 = doc.getLineAt(2)!;
 		expect(line2.isVariableDef).toBe(true);
-		expect(line2.bytecode).not.toBeNull();
+		expect(line2.bytecodes.length).toBe(1);
 		expect(line2.dirty).toBe(false); // executed in Tier 3
-		expect(line2.result).not.toBeNull();
+		expect(line2.results.length).toBe(1);
 	});
 
 	test("executes invisible variable-def lines to maintain VM state", () => {
@@ -245,10 +245,10 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 		// Line 2 (:x = 10) is a variable def + invisible → Tier 3 with execution
 		const line2 = doc.getLineAt(2)!;
 		expect(line2.isVariableDef).toBe(true);
-		expect(line2.bytecode).not.toBeNull();
+		expect(line2.bytecodes.length).toBe(1);
 		expect(line2.dirty).toBe(false); // executed, now clean
-		expect(line2.result).not.toBeNull();
-		expect(line2.result!.toNumber()).toBe(10);
+		expect(line2.results.length).toBe(1);
+		expect(line2.results[0].toNumber()).toBe(10);
 
 		// Line 3 uses x — VM should have x=10 from Tier 3 execution of line 2
 		expect(result.resultMap.get(3)!.toNumber()).toBe(20);
@@ -267,7 +267,7 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 
 		// Line 4 (non-variable-def) compiled but dirty
 		const line4 = doc.getLineAt(4)!;
-		expect(line4.bytecode).not.toBeNull();
+		expect(line4.bytecodes.length).toBe(1);
 		expect(line4.dirty).toBe(true);
 	});
 
@@ -500,6 +500,73 @@ describe("ThreeTierEvaluator — Edge Cases", () => {
 		const bgResults = evaluator.backgroundCompile({ startLine: 1, endLine: 1 });
 
 		expect(bgResults.length).toBe(0);
+	});
+
+	test("extracts inline solve expression from prose lines (regression: was returning full prose)", () => {
+		const doc = createDoc([
+			"I think the world is running around lysing s`203 + 2`",
+		]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		const result = evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		// Should extract just "203 + 2" and evaluate to 205, not the full prose line
+		expect(result.tierCounts.tier1).toBe(1);
+		expect(result.resultMap.get(1)!.toNumber()).toBe(205);
+
+		// DAG should have 0 reads — no IDENTs in "203 + 2"
+		const dag = engine.getDag();
+		const dagSnapshot = dag.getSnapshot();
+		const totalReads = Object.values(dagSnapshot.reads).reduce((sum, vars) => sum + vars.length, 0);
+		expect(totalReads).toBe(0);
+	});
+
+	test("inline solve in prose does not produce phantom DAG reads from surrounding words", () => {
+		// Full document mimicking a realistic Obsidian note with inline solves.
+		// Before the extractExpression fix, the inline solve line would pass
+		// the full prose (8 IDENT words) to the engine, and extractReadsAndWrites
+		// would count all 8 as DAG reads.
+		const doc = createDoc([
+			"10 + 5 * 2",
+			"",
+			"Hello world",
+			"",
+			"100",
+			"",
+			"",
+			"# banter and base",
+			"",
+			"",
+			":var = 20",
+			"",
+			":var + 205",
+			"",
+			"I think the world is running around lysing s`203 + 2`",
+		]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		const result = evaluator.evaluate({ startLine: 1, endLine: 15 });
+
+		// The inline solve line should evaluate correctly
+		expect(result.resultMap.get(15)!.toNumber()).toBe(205);
+
+		// :var + 205 should use var=20
+		expect(result.resultMap.get(13)!.toNumber()).toBe(225);
+
+		// Check DAG reads: should only have reads from "Hello world" (2 reads)
+		// and the :var lines (2 reads for var). Not 8 extra reads from the
+		// inline solve prose line (I, think, the, world, is, running, around, lysing).
+		const dag = engine.getDag();
+		const dagSnapshot = dag.getSnapshot();
+		const totalReads = Object.values(dagSnapshot.reads).reduce((sum, vars) => sum + vars.length, 0);
+		// "Hello world" contributes 2 reads (Hello, world).
+		// :var = 20 contributes 1 read (var).
+		// :var + 205 contributes 1 read (var).
+		// The inline solve line contributes 0 reads (extracted as "203 + 2").
+		// 10 + 5 * 2 and 100 contribute 0 reads each.
+		expect(totalReads).toBe(4);
 	});
 });
 
@@ -1000,5 +1067,354 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 
 		const r3 = evaluator.setViewport({ startLine: 4, endLine: 4 });
 		expect(r3.lines.length).toBe(1);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Multi Inline Solves — Multiple s`...` per Line
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("ThreeTierEvaluator — Multi Inline Solves", () => {
+	// ── extractExpressions returns all inline solves ────────────────
+
+	test("extracts all inline solves from a single line", () => {
+		const doc = createDoc(["s`2 + 2` text s`3 * 3`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.inlineSolveCount).toBe(2);
+		expect(state.expressions).toEqual(["2 + 2", "3 * 3"]);
+	});
+
+	test("inlineSolveCount is 0 for full-line expressions", () => {
+		const doc = createDoc(["5 + 3"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.inlineSolveCount).toBe(0);
+		expect(state.expressions).toEqual(["5 + 3"]);
+	});
+
+	test("inlineSolveCount is 0 for markdown-only lines (no evaluable expression)", () => {
+		const doc = createDoc(["# Heading only"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.isEmpty).toBe(true);
+		expect(state.inlineSolveCount).toBe(0);
+	});
+
+	// ── Evaluation: each expression produces a result ───────────────
+
+	test("evaluates all inline solves on a line", () => {
+		const doc = createDoc(["s`10 + 5` some text s`20 * 2` more text"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		const result = evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		expect(result.tierCounts.tier1).toBe(1);
+		// resultMap stores the LAST result for the line
+		expect(result.resultMap.get(1)!.toNumber()).toBe(40);
+
+		// But state.results[] has all results in order
+		const state = doc.getLineAt(1)!;
+		expect(state.results.length).toBe(2);
+		expect(state.results[0].toNumber()).toBe(15);
+		expect(state.results[1].toNumber()).toBe(40);
+	});
+
+	test("results[] indices match inline solve left-to-right order", () => {
+		const doc = createDoc(["s`1` s`2` s`3` s`4` s`5`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.results.length).toBe(5);
+		for (let i = 0; i < 5; i++) {
+			expect(state.results[i].toNumber()).toBe(i + 1);
+		}
+	});
+
+	// ── Left-to-right variable flow ──────────────────────────────────
+
+	test("variable definitions in earlier inline solves flow to later ones", () => {
+		const doc = createDoc(["s`:x = 5` text s`x + 10` more text s`x * 2`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.results.length).toBe(3);
+		expect(state.results[0].toNumber()).toBe(5);  // :x = 5
+		expect(state.results[1].toNumber()).toBe(15); // x + 10 = 15
+		expect(state.results[2].toNumber()).toBe(10); // x * 2 = 10
+
+		// VM should have x=5 after the line evaluation
+		expect(engine.getVM().getVar("x")?.toNumber()).toBe(5);
+	});
+
+	test("inline solve variable defs affect subsequent full-line expressions", () => {
+		const doc = createDoc([
+			"s`:x = 10` text s`x + 1` more",  // line 1: defines x
+			"x + 5",                           // line 2: uses x from line 1
+		]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		const result = evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		// Line 1 last result (x + 1) = 11
+		expect(result.resultMap.get(1)!.toNumber()).toBe(11);
+		// Line 2 uses x=10 (from line 1's variable def)
+		expect(result.resultMap.get(2)!.toNumber()).toBe(15);
+	});
+
+	// ── DAG aggregates reads/writes ─────────────────────────────────
+
+	test("DAG aggregates writes for variable-def inline solves on a single line", () => {
+		// Test write aggregation with simple arithmetic inline solves
+		// (single expression per inline solve, no variable references)
+		const doc = createDoc(["s`:x = 10` text s`:y = 20`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.inlineSolveCount).toBe(2);
+		expect(state.expressions).toEqual([":x = 10", ":y = 20"]);
+		expect(state.results.length).toBe(2);
+		expect(state.writes).toContain("x");
+		expect(state.writes).toContain("y");
+	});
+
+	test("DAG aggregates reads for inline solves that reference variables", () => {
+		// Define a variable first via full-line, then reference it in inline solves
+		const doc = createDoc([
+			":a = 5",                          // line 1: defines a
+			"s`a + 3` text s`a * 2`",          // line 2: references a
+		]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		const state = doc.getLineAt(2)!;
+		expect(state.inlineSolveCount).toBe(2);
+		expect(state.reads).toContain("a");
+	});
+
+	test("re-evaluation triggers when variable used by inline solves changes", () => {
+		const doc = createDoc([
+			":z = 10",                        // line 1
+			"s`z + 1` some text s`z * 2`",    // line 2: uses z
+		]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		// Evaluate all to populate cache
+		evaluator.evaluateAll();
+
+		const line2 = doc.getLineAt(2)!;
+		expect(line2.results[0].toNumber()).toBe(11);  // z + 1 = 11
+		expect(line2.results[1].toNumber()).toBe(20);  // z * 2 = 20
+
+		// Change z and mark line 2 dirty so it gets Tier 1 re-evaluation
+		doc.editLine(1, ":z = 100");
+		doc.editLine(2, line2.text); // re-hash to mark dirty
+
+		const result = evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		// Line 2 re-evaluated with new z via Tier 1
+		expect(result.resultMap.get(2)!.toNumber()).toBe(200); // z * 2 = 200
+		const updatedLine2 = doc.getLineAt(2)!;
+		expect(updatedLine2.results[0].toNumber()).toBe(101); // z + 1 = 101
+		expect(updatedLine2.results[1].toNumber()).toBe(200); // z * 2 = 200
+	});
+
+	// ── Bytecodes are stored per-expression ──────────────────────────
+
+	test("bytecodes[] length matches expressions[] length", () => {
+		const doc = createDoc(["s`2 + 2` text s`3 * 3`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.bytecodes.length).toBe(2);
+		expect(state.bytecodes.length).toBe(state.expressions.length);
+	});
+
+	// ── Tier 2: execute all bytecodes ──────────────────────────────
+
+	test("Tier 2 executes all bytecodes for a multi-inline-solve line", () => {
+		const doc = createDoc(["s`10 + 5` text s`20 * 2`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		// First pass: Tier 1 — populates bytecodes + results
+		evaluator.evaluateAll();
+
+		const state = doc.getLineAt(1)!;
+		expect(state.inlineSolveCount).toBe(2);
+		expect(state.bytecodes.length).toBe(2);
+		expect(state.results.length).toBe(2);
+		expect(state.results[0].toNumber()).toBe(15);
+		expect(state.results[1].toNumber()).toBe(40);
+
+		// Second pass: Tier 2 (clean + cached). Re-execute from bytecodes.
+		const result = evaluator.evaluateAll();
+
+		expect(result.tierCounts.tier2).toBe(1);
+		// Results re-populated after Tier 2
+		const updated = doc.getLineAt(1)!;
+		expect(updated.results.length).toBe(2);
+	});
+
+	// ── Tier 3: compile all expressions ────────────────────────────
+
+	test("Tier 3 compiles all expressions for an invisible multi-inline-solve line", () => {
+		const doc = createDoc([
+			"100 + 1",                         // line 1: dirty, later Tier 3 (compile-only)
+			":x = 5",                          // line 2: invisible variable def (Tier 3 executed)
+			"s`x + 3` text s`x * 2`",         // line 3: invisible (Tier 3 compile-only)
+			"s`10 * 2` text s`20 + 5`",       // line 4: visible (Tier 1)
+		]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		// Viewport covers line 4 — lines 1-3 are invisible → Tier 3
+		// evalEnd = 4 so ALL lines are processed in order
+		const result = evaluator.evaluate({ startLine: 4, endLine: 4 });
+
+		// Line 1: invisible + dirty + non-var-def → Tier 3 (compile-only, stays dirty)
+		const line1 = doc.getLineAt(1)!;
+		expect(line1.inlineSolveCount).toBe(0);
+		expect(line1.bytecodes.length).toBe(1);
+		expect(line1.dirty).toBe(true);
+
+		// Line 2: invisible + dirty + variable def → Tier 3 (compiled + executed)
+		const line2 = doc.getLineAt(2)!;
+		expect(line2.dirty).toBe(false);
+
+		// Line 3: invisible + dirty → Tier 3 (compile-only, non-var-def)
+		const line3 = doc.getLineAt(3)!;
+		expect(line3.inlineSolveCount).toBe(2);
+		expect(line3.expressions).toEqual(["x + 3", "x * 2"]);
+		expect(line3.bytecodes.length).toBe(2);
+		expect(line3.dirty).toBe(true); // stays dirty (compile-only, not executed)
+
+		// Line 4: visible + dirty → Tier 1 (fully executed)
+		const line4 = doc.getLineAt(4)!;
+		expect(line4.inlineSolveCount).toBe(2);
+		expect(line4.expressions).toEqual(["10 * 2", "20 + 5"]);
+		expect(line4.results.length).toBe(2);
+		expect(line4.results[0].toNumber()).toBe(20);
+		expect(line4.results[1].toNumber()).toBe(25);
+		expect(result.tierCounts.tier3).toBe(3); // lines 1-3
+		expect(result.tierCounts.tier1).toBe(1); // line 4
+	});
+
+	// ── Mixed document: inline solves + full-line expressions ───────
+
+	test("mixed document: inline solve lines alongside full-line expressions", () => {
+		const doc = createDoc([
+			":base = 20",                      // line 1: full-line variable def
+			"s`base + 5` text s`base * 3`",    // line 2: multi-inline-solve
+			"base + 1",                        // line 3: full-line, uses base
+			"s`base - 10`",                    // line 4: single inline solve
+		]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		const result = evaluator.evaluate({ startLine: 1, endLine: 4 });
+
+		expect(result.tierCounts.tier1).toBe(4);
+
+		// Line 1: full-line variable def
+		const line1 = doc.getLineAt(1)!;
+		expect(line1.inlineSolveCount).toBe(0);
+		expect(line1.expressions).toEqual([":base = 20"]);
+		expect(line1.results[0].toNumber()).toBe(20);
+
+		// Line 2: multi-inline-solve (resultMap = last result)
+		const line2 = doc.getLineAt(2)!;
+		expect(line2.inlineSolveCount).toBe(2);
+		expect(line2.results[0].toNumber()).toBe(25);  // base + 5
+		expect(line2.results[1].toNumber()).toBe(60);  // base * 3
+		expect(result.resultMap.get(2)!.toNumber()).toBe(60); // last result
+
+		// Line 3: full-line, uses base
+		expect(result.resultMap.get(3)!.toNumber()).toBe(21);
+
+		// Line 4: single inline solve
+		const line4 = doc.getLineAt(4)!;
+		expect(line4.inlineSolveCount).toBe(1);
+		expect(line4.results[0].toNumber()).toBe(10);
+	});
+
+	// ── Edge cases ──────────────────────────────────────────────────
+
+	test("single inline solve on a line still sets inlineSolveCount=1", () => {
+		const doc = createDoc(["s`42`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.inlineSolveCount).toBe(1);
+		expect(state.expressions).toEqual(["42"]);
+		expect(state.results[0].toNumber()).toBe(42);
+	});
+
+	test("empty inline solve (s``) is skipped gracefully", () => {
+		const doc = createDoc(["s`5 + 3` text s`` text s`10 * 2`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		// Empty inline solve is skipped — only 2 results (5+3=8 and 10*2=20)
+		expect(state.results.length).toBe(2);
+		expect(state.results[0].toNumber()).toBe(8);  // 5 + 3
+		expect(state.results[1].toNumber()).toBe(20); // 10 * 2
+		// inlineSolveCount should still be 3 (empty one counted by lexer)
+		// or 2 if lexer filters — either is correct
+		expect(state.inlineSolveCount).toBeGreaterThanOrEqual(2);
+	});
+
+	test("extractExpressions returns cached expressions on subsequent evaluations", () => {
+		const doc = createDoc(["s`2 + 2` text s`3 * 3`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		// First evaluation: extract from text
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		const firstExpressions = state.expressions;
+		expect(firstExpressions).toEqual(["2 + 2", "3 * 3"]);
+
+		// Second evaluation: should use cached expressions (Tier 2)
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		// Expressions should be unchanged (not re-extracted)
+		expect(state.expressions).toBe(firstExpressions); // same reference
 	});
 });

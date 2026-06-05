@@ -280,24 +280,34 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				const lineState = this.docModel.getLineAt(line.number);
 
 				// Check for inline solves (embedded s`...` in markdown text)
-				const inlineSolves = findInlineSolvesInLine(line.text, 0);
-				if (inlineSolves.length > 0) {
-					this.buildInlineSolveDecorations(line, inlineSolves, builder);
+				// After the multi-result refactor, inline solve results are stored
+				// in lineState.results[] by the ThreeTierEvaluator. The UI reads
+				// from there instead of calling engine.evaluateLine() directly.
+				const inlineSolves = findInlineSolvesInLine(line.text, line.number);
+				if (inlineSolves.length > 0 && lineState) {
+					if (lineState.inlineSolveCount > 0) {
+						// Normal path: results already populated by evaluator
+						this.buildInlineSolveDecorations(line, inlineSolves, lineState, builder);
+					} else {
+						// Fallback: evaluator hasn't populated results yet (e.g., pre-
+						// evaluation render). Call engine directly as a one-off.
+						this.buildInlineSolveDecorationsFallback(line, inlineSolves, builder);
+					}
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
 
 				// Skip empty/markdown-only lines (no expression)
-				if (lineState?.isEmpty || !lineState?.result) {
+				if (!lineState || lineState.isEmpty || lineState.results.length === 0) {
 					nextLineTextOffset += lineTextRaw.length;
 					continue;
 				}
 
 				// Full-line expression result from evaluator
-				const result = lineState.result;
+				const result = lineState.results[0];
 				const isPending = result.type === ValueType.Pending;
 				const formattedResult = isPending ? "" : formatValue(result);
-				const expression = lineState.expression ?? line.text.trim();
+				const expression = lineState.expressions[0] ?? line.text.trim();
 				const queryKey = isPending ? (result.value as string) : null;
 
 				builder.add(
@@ -320,10 +330,48 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 	/**
 	 * Build decorations for inline solve expressions (s`...`) embedded in markdown text.
-	 * These are evaluated directly via the engine since the ThreeTierEvaluator focuses
-	 * on full-line expressions.
+	 * Results are read from {@link LineState.results} which was populated by the
+	 * ThreeTierEvaluator during Tier 1 evaluation — no more direct engine calls.
 	 */
 	private buildInlineSolveDecorations(
+		line: ReturnType<typeof EditorView.prototype.state.doc.lineAt>,
+		inlineSolves: ReturnType<typeof findInlineSolvesInLine>,
+		lineState: ReturnType<typeof DocumentModel.prototype.getLineAt>,
+		builder: RangeSetBuilder<Decoration>
+	): void {
+		if (!lineState) return;
+
+		const results = lineState.results;
+		for (let i = 0; i < inlineSolves.length; i++) {
+			const solve = inlineSolves[i];
+			if (!solve.expression.trim()) continue;
+
+			const result = i < results.length ? results[i] : null;
+			if (result === null || result === undefined) continue;
+
+			const isPending = result.type === ValueType.Pending;
+			const formattedResult = isPending ? "" : formatValue(result);
+			const queryKey = isPending ? (result.value as string) : null;
+			const widgetPos = line.from + solve.start + solve.expression.length + 3;
+
+			builder.add(
+				widgetPos,
+				widgetPos,
+				Decoration.widget({
+					widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult, isPending, queryKey),
+					side: 1,
+				}),
+			);
+		}
+	}
+
+	/**
+	 * Fallback inline solve renderer used when the evaluator hasn't populated
+	 * lineState.inlineSolveCount yet (pre-evaluation render path). Calls the
+	 * engine directly as a one-off — once the evaluator runs, the normal
+	 * buildInlineSolveDecorations path (reading from state.results[]) takes over.
+	 */
+	private buildInlineSolveDecorationsFallback(
 		line: ReturnType<typeof EditorView.prototype.state.doc.lineAt>,
 		inlineSolves: ReturnType<typeof findInlineSolvesInLine>,
 		builder: RangeSetBuilder<Decoration>

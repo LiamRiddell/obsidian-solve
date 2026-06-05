@@ -86,8 +86,8 @@ describe("Worker Integration", () => {
 
 			// DocumentModel should now have bytecode for this line
 			const updated = doc.getLineAt(1)!;
-			expect(updated.bytecode).not.toBeNull();
-			expect(updated.bytecode!.opcodes.length).toBe(3);
+			expect(updated.bytecodes.length).toBe(1);
+			expect(updated.bytecodes[0].opcodes.length).toBe(3);
 			expect(updated.writes).toContain("x");
 			expect(updated.isVariableDef).toBe(true);
 
@@ -117,7 +117,7 @@ describe("Worker Integration", () => {
 
 			// DocumentModel should NOT have bytecode (stale result was rejected)
 			const unchanged = doc.getLineAt(1)!;
-			expect(unchanged.bytecode).toBeNull();
+			expect(unchanged.bytecodes).toEqual([]);
 
 			manager.terminate();
 		});
@@ -143,7 +143,7 @@ describe("Worker Integration", () => {
 
 			// Line should still have no bytecode
 			const unchanged = doc.getLineAt(1)!;
-			expect(unchanged.bytecode).toBeNull();
+			expect(unchanged.bytecodes).toEqual([]);
 
 			manager.terminate();
 		});
@@ -208,9 +208,9 @@ describe("Worker Integration", () => {
 			expect(stored).toBe(1); // Only line 1 was stored
 
 			// Line 1 has bytecode
-			expect(doc.getLineAt(1)!.bytecode).not.toBeNull();
+			expect(doc.getLineAt(1)!.bytecodes.length).toBe(1);
 			// Line 2 does NOT have bytecode (rejected)
-			expect(doc.getLineAt(2)!.bytecode).toBeNull();
+			expect(doc.getLineAt(2)!.bytecodes).toEqual([]);
 
 			manager.terminate();
 		});
@@ -254,16 +254,16 @@ describe("Worker Integration", () => {
 			// Simulate worker compiling the line
 			doc.updateLineCompiled(
 				line1.lineId,
-				":x = 42",
-				{ opcodes: new Uint8Array([1, 2]), numbers: new Float64Array([42]), strings: [], hasAsync: false },
+				[":x = 42"],
+				[{ opcodes: new Uint8Array([1, 2]), numbers: new Float64Array([42]), strings: [], hasAsync: false }],
 				[],
 				["x"],
 				true
 			);
 
 			const updated = doc.getLineAt(1)!;
-			expect(updated.bytecode).not.toBeNull();
-			expect(updated.expression).toBe(":x = 42");
+			expect(updated.bytecodes.length).toBe(1);
+			expect(updated.expressions).toEqual([":x = 42"]);
 			expect(updated.writes).toContain("x");
 			expect(updated.isVariableDef).toBe(true);
 

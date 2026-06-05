@@ -141,6 +141,10 @@ export class CompilationWorkerManager {
 	 * validation. Only stores bytecode for lines whose text has not changed
 	 * since the compilation request was dispatched.
 	 *
+	 * Results for the same lineId are batched — all bytecodes from
+	 * successful compilations are passed to updateLineCompiled in a single
+	 * call. This supports multi-expression lines (inline solves).
+	 *
 	 * @param results Compiled results from the worker.
 	 * @param doc The target document model.
 	 * @returns Number of results successfully stored (passed safety check).
@@ -149,7 +153,19 @@ export class CompilationWorkerManager {
 		results: CompileResponseItem[],
 		doc: DocumentModel
 	): number {
-		let stored = 0;
+		// Batch results by lineId (multiple inline solves share the same lineId)
+		const byLineId = new Map<
+			number,
+			{
+				bytecodes: BytecodeProgram[];
+				reads: Set<string>;
+				writes: Set<string>;
+				isVariableDef: boolean;
+				expressions: string[];
+				textHash: number;
+			}
+		>();
+		let validCount = 0;
 
 		for (const result of results) {
 			if (result.error) continue;
@@ -159,19 +175,47 @@ export class CompilationWorkerManager {
 			if (!state) continue;
 
 			// Validate that the line text hasn't changed since dispatch.
-			// If the hash doesn't match, a document edit occurred between
-			// dispatch and response — the bytecode is stale, discard it.
 			if (state.textHash !== result.compiledAgainstHash) continue;
 
+			// Batch by lineId
+			let batch = byLineId.get(result.lineId);
+			if (!batch) {
+				batch = {
+					bytecodes: [],
+					reads: new Set(),
+					writes: new Set(),
+					isVariableDef: false,
+					expressions: state.expressions.length > 0 ? [...state.expressions] : [],
+					textHash: result.compiledAgainstHash,
+				};
+				byLineId.set(result.lineId, batch);
+			}
+
+			batch.bytecodes.push(result.program);
+			for (const r of result.reads) batch.reads.add(r);
+			for (const w of result.writes) batch.writes.add(w);
+			if (result.isVariableDef) batch.isVariableDef = true;
+			validCount++;
+		}
+
+		// Store batched results
+		let stored = 0;
+		for (const [lineId, batch] of byLineId) {
+			if (batch.bytecodes.length === 0) continue;
+			// Preserve inlineSolveCount from the LineState so the evaluator
+			// knows this line has multiple expressions (avoids re-extraction).
+			const state = doc.getLineById(lineId);
+			const inlineSolveCount = state?.inlineSolveCount ?? 0;
 			doc.updateLineCompiled(
-				result.lineId,
-				state.expression ?? state.text,
-				result.program,
-				result.reads,
-				result.writes,
-				result.isVariableDef
+				lineId,
+				batch.expressions,
+				batch.bytecodes,
+				[...batch.reads],
+				[...batch.writes],
+				batch.isVariableDef,
+				inlineSolveCount,
 			);
-			stored++;
+			stored += batch.bytecodes.length;
 		}
 
 		return stored;

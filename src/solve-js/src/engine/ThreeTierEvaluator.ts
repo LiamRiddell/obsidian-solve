@@ -12,6 +12,7 @@ import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 import { CompilationWorkerManager, type CompileRequestItem } from "@solve-js/engine/CompilationWorkerManager";
 import { PageManager } from "@solve-js/engine/PageManager";
+import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 
 // ── EvalTier (diagnostic enum) ──────────────────────────────────────────
 
@@ -203,8 +204,8 @@ export class ThreeTierEvaluator {
 			// Skip already-compiled Tier 3 lines — they have bytecode
 			// but were compiled without execution (non-variable-def).
 			// Recompiling is wasteful since the text hasn't changed
-			// (text change clears bytecode via editLine).
-			if (state.bytecode !== null && !state.isVariableDef) continue;
+			// (text change clears bytecodes via editLine).
+			if (state.bytecodes.length > 0 && !state.isVariableDef) continue;
 
 			const lineResult = this.evaluateSingleLine(state, pos, false);
 			results.push(lineResult);
@@ -526,29 +527,35 @@ export class ThreeTierEvaluator {
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
 		}
 
+		// Extract all evaluable expressions (may be multiple inline solves)
+		const { expressions, inlineSolveCount } = this.extractExpressions(state);
+		if (expressions.length === 0) {
+			state.isEmpty = true;
+			state.dirty = false;
+			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
+		}
+
 		// Determine the expression to evaluate (only needed for dirty lines)
 		if (state.dirty) {
-			const expression = this.extractExpression(state);
-
 			if (inViewport) {
 				// ── Tier 1: Visible + Dirty → Full Pipeline ──────────
-				return this.evaluateTier1(state, lineNumber, expression, baseResult);
+				return this.evaluateTier1(state, lineNumber, expressions, inlineSolveCount, baseResult);
 			} else {
 				// ── Tier 3: Invisible + Dirty → Compile-only ─────────
 				// Skip recompilation if already compiled by a previous Tier 3 pass.
 				// Non-variable-def lines keep dirty=true after Tier 3 (so they get
 				// Tier 1 when scrolled into view), but recompiling identical text
 				// produces the same bytecode and DAG entries. Text changes clear
-				// bytecode via DocumentModel.editLine(), so a null check is safe.
-				if (state.bytecode !== null && !state.isVariableDef) {
+				// bytecodes via DocumentModel.editLine(), so a length check is safe.
+				if (state.bytecodes.length > 0 && state.bytecodes.length === expressions.length && !state.isVariableDef) {
 					return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
 				}
-				return this.evaluateTier3(state, lineNumber, expression, baseResult);
+				return this.evaluateTier3(state, lineNumber, expressions, inlineSolveCount, baseResult);
 			}
 		}
 
 		// Line is clean
-		if (inViewport && state.bytecode && state.bytecode.opcodes.length > 0) {
+		if (inViewport && state.bytecodes.length > 0) {
 			// ── Tier 2: Visible + Cached → Execute from bytecode ────
 			return this.evaluateTier2(state, lineNumber, baseResult);
 		}
@@ -561,65 +568,84 @@ export class ThreeTierEvaluator {
 	 * Tier 1: Full pipeline — lex, parse, compile, execute.
 	 * Uses the engine's existing evaluateLine() which handles all pipeline
 	 * stages including DAG updates and LineCache population.
+	 *
+	 * Supports multiple expressions per line (inline solves). Evaluates each
+	 * expression left-to-right through the engine so variable definitions in
+	 * earlier solves update the VM state before later solves are evaluated.
+	 * Reads/writes are aggregated across all expressions for the DAG.
 	 */
 	private evaluateTier1(
 		state: LineState,
 		lineNumber: number,
-		expression: string,
+		expressions: string[],
+		inlineSolveCount: number,
 		baseResult: Omit<EvalLineResult, "tier" | "result" | "error">
 	): EvalLineResult {
 		try {
-			const value = this.engine.evaluateLine(lineNumber, expression);
+			const allResults: Value[] = [];
+			const allBytecodes: BytecodeProgram[] = [];
+			const allReads = new Set<string>();
+			const allWrites = new Set<string>();
+			let hasVariableDef = false;
+			let lastValue: Value | null = null;
 
-			// The engine already updated DAG and LineCache internally.
-			// Sync the DocumentModel from the LineCache.
-			const entry = this.engine.getLineCache().getEntryForLine(lineNumber);
-			if (entry) {
-				this.doc.updateLineResult(
-					state.lineId,
-					value,
-					entry.bytecode,
-					entry.readVariables,
-					entry.writeVariable ? [entry.writeVariable] : [],
-					entry.writeVariable !== null
-				);
-		} else {
-			// Fallback: LineCache missed — compile expression ourselves
-			// and store bytecode so Tier 2 works on subsequent calls.
-			// Wrap in its own try/catch so a compile failure doesn't discard
-			// the already-computed value.
-			try {
-				const { program, reads, writes } = this.engine.compileExpression(expression);
-				this.doc.updateLineResult(
-					state.lineId,
-					value,
-					program,
-					reads,
-					writes,
-					writes.length > 0
-				);
-				// engine.evaluateLine already registered reads/writes in DAG,
-				// so this is idempotent (overwrites same line key).
-				this.dag.registerLine(lineNumber, reads, writes);
+			for (const expression of expressions) {
+				if (!expression.trim()) continue;
+				const value = this.engine.evaluateLine(lineNumber, expression);
+				lastValue = value;
+				allResults.push(value);
 
-				// ── Checkpoint after variable definition (fallback path) ──
-				if (this.checkpointer && writes.length > 0) {
-					this.checkpointer.snapshot(lineNumber, state.lineId, writes);
+				// Sync the DocumentModel from the LineCache.
+				// Use get(lineNumber, expression) instead of getEntryForLine(lineNumber)
+				// because multiple expressions on the same line share the same lineNumber
+				// and getEntryForLine always returns the FIRST entry (Map insertion order).
+				const entry = this.engine.getLineCache().get(lineNumber, expression);
+				if (entry) {
+					allBytecodes.push(entry.bytecode);
+					for (const r of entry.readVariables) allReads.add(r);
+					if (entry.writeVariable) {
+						allWrites.add(entry.writeVariable);
+						hasVariableDef = true;
+					}
+				} else {
+					// Fallback: LineCache missed — compile expression ourselves
+					try {
+						const { program, reads, writes } = this.engine.compileExpression(expression);
+						allBytecodes.push(program);
+						for (const r of reads) allReads.add(r);
+						for (const w of writes) allWrites.add(w);
+						if (writes.length > 0) hasVariableDef = true;
+					} catch (_compileErr) {
+						// Push empty bytecode — expression will recompile on next pass
+						allBytecodes.push({ opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false });
+					}
 				}
-			} catch (_compileErr) {
-				// Fallback to basic sync: store result but no bytecode.
-				// The line will go through Tier 1 again next time.
-				state.result = value;
-				state.dirty = false;
 			}
-		}
 
-			// ── Checkpoint after variable definition (LineCache path) ──
-		if (this.checkpointer && entry?.writeVariable) {
-			this.checkpointer.snapshot(lineNumber, state.lineId, [entry.writeVariable]);
-		}
+			const reads = [...allReads];
+			const writes = [...allWrites];
 
-		return { ...baseResult, tier: EvalTier.Tier1, result: value, error: null };
+			// Store all results in DocumentModel
+			this.doc.updateLineResult(
+				state.lineId,
+				allResults,
+				allBytecodes,
+				expressions,
+				reads,
+				writes,
+				hasVariableDef,
+				inlineSolveCount,
+			);
+
+			// Register reads/writes in DAG (aggregated across all expressions)
+			this.dag.registerLine(lineNumber, reads, writes);
+
+			// ── Checkpoint after variable definition ──
+			if (this.checkpointer && writes.length > 0) {
+				this.checkpointer.snapshot(lineNumber, state.lineId, writes);
+			}
+
+			return { ...baseResult, tier: EvalTier.Tier1, result: lastValue, error: null };
 		} catch (e) {
 			const errorMessage = e instanceof Error ? e.message : String(e);
 			// Keep dirty so it retries on next evaluation
@@ -630,26 +656,37 @@ export class ThreeTierEvaluator {
 	/**
 	 * Tier 2: Execute from cached bytecode only.
 	 * Skips lexing, parsing, and compiling — runs the pre-compiled bytecode
-	 * against the engine's shared VM. Assumes the VM already has correct
-	 * variable state from preceding Tier-1 evaluations.
+	 * against the engine's shared VM. Supports multiple bytecodes per line
+	 * (inline solves) — each is executed left-to-right so variable definitions
+	 * in earlier bytecodes update the VM before later ones run.
+	 * Assumes the VM already has correct variable state from preceding
+	 * Tier-1 evaluations.
 	 */
 	private evaluateTier2(
 		state: LineState,
 		lineNumber: number,
 		baseResult: Omit<EvalLineResult, "tier" | "result" | "error">
 	): EvalLineResult {
-		if (!state.bytecode || state.bytecode.opcodes.length === 0) {
+		if (state.bytecodes.length === 0) {
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
 		}
 
 		try {
-			const value = this.engine.executeCached(state.bytecode);
+			const results: Value[] = [];
+			let lastValue: Value | null = null;
+
+			for (const bytecode of state.bytecodes) {
+				if (bytecode.opcodes.length === 0) continue;
+				const value = this.engine.executeCached(bytecode);
+				lastValue = value;
+				results.push(value);
+			}
 
 			// Update DAG: re-register reads/writes from the cached metadata
 			this.dag.registerLine(lineNumber, state.reads, state.writes);
-			state.result = value;
+			state.results = results;
 
-			return { ...baseResult, tier: EvalTier.Tier2, result: value, error: null };
+			return { ...baseResult, tier: EvalTier.Tier2, result: lastValue, error: null };
 		} catch (e) {
 			const errorMessage = e instanceof Error ? e.message : String(e);
 			// Mark dirty so it falls back to Tier 1 on next attempt
@@ -665,49 +702,66 @@ export class ThreeTierEvaluator {
 	 * or writes.length > 0), because variable assignments affect VM state
 	 * that other lines depend on. Pure expression lines are compiled but NOT
 	 * executed — saving CPU for large documents.
+	 *
+	 * Supports multiple expressions per line (inline solves). Each is compiled
+	 * separately; variable-def expressions are also executed.
 	 */
 	private evaluateTier3(
 		state: LineState,
 		lineNumber: number,
-		expression: string,
+		expressions: string[],
+		inlineSolveCount: number,
 		baseResult: Omit<EvalLineResult, "tier" | "result" | "error">
 	): EvalLineResult {
 		try {
-			const { program, reads, writes } = this.engine.compileExpression(expression);
+			const allBytecodes: BytecodeProgram[] = [];
+			const allReads = new Set<string>();
+			const allWrites = new Set<string>();
+			let hasVariableDef = false;
+			let lastResult: Value | null = null;
 
-			const isVariableDef = writes.length > 0;
-			let result: Value | null = null;
+			for (const expression of expressions) {
+				if (!expression.trim()) continue;
+				const { program, reads, writes } = this.engine.compileExpression(expression);
+				allBytecodes.push(program);
+				for (const r of reads) allReads.add(r);
+				for (const w of writes) allWrites.add(w);
+				if (writes.length > 0) hasVariableDef = true;
+
+				if (writes.length > 0 && program.opcodes.length > 0) {
+					// Variable definitions MUST execute to maintain VM state
+					lastResult = this.engine.executeCached(program);
+				}
+			}
+
+			const reads = [...allReads];
+			const writes = [...allWrites];
 
 			// Store compile-only state in DocumentModel
 			this.doc.updateLineCompiled(
 				state.lineId,
-				expression,
-				program,
+				expressions,
+				allBytecodes,
 				reads,
 				writes,
-				isVariableDef
+				hasVariableDef,
+				inlineSolveCount,
 			);
 
 			// Register reads/writes in DAG regardless
 			this.dag.registerLine(lineNumber, reads, writes);
 
-			if (isVariableDef && program.opcodes.length > 0) {
-				// Variable definitions MUST execute to maintain VM state
-				result = this.engine.executeCached(program);
-				state.result = result;
+			if (hasVariableDef && lastResult) {
+				state.results = [lastResult];
 				state.dirty = false;
 
 				// ── Checkpoint after variable definition ────────────
 				if (this.checkpointer) {
 					this.checkpointer.snapshot(lineNumber, state.lineId, writes);
 				}
-				// Variable def lines are now clean (executed) but still
-				// report as Tier 3 since they're invisible.
 			}
-			// NOTE: dirty stays true for non-variable-def lines so they
-			// get Tier 1 execution when scrolled into view.
 
-			return { ...baseResult, tier: EvalTier.Tier3, result, error: null };
+			return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, error: null };
 		} catch (e) {
 			const errorMessage = e instanceof Error ? e.message : String(e);
 			// Keep dirty so it retries
@@ -803,44 +857,60 @@ export class ThreeTierEvaluator {
 			if (!state.dirty) continue;
 
 			// Skip already-compiled lines
-			if (state.bytecode !== null && !state.isVariableDef) continue;
+			if (state.bytecodes.length > 0 && !state.isVariableDef) continue;
 
 			// Skip empty/markdown-only lines
 			if (state.isEmpty || isEmptyLine(state.text)) continue;
 
-			const expression = this.extractExpression(state);
-			if (!expression) continue;
+			const { expressions } = this.extractExpressions(state);
+			if (expressions.length === 0) continue;
 
-			items.push({
-				lineId: state.lineId,
-				expression,
-				textHash: state.textHash,
-			});
+			// Create one CompileRequestItem per expression (inline solves
+			// on the same line share the same lineId + textHash). The worker
+			// compiles each independently; storeResults batches by lineId.
+			for (const expression of expressions) {
+				if (!expression.trim()) continue;
+				items.push({
+					lineId: state.lineId,
+					expression,
+					textHash: state.textHash,
+				});
+			}
 		}
 
 		return items;
 	}
 
 	/**
-	 * Extract the evaluable expression from a LineState.
-	 * Uses the stored expression if available, otherwise trims the raw text.
-	 * Handles inline solve syntax: s`...` → extracts the expression.
+	 * Extract all evaluable expressions from a LineState.
+	 *
+	 * For full-line expressions: returns `{ expressions: [trimmedText], inlineSolveCount: 0 }`.
+	 * For inline solve lines: returns `{ expressions: [...allSolves], inlineSolveCount: N }`.
+	 * For pre-extracted (cached) expressions: returns the cached array.
+	 *
+	 * Inline solves are extracted left-to-right via the sharedLexer, so variable
+	 * definitions in earlier solves (e.g., `s\`x = 5\` more text s\`x + 1\``)
+	 * correctly update the VM state before later solves are evaluated.
 	 */
-	private extractExpression(state: LineState): string {
-		// Use pre-extracted expression if available
-		if (state.expression !== null) return state.expression;
-
-		const text = state.text.trim();
-		if (text.length === 0) return text;
-
-		// Check for inline solve syntax: s`expression`
-		// Skip the findInlineSolvesInLine mapping — we only need the first
-		// expression string, not the full InlineSolvePosition[] with coordinates.
-		const inlineSpans = sharedLexer.findInlineSolves(state.text);
-		if (inlineSpans.length > 0) {
-			return inlineSpans[0].expression;
+	private extractExpressions(state: LineState): { expressions: string[]; inlineSolveCount: number } {
+		// Use pre-extracted expressions if available (from cache / previous evaluation)
+		if (state.expressions.length > 0) {
+			return { expressions: state.expressions, inlineSolveCount: state.inlineSolveCount };
 		}
 
-		return text;
+		const trimmed = state.text.trim();
+		if (trimmed.length === 0) return { expressions: [], inlineSolveCount: 0 };
+
+		// Check for inline solve syntax: s`expression`
+		const inlineSpans = sharedLexer.findInlineSolves(state.text);
+		if (inlineSpans.length > 0) {
+			return {
+				expressions: inlineSpans.map(s => s.expression),
+				inlineSolveCount: inlineSpans.length,
+			};
+		}
+
+		// Full-line expression
+		return { expressions: [trimmed], inlineSolveCount: 0 };
 	}
 }

@@ -12,6 +12,17 @@ import { SegmentTree } from "@solve-js/engine/SegmentTree";
  * (insertions, deletions, line shifts). This allows caches, the dependency
  * graph, and VM checkpoints to reference lines by ID instead of by volatile
  * line numbers.
+ *
+ * ── Multi-expression support ─────────────────────────────────────────
+ * A single document line may contain multiple inline solves (`s\`...\``).
+ * To support this without breaking the 1:1 line-to-DAG-node contract:
+ * - `expressions[]` holds all extracted expression strings (1 entry for
+ *   full-line expressions, N entries for N inline solves).
+ * - `bytecodes[]` holds compiled bytecode in corresponding order.
+ * - `results[]` holds evaluation results in corresponding order.
+ * - `reads[]` and `writes[]` are aggregated across ALL expressions on
+ *   the line — the DAG treats the line as a single dependency node.
+ * - `inlineSolveCount` is 0 for full-line expressions, >0 for inline solves.
  */
 export interface LineState {
 	/** Immutable unique identifier — survives all structural edits. */
@@ -24,31 +35,43 @@ export interface LineState {
 	text: string;
 
 	/**
-	 * Extracted expression text, or null if this is a markdown-only line.
-	 * For inline solves (s`...`), this is the expression between backticks.
+	 * Extracted expression texts.
+	 * - Full-line expressions: one entry (the trimmed text).
+	 * - Inline solve lines: one entry per `s\`...\`` span, in left-to-right order.
+	 * - Markdown-only lines: empty array.
 	 */
-	expression: string | null;
+	expressions: string[];
 
-	/** Compiled bytecode, or null if not yet compiled / non-evaluable. */
-	bytecode: BytecodeProgram | null;
+	/**
+	 * Compiled bytecode for each expression, in corresponding order.
+	 * Parallel to {@link expressions}.
+	 */
+	bytecodes: BytecodeProgram[];
 
-	/** Variables this line reads (for dependency tracking). */
+	/** Variables this line reads (for dependency tracking). Aggregated across all expressions. */
 	reads: string[];
 
-	/** Variables this line writes (empty if not a variable definition). */
+	/** Variables this line writes (empty if not a variable definition). Aggregated across all expressions. */
 	writes: string[];
 
-	/** Last evaluation result, or null if not yet evaluated. */
-	result: Value | null;
+	/** Evaluation results for each expression, in corresponding order. */
+	results: Value[];
 
 	/** True if this line needs re-evaluation. */
 	dirty: boolean;
 
-	/** True if this line defines a variable (never evict bytecode). */
+	/** True if any expression on this line defines a variable (never evict bytecode). */
 	isVariableDef: boolean;
 
 	/** True if this line contains only markdown (no evaluable expression). */
 	isEmpty: boolean;
+
+	/**
+	 * Number of inline solve expressions on this line.
+	 * 0 = full-line expression (or markdown-only).
+	 * >0 = N inline solves embedded in markdown text.
+	 */
+	inlineSolveCount: number;
 }
 
 // ── ViewportRange ──────────────────────────────────────────────────────────
@@ -135,14 +158,15 @@ export class DocumentModel {
 				lineId,
 				textHash: djb2Hash(rawLines[i]),
 				text: rawLines[i],
-				expression: null,
-				bytecode: null,
+				expressions: [],
+				bytecodes: [],
 				reads: [],
 				writes: [],
-				result: null,
+				results: [],
 				dirty: true,
 				isVariableDef: false,
 				isEmpty: rawLines[i].trim().length === 0,
+				inlineSolveCount: 0,
 			});
 		}
 
@@ -188,14 +212,15 @@ export class DocumentModel {
 					lineId,
 					textHash: djb2Hash(text),
 					text,
-					expression: null,
-					bytecode: null,
+					expressions: [],
+					bytecodes: [],
 					reads: [],
 					writes: [],
-					result: null,
+					results: [],
 					dirty: true,
 					isVariableDef: false,
 					isEmpty: text.trim().length === 0,
+					inlineSolveCount: 0,
 				});
 			}
 
@@ -261,9 +286,10 @@ export class DocumentModel {
 
 		state.text = newText;
 		state.textHash = newHash;
-		state.expression = null;
-		state.bytecode = null;
-		state.result = null;
+		state.expressions = [];
+		state.bytecodes = [];
+		state.results = [];
+		state.inlineSolveCount = 0;
 		state.dirty = true;
 		state.isEmpty = newText.trim().length === 0;
 		return true;
@@ -399,50 +425,74 @@ export class DocumentModel {
 	/**
 	 * Update a line's evaluation state after successful execution (Tier 1 / Tier 2).
 	 *
-	 * Sets result, bytecode, reads, writes, and marks the line clean.
+	 * Sets results, bytecodes, reads, writes, and marks the line clean.
+	 * Supports multi-expression lines (inline solves) via parallel arrays.
+	 *
+	 * @param lineId - Persistent line identifier.
+	 * @param results - Evaluation results for each expression (in order).
+	 * @param bytecodes - Compiled bytecode for each expression (in order).
+	 * @param expressions - Extracted expression strings (in order).
+	 * @param reads - Aggregated read variables across all expressions.
+	 * @param writes - Aggregated write variables across all expressions.
+	 * @param isVariableDef - True if any expression defines a variable.
+	 * @param inlineSolveCount - Number of inline solves (0 for full-line).
 	 */
 	updateLineResult(
 		lineId: number,
-		result: Value,
-		bytecode: BytecodeProgram,
+		results: Value[],
+		bytecodes: BytecodeProgram[],
+		expressions: string[],
 		reads: string[],
 		writes: string[],
-		isVariableDef: boolean
+		isVariableDef: boolean,
+		inlineSolveCount: number = 0,
 	): void {
 		const state = this.lines.get(lineId);
 		if (!state) return;
-		state.result = result;
-		state.bytecode = bytecode;
+		state.results = results;
+		state.bytecodes = bytecodes;
+		state.expressions = expressions;
 		state.reads = reads;
 		state.writes = writes;
 		state.isVariableDef = isVariableDef;
+		state.inlineSolveCount = inlineSolveCount;
 		state.dirty = false;
 	}
 
 	/**
 	 * Update a line's compile-only state (Tier 3: background compilation).
 	 *
-	 * Stores expression, bytecode, reads, and writes. Does NOT set a result
+	 * Stores expressions, bytecodes, reads, and writes. Does NOT set results
 	 * and does NOT mark the line clean — it still needs execution (Tier 1 or
-	 * Tier 2) to produce a result. This distinction allows the three-tier
+	 * Tier 2) to produce results. This distinction allows the three-tier
 	 * evaluation strategy: compile invisible lines in the background without
 	 * executing them, then execute from cached bytecode when scrolled into view.
+	 *
+	 * @param lineId - Persistent line identifier.
+	 * @param expressions - Extracted expression strings (in order).
+	 * @param bytecodes - Compiled bytecode for each expression (in order).
+	 * @param reads - Aggregated read variables across all expressions.
+	 * @param writes - Aggregated write variables across all expressions.
+	 * @param isVariableDef - True if any expression defines a variable.
+	 * @param inlineSolveCount - Number of inline solves (0 for full-line).
 	 */
 	updateLineCompiled(
 		lineId: number,
-		expression: string,
-		bytecode: BytecodeProgram,
+		expressions: string[],
+		bytecodes: BytecodeProgram[],
 		reads: string[],
 		writes: string[],
-		isVariableDef: boolean
+		isVariableDef: boolean,
+		inlineSolveCount: number = 0,
 	): void {
 		const state = this.lines.get(lineId);
 		if (!state) return;
-		state.expression = expression;
-		state.bytecode = bytecode;
+		state.expressions = expressions;
+		state.bytecodes = bytecodes;
 		state.reads = reads;
 		state.writes = writes;
 		state.isVariableDef = isVariableDef;
+		state.inlineSolveCount = inlineSolveCount;
 		// NOTE: dirty remains unchanged — line still needs execution
 	}
 
@@ -488,8 +538,9 @@ export class DocumentModel {
 				dirty: s.dirty,
 				isVariableDef: s.isVariableDef,
 				isEmpty: s.isEmpty,
-				hasBytecode: s.bytecode !== null,
-				hasResult: s.result !== null,
+				hasBytecode: s.bytecodes.length > 0,
+				hasResult: s.results.length > 0,
+				inlineSolveCount: s.inlineSolveCount,
 				reads: s.reads,
 				writes: s.writes,
 			})),

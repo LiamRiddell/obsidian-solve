@@ -279,13 +279,13 @@ describe("DocumentModel", () => {
 
 		test("clears bytecode and result on change", () => {
 			const line = model.getLineAt(2)!;
-			model.updateLineResult(line.lineId, null as any, {} as any, [], [], false);
+			model.updateLineResult(line.lineId, [null as any], [{} as any], [""], [], [], false);
 
 			model.editLine(2, "new text");
 
 			const updated = model.getLineAt(2)!;
-			expect(updated.bytecode).toBeNull();
-			expect(updated.result).toBeNull();
+			expect(updated.bytecodes).toEqual([]);
+			expect(updated.results).toEqual([]);
 		});
 
 		test("updates text hash on change", () => {
@@ -407,11 +407,11 @@ describe("DocumentModel", () => {
 			const mockResult = {} as any;
 			const mockBytecode = {} as any;
 
-			model.updateLineResult(line.lineId, mockResult, mockBytecode, ["y"], ["x"], true);
+			model.updateLineResult(line.lineId, [mockResult], [mockBytecode], ["x = 5"], ["y"], ["x"], true);
 
 			const updated = model.getLineById(line.lineId)!;
-			expect(updated.result).toBe(mockResult);
-			expect(updated.bytecode).toBe(mockBytecode);
+			expect(updated.results).toEqual([mockResult]);
+			expect(updated.bytecodes).toEqual([mockBytecode]);
 			expect(updated.reads).toEqual(["y"]);
 			expect(updated.writes).toEqual(["x"]);
 			expect(updated.isVariableDef).toBe(true);
@@ -421,7 +421,7 @@ describe("DocumentModel", () => {
 		test("no-op for unknown line ID", () => {
 			const model = new DocumentModel();
 			model.setDocument("a");
-			model.updateLineResult(9999, {} as any, {} as any, [], [], false);
+			model.updateLineResult(9999, [] as any, [] as any, [], [], [], false);
 		});
 	});
 
@@ -433,14 +433,14 @@ describe("DocumentModel", () => {
 			const line = model.getLineAt(1)!;
 			const mockBytecode = {} as any;
 
-			model.updateLineCompiled(line.lineId, "x + 1", mockBytecode, ["x"], [], false);
+			model.updateLineCompiled(line.lineId, ["x + 1"], [mockBytecode], ["x"], [], false);
 
 			const updated = model.getLineById(line.lineId)!;
-			expect(updated.expression).toBe("x + 1");
-			expect(updated.bytecode).toBe(mockBytecode);
+			expect(updated.expressions).toEqual(["x + 1"]);
+			expect(updated.bytecodes).toEqual([mockBytecode]);
 			expect(updated.reads).toEqual(["x"]);
 			expect(updated.dirty).toBe(true); // still dirty — needs execution
-			expect(updated.result).toBeNull(); // no result set
+			expect(updated.results).toEqual([]); // no results set
 		});
 	});
 

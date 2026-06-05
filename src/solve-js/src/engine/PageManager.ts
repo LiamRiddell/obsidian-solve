@@ -25,6 +25,7 @@
  */
 
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
+import { sharedLexer } from "@solve-js/lexer/Lexer";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -206,17 +207,46 @@ export class PageManager {
 				const state = doc.getLineAt(pos);
 				if (!state) continue;
 				if (!state.dirty) continue;
-				if (state.bytecode !== null && !state.isVariableDef) continue;
+				if (state.bytecodes.length > 0 && !state.isVariableDef) continue;
 				if (state.isEmpty) continue;
 
-				const expression = state.expression ?? state.text.trim();
-				if (!expression) continue;
-
-				items.push({
-					lineId: state.lineId,
-					expression,
-					textHash: state.textHash,
-				});
+				// Extract expressions using the shared lexer to handle inline
+				// solves (s`...`). For full-line expressions, this returns [text].
+				// For inline solve lines, this returns each extracted expression.
+				if (state.expressions.length > 0) {
+					// Use pre-extracted expressions (from prior evaluation)
+					for (const expression of state.expressions) {
+						if (!expression.trim()) continue;
+						items.push({
+							lineId: state.lineId,
+							expression,
+							textHash: state.textHash,
+						});
+					}
+				} else {
+					// Expressions not yet extracted — use lexer to find inline solves
+					const inlineSpans = sharedLexer.findInlineSolves(state.text);
+					if (inlineSpans.length > 0) {
+						for (const span of inlineSpans) {
+							if (!span.expression.trim()) continue;
+							items.push({
+								lineId: state.lineId,
+								expression: span.expression,
+								textHash: state.textHash,
+							});
+						}
+					} else {
+						// Full-line expression
+						const expression = state.text.trim();
+						if (expression) {
+							items.push({
+								lineId: state.lineId,
+								expression,
+								textHash: state.textHash,
+							});
+						}
+					}
+				}
 			}
 		}
 
@@ -252,8 +282,8 @@ export class PageManager {
 		const range = PageManager.pageRange(pageNum, docLineCount);
 		for (let pos = range.startLine; pos <= range.endLine; pos++) {
 			const state = doc.getLineAt(pos);
-			if (state && !state.isVariableDef && state.result !== null) {
-				state.result = null;
+			if (state && !state.isVariableDef && state.results.length > 0) {
+				state.results = [];
 			}
 		}
 	}
@@ -276,9 +306,9 @@ export class PageManager {
 			const state = doc.getLineAt(pos);
 			if (!state || state.isVariableDef) continue;
 
-			if (state.bytecode !== null || state.result !== null) {
-				state.bytecode = null;
-				state.result = null;
+			if (state.bytecodes.length > 0 || state.results.length > 0) {
+				state.bytecodes = [];
+				state.results = [];
 				state.dirty = true;
 			}
 		}
