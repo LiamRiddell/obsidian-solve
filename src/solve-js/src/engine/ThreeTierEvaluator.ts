@@ -8,7 +8,8 @@ import {
 import { Value, enableValueArena, disableValueArena } from "@solve-js/vm/Value";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
-import { isEmptyLine, findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { sharedLexer } from "@solve-js/lexer/Lexer";
 import { CompilationWorkerManager, type CompileRequestItem } from "@solve-js/engine/CompilationWorkerManager";
 import { PageManager } from "@solve-js/engine/PageManager";
 
@@ -832,14 +833,12 @@ export class ThreeTierEvaluator {
 		const text = state.text.trim();
 		if (text.length === 0) return text;
 
-		// Check for inline solve syntax: the full line is s`expression`
-		const inlineSolves = findInlineSolvesInLine(state.text, 0);
-		if (inlineSolves.length > 0) {
-			// If the entire line is an inline solve, extract its expression
-			if (/^s`[^`]*`$/.test(text)) {
-				return inlineSolves[0].expression;
-			}
-			// Otherwise use the raw text — inline solves are handled by evaluateLine
+		// Check for inline solve syntax: s`expression`
+		// Skip the findInlineSolvesInLine mapping — we only need the first
+		// expression string, not the full InlineSolvePosition[] with coordinates.
+		const inlineSpans = sharedLexer.findInlineSolves(state.text);
+		if (inlineSpans.length > 0) {
+			return inlineSpans[0].expression;
 		}
 
 		return text;
