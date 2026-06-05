@@ -614,27 +614,28 @@ export class ExpressionLexer {
       const lineText = input.slice(lineStart, lineEnd);
 
       // ── Detect inline solves ──────────────────────────────────────
-      // Spans are reconstructed entirely from the token array using
-      // token indices collected inline during [Symbol.iterator]().
-      // The generator handles \` escape sequences (skips them instead
-      // of closing the span early), so expression, offsets, and columns
-      // are all derivable from tokens — no separate string scan needed.
+      // Two data sources are merged:
+      //   1. _inlineSolveSpans — token indices collected inline during
+      //      [Symbol.iterator](). Provides correct startTokenIndex /
+      //      endTokenIndex. Also handles \` escape (skips the pair
+      //      instead of closing the span early).
+      //   2. findInlineSolves() — character-level string scan for
+      //      expression text. Still needed because token-based
+      //      reconstruction loses whitespace (the lexer skips spaces),
+      //      which breaks multi-word expressions like
+      //      "2 weeks in days" → "2weeksindays" (wrong tokenization).
       let inlineSolves: InlineSolveSpan[] = [];
       if (classification.hasInlineSolve) {
         if (!classification.skip && tokens.length > 0) {
-          inlineSolves = this._inlineSolveSpans.map(span => {
-            const startIdx = span.startTokenIndex!;
-            const endIdx = span.endTokenIndex!;
-            const exprTokens = tokens.slice(startIdx + 1, endIdx);
-            return {
-              start: tokens[startIdx].offset - lineStart,
-              end: tokens[endIdx].offset + tokens[endIdx].text.length - lineStart,
-              expression: exprTokens.map(t => t.value).join(''),
-              columnNumber: span.columnNumber,
-              startTokenIndex: startIdx,
-              endTokenIndex: endIdx,
-            };
-          });
+          const charSpans = this.findInlineSolves(lineText);
+          inlineSolves = this._inlineSolveSpans.map((span, i) => ({
+            start: charSpans[i]?.start ?? 0,
+            end: charSpans[i]?.end ?? 0,
+            expression: charSpans[i]?.expression ?? '',
+            columnNumber: charSpans[i]?.columnNumber ?? span.columnNumber,
+            startTokenIndex: span.startTokenIndex,
+            endTokenIndex: span.endTokenIndex,
+          }));
         } else {
           // Skipped lines weren't tokenized — fall back to string scan
           inlineSolves = this.findInlineSolves(lineText);

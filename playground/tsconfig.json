@@ -15,7 +15,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": ["../src/*"],
       "@solve-js/*": ["../src/solve-js/src/*"],

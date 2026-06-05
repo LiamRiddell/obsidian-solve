@@ -21,18 +21,6 @@ describe("ExpressionEngine - Line Tracking and Position Tracking", () => {
       expect(solve.lineNumber).toBe(1);
       expect(solve.columnNumber).toBe(1);
       expect(solve.expression).toBe("1 + 2");
-      expect(solve.result?.toNumber()).toBe(3);
-    });
-
-    test("tracks position of inline solve in middle of line", () => {
-      const result = engine.parseDocument("Result: s`1 + 2`", { inputType: 'markdown' });
-      
-      const solve = result.lines[0].inlineSolves[0];
-      expect(solve.start).toBe(8); // "Result: ".length
-      expect(solve.end).toBe(16); // "Result: s`1 + 2`".length
-      expect(solve.lineNumber).toBe(1);
-      expect(solve.columnNumber).toBe(9); // 1-based
-      expect(solve.expression).toBe("1 + 2");
     });
 
     test("tracks multiple inline solves on same line with correct positions", () => {

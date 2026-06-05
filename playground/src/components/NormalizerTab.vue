@@ -279,34 +279,21 @@ const typeGuardSkipCount = computed(() => {
 interface TrieBranch { word: string; tokenType: string; path: string; matched: boolean; singleton: boolean }
 interface TrieRoot { root: string; matched: boolean; children: TrieBranch[] }
 
-/** Phrases registered in the trie (inferred from fusions + known builtins). */
+/** Phrases registered in the trie — provided directly by the engine via NormalizerOutput. */
 const triePhrases = computed<Record<string, string>>(() => {
-  const phrases: Record<string, string> = {};
-  // Infer from fusions that used the phrase-trie
-  for (const f of data.value.fusions) {
-    if (f.rule === 'phrase-trie') {
-      const key = f.sourceTokens.map(s => s.value).join(' ').toLowerCase();
-      if (!phrases[key]) phrases[key] = f.fusedToken.type as string;
-    }
-  }
-  // Add known built-in phrases as fallback
-  const builtins: Record<string, string> = {
-    'to the power of': 'CARET', 'power of': 'CARET',
-    'increase by': 'INCREASE_BY', 'decrease by': 'DECREASE_BY',
-    'times by': 'TIMES_BY', 'multiply by': 'MULTIPLY_BY', 'divide by': 'DIVIDE_BY',
-  };
-  for (const [k, v] of Object.entries(builtins)) {
-    if (!phrases[k]) phrases[k] = v;
-  }
-  return phrases;
+  return data.value.phrases ?? {};
 });
 
 const triePhraseCount = computed(() => Object.keys(triePhrases.value).length);
 
-/** Build trie tree from registered phrases (inferred from fusions/rules). */
+/** Build trie tree from registered phrases with matched highlights from fusion data. */
 const trieTree = computed<TrieRoot[]>(() => {
   const phrases = triePhrases.value;
-  const matchedPhrases = new Set(data.value.fusions.map(f => f.rule).filter(r => r !== 'implicit:multiply' && r !== 'phrase:deprecated'));
+  // Build matched phrase set from actual phrase strings (join source token values),
+  // not from fusion rule names. This ensures trie tree badges light up correctly.
+  const matchedPhrases = new Set(
+    data.value.fusions.map(f => f.sourceTokens.map(s => s.value).join(' ').toLowerCase())
+  );
   const rootMap = new Map<string, TrieBranch[]>();
 
   for (const [phrase, tokenType] of Object.entries(phrases)) {
@@ -325,7 +312,7 @@ const trieTree = computed<TrieRoot[]>(() => {
 
   return Array.from(rootMap.entries()).map(([root, children]) => ({
     root,
-    matched: matchedPhrases.has(root) || children.some(c => c.matched),
+    matched: children.some(c => c.matched),
     children,
   }));
 });

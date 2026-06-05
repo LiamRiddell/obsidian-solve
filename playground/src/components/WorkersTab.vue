@@ -114,14 +114,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { useWorkersStore } from '../stores/workers.js';
 
 const ws = useWorkersStore();
 
 const recentLog = computed(() => ws.activityLog.slice(-30));
-
-const logContainer = ref<HTMLElement | null>(null);
 
 function formatTime(ts: number): string {
   const d = new Date(ts);

@@ -791,7 +791,10 @@ export class ExpressionEngine {
             );
         }
 
-        if (tokens.length === 0) {
+        // Filter COMMENT tokens before evaluation — they have no parselet.
+        const exprTokens = tokens.filter(t => t.type !== 'COMMENT');
+
+        if (exprTokens.length === 0) {
             const v = numberValue(0);
             this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null), expression);
             return v;
@@ -799,7 +802,7 @@ export class ExpressionEngine {
 
         // ══ NORMALIZER ══
         // Normalize tokens for phrase fusion, implicit multiply, domain token merging.
-        const normalizedTokens = this.normalizer.normalize(tokens);
+        const normalizedTokens = this.normalizer.normalize(exprTokens);
 
         // ══ SAFETY CHECK 2: Complexity scoring ══
         const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
@@ -1098,11 +1101,14 @@ export class ExpressionEngine {
         // ══ LEXER STAGE ══
         // Lexing with token emission events — use resetExpression to skip
         // redundant classifyLine (caller already knows this is an expression).
+        // COMMENT tokens are filtered — they have no parselet and would cause
+        // "No prefix parselet found" errors at the parser.
         const lexResult = AllocationTracker.track('lexer', () => {
             this.lexer.resetExpression(expression);
             let tokenIndex = 0;
             let hasParens = false;
             for (const t of this.lexer) {
+                if (t.type === 'COMMENT') continue;
                 if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
                 tokens.push(t);
 
@@ -1244,6 +1250,7 @@ export class ExpressionEngine {
                     fusions: normalizerFusions,
                     rulesApplied: [...normalizerRuleCounts.entries()].map(([rule, count]) => ({ rule, count })),
                     tokens: [...normalizedTokens],
+                    phrases: this.normalizer.getPhrases(),
                 });
             }
         } else if (hasCollectors) {
@@ -1254,6 +1261,7 @@ export class ExpressionEngine {
                 fusions: [],
                 rulesApplied: [],
                 tokens: [...tokens],
+                phrases: this.normalizer.getPhrases(),
             });
         }
 
@@ -2027,10 +2035,12 @@ export class ExpressionEngine {
 		}
 
 		// Lexing — skip classifyLine overhead since caller knows this is an expression.
+		// COMMENT tokens are filtered — they have no parselet.
 		const tokens: Token[] = [];
 		let hasParens = false;
 		this.lexer.resetExpression(expression);
 		for (const t of this.lexer) {
+			if (t.type === 'COMMENT') continue;
 			if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
 			tokens.push(t);
 		}

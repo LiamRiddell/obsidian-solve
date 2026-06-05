@@ -229,6 +229,13 @@ export interface NormalizerOutput {
   rulesApplied: { rule: string; count: number }[];
   /** Post-normalization tokens ready for parsing */
   tokens: Token[];
+  /**
+   * All registered phrase → tokenType mappings from the PhraseTrie.
+   * Populated by the engine at diagnostic stage build time so the
+   * playground NormalizerTab can render the complete trie structure
+   * rather than only phrases that matched in this evaluation.
+   */
+  phrases: Record<string, string>;
 }
 
 //#endregion

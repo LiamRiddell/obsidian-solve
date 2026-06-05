@@ -213,6 +213,32 @@ export class PhraseTrie {
 		return this.root.size;
 	}
 
+	/**
+	 * Return all registered phrases and their target token types.
+	 *
+	 * Used by diagnostic mode to expose the complete trie structure to the
+	 * playground's NormalizerTab for rendering ALL registered phrases
+	 * (not just the ones that matched in this evaluation).
+	 */
+	getAllPhrases(): Record<string, string> {
+		const result: Record<string, string> = {};
+
+		const collect = (node: TrieNode, path: string[]): void => {
+			if (node.terminal) {
+				result[path.join(' ')] = node.terminal.tokenType;
+			}
+			for (const [word, child] of node.children) {
+				collect(child, [...path, word]);
+			}
+		};
+
+		for (const [firstWord, node] of this.root) {
+			collect(node, [firstWord]);
+		}
+
+		return result;
+	}
+
 	/** Check if any phrase starts with this word (case-insensitive). */
 	canStart(word: string): boolean {
 		return this.startWords.has(word.toLowerCase());

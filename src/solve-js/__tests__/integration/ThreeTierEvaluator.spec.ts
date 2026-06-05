@@ -1201,6 +1201,45 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		expect(state.writes).toContain("y");
 	});
 
+	test("DAG aggregates reads and writes across same-line cross-reference inline solves", () => {
+		// Regression: same-line cross-reference inline solves (s`:a = 5` s`:b = a + 3` s`a + b`)
+		// were broken because evaluateTier1's monolithic try/catch silently discarded ALL
+		// results when any expression failed. Per-expression error handling (Phase 1 fix)
+		// ensures each inline solve is independently evaluated, partial results are stored,
+		// and reads/writes are aggregated across all expressions.
+		const doc = createDoc(["s`:a = 5` text s`:b = a + 3` more s`a + b`"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+
+		const state = doc.getLineAt(1)!;
+		expect(state.inlineSolveCount).toBe(3);
+		expect(state.expressions).toEqual([":a = 5", ":b = a + 3", "a + b"]);
+		expect(state.results.length).toBe(3);
+		// :a = 5 → 5
+		expect(state.results[0].toNumber()).toBe(5);
+		// :b = a + 3 → 8 (a=5 from previous inline solve)
+		expect(state.results[1].toNumber()).toBe(8);
+		// a + b → 13 (a=5, b=8 from previous inline solves)
+		expect(state.results[2].toNumber()).toBe(13);
+		// DAG should aggregate writes from :a and :b
+		expect(state.writes).toContain("a");
+		expect(state.writes).toContain("b");
+		// DAG should aggregate reads from :b (reads a) and a+b (reads a, b)
+		expect(state.reads).toContain("a");
+		expect(state.reads).toContain("b");
+		// VM should have both variables after the line evaluation
+		expect(engine.getVM().getVar("a")?.toNumber()).toBe(5);
+		expect(engine.getVM().getVar("b")?.toNumber()).toBe(8);
+		// Line should be clean (all expressions succeeded)
+		expect(state.dirty).toBe(false);
+		// Error should be null
+		expect(state.expressions.length).toBe(3);
+		// Bytecode should be cached for all three expressions
+		expect(state.bytecodes.length).toBe(3);
+	});
+
 	test("DAG aggregates reads for inline solves that reference variables", () => {
 		// Define a variable first via full-line, then reference it in inline solves
 		const doc = createDoc([

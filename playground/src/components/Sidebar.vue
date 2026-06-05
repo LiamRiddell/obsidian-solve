@@ -2,14 +2,6 @@
   <aside class="sidebar" id="sidebar" :class="{ collapsed: ui.sidebarCollapsed }">
     <div class="sidebar-header">
       <h2>Examples</h2>
-      <button
-        class="pane-collapse-btn sidebar-collapse-btn"
-        :class="{ active: ui.sidebarCollapsed }"
-        @click="ui.toggleSidebar()"
-        :title="ui.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-      >
-        {{ ui.sidebarCollapsed ? '▶' : '◀' }}
-      </button>
       <select class="full-doc-select" @change="onFullDocSelect">
         <option value="">📄 Full Documents…</option>
         <option v-for="doc in fullDocumentExamples" :key="doc.name" :value="doc.content">

@@ -5,7 +5,7 @@ import {
 	LineState,
 	ViewportRange,
 } from "@solve-js/engine/DocumentModel";
-import { Value, enableValueArena, disableValueArena } from "@solve-js/vm/Value";
+import { Value, enableValueArena, disableValueArena, errorValue } from "@solve-js/vm/Value";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
@@ -581,51 +581,100 @@ export class ThreeTierEvaluator {
 		inlineSolveCount: number,
 		baseResult: Omit<EvalLineResult, "tier" | "result" | "error">
 	): EvalLineResult {
-		try {
-			const allResults: Value[] = [];
-			const allBytecodes: BytecodeProgram[] = [];
-			const allReads = new Set<string>();
-			const allWrites = new Set<string>();
-			let hasVariableDef = false;
-			let lastValue: Value | null = null;
+		const allResults: Value[] = [];
+		const allBytecodes: BytecodeProgram[] = [];
+		const allReads = new Set<string>();
+		const allWrites = new Set<string>();
+		let hasVariableDef = false;
+		let lastValue: Value | null = null;
+		let firstError: string | null = null;
+		let anyFailed = false;
 
-			for (const expression of expressions) {
-				if (!expression.trim()) continue;
-				const value = this.engine.evaluateLine(lineNumber, expression);
+		// Evaluate each expression independently — a failure in one expression
+		// (e.g., parse error in s`bad syntax`) must not prevent other expressions
+		// on the same line from being evaluated and having their results stored.
+		// Without per-expression error handling, same-line cross-reference inline
+		// solves (s`:a = 5` s`:b = a + 3` s`a + b`) would lose ALL results when
+		// the third expression throws because 'b' references cross a VM state
+		// boundary or the engine encounters a transient error.
+		for (const expression of expressions) {
+			if (!expression.trim()) continue;
+
+			let value: Value | null = null;
+			let entry: { bytecode: BytecodeProgram; readVariables: string[]; writeVariable: string | null } | undefined;
+
+			try {
+				value = this.engine.evaluateLine(lineNumber, expression);
 				lastValue = value;
-				allResults.push(value);
-
 				// Sync the DocumentModel from the LineCache.
 				// Use get(lineNumber, expression) instead of getEntryForLine(lineNumber)
 				// because multiple expressions on the same line share the same lineNumber
 				// and getEntryForLine always returns the FIRST entry (Map insertion order).
-				const entry = this.engine.getLineCache().get(lineNumber, expression);
-				if (entry) {
-					allBytecodes.push(entry.bytecode);
-					for (const r of entry.readVariables) allReads.add(r);
-					if (entry.writeVariable) {
-						allWrites.add(entry.writeVariable);
-						hasVariableDef = true;
-					}
-				} else {
-					// Fallback: LineCache missed — compile expression ourselves
-					try {
-						const { program, reads, writes } = this.engine.compileExpression(expression);
-						allBytecodes.push(program);
-						for (const r of reads) allReads.add(r);
-						for (const w of writes) allWrites.add(w);
-						if (writes.length > 0) hasVariableDef = true;
-					} catch (_compileErr) {
-						// Push empty bytecode — expression will recompile on next pass
-						allBytecodes.push({ opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false });
-					}
-				}
+				entry = this.engine.getLineCache().get(lineNumber, expression) as typeof entry;
+			} catch (e) {
+				const errorMessage = e instanceof Error ? e.message : String(e);
+				if (!firstError) firstError = errorMessage;
+				anyFailed = true;
 			}
 
-			const reads = [...allReads];
-			const writes = [...allWrites];
+			if (value) {
+				allResults.push(value);
+			} else {
+				// Expression failed — push an ErrorValue sentinel so results[] stays
+				// aligned with expressions[] and bytecodes[] indices. Downstream code
+				// checking result.type === Error will find it, vs a raw null that NPEs.
+				allResults.push(errorValue("eval_failed", firstError ?? "unknown error"));
+			}
 
-			// Store all results in DocumentModel
+			if (entry) {
+				allBytecodes.push(entry.bytecode);
+				for (const r of entry.readVariables) allReads.add(r);
+				if (entry.writeVariable) {
+					allWrites.add(entry.writeVariable);
+					hasVariableDef = true;
+				}
+			} else {
+				// Fallback: LineCache missed — compile expression ourselves
+				try {
+					const { program, reads, writes } = this.engine.compileExpression(expression);
+					allBytecodes.push(program);
+					for (const r of reads) allReads.add(r);
+					for (const w of writes) allWrites.add(w);
+					if (writes.length > 0) hasVariableDef = true;
+				} catch (_compileErr) {
+					// Push empty bytecode — expression will recompile on next pass
+					allBytecodes.push({ opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false });
+				}
+			}
+		}
+
+		const reads = [...allReads];
+		const writes = [...allWrites];
+
+		// Always store results — even partial ones. If any expression failed,
+		// the line stays dirty so the failed expression(s) get retried on the
+		// next evaluation pass. But successfully-evaluated expressions' results
+		// are preserved so the DAG, UI decorations, and downstream consumers
+		// can use them immediately.
+		if (anyFailed) {
+			// Store partial results via updateLineCompiled (doesn't clear dirty).
+			// The successful expressions' bytecodes are cached so Tier 2 works
+			// for them on the next scroll pass.
+			this.doc.updateLineCompiled(
+				state.lineId,
+				expressions,
+				allBytecodes,
+				reads,
+				writes,
+				hasVariableDef,
+				inlineSolveCount,
+			);
+			// Also set results for the successful expressions
+			state.results = allResults;
+			state.inlineSolveCount = inlineSolveCount;
+			state.expressions = expressions;
+		} else {
+			// All expressions succeeded — store full results and mark clean
 			this.doc.updateLineResult(
 				state.lineId,
 				allResults,
@@ -636,21 +685,24 @@ export class ThreeTierEvaluator {
 				hasVariableDef,
 				inlineSolveCount,
 			);
-
-			// Register reads/writes in DAG (aggregated across all expressions)
-			this.dag.registerLine(lineNumber, reads, writes);
-
-			// ── Checkpoint after variable definition ──
-			if (this.checkpointer && writes.length > 0) {
-				this.checkpointer.snapshot(lineNumber, state.lineId, writes);
-			}
-
-			return { ...baseResult, tier: EvalTier.Tier1, result: lastValue, error: null };
-		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : String(e);
-			// Keep dirty so it retries on next evaluation
-			return { ...baseResult, tier: EvalTier.Tier1, result: null, error: errorMessage };
 		}
+
+		// Register reads/writes in DAG (aggregated across all expressions).
+		// Always register — even lines with no reads/writes (pure expressions
+		// like "2+2") need DAG entries so downstream queries for line presence work.
+		this.dag.registerLine(lineNumber, reads, writes);
+
+		// ── Checkpoint after variable definition ──
+		if (this.checkpointer && writes.length > 0 && !anyFailed) {
+			this.checkpointer.snapshot(lineNumber, state.lineId, writes);
+		}
+
+		return {
+			...baseResult,
+			tier: EvalTier.Tier1,
+			result: lastValue,
+			error: firstError,
+		};
 	}
 
 	/**
@@ -671,28 +723,44 @@ export class ThreeTierEvaluator {
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
 		}
 
-		try {
-			const results: Value[] = [];
-			let lastValue: Value | null = null;
+		const results: Value[] = [];
+		let lastValue: Value | null = null;
+		let firstError: string | null = null;
+		let anyFailed = false;
 
-			for (const bytecode of state.bytecodes) {
-				if (bytecode.opcodes.length === 0) continue;
+		// Execute each bytecode independently — a failure in one should not
+		// prevent other bytecodes on the same line from executing. Same-line
+		// inline solves with variable definitions (s`:a = 5` s`a + 3`) rely
+		// on earlier bytecodes updating the VM before later ones execute.
+		for (const bytecode of state.bytecodes) {
+			if (bytecode.opcodes.length === 0) continue;
+			try {
 				const value = this.engine.executeCached(bytecode);
 				lastValue = value;
 				results.push(value);
+			} catch (e) {
+				const errorMessage = e instanceof Error ? e.message : String(e);
+				if (!firstError) firstError = errorMessage;
+				anyFailed = true;
+				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment
+				results.push(errorValue("exec_failed", errorMessage));
 			}
-
-			// Update DAG: re-register reads/writes from the cached metadata
-			this.dag.registerLine(lineNumber, state.reads, state.writes);
-			state.results = results;
-
-			return { ...baseResult, tier: EvalTier.Tier2, result: lastValue, error: null };
-		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : String(e);
-			// Mark dirty so it falls back to Tier 1 on next attempt
-			state.dirty = true;
-			return { ...baseResult, tier: EvalTier.Tier2, result: null, error: errorMessage };
 		}
+
+		// Update DAG: re-register reads/writes from the cached metadata.
+		// Always register — even empty reads/writes so DAG line-presence queries work.
+		this.dag.registerLine(lineNumber, state.reads, state.writes);
+
+		if (anyFailed) {
+			// Push placeholder for failed bytecode to maintain results[i] ↔ bytecodes[i]
+			state.results = results;
+			// Mark dirty so failed bytecodes are re-compiled (Tier 1) next pass
+			state.dirty = true;
+		} else {
+			state.results = results;
+		}
+
+		return { ...baseResult, tier: EvalTier.Tier2, result: lastValue, error: firstError };
 	}
 
 	/**
@@ -713,15 +781,21 @@ export class ThreeTierEvaluator {
 		inlineSolveCount: number,
 		baseResult: Omit<EvalLineResult, "tier" | "result" | "error">
 	): EvalLineResult {
-		try {
-			const allBytecodes: BytecodeProgram[] = [];
-			const allReads = new Set<string>();
-			const allWrites = new Set<string>();
-			let hasVariableDef = false;
-			let lastResult: Value | null = null;
+		const allBytecodes: BytecodeProgram[] = [];
+		const allReads = new Set<string>();
+		const allWrites = new Set<string>();
+		let hasVariableDef = false;
+		let lastResult: Value | null = null;
+		let firstError: string | null = null;
+		let anyFailed = false;
 
-			for (const expression of expressions) {
-				if (!expression.trim()) continue;
+		// Compile each expression independently — a parse error in one
+		// should not prevent other expressions from being compiled and
+		// having their reads/writes registered in the DAG.
+		for (const expression of expressions) {
+			if (!expression.trim()) continue;
+
+			try {
 				const { program, reads, writes } = this.engine.compileExpression(expression);
 				allBytecodes.push(program);
 				for (const r of reads) allReads.add(r);
@@ -732,41 +806,45 @@ export class ThreeTierEvaluator {
 					// Variable definitions MUST execute to maintain VM state
 					lastResult = this.engine.executeCached(program);
 				}
+			} catch (e) {
+				const errorMessage = e instanceof Error ? e.message : String(e);
+				if (!firstError) firstError = errorMessage;
+				anyFailed = true;
+				// Push empty bytecode placeholder for alignment
+				allBytecodes.push({ opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false });
 			}
-
-			const reads = [...allReads];
-			const writes = [...allWrites];
-
-			// Store compile-only state in DocumentModel
-			this.doc.updateLineCompiled(
-				state.lineId,
-				expressions,
-				allBytecodes,
-				reads,
-				writes,
-				hasVariableDef,
-				inlineSolveCount,
-			);
-
-			// Register reads/writes in DAG regardless
-			this.dag.registerLine(lineNumber, reads, writes);
-
-			if (hasVariableDef && lastResult) {
-				state.results = [lastResult];
-				state.dirty = false;
-
-				// ── Checkpoint after variable definition ────────────
-				if (this.checkpointer) {
-					this.checkpointer.snapshot(lineNumber, state.lineId, writes);
-				}
-			}
-
-			return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, error: null };
-		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : String(e);
-			// Keep dirty so it retries
-			return { ...baseResult, tier: EvalTier.Tier3, result: null, error: errorMessage };
 		}
+
+		const reads = [...allReads];
+		const writes = [...allWrites];
+
+		// Store compile-only state in DocumentModel — even partial results
+		// preserve successful expressions' bytecodes and DAG data.
+		this.doc.updateLineCompiled(
+			state.lineId,
+			expressions,
+			allBytecodes,
+			reads,
+			writes,
+			hasVariableDef,
+			inlineSolveCount,
+		);
+
+		// Register reads/writes in DAG regardless — partial data is valid.
+		// Always register — even empty reads/writes for DAG line-presence queries.
+		this.dag.registerLine(lineNumber, reads, writes);
+
+		if (hasVariableDef && lastResult && !anyFailed) {
+			state.results = [lastResult];
+			state.dirty = false;
+
+			// ── Checkpoint after variable definition ────────────
+			if (this.checkpointer) {
+				this.checkpointer.snapshot(lineNumber, state.lineId, writes);
+			}
+		}
+
+		return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, error: firstError };
 	}
 
 	// ── Public checkpoint API (used by Phase 5.2e setViewport) ──────

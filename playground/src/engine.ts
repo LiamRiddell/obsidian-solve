@@ -1,6 +1,8 @@
 import { ExpressionEngine } from "@/solve-js/src/engine/ExpressionEngine";
-export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo } from "@/solve-js/src/engine/ExpressionEngine";
-export type { DagSnapshot } from "@/solve-js/src/vm/DependencyGraph";
+import type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo } from "@/solve-js/src/engine/ExpressionEngine";
+export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
+import type { DagSnapshot } from "@/solve-js/src/vm/DependencyGraph";
+export type { DagSnapshot };
 import { formatValue } from "@/solve-js/src/format/FormatEngine";
 import type { Token } from "@/solve-js/src/lexer/Token";
 import type { AsyncResolutionEvent } from "@/solve-js/src/engine/AsyncResolutionBatcher";
@@ -281,7 +283,6 @@ function extractLineTimings(
 	const lastToken = [...events]
 		.reverse()
 		.find((e) => e.type === "token_emitted");
-	const firstParselet = events.find((e) => e.type === "parselet_matched");
 	const lastParselet = [...events]
 		.reverse()
 		.find((e) => e.type === "parselet_matched");
@@ -1014,6 +1015,13 @@ export function runEngine(expression: string): DebugResult {
 	};
 	const opcodeCountsByLine = new Map<number, number>();
 
+	// ── Declare stats/lineStats here so both try and catch paths can reference them ──
+	let stats: PerformanceStats = { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
+	let lineStats: LineStats[] = [];
+	let vmTrace: VmTraceStep[] = [];
+	let dqMetrics: DQMetrics = { queryCount: 0, pendingQueries: 0, dataSources: 0, cacheSize: 0, dataSourceNames: [] };
+	let diagnosticEvents: DiagnosticEventInfo[] = [];
+
 	try {
 		// ── Enable allocation tracking for per-stage telemetry ──
 		AllocationTracker.enable();
@@ -1203,6 +1211,55 @@ export function runEngine(expression: string): DebugResult {
 		};
 		disableValueArena();
 
+		// ── Compute stats before returning from try block ──
+		stats = lastDebugEvents
+			? extractStageTimings(lastDebugEvents)
+			: { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
+
+		{
+			let prevCount = 0;
+			for (const snap of lineEventSnapshots) {
+				const lineOnlyEvents = snap.events.slice(prevCount);
+				prevCount = snap.events.length;
+				lineStats.push({
+					lineNumber: snap.lineNumber,
+					stats: extractLineTimings(lineOnlyEvents),
+				});
+			}
+		}
+
+		vmTrace = lastDebugEvents
+			? lastDebugEvents
+				.filter((e) => e.type === "vm_step")
+				.map((e) => {
+					const step = e as {
+						type: "vm_step";
+						ip: number;
+						opcodeName: string;
+						opcode: number;
+						stackDepth: number;
+						instructionNumber: number;
+						elapsedNs: number;
+					};
+					return {
+						ip: step.ip,
+						opcodeName: step.opcodeName,
+						opcode: step.opcode,
+						stackDepth: step.stackDepth,
+						instructionNumber: step.instructionNumber,
+						elapsedNs: step.elapsedNs,
+						stack: (step as any).stack ?? [],
+					};
+				})
+			: [];
+
+		const m = dataQueryService.getMetrics();
+		dqMetrics = { queryCount: m.queryCount, pendingQueries: m.pendingQueries, dataSources: m.dataSources, cacheSize: m.cacheSize, dataSourceNames: dataQueryService.getRegisteredSourceIds() };
+
+		diagnosticEvents = lastDebugEvents
+			? lastDebugEvents.map((e) => ({ type: e.type, timestamp: Date.now(), elapsedNs: e.elapsedNs, expression: (e as any).expression ?? "", details: (e as any).details ?? "", groupKey: (e as any).expression ?? "" }))
+			: [];
+
 		return {
 			tokens: rawTokens,
 			rawTokens,
@@ -1235,7 +1292,7 @@ export function runEngine(expression: string): DebugResult {
 	}
 
 	// Extract aggregate per-stage timings from the last accumulated event set.
-	const stats: PerformanceStats = lastDebugEvents
+	stats = lastDebugEvents
 		? extractStageTimings(lastDebugEvents)
 		: {
 				lexerTime: 0,
@@ -1248,7 +1305,7 @@ export function runEngine(expression: string): DebugResult {
 	// Extract per-line timings from event snapshot deltas.
 	// Each snapshot is cumulative; we slice the delta between consecutive snapshots
 	// to get the events that belong to each line.
-	const lineStats: LineStats[] = [];
+	lineStats = [];
 	let prevEventCount = 0;
 	for (const snap of lineEventSnapshots) {
 		const lineOnlyEvents = snap.events.slice(prevEventCount);
@@ -1260,7 +1317,7 @@ export function runEngine(expression: string): DebugResult {
 	}
 
 	// Extract VM trace steps from the last accumulated event set
-	const vmTrace: VmTraceStep[] = lastDebugEvents
+	vmTrace = lastDebugEvents
 		? lastDebugEvents
 				.filter((e) => e.type === "vm_step")
 				.map((e) => {
@@ -1287,7 +1344,7 @@ export function runEngine(expression: string): DebugResult {
 
 	// Collect real DataQueryService metrics for the worker telemetry panel
 	const m = dataQueryService.getMetrics();
-	const dqMetrics: DQMetrics = {
+	dqMetrics = {
 		queryCount: m.queryCount,
 		pendingQueries: m.pendingQueries,
 		dataSources: m.dataSources,
@@ -1296,7 +1353,7 @@ export function runEngine(expression: string): DebugResult {
 	};
 
 	// Collect diagnostic events from the last run
-	const diagnosticEvents: DiagnosticEventInfo[] = lastDebugEvents
+	diagnosticEvents = lastDebugEvents
 		? lastDebugEvents.map((e) => ({
 				type: e.type,
 				timestamp: Date.now(),

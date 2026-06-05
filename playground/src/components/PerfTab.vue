@@ -257,7 +257,6 @@ const pipeline = usePipelineStore();
 /* ── Data (populated by engine store's onmessage handler) ──────── */
 const stats = computed(() => dr.stats ?? { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 });
 const overhead = computed(() => computeOverhead(stats.value));
-const total = computed(() => stats.value.totalTime || 1);
 
 /* ── Flamegraph ────────────────────────────────────────────────── */
 const flameSegments = computed(() => {
@@ -395,7 +394,6 @@ const heatmapRows = computed(() => {
 });
 
 /* ── Stat cards ────────────────────────────────────────────────── */
-const statCardKeys = ['Lexer', 'Parser', 'Compiler', 'VM Execute', 'Total'];
 
 function sparklineData(values: number[], color: string): { points: string; avgY: number } | null {
   if (values.length < 2) return null;

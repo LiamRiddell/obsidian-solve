@@ -284,6 +284,17 @@ export class TokenNormalizer {
    * before phrase-starting identifiers (e.g., "2 power of 3" → `2 ^ 3`,
    * not `2 * power of 3`). Delegates to {@link PhraseTrie.canStart}.
    */
+  /**
+   * Get all registered phrases and their target token types.
+   *
+   * Exposes the full phrase trie structure for diagnostic rendering
+   * in the playground's NormalizerTab. Returns ALL registered phrases,
+   * not just the ones that matched in the last evaluation.
+   */
+  getPhrases(): Record<string, string> {
+    return this.phraseTrie.getAllPhrases();
+  }
+
   canStartPhrase(word: string): boolean {
     return this.phraseTrie.canStart(word);
   }
