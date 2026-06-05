@@ -136,7 +136,13 @@ export function createFusedToken(
 // Arithmetic operators (PLUS, MINUS, STAR, SLASH, CARET, MOD, PERCENT) are
 // intentionally excluded: in keyword locales the lexer maps "times"→STAR,
 // "divide"→SLASH etc., and those tokens CAN start phrases like "times by".
-const NON_WORD_NAMES = [
+/**
+ * Token type names that can NEVER start a multi-word phrase.
+ *
+ * Exported for testing only — consumers should use the type-guard behavior
+ * of {@link TokenNormalizer.normalize} rather than this list directly.
+ */
+export const NON_WORD_NAMES = [
 	"NUMBER", "HEX", "BIGINT", "FLOAT",
 	"LSHIFT", "RSHIFT", "BIT_AND", "BIT_OR", "BIT_XOR",
 	"LPAREN", "RPAREN", "LBRACKET", "RBRACKET",
@@ -145,7 +151,13 @@ const NON_WORD_NAMES = [
 	"EOF", "WS", "NEWLINE",
 ] as const;
 
-const NON_WORD_TABLE: Uint8Array = (() => {
+/**
+ * Flat Uint8Array lookup table: index = token typeId, value = 1 if non-word.
+ *
+ * Exported for testing only — consumers should not depend on the internal
+ * table layout, as the set of non-word types may change.
+ */
+export const NON_WORD_TABLE: Uint8Array = (() => {
 	// Resolve all non-word type names to their numeric IDs
 	const ids = NON_WORD_NAMES.map(n => tokenTypeId(n));
 	// Size the table to cover the largest ID + 1

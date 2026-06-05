@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach, jest } from "@jest/globals";
-import { TokenNormalizer } from "@solve-js/normalizer";
+import { TokenNormalizer, NON_WORD_NAMES, NON_WORD_TABLE } from "@solve-js/normalizer/TokenNormalizer";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import type { Token } from "@solve-js/lexer/Token";
@@ -671,5 +671,138 @@ describe("Type-guard — edge cases", () => {
 		expectTrieSkipped(spy);
 
 		cleanup();
+	});
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// §11  Uint8Array IIFE — correctness of the lookup table build
+// ══════════════════════════════════════════════════════════════════════
+
+describe("Uint8Array IIFE — lookup table construction", () => {
+	/**
+	 * Tests that verify the {@link NON_WORD_TABLE} IIFE builds correctly:
+	 *
+	 * 1. All 25 non-word type name strings resolve to unique numeric IDs.
+	 * 2. The table is sized to `max(id) + 1`, covering every registered typeId.
+	 * 3. In-bounds word-type indices have value 0 (pass through to trie).
+	 * 4. In-bounds non-word indices have value 1 (skip trie).
+	 *
+	 * These invariants must hold regardless of which built-in token types
+	 * are registered and in what order, since the test imports the live
+	 * module-scoped table after all registrations.
+	 */
+
+	/** Known word-type names for §11.3 verification.
+	 *  These MUST be 0 in the table (pass through to trie).
+	 *  Arithmetic operators are included because they're intentionally
+	 *  excluded from the skip set — keyword-mapped values like "times"→STAR
+	 *  can start phrases (e.g., "times by" → TIMES_BY). */
+	const KNOWN_WORD_NAMES = [
+		"IDENT", "KEYWORD", "FUNC", "UNIT",
+		"PLUS", "MINUS", "STAR", "SLASH", "CARET",
+		"MOD", "PERCENT",
+	];
+
+	// ── §11.1  Cardinality & uniqueness ──────────────────────────────────
+
+	test("NON_WORD_NAMES contains exactly 25 type names", () => {
+		expect(NON_WORD_NAMES).toHaveLength(25);
+	});
+
+	test("all 25 non-word type names resolve to valid, unique numeric IDs", () => {
+		const ids = NON_WORD_NAMES.map(n => tokenTypeId(n));
+
+		// Every name mapped to a finite integer ≥ 0
+		for (let i = 0; i < ids.length; i++) {
+			const id = ids[i];
+			expect(Number.isFinite(id)).toBe(true);
+			expect(id).toBeGreaterThanOrEqual(0);
+			expect(Number.isInteger(id)).toBe(true);
+		}
+
+		// No duplicate IDs — each non-word type maps to a distinct slot
+		const uniqueIds = new Set(ids);
+		expect(uniqueIds.size).toBe(NON_WORD_NAMES.length);
+	});
+
+	// ── §11.2  Table sizing ─────────────────────────────────────────────
+
+	test("NON_WORD_TABLE length equals max(non-word typeId) + 1", () => {
+		const ids = NON_WORD_NAMES.map(n => tokenTypeId(n));
+		const maxId = Math.max(...ids);
+
+		expect(NON_WORD_TABLE.length).toBe(maxId + 1);
+	});
+
+	test("NON_WORD_TABLE is a Uint8Array (zero hashing, flat indexed)", () => {
+		expect(NON_WORD_TABLE).toBeInstanceOf(Uint8Array);
+	});
+
+	// ── §11.3  Non-word slots = 1 (skip trie) ───────────────────────────
+
+	test("every non-word typeId maps to value 1 in the table", () => {
+		const ids = NON_WORD_NAMES.map(n => tokenTypeId(n));
+
+		for (let i = 0; i < NON_WORD_NAMES.length; i++) {
+			const name = NON_WORD_NAMES[i];
+			const id = ids[i];
+
+			// In-bounds guarantee: table is sized to max(id)+1
+			expect(id).toBeLessThan(NON_WORD_TABLE.length);
+			expect(NON_WORD_TABLE[id]).toBe(1);
+		}
+	});
+
+	// ── §11.4  Word-type slots = 0 (pass through to trie) ───────────────
+
+	test("in-bounds word-type indices have value 0", () => {
+		for (const name of KNOWN_WORD_NAMES) {
+			const id = tokenTypeId(name);
+
+			// Only check if the word type's ID is within the table bounds.
+			// If a word type was registered AFTER all non-word types,
+			// its ID could exceed the table length — the bounds check
+			// `tid >= TABLE.length` then safely passes it to the trie.
+			if (id < NON_WORD_TABLE.length) {
+				expect(NON_WORD_TABLE[id]).toBe(0);
+			}
+		}
+	});
+
+	test("in-bounds word-type indices are not accidentally marked as non-word", () => {
+		const ids = NON_WORD_NAMES.map(n => tokenTypeId(n));
+
+		for (const name of KNOWN_WORD_NAMES) {
+			const id = tokenTypeId(name);
+
+			if (id < NON_WORD_TABLE.length) {
+				// Must NOT appear in the non-word ID set (would be a collision)
+				expect(ids).not.toContain(id);
+			}
+		}
+	});
+
+	// ── §11.5  Table integrity — no stray 1s ────────────────────────────
+
+	test("NON_WORD_TABLE has exactly 25 positions set to 1", () => {
+		let count = 0;
+		for (let i = 0; i < NON_WORD_TABLE.length; i++) {
+			if (NON_WORD_TABLE[i] === 1) count++;
+		}
+		expect(count).toBe(NON_WORD_NAMES.length);
+	});
+
+	test("NON_WORD_TABLE values are only 0 or 1 (no stray values)", () => {
+		for (let i = 0; i < NON_WORD_TABLE.length; i++) {
+			const v = NON_WORD_TABLE[i];
+			expect(v === 0 || v === 1).toBe(true);
+		}
+	});
+
+	// ── §11.6  Names array integrity ──────────────────────────────────
+
+	test("NON_WORD_NAMES has no duplicate entries", () => {
+		const unique = new Set(NON_WORD_NAMES as unknown as string[]);
+		expect(unique.size).toBe(NON_WORD_NAMES.length);
 	});
 });
