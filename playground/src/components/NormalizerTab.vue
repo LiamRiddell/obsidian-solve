@@ -36,11 +36,11 @@
       <div class="normalizer-section">
         <div class="normalizer-section-header" @click="trieExpanded = !trieExpanded" role="button" :aria-expanded="trieExpanded">
           <span class="normalizer-section-title">🌳 PhraseTrie Overview</span>
-          <span class="normalizer-tag">{{ triePhrases.length }} phrases</span>
+          <span class="normalizer-tag">{{ triePhraseCount }} phrases</span>
           <span class="normalizer-section-chevron" :class="{ expanded: trieExpanded }">▸</span>
         </div>
-        <div v-if="trieExpanded" class="normalizer-section-body">
-          <div v-if="triePhrases.length === 0" class="normalizer-empty">No phrases registered</div>
+        <div v-if="trieExpanded" class="normalizer-section-body scrollable-section">
+          <div v-if="triePhraseCount === 0" class="normalizer-empty">No phrases registered</div>
           <template v-else>
             <div class="trie-description">
               <span class="trie-desc-text">Word-level trie — single-pass O(depth) matching per position. Longest-match-wins.</span>
@@ -74,7 +74,7 @@
           <span class="normalizer-tag">{{ flowSteps.length }} steps</span>
           <span class="normalizer-section-chevron" :class="{ expanded: flowExpanded }">▸</span>
         </div>
-        <div v-if="flowExpanded" class="normalizer-section-body">
+        <div v-if="flowExpanded" class="normalizer-section-body scrollable-section">
           <div v-if="flowSteps.length === 0" class="normalizer-empty">No tokens to normalize</div>
           <div v-else class="flow-timeline">
             <div v-for="(step, si) in flowSteps" :key="si" class="flow-step" :class="{ 'flow-step-skip': step.action === 'skip', 'flow-step-fuse': step.action === 'fuse', 'flow-step-pass': step.action === 'pass' }">
@@ -232,7 +232,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
-import type { PipelineStageResult, NormalizerOutput, TokenFusion, LexerOutput } from '@/solve-js/src/types/DiagnosticPipelineResult';
+import type { PipelineStageResult, NormalizerOutput, LexerOutput } from '@/solve-js/src/types/DiagnosticPipelineResult';
 import type { Token } from '@/solve-js/src/lexer/Token';
 
 const dr = useDiagnosticReportStore();
@@ -279,6 +279,30 @@ const typeGuardSkipCount = computed(() => {
 interface TrieBranch { word: string; tokenType: string; path: string; matched: boolean; singleton: boolean }
 interface TrieRoot { root: string; matched: boolean; children: TrieBranch[] }
 
+/** Phrases registered in the trie (inferred from fusions + known builtins). */
+const triePhrases = computed<Record<string, string>>(() => {
+  const phrases: Record<string, string> = {};
+  // Infer from fusions that used the phrase-trie
+  for (const f of data.value.fusions) {
+    if (f.rule === 'phrase-trie') {
+      const key = f.sourceTokens.map(s => s.value).join(' ').toLowerCase();
+      if (!phrases[key]) phrases[key] = f.fusedToken.type as string;
+    }
+  }
+  // Add known built-in phrases as fallback
+  const builtins: Record<string, string> = {
+    'to the power of': 'CARET', 'power of': 'CARET',
+    'increase by': 'INCREASE_BY', 'decrease by': 'DECREASE_BY',
+    'times by': 'TIMES_BY', 'multiply by': 'MULTIPLY_BY', 'divide by': 'DIVIDE_BY',
+  };
+  for (const [k, v] of Object.entries(builtins)) {
+    if (!phrases[k]) phrases[k] = v;
+  }
+  return phrases;
+});
+
+const triePhraseCount = computed(() => Object.keys(triePhrases.value).length);
+
 /** Build trie tree from registered phrases (inferred from fusions/rules). */
 const trieTree = computed<TrieRoot[]>(() => {
   const phrases = triePhrases.value;
@@ -304,28 +328,6 @@ const trieTree = computed<TrieRoot[]>(() => {
     matched: matchedPhrases.has(root) || children.some(c => c.matched),
     children,
   }));
-});
-
-/** Phrases registered in the trie (inferred from fusions + known builtins). */
-const triePhrases = computed<Record<string, string>>(() => {
-  const phrases: Record<string, string> = {};
-  // Infer from fusions that used the phrase-trie
-  for (const f of data.value.fusions) {
-    if (f.rule === 'phrase-trie') {
-      const key = f.sourceTokens.map(s => s.value).join(' ').toLowerCase();
-      if (!phrases[key]) phrases[key] = f.fusedToken.type as string;
-    }
-  }
-  // Add known built-in phrases as fallback
-  const builtins: Record<string, string> = {
-    'to the power of': 'CARET', 'power of': 'CARET',
-    'increase by': 'INCREASE_BY', 'decrease by': 'DECREASE_BY',
-    'times by': 'TIMES_BY', 'multiply by': 'MULTIPLY_BY', 'divide by': 'DIVIDE_BY',
-  };
-  for (const [k, v] of Object.entries(builtins)) {
-    if (!phrases[k]) phrases[k] = v;
-  }
-  return phrases;
 });
 
 /* ── Normalization Flow ──────────────────────────────────────── */
@@ -459,8 +461,8 @@ const diffSegments = computed<DiffSegment[]>(() => {
 });
 
 /* ── Fusion grouping ─────────────────────────────────────────── */
-const fusionGroups = computed<{ rule: string; fusions: TokenFusion[] }[]>(() => {
-  const groups = new Map<string, TokenFusion[]>();
+const fusionGroups = computed<{ rule: string; fusions: any[] }[]>(() => {
+  const groups = new Map<string, any[]>();
   for (const f of data.value.fusions) {
     if (!groups.has(f.rule)) groups.set(f.rule, []);
     groups.get(f.rule)!.push(f);
@@ -499,6 +501,7 @@ function tokenClass(t: { type?: string }): string {
 .normalizer-section-chevron { font-size: 10px; color: var(--text-muted, #6b6b75); transition: transform 0.2s; }
 .normalizer-section-chevron.expanded { transform: rotate(90deg); }
 .normalizer-section-body { padding: 8px 10px; border-top: 1px solid rgba(107,107,117,0.08); }
+.normalizer-section-body.scrollable-section { max-height: 320px; overflow-y: auto; }
 .normalizer-empty { font-size: 10px; color: var(--text-muted, #6b6b75); padding: 8px 0; }
 
 /* ── PhraseTrie Tree ─────────────────────────────────────────── */
