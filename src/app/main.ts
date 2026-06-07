@@ -142,7 +142,7 @@ export default class SolvePlugin extends Plugin {
 				}
 
 				try {
-					const val = engine.evaluateExpression(selectedText);
+				const [val] = engine.evaluateExpression(selectedText);
 					new Notice(`Solve: ${selectedText.trim()} = ${val.toNumber()}`);
 				} catch (err) {
 					new Notice(`Solve: Error — ${(err as Error).message}`);

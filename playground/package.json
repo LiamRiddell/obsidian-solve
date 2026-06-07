@@ -19,6 +19,7 @@
     "@marijn/find-cluster-break": "^1.0.2",
     "@tanstack/query-core": "^5.100.10",
     "@vitejs/plugin-vue": "^4.6.2",
+    "@vueuse/core": "^14.3.0",
     "codemirror": "^6.0.2",
     "pinia": "^3.0.4",
     "style-mod": "^4.1.3",
