@@ -95,12 +95,12 @@ import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 const stream = useStreamStore();
 const dr = useDiagnosticReportStore();
 const streamContainer = ref<HTMLElement | null>(null);
-const batcherExpanded = ref(false);
+const batcherExpanded = ref(true);
 
 // Batcher metrics from engine result
 const batcherData = computed(() => dr.batcherMetrics);
 
-// Groups with async events start expanded; others start collapsed (matching vanilla)
+// All groups start expanded per 'nothing collapsed by default' mandate.
 const collapsedGroups = ref(new Set<string>());
 
 // Auto-scroll to bottom when events are added
@@ -113,15 +113,6 @@ watch(() => stream.events.length, () => {
 });
 
 function isCollapsed(key: string): boolean {
-  // If not yet in the set, compute default: async groups expanded, others collapsed
-  if (!collapsedGroups.value.has(key)) {
-    const events = stream.groupedEvents.get(key);
-    const collapsed = !events?.some(e =>
-      e.type === 'async_pending' || e.type === 'async_resolved' || e.type === 'async_error',
-    );
-    if (collapsed) collapsedGroups.value.add(key);
-    return collapsed;
-  }
   return collapsedGroups.value.has(key);
 }
 

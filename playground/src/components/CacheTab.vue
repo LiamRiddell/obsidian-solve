@@ -70,19 +70,22 @@
           </div>
         </div>
 
-        <!-- Async Cache -->
-        <div v-for="pkg in cache.asyncCache" :key="pkg.packageId" class="cache-section">
+            <!-- TanStack Query Cache -->
+        <div v-if="queryCacheEntries.length > 0" class="cache-section">
           <div class="cache-section-header">
-            <span>⟳ {{ pkg.packageId }}</span>
-            <span class="cache-section-count">{{ pkg.resolvedCount }} ✓ · {{ pkg.inFlightCount }} ⟳ · {{ pkg.errorCount }} ✗</span>
+            <span>🗄️ Query Cache (TanStack)</span>
+            <span class="cache-section-count">{{ queryCacheEntries.length }} entries · {{ queryCacheFreshCount }} fresh · {{ queryCacheStaleCount }} stale</span>
           </div>
-          <div v-if="pkg.entries.length === 0" class="cache-entry">
-            <span class="empty" style="padding:8px;display:block;width:100%;text-align:center">No async cache entries</span>
-          </div>
-          <div v-for="entry in pkg.entries" :key="entry.key" class="cache-entry">
-            <span class="cache-entry-expr">{{ entry.key }}</span>
-            <span class="cache-entry-status" :class="entry.status">{{ entry.status === 'resolved' ? '✓' : entry.status === 'error' ? '✗' : '⟳' }}</span>
-            <span v-if="entry.errorMessage" class="cache-entry-meta" style="color:var(--error)">{{ entry.errorMessage }}</span>
+          <div v-for="entry in queryCacheEntries" :key="entry.queryKey" class="cache-entry">
+            <span class="cache-entry-expr" style="min-width:100px">{{ entry.queryKey }}</span>
+            <span class="cache-entry-status" :class="'query-' + entry.status">{{ entry.status }}</span>
+            <span class="cache-entry-meta">{{ entry.dataType }}</span>
+            <span v-if="entry.updatedAt" class="cache-entry-meta" :title="'Updated ' + new Date(entry.updatedAt).toLocaleTimeString()">
+              {{ formatAge(entry.updatedAt, nowMs) }}
+            </span>
+            <span v-if="entry.staleTime" class="cache-entry-meta" :class="staleUrgencyClass(entry.updatedAt, entry.staleTime, nowMs)">
+              {{ formatStaleRemaining(entry.updatedAt, entry.staleTime, nowMs) }}
+            </span>
           </div>
         </div>
       </template>
@@ -92,10 +95,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useNow } from '@vueuse/core';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
-import type { PageHeatmapEntry } from '../engine.js';
+import type { PageHeatmapEntry, QueryCacheEntry } from '../engine.js';
 
 const dr = useDiagnosticReportStore();
+const nowDate = useNow({ interval: 1000 });
+const nowMs = computed(() => nowDate.value.getTime());
+
 const cache = computed(() => dr.cacheSnapshot);
 
 const resolvedLineCount = computed(() =>
@@ -103,6 +110,11 @@ const resolvedLineCount = computed(() =>
 );
 
 const heatmapEntries = computed<PageHeatmapEntry[]>(() => dr.pageHeatmap);
+
+/** Query cache entries from TanStack Query. */
+const queryCacheEntries = computed<QueryCacheEntry[]>(() => dr.queryCache);
+const queryCacheFreshCount = computed(() => queryCacheEntries.value.filter(e => e.status === 'fresh').length);
+const queryCacheStaleCount = computed(() => queryCacheEntries.value.filter(e => e.status === 'stale').length);
 
 /* Preload direction: compute by examining access sequence number trend across pages.
  * If pages with higher accessSeq are at higher page indices → forward.
@@ -128,4 +140,35 @@ const preloadDirectionTitle = computed<string>(() => {
   if (dir === 'stable') return 'Cache access pattern is stable — no clear preload direction';
   return '';
 });
-</script>
+
+/** Format an epoch-ms timestamp as a human-readable age (e.g., "12s", "3m", "1h"). */
+function formatAge(createdAt: number, nowMs: number): string {
+  const diffMs = nowMs - createdAt;
+  if (diffMs < 0) return 'just now';
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hrs = Math.floor(min / 60);
+  return `${hrs}h ago`;
+}
+
+
+/** CSS class based on how close to stale expiry (green > 50% remaining, yellow 10-50%, red < 10%). */
+function staleUrgencyClass(updatedAt: number, staleTime: number, nowMs: number): string {
+  const remaining = Math.max(0, staleTime - (nowMs - updatedAt));
+  const pct = remaining / staleTime;
+  if (pct > 0.5) return 'ttl-fresh';
+  if (pct > 0.1) return 'ttl-warning';
+  return 'ttl-expiring';
+}
+
+/** Format remaining time until data goes stale. */
+function formatStaleRemaining(updatedAt: number, staleTime: number, nowMs: number): string {
+  const remaining = Math.max(0, staleTime - (nowMs - updatedAt));
+  if (remaining <= 0) return 'stale';
+  const sec = Math.floor(remaining / 1000);
+  if (sec < 60) return `${sec}s fresh`;
+  const min = Math.floor(sec / 60);
+  return `${min}m fresh`;
+}</script>

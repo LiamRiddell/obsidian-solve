@@ -21,7 +21,7 @@ import { ref, computed, watch } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 
 const dr = useDiagnosticReportStore();
-const expanded = ref(false);
+const expanded = ref(true);
 
 const errors = computed(() => dr.errors);
 

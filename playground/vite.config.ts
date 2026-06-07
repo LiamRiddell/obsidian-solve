@@ -9,7 +9,6 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			// Specific aliases MUST come before catch-all prefixes so they match first
-			{ find: "@solve-js/workers/DataQueryWorker.worker", replacement: path.resolve(__dirname, "./workers/create-data-query-worker.ts") },
 			{ find: "@solve-js", replacement: path.resolve(__dirname, "../src/solve-js/src") },
 			{ find: "@app", replacement: path.resolve(__dirname, "../src/app") },
 			{ find: "@tools", replacement: path.resolve(__dirname, "../src/solve-js/tools") },

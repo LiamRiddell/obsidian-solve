@@ -471,12 +471,14 @@ html, body {
   display: none;
   flex: 1; overflow: hidden;
   flex-direction: column;
+  min-height: 0;
 }
 .tab-panel.active { display: flex; }
 
 .panel-scroll {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   padding: 10px;
+  min-height: 0;
 }
 .panel-toolbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -2284,39 +2286,11 @@ html, body {
 }
 .worker-card-status:empty { display: none; }
 #worker-engine-status { background: var(--accent-dim); color: var(--accent); }
-#worker-dq-status { background: rgba(78, 201, 176, 0.12); color: var(--stage-compiler); }
 .worker-card-status.status-busy { background: var(--stage-vm-dim); color: var(--stage-vm); animation: pulse-dot 0.8s ease infinite; }
 .worker-card-status.status-offline { background: var(--bg-tertiary); color: var(--text-muted); }
 .worker-card-status.status-error { background: var(--error-dim); color: var(--error); }
 
-/* ── DQ Source Chips ──────────────────────────────────────────── */
-.worker-metric-sources {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 4px;
-}
-.worker-dq-sources-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px;
-    width: 100%;
-}
-.worker-dq-source-chip {
-    font-size: 9px;
-    font-weight: 600;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-secondary);
-    text-transform: lowercase;
-    letter-spacing: 0.3px;
-}
-.worker-dq-source-chip::before {
-    content: '#';
-    opacity: 0.5;
-    margin-right: 1px;
-}
+/* ── DQ Source Chips (legacy — removed) ──────────────────── */
 
 .worker-card-body {
   padding: 8px 12px;
@@ -2783,9 +2757,10 @@ html, body {
   font-size: 9px;
   font-weight: 600;
 }
-.cache-entry-status.resolved { background: rgba(41, 206, 153, 0.15); color: var(--accent); }
-.cache-entry-status.in_flight { background: var(--stage-vm-dim); color: var(--stage-vm); }
-.cache-entry-status.error { background: var(--error-dim); color: var(--error); }
+.cache-entry-status.query-fresh { background: rgba(41, 206, 153, 0.15); color: var(--accent); }
+.cache-entry-status.query-stale { background: var(--stage-vm-dim); color: var(--stage-vm); }
+.cache-entry-status.query-fetching { background: var(--stage-lexer-dim); color: var(--stage-lexer); }
+.cache-entry-status.query-error { background: var(--error-dim); color: var(--error); }
 
 .cache-entry-reads {
   display: flex;
@@ -3490,3 +3465,8 @@ html, body {
 .page-heatmap-legend-item.page-heatmap-hot { color: var(--accent); }
 .page-heatmap-legend-item.page-heatmap-warm { color: var(--stage-vm); }
 .page-heatmap-legend-item.page-heatmap-cold { color: var(--text-muted); }
+
+/* ── Cache Tab TTL urgency colors ─────────────────────────────── */
+.ttl-fresh { color: var(--accent); }
+.ttl-warning { color: var(--stage-vm); }
+.ttl-expiring { color: var(--error); }

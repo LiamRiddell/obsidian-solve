@@ -1173,7 +1173,44 @@ const stageRenderers: Record<
 
     const raw = String(o.rawValue ?? "—");
     const formatted = o.formattedValue ?? raw;
+    const allValues: Array<{value: string, formatted: string, unit?: string}> | undefined = o.allValues;
 
+    // ── Multi-target: render value chips for each currency/unit ──
+    if (allValues && allValues.length > 1) {
+      return h("div", { style: { display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" } }, [
+        // Multi-value chip row
+        h("div", { style: { display: "flex", flexWrap: "wrap", gap: "5px", justifyContent: "center" } },
+          allValues.map((v) =>
+            h("span", {
+              style: {
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                background: "rgba(41,206,153,0.12)",
+                border: "1px solid rgba(41,206,153,0.25)",
+                borderRadius: "6px",
+                padding: "3px 10px",
+              },
+              title: `Raw: ${v.value}`,
+            }, [
+              h("span", {
+                style: { color: "#29ce99", fontSize: "13px", fontWeight: "700", fontVariantNumeric: "tabular-nums" },
+              }, v.formatted),
+              v.unit ? h("span", {
+                style: { color: "#6b6b75", fontSize: "9px", fontWeight: "500" },
+              }, v.unit) : null,
+            ]),
+          ),
+        ),
+        // Raw + formatted detail row
+        raw !== formatted ? h("div", { style: { display: "flex", alignItems: "center", gap: "8px", marginTop: "2px" } }, [
+          h("span", { style: { fontSize: "9px", color: "#6b6b75", textTransform: "uppercase", letterSpacing: "0.5px" } }, "Raw:"),
+          h("span", { style: { color: "#dcdcaa", fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" } }, raw),
+        ]) : null,
+      ]);
+    }
+
+    // ── Single value: existing rendering ──
     if (raw === formatted) {
       return h("span", { style: { color: "#29ce99", fontSize: "14px", fontWeight: "700" } }, formatted);
     }
@@ -1238,7 +1275,7 @@ interface ConstantGroup {
 const allConstants = computed<ConstantInfo[]>(() => dr.constants);
 
 /** Whether the constants section is expanded. */
-const constantsExpanded = ref(false);
+const constantsExpanded = ref(true);
 
 /** Filter input for the constants table (filter by index or value). */
 const constantsFilter = ref("");
@@ -1258,7 +1295,7 @@ const filteredTotal = computed(() => {
 const allVariables = computed<string[]>(() => dr.variables);
 
 /** Whether the variables section is expanded. */
-const variablesExpanded = ref(false);
+const variablesExpanded = ref(true);
 
 /**
  * Split a constant value into segments, highlighting matches of the filter query.

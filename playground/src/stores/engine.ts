@@ -63,8 +63,8 @@ export const useEngineStore = defineStore('engine', () => {
     // Finalize streaming: initial result complete, live events may still arrive
     useStreamStore().finalize();
 
-    // Update DQ telemetry
-    ws.updateDqTelemetry(result);
+    // Update Query Cache telemetry
+    ws.updateQueryCacheTelemetry(result.queryCache ?? []);
   };
 
   /* ── Actions ────────────────────────────────────────────── */

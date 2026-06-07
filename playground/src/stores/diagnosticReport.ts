@@ -11,11 +11,9 @@ import type {
   VmTraceStep,
   PageHeatmapEntry,
   ArenaStats,
-  DiagnosticEventInfo,
+  QueryCacheEntry,
 } from '../engine.js';
 import type { PipelineStageResult } from '@/solve-js/src/types/DiagnosticPipelineResult';
-import type { DagSnapshot } from '@/solve-js/src/vm/DependencyGraph';
-import type { CacheSnapshot } from '@/solve-js/src/engine/ExpressionEngine';
 import type { BatcherMetrics, CheckpointSnapshot } from '@/solve-js/src/engine/ExpressionEngine';
 import type { PipelineTelemetry } from '@/solve-js/src/telemetry/AllocationTracker';
 
@@ -96,11 +94,17 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
   /** Page heatmap entries. */
   const pageHeatmap = ref<PageHeatmapEntry[]>([]);
 
+  /** TanStack Query cache entries. */
+  const queryCache = ref<QueryCacheEntry[]>([]);
+
   /** Allocation tracker pipeline telemetry. */
   const pipelineTelemetry = ref<PipelineTelemetry | null>(null);
 
   /** ValueArena stats from bump-allocator. */
   const arenaStats = ref<ArenaStats>({ enabled: false, usage: 0, capacity: 0 });
+
+  /** Registered parselet registry from the engine (prefix + infix). */
+  const parseletRegistry = ref<{ prefix: Array<{ tokenType: string; bindingPower: number; category?: string }>; infix: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> }>({ prefix: [], infix: [] });
 
   /** VM trace steps from the last evaluation. */
   const vmTrace = ref<VmTraceStep[]>([]);
@@ -190,11 +194,13 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
       asyncCache: [],
     };
     pageHeatmap.value = r.pageHeatmap ?? [];
+    queryCache.value = r.queryCache ?? [];
     pipelineTelemetry.value = r.pipelineTelemetry ?? null;
     arenaStats.value = r.arenaStats ?? { enabled: false, usage: 0, capacity: 0 };
     vmTrace.value = r.vmTrace ?? [];
     errors.value = r.errors ?? [];
     parselets.value = r.parselets ?? [];
+    parseletRegistry.value = r.parseletRegistry ?? { prefix: [], infix: [] };
 
     // Accumulate performance history
     if (r.stats) {
@@ -235,11 +241,13 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
     batcherMetrics,
     cacheSnapshot,
     pageHeatmap,
+    queryCache,
     pipelineTelemetry,
     arenaStats,
     vmTrace,
     errors,
     parselets,
+    parseletRegistry,
     statsHistory,
     // Derived
     tokenCount,

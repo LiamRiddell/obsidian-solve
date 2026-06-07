@@ -28,7 +28,7 @@
  */
 //#endregion
 
-import { runEngine, runEngineWithStreaming, DebugResult, Token, DiagnosticEventInfo } from './engine.js';
+import { runEngine, runEngineWithStreaming, DebugResult, Token } from './engine.js';
 
 //#region Serialization — Token → transferable format
 /**

@@ -33,7 +33,7 @@
             <tr>
               <th class="parselet-col-token">Token Type</th>
               <th class="parselet-col-bp">Binding Power</th>
-              <th class="parselet-col-desc">Description</th>
+              <th class="parselet-col-desc">Category</th>
             </tr>
           </thead>
           <tbody>
@@ -42,7 +42,7 @@
                 <span class="parselet-token-chip">{{ p.tokenType }}</span>
               </td>
               <td class="parselet-col-bp">{{ p.bindingPower }}</td>
-              <td class="parselet-col-desc">{{ p.description }}</td>
+              <td class="parselet-col-desc">{{ p.category || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -61,7 +61,7 @@
               <th class="parselet-col-token">Token Type</th>
               <th class="parselet-col-bp">Left BP</th>
               <th class="parselet-col-bp">Right BP</th>
-              <th class="parselet-col-desc">Description</th>
+              <th class="parselet-col-desc">Category</th>
             </tr>
           </thead>
           <tbody>
@@ -71,7 +71,7 @@
               </td>
               <td class="parselet-col-bp">{{ p.leftBindingPower }}</td>
               <td class="parselet-col-bp">{{ p.rightBindingPower }}</td>
-              <td class="parselet-col-desc">{{ p.description }}</td>
+              <td class="parselet-col-desc">{{ p.category || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -83,72 +83,33 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 
 interface PrefixParseletInfo {
   tokenType: string;
   bindingPower: number;
-  description: string;
+  category?: string;
 }
 
 interface InfixParseletInfo {
   tokenType: string;
   leftBindingPower: number;
   rightBindingPower: number;
-  description: string;
+  category?: string;
 }
 
+const dr = useDiagnosticReportStore();
 const filterQuery = ref('');
 
-// Known prefix parselets with their token types and binding powers
-const prefixParselets: PrefixParseletInfo[] = [
-  { tokenType: 'NUMBER', bindingPower: 0, description: 'Numeric literal' },
-  { tokenType: 'STRING', bindingPower: 0, description: 'String literal' },
-  { tokenType: 'IDENT', bindingPower: 0, description: 'Variable/identifier reference' },
-  { tokenType: 'LPAREN', bindingPower: 0, description: 'Grouped expression ( ... )' },
-  { tokenType: 'MINUS', bindingPower: 80, description: 'Unary negation' },
-  { tokenType: 'PLUS', bindingPower: 80, description: 'Unary plus' },
-  { tokenType: 'KW_TRUE', bindingPower: 0, description: 'Boolean true literal' },
-  { tokenType: 'KW_FALSE', bindingPower: 0, description: 'Boolean false literal' },
-  { tokenType: 'MINUS_MINUS', bindingPower: 80, description: 'Unary decrement prefix' },
-  { tokenType: 'PLUS_PLUS', bindingPower: 80, description: 'Unary increment prefix' },
-  { tokenType: 'BANG', bindingPower: 80, description: 'Logical NOT' },
-  { tokenType: 'TILDE', bindingPower: 80, description: 'Bitwise NOT' },
-  { tokenType: 'LBRACKET', bindingPower: 0, description: 'Array literal [ ... ]' },
-  { tokenType: 'PIPE', bindingPower: 0, description: 'Pipeline start | expr → result' },
-];
+// Dynamic parselet data from the engine's ParseletRegistry.
+// Falls back to empty arrays if the engine hasn't populated the data yet.
+const prefixParselets = computed<PrefixParseletInfo[]>(() => dr.parseletRegistry?.prefix ?? []);
+const infixParselets = computed<InfixParseletInfo[]>(() => dr.parseletRegistry?.infix ?? []);
 
-const infixParselets: InfixParseletInfo[] = [
-  { tokenType: 'PIPE', leftBindingPower: 10, rightBindingPower: 11, description: 'Pipeline operator (left-to-right)' },
-  { tokenType: 'ASSIGN', leftBindingPower: 10, rightBindingPower: 9, description: 'Variable assignment :x = 5' },
-  { tokenType: 'TERNARY_Q', leftBindingPower: 20, rightBindingPower: 19, description: 'Ternary conditional ? :' },
-  { tokenType: 'TERNARY_C', leftBindingPower: 20, rightBindingPower: 20, description: 'Ternary colon separator' },
-  { tokenType: 'PIPE_PIPE', leftBindingPower: 30, rightBindingPower: 31, description: 'Logical OR (||)' },
-  { tokenType: 'AMP_AMP', leftBindingPower: 40, rightBindingPower: 41, description: 'Logical AND (&&)' },
-  { tokenType: 'PIPE', leftBindingPower: 50, rightBindingPower: 51, description: 'Bitwise OR (|) (alternate use)' },
-  { tokenType: 'CARET', leftBindingPower: 60, rightBindingPower: 61, description: 'Bitwise XOR (^)' },
-  { tokenType: 'AMP', leftBindingPower: 70, rightBindingPower: 71, description: 'Bitwise AND (&)' },
-  { tokenType: 'EQ_EQ', leftBindingPower: 80, rightBindingPower: 81, description: 'Equality (==)' },
-  { tokenType: 'BANG_EQ', leftBindingPower: 80, rightBindingPower: 81, description: 'Inequality (!=)' },
-  { tokenType: 'LT', leftBindingPower: 90, rightBindingPower: 91, description: 'Less than (<)' },
-  { tokenType: 'GT', leftBindingPower: 90, rightBindingPower: 91, description: 'Greater than (>)' },
-  { tokenType: 'LT_EQ', leftBindingPower: 90, rightBindingPower: 91, description: 'Less or equal (<=)' },
-  { tokenType: 'GT_EQ', leftBindingPower: 90, rightBindingPower: 91, description: 'Greater or equal (>=)' },
-  { tokenType: 'PLUS', leftBindingPower: 100, rightBindingPower: 101, description: 'Addition (+) / string concat' },
-  { tokenType: 'MINUS', leftBindingPower: 100, rightBindingPower: 101, description: 'Subtraction (-)' },
-  { tokenType: 'STAR', leftBindingPower: 110, rightBindingPower: 111, description: 'Multiplication (*)' },
-  { tokenType: 'SLASH', leftBindingPower: 110, rightBindingPower: 111, description: 'Division (/)' },
-  { tokenType: 'PERCENT', leftBindingPower: 110, rightBindingPower: 111, description: 'Modulo (%)' },
-  { tokenType: 'STAR_STAR', leftBindingPower: 120, rightBindingPower: 119, description: 'Exponentiation (**)' },
-  { tokenType: 'DOT', leftBindingPower: 130, rightBindingPower: 131, description: 'Member access (obj.prop)' },
-  { tokenType: 'LBRACKET', leftBindingPower: 130, rightBindingPower: 131, description: 'Index access (arr[i])' },
-  { tokenType: 'LPAREN', leftBindingPower: 130, rightBindingPower: 131, description: 'Function call fn(...)' },
-  { tokenType: 'POUND', leftBindingPower: 5, rightBindingPower: 6, description: 'Inline solve marker #expr#' },
-];
-
-function matches(p: { tokenType: string; description: string }, query: string): boolean {
+function matches(p: { tokenType: string; category?: string }, query: string): boolean {
   if (!query) return true;
   const q = query.toLowerCase();
-  return p.tokenType.toLowerCase().includes(q) || p.description.toLowerCase().includes(q);
+  return p.tokenType.toLowerCase().includes(q) || (p.category?.toLowerCase().includes(q) ?? false);
 }
 
 const filteredPrefix = computed(() => {

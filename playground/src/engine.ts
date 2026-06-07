@@ -1,6 +1,6 @@
 import { ExpressionEngine } from "@/solve-js/src/engine/ExpressionEngine";
-import type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo } from "@/solve-js/src/engine/ExpressionEngine";
-export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
+import type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo } from "@/solve-js/src/engine/ExpressionEngine";
+export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo };
 import type { DagSnapshot } from "@/solve-js/src/vm/DependencyGraph";
 export type { DagSnapshot };
 import { formatValue } from "@/solve-js/src/format/FormatEngine";
@@ -12,8 +12,6 @@ import type { ParseletInfo } from "@/solve-js/src/types/ParsingResult";
 import { Value, ValueType, enableValueArena, disableValueArena } from "@/solve-js/src/vm/Value";
 import { AllocationTracker } from "@/solve-js/src/telemetry/AllocationTracker";
 import type { PipelineTelemetry } from "@/solve-js/src/telemetry/AllocationTracker";
-import { dataQueryService } from "@solve-js/services/DataQueryService";
-
 export type { ParseletInfo, Token };
 
 export interface DebugResult {
@@ -32,7 +30,7 @@ export interface DebugResult {
 	lineResults: LineResult[];
 	parselets: ParseletInfo[];
 	vmTrace: VmTraceStep[];
-	dqMetrics: DQMetrics;
+
 	cacheSnapshot: CacheSnapshot;
 	diagnosticEvents: DiagnosticEventInfo[];
 	/** Structured pipeline stages from engine's DiagnosticPipelineResult (available in diagnostic mode) */
@@ -47,7 +45,23 @@ export interface DebugResult {
     /** Allocation tracker pipeline telemetry (per-stage wall time + bytes). */
     pipelineTelemetry: PipelineTelemetry | null;
     /** ValueArena stats from bump-allocator (usage/capacity). */
-    arenaStats: ArenaStats;
+    arenaStats: ArenaStats;	/** TanStack Query cache entries — per-query status, staleness, TTL. */
+	queryCache: QueryCacheEntry[];
+	/** Registered parselets from the engine's ParseletRegistry. */
+    parseletRegistry?: {
+        prefix: Array<{ tokenType: string; bindingPower: number; category?: string }>;
+        infix: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }>;
+    };
+}
+
+/** TanStack Query cache entry for diagnostic rendering. */
+export interface QueryCacheEntry {
+	queryKey: string;
+	status: 'fresh' | 'stale' | 'fetching' | 'error';
+	dataType: string;
+	updatedAt: number;
+	staleTime: number;
+	cacheTime: number;
 }
 
 // ── Arena Stats ───────────────────────────────────────────────────────────
@@ -106,14 +120,6 @@ export interface VmTraceStep {
 	elapsedNs: number;
 	stack: VmStackValue[];
 }
-export interface DQMetrics {
-	queryCount: number;
-	pendingQueries: number;
-	dataSources: number;
-	cacheSize: number;
-	dataSourceNames: string[];
-}
-
 /** Diagnostic event type with elapsedNs and expression */
 export interface DiagnosticEventInfo {
 	type: string;
@@ -571,16 +577,17 @@ export function runEngineWithStreaming(
 			try {
 				engine = new ExpressionEngine("en", true, {
 					diagnostic: { enabled: true, vmTraceEnabled: true },
-				});			// ── Pipe batcher events through a TransformStream to convert
-			// AsyncResolutionEvent → DiagnosticEventInfo, eliminating the
-			// manual async IIFE reader loop. The pipeline uses Web Streams
-			// API pipeThrough/pipeTo for backpressure, cancellation, and
-			// proper resource cleanup.
-			const eng = engine;
-			pipeAbortController = new AbortController();
+				});
+				// ── Pipe batcher events through a TransformStream to convert
+				// AsyncResolutionEvent → DiagnosticEventInfo, eliminating the
+				// manual async IIFE reader loop. The pipeline uses Web Streams
+				// API pipeThrough/pipeTo for backpressure, cancellation, and
+				// proper resource cleanup.
+				const eng = engine;
+				pipeAbortController = new AbortController();
 
-			// TransformStream: AsyncResolutionEvent → DiagnosticEventInfo
-			const asyncToDiagnostic = new TransformStream<AsyncResolutionEvent, DiagnosticEventInfo>({
+				// TransformStream: AsyncResolutionEvent → DiagnosticEventInfo
+				const asyncToDiagnostic: TransformStream<AsyncResolutionEvent, DiagnosticEventInfo> = new TransformStream({
 				transform(asyncEvent, transformController) {
 					if (asyncEvent.type === "lines-updated") {
 						const relNs = performance.now() * 1e6 - streamStartNs;
@@ -900,14 +907,19 @@ export function runEngineWithStreaming(
 				})
 		: [];
 
-	const m = dataQueryService.getMetrics();
-	const dqMetrics: DQMetrics = {
-		queryCount: m.queryCount,
-		pendingQueries: m.pendingQueries,
-		dataSources: m.dataSources,
-		cacheSize: m.cacheSize,
-		dataSourceNames: dataQueryService.getRegisteredSourceIds(),
-	};
+	// Extract TanStack Query cache entries for Workers tab display
+	const defaultStaleTime = engine?.queryClient.getDefaultOptions().queries?.staleTime ?? 0;
+	const defaultCacheTime = engine?.queryClient.getDefaultOptions().queries?.gcTime ?? 0;
+	const queryCache: QueryCacheEntry[] = engine
+		? engine.queryClient.getQueryCache().getAll().map(q => ({
+			queryKey: q.queryKey.join(':'),
+			status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
+			dataType: q.state.data != null && typeof q.state.data === 'object' ? (q.state.data as any)?.unit || 'object' : typeof q.state.data,
+			updatedAt: q.state.dataUpdatedAt,
+			staleTime: defaultStaleTime,
+			cacheTime: defaultCacheTime,
+		}))
+		: [];
 
 	const diagnosticEvents: DiagnosticEventInfo[] = lastDebugEvents
 		? lastDebugEvents.map((e) => ({
@@ -964,7 +976,7 @@ export function runEngineWithStreaming(
 		lineResults,
 		parselets,
 		vmTrace,
-		dqMetrics,
+		queryCache,
 		cacheSnapshot,
 		diagnosticEvents,
 		pipelineTelemetry,
@@ -974,6 +986,7 @@ export function runEngineWithStreaming(
 		batcherMetrics,
 		pageHeatmap,
 		arenaStats,
+		parseletRegistry: engine ? engine.getParseletRegistry() : undefined,
 	};
 
 	// ── Return the stream directly — no tee() needed.
@@ -1019,7 +1032,7 @@ export function runEngine(expression: string): DebugResult {
 	let stats: PerformanceStats = { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
 	let lineStats: LineStats[] = [];
 	let vmTrace: VmTraceStep[] = [];
-	let dqMetrics: DQMetrics = { queryCount: 0, pendingQueries: 0, dataSources: 0, cacheSize: 0, dataSourceNames: [] };
+	let queryCache: QueryCacheEntry[] = [];
 	let diagnosticEvents: DiagnosticEventInfo[] = [];
 
 	try {
@@ -1253,8 +1266,16 @@ export function runEngine(expression: string): DebugResult {
 				})
 			: [];
 
-		const m = dataQueryService.getMetrics();
-		dqMetrics = { queryCount: m.queryCount, pendingQueries: m.pendingQueries, dataSources: m.dataSources, cacheSize: m.cacheSize, dataSourceNames: dataQueryService.getRegisteredSourceIds() };
+		const defaultStaleTime = engine.queryClient.getDefaultOptions().queries?.staleTime ?? 0;
+		const defaultCacheTime = engine.queryClient.getDefaultOptions().queries?.gcTime ?? 0;
+		queryCache = engine.queryClient.getQueryCache().getAll().map(q => ({
+			queryKey: q.queryKey.join(':'),
+			status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
+			dataType: q.state.data != null && typeof q.state.data === 'object' ? (q.state.data as any)?.unit || 'object' : typeof q.state.data,
+			updatedAt: q.state.dataUpdatedAt,
+			staleTime: defaultStaleTime,
+			cacheTime: defaultCacheTime,
+		}));
 
 		diagnosticEvents = lastDebugEvents
 			? lastDebugEvents.map((e) => ({ type: e.type, timestamp: Date.now(), elapsedNs: e.elapsedNs, expression: (e as any).expression ?? "", details: (e as any).details ?? "", groupKey: (e as any).expression ?? "" }))
@@ -1276,7 +1297,7 @@ export function runEngine(expression: string): DebugResult {
 			lineResults,
 			parselets,
 			vmTrace,
-			dqMetrics,
+			queryCache,
 			cacheSnapshot,
 			diagnosticEvents,
 			pipelineTelemetry: engine.getLastTelemetry(),
@@ -1286,6 +1307,7 @@ export function runEngine(expression: string): DebugResult {
 			batcherMetrics: bm,
 			pageHeatmap: ph,
 			arenaStats,
+			parseletRegistry: engine.getParseletRegistry(),
 		};
 	} catch (error) {
 		errors.push(error instanceof Error ? error.message : String(error));
@@ -1342,17 +1364,7 @@ export function runEngine(expression: string): DebugResult {
 				})
 		: [];
 
-	// Collect real DataQueryService metrics for the worker telemetry panel
-	const m = dataQueryService.getMetrics();
-	dqMetrics = {
-		queryCount: m.queryCount,
-		pendingQueries: m.pendingQueries,
-		dataSources: m.dataSources,
-		cacheSize: m.cacheSize,
-		dataSourceNames: dataQueryService.getRegisteredSourceIds(),
-	};
-
-	// Collect diagnostic events from the last run
+	// Diagnostic events from the last run
 	diagnosticEvents = lastDebugEvents
 		? lastDebugEvents.map((e) => ({
 				type: e.type,
@@ -1397,15 +1409,17 @@ export function runEngine(expression: string): DebugResult {
 		lineResults,
 		parselets,
 		vmTrace,
-		dqMetrics,
+		queryCache: [],
 		cacheSnapshot,
 		diagnosticEvents,
-		pipelineTelemetry: null,			pipelineStages: lastPipelineStages,
+		pipelineTelemetry: null,
+		pipelineStages: lastPipelineStages,
 			dagSnapshot,
 			checkpoints,
 			batcherMetrics,
 			pageHeatmap,
 			arenaStats: { enabled: false, usage: 0, capacity: 0 },
+			parseletRegistry: { prefix: [], infix: [] },
 		};
 }
 

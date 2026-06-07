@@ -5,7 +5,7 @@ import type { DebugResult } from '../engine.js';
 /** Worker activity log entry. */
 export interface WorkerLogEntry {
   ts: number;
-  source: 'engine' | 'dataquery';
+  source: 'engine' | 'query-cache';
   msg: string;
   error?: boolean;
 }
@@ -41,13 +41,14 @@ export const useWorkersStore = defineStore('workers', () => {
     roundTripTimes: [] as number[],
   });
 
-  /* ── DataQuery Worker Metrics ───────────────────────────── */
-  const dataquery = reactive({
-    activeRequests: 0,
-    fetches: 0,
-    sources: 0,
+  /* ── Query Cache Metrics (TanStack Query) ────────────────── */
+  const queryCache = reactive({
+    totalQueries: 0,
+    freshQueries: 0,
+    staleQueries: 0,
+    fetchingQueries: 0,
+    errorQueries: 0,
     lastActivityTs: 0,
-    sourceNames: [] as string[],
   });
 
   /* ── Compilation Worker Metrics (placeholder — real data from engine) ── */
@@ -89,21 +90,13 @@ export const useWorkersStore = defineStore('workers', () => {
     agoStrPerf(engine.lastRunTime),
   );
 
-  /* ── Derived: DataQuery Worker ──────────────────────────── */
-  const dqHasData = computed(() =>
-    dataquery.fetches > 0 || dataquery.activeRequests > 0 || dataquery.sources > 0,
-  );
-
-  const dqStatus = computed(() =>
-    dqHasData.value ? 'active' : 'inactive',
-  );
-
-  const dqLastActivityAgo = computed(() =>
-    agoStr(dataquery.lastActivityTs),
-  );
+  /* ── Derived: Query Cache ───────────────────────────────── */
+  const qcHasData = computed(() => queryCache.totalQueries > 0);
+  const qcStatus = computed(() => qcHasData.value ? 'active' : 'inactive');
+  const qcLastActivityAgo = computed(() => agoStr(queryCache.lastActivityTs));
 
   /* ── Actions ────────────────────────────────────────────── */
-  function logActivity(source: 'engine' | 'dataquery', msg: string, isError = false): void {
+  function logActivity(source: 'engine' | 'query-cache', msg: string, isError = false): void {
     const log = activityLog.value;
     log.push({ ts: Date.now(), source, msg, error: isError });
     if (log.length > MAX_LOG_ENTRIES) log.shift();
@@ -135,17 +128,19 @@ export const useWorkersStore = defineStore('workers', () => {
     }
   }
 
-  function updateDqTelemetry(result: DebugResult): void {
-    dataquery.activeRequests = result.dqMetrics.pendingQueries;
-    dataquery.fetches = result.dqMetrics.queryCount;
-    dataquery.sources = result.dqMetrics.dataSources;
-    dataquery.sourceNames = result.dqMetrics.dataSourceNames;
-    dataquery.lastActivityTs = Date.now();
+  /** Update query cache metrics from the TanStack Query client snapshot. */
+  function updateQueryCacheTelemetry(entries: { status: string }[]): void {
+    queryCache.totalQueries = entries.length;
+    queryCache.freshQueries = entries.filter(e => e.status === 'fresh').length;
+    queryCache.staleQueries = entries.filter(e => e.status === 'stale').length;
+    queryCache.fetchingQueries = entries.filter(e => e.status === 'fetching').length;
+    queryCache.errorQueries = entries.filter(e => e.status === 'error').length;
+    queryCache.lastActivityTs = Date.now();
   }
 
   return {
     engine,
-    dataquery,
+    queryCache,
     compilationWorker,
     activityLog,
     // Derived
@@ -155,12 +150,12 @@ export const useWorkersStore = defineStore('workers', () => {
     engineLatencyBarPct,
     engineLatencyBarClass,
     engineLastRunAgo,
-    dqHasData,
-    dqStatus,
-    dqLastActivityAgo,
+    qcHasData,
+    qcStatus,
+    qcLastActivityAgo,
     // Actions
     logActivity,
     updateEngineTelemetry,
-    updateDqTelemetry,
+    updateQueryCacheTelemetry,
   };
 });

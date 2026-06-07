@@ -34,35 +34,42 @@
         </div>
       </div>
 
-      <!-- DataQuery Worker Card -->
+      <!-- Query Cache Card (TanStack Query) -->
       <div class="worker-card">
         <div class="worker-card-header">
-          <span class="worker-card-icon">📡</span>
-          <span class="worker-card-name">Data Query Worker</span>
-          <span class="worker-card-status" :class="{ 'status-offline': !ws.dqHasData }">{{ ws.dqStatus }}</span>
+          <span class="worker-card-icon">🗄️</span>
+          <span class="worker-card-name">Query Cache</span>
+          <span class="worker-card-status" :class="{ 'status-offline': !ws.qcHasData }">{{ ws.qcStatus }}</span>
         </div>
         <div class="worker-card-body">
           <div class="worker-metric">
-            <span class="worker-metric-label">Active requests</span>
-            <span class="worker-metric-value">{{ ws.dataquery.activeRequests }}</span>
+            <span class="worker-metric-label">Total queries</span>
+            <span class="worker-metric-value">{{ ws.queryCache.totalQueries }}</span>
           </div>
-          <div class="worker-metric worker-metric-sources">
-            <span class="worker-metric-label">Registered sources</span>
-            <div class="worker-dq-sources-list">
-              <template v-if="ws.dataquery.sourceNames.length > 0">
-                <span v-for="name in ws.dataquery.sourceNames" :key="name" class="worker-dq-source-chip">{{ name }}</span>
-              </template>
-              <span v-else class="empty">none</span>
-            </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Fresh</span>
+            <span class="worker-metric-value" style="color:var(--accent)">{{ ws.queryCache.freshQueries }}</span>
+          </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Stale</span>
+            <span class="worker-metric-value" style="color:var(--stage-vm)">{{ ws.queryCache.staleQueries }}</span>
+          </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Fetching</span>
+            <span class="worker-metric-value" style="color:var(--stage-lexer)">{{ ws.queryCache.fetchingQueries }}</span>
+          </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Errors</span>
+            <span class="worker-metric-value" style="color:var(--error)">{{ ws.queryCache.errorQueries }}</span>
           </div>
           <div class="worker-metric">
             <span class="worker-metric-label">Last activity</span>
-            <span class="worker-metric-value">{{ ws.dqLastActivityAgo }}</span>
+            <span class="worker-metric-value">{{ ws.qcLastActivityAgo }}</span>
           </div>
         </div>
         <div class="worker-card-footer">
-          <span class="worker-metric-label">Total fetches</span>
-          <span class="worker-metric-value">{{ ws.dataquery.fetches }}</span>
+          <span class="worker-metric-label">Cache provider</span>
+          <span class="worker-metric-value">TanStack Query</span>
         </div>
       </div>
 
@@ -104,7 +111,7 @@
           <span v-if="ws.activityLog.length === 0" class="empty">No worker activity yet</span>
           <div v-for="(entry, i) in recentLog" :key="i" class="worker-log-entry">
             <span class="worker-log-time">{{ formatTime(entry.ts) }}</span>
-            <span class="worker-log-source" :class="entry.source">{{ entry.source }}</span>
+            <span class="worker-log-source" :class="entry.source">{{ entry.source === 'query-cache' ? 'query' : entry.source }}</span>
             <span class="worker-log-msg" :class="{ error: entry.error }">{{ entry.msg }}</span>
           </div>
         </div>

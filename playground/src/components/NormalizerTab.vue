@@ -1,5 +1,6 @@
 <template>
   <div class="tab-panel active" id="panel-normalizer">
+    <div class="panel-scroll">
     <!--#region Empty State -->
     <div v-if="!normalizerStage" class="empty-state">
       <div class="empty-state-icon">🔄</div>
@@ -103,7 +104,7 @@
           <span class="normalizer-tag">{{ data.rulesApplied.length }} rules</span>
           <span class="normalizer-section-chevron" :class="{ expanded: rulesExpanded }">▸</span>
         </div>
-        <div v-if="rulesExpanded" class="normalizer-section-body">
+        <div v-if="rulesExpanded" class="normalizer-section-body scrollable-section">
           <div v-if="data.rulesApplied.length === 0" class="normalizer-empty">No rules were applied</div>
           <div v-else class="normalizer-rules-grid">
             <div v-for="r in data.rulesApplied" :key="r.rule" class="normalizer-rule-chip" :class="{ 'rule-trie': r.rule === 'phrase-trie' }">
@@ -121,7 +122,7 @@
           <span class="normalizer-tag">{{ data.fusions.length }} fusions</span>
           <span class="normalizer-section-chevron" :class="{ expanded: fusionsExpanded }">▸</span>
         </div>
-        <div v-if="fusionsExpanded" class="normalizer-section-body">
+        <div v-if="fusionsExpanded" class="normalizer-section-body scrollable-section">
           <div v-if="data.fusions.length === 0" class="normalizer-empty">No tokens were fused</div>
           <div v-for="(group, gi) in fusionGroups" :key="gi" class="fusion-group">
             <div class="fusion-group-header">
@@ -167,7 +168,7 @@
           <span class="normalizer-tag">{{ rawTokens.length }} → {{ data.tokens.length }}</span>
           <span class="normalizer-section-chevron" :class="{ expanded: diffExpanded }">▸</span>
         </div>
-        <div v-if="diffExpanded" class="normalizer-section-body">
+        <div v-if="diffExpanded" class="normalizer-section-body scrollable-section">
           <div class="diff-column-headers">
             <div class="diff-header-left">
               <span class="diff-header-label">Raw (before)</span>
@@ -226,6 +227,7 @@
         </div>
       </div>
     </template>
+    </div>
   </div>
 </template>
 
@@ -469,7 +471,8 @@ function tokenClass(t: { type?: string }): string {
 </script>
 
 <style scoped>
-#panel-normalizer { display: flex; flex-direction: column; gap: 12px; padding: 8px; overflow-y: auto; max-height: 100%; }
+#panel-normalizer { display: flex; flex-direction: column; overflow-y: visible; max-height: none; }
+#panel-normalizer .panel-scroll { display: flex; flex-direction: column; gap: 12px; padding: 8px; }
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 180px; gap: 8px; color: var(--text-muted, #6b6b75); }
 .empty-state-icon { font-size: 28px; opacity: 0.5; }
 .empty-state-text { font-size: 13px; font-weight: 500; }
