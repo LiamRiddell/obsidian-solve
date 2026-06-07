@@ -25,7 +25,7 @@ export function createEngine(locale = "en", diagnostic = false): ExpressionEngin
  * Convenience wrapper around engine.evaluateLine().
  */
 export function evalExpr(engine: ExpressionEngine, expr: string, lineNum = 1): Value {
-  return engine.evaluateLine(lineNum, expr);
+  return engine.evaluateLine(lineNum, expr)[0];
 }
 
 /**

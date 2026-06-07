@@ -32,6 +32,39 @@ export class ParseletRegistry {
 		this.infixById.set(tokenTypeId(tokenType), parselet);
 	}
 
+	/** Iterate all registered prefix parselets for diagnostic display. */
+	getAllPrefix(): Array<{ tokenType: string; bindingPower: number; category?: string }> {
+		const result: Array<{ tokenType: string; bindingPower: number; category?: string }> = [];
+		for (const [tokenType, parselet] of this.prefixParselets) {
+			result.push({
+				tokenType,
+				bindingPower: (parselet as any).bindingPower ?? 0,
+				category: (parselet as any).category,
+			});
+		}
+		return result;
+	}
+
+	/** Iterate all registered infix parselets for diagnostic display. */
+	getAllInfix(): Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> {
+		const result: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> = [];
+		for (const [tokenType, parselet] of this.infixParselets) {
+			result.push({
+				tokenType,
+				leftBindingPower: (parselet as any).leftBindingPower ?? 0,
+				rightBindingPower: (parselet as any).rightBindingPower ?? 0,
+				category: (parselet as any).category,
+			});
+		}
+		return result;
+	}
+
+	/** Number of registered prefix parselets. */
+	get prefixCount(): number { return this.prefixParselets.size; }
+
+	/** Number of registered infix parselets. */
+	get infixCount(): number { return this.infixParselets.size; }
+
 	/**
 	 * Get prefix parselet by string token type OR integer typeId.
 	 * Fast path for integer IDs (Parser hot path), fallback for strings

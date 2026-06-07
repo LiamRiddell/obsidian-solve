@@ -307,7 +307,7 @@ export class AsyncResolutionBatcher {
 			return;
 		}
 
-		const updatedLineNumbers = this.reExecuteMainThread(ordered, allQueryKeys);
+		this.reExecuteMainThread(ordered, allQueryKeys);
 	}
 
 	// ── Private: topological sort ─────────────────────────────────────

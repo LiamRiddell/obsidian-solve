@@ -22,10 +22,10 @@
  * All messages are structured-cloneable — no functions or class instances cross the boundary.
  */
 
-import { ExpressionEngine } from "../engine/ExpressionEngine";
+import { ExpressionEngine, type EvalResults } from "../engine/ExpressionEngine";
 import { Value } from "../vm/Value";
 import type { ParsedLine } from "../types/ParsingResult";
-import type { SolvePlugin } from "../plugins/PluginSystem";
+import type { SolvePackage as SolvePlugin } from "../packages/PackageSystem";
 
 type WorkerPostMessage = { postMessage(msg: unknown): void };
 const workerSelf = self as unknown as WorkerPostMessage;
@@ -63,7 +63,8 @@ export type EvalWorkerMessage = EvalMsg | EvalDocMsg | RegisterPluginMsg | Unreg
 function handleEval(msg: EvalMsg): void {
   try {
     const eng = getEngine(msg.locale);
-    const val: Value = eng.evaluateLine(msg.lineNumber, msg.expression);
+    const vals: EvalResults = eng.evaluateLine(msg.lineNumber, msg.expression);
+    const val = vals[0];
     postResult(msg.id, {
       value: val?.toNumber() ?? null,
       type: val?.type ?? null,

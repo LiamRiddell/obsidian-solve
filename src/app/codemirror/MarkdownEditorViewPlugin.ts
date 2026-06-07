@@ -304,7 +304,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				}
 
 				// Full-line expression result from evaluator
-				const result = lineState.results[0];
+				const resultGroup = lineState.results[0];
+				const result = resultGroup[0];
 				const isPending = result.type === ValueType.Pending;
 				const formattedResult = isPending ? "" : formatValue(result);
 				const expression = lineState.expressions[0] ?? line.text.trim();
@@ -346,9 +347,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			const solve = inlineSolves[i];
 			if (!solve.expression.trim()) continue;
 
-			const result = i < results.length ? results[i] : null;
-			if (result === null || result === undefined) continue;
+			const resultGroup = i < results.length ? results[i] : null;
+			if (resultGroup === null || resultGroup === undefined || resultGroup.length === 0) continue;
 
+			const result = resultGroup[0];
 			const isPending = result.type === ValueType.Pending;
 			const formattedResult = isPending ? "" : formatValue(result);
 			const queryKey = isPending ? (result.value as string) : null;
@@ -382,7 +384,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			if (!solve.expression.trim()) continue;
 
 			try {
-				const result = engine.evaluateLine(line.number, solve.expression);
+			const [result] = engine.evaluateLine(line.number, solve.expression);
 				if (result !== null && result !== undefined) {
 					const isPending = result.type === ValueType.Pending;
 					const formattedResult = isPending ? "" : formatValue(result);
@@ -408,7 +410,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private evaluateLine(lineNumber: number, expression: string): string | undefined {
 		try {
 			const engine = EngineProvider.get();
-			const value: Value = engine.evaluateLine(lineNumber, expression);
+			const [value] = engine.evaluateLine(lineNumber, expression);
 			return formatValue(value);
 		} catch {
 			return undefined;
@@ -419,7 +421,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	evaluateExpression(expression: string): Value | undefined {
 		try {
 			const engine = EngineProvider.get();
-			return engine.evaluateExpression(expression);
+			const [result] = engine.evaluateExpression(expression);
+			return result;
 		} catch {
 			return undefined;
 		}

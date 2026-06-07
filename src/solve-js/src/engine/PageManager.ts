@@ -284,6 +284,7 @@ export class PageManager {
 			const state = doc.getLineAt(pos);
 			if (state && !state.isVariableDef && state.results.length > 0) {
 				state.results = [];
+				state.result = null;
 			}
 		}
 	}
@@ -309,6 +310,7 @@ export class PageManager {
 			if (state.bytecodes.length > 0 || state.results.length > 0) {
 				state.bytecodes = [];
 				state.results = [];
+				state.result = null;
 				state.dirty = true;
 			}
 		}

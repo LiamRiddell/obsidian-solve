@@ -163,11 +163,11 @@ export class ExecutionPool {
 			const opcodesClone = opcodes.buffer.slice(
 				opcodes.byteOffset,
 				opcodes.byteOffset + opcodes.byteLength,
-			);
+			) as ArrayBuffer;
 			const numbersClone = numbers.buffer.slice(
 				numbers.byteOffset,
 				numbers.byteOffset + numbers.byteLength,
-			);
+			) as ArrayBuffer;
 
 			items.push({
 				lineNumber,

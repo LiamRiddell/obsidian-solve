@@ -12,7 +12,7 @@ import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
 /**
  * Data source types
  */
-export type DataSourceType = "currency" | "asset" | "config" | "custom" | "http";
+export type DataSourceType = "currency" | "asset" | "config" | "custom" | "http" | "osrs";
 
 /**
  * Data source configuration
@@ -205,6 +205,137 @@ export class HttpDataSource implements DataSourceStrategy {
 }
 
 /**
+ * OSRS Grand Exchange price data source.
+ *
+ * Fetches the bulk OSRS price API (https://prices.runescape.wiki/api/v1/osrs/latest)
+ * and caches individual item prices internally with a 5-minute TTL. The first
+ * request triggers the bulk fetch; subsequent requests for other items within
+ * the TTL window are served from the internal cache without additional API calls.
+ */
+export class OsrsDataSource implements DataSourceStrategy {
+  private priceCache: Map<number, number> = new Map();
+  private lastFetchTime = 0;
+  private bulkFetchPromise: Promise<void> | null = null;
+  private readonly ttlMs = 5 * 60 * 1000; // 5 minutes
+  private readonly apiUrl = "https://prices.runescape.wiki/api/v1/osrs/latest";
+
+  async execute(request: FetchRequest): Promise<FetchResponse> {
+    const [, key] = request.queryKey;
+
+    // Special "bulk" key: return the full price map after ensuring it's fresh.
+    if (key === "bulk") {
+      try {
+        await this.fetchBulkPrices();
+        const allPrices: Record<string, number> = {};
+        for (const [id, price] of this.priceCache) {
+          allPrices[id.toString()] = price;
+        }
+        return {
+          id: request.id,
+          dataSourceId: request.dataSourceId,
+          queryKey: request.queryKey,
+          data: allPrices,
+          timestamp: Date.now(),
+        };
+      } catch (err) {
+        return {
+          id: request.id,
+          dataSourceId: request.dataSourceId,
+          queryKey: request.queryKey,
+          error: err instanceof Error ? err.message : String(err),
+          timestamp: Date.now(),
+        };
+      }
+    }
+
+    const itemId = parseInt(key, 10);
+
+    if (isNaN(itemId)) {
+      return {
+        id: request.id,
+        dataSourceId: request.dataSourceId,
+        queryKey: request.queryKey,
+        error: `Invalid item ID: ${key}`,
+        timestamp: Date.now(),
+      };
+    }
+
+    // Serve from internal cache if fresh
+    if (
+      this.lastFetchTime > 0 &&
+      Date.now() - this.lastFetchTime < this.ttlMs &&
+      this.priceCache.has(itemId)
+    ) {
+      return {
+        id: request.id,
+        dataSourceId: request.dataSourceId,
+        queryKey: request.queryKey,
+        data: this.priceCache.get(itemId),
+        timestamp: Date.now(),
+      };
+    }
+
+    // Trigger bulk fetch (deduplicated via in-flight promise)
+    try {
+      await this.fetchBulkPrices();
+    } catch (err) {
+      return {
+        id: request.id,
+        dataSourceId: request.dataSourceId,
+        queryKey: request.queryKey,
+        error: err instanceof Error ? err.message : String(err),
+        timestamp: Date.now(),
+      };
+    }
+
+    const price = this.priceCache.get(itemId);
+    return {
+      id: request.id,
+      dataSourceId: request.dataSourceId,
+      queryKey: request.queryKey,
+      data: price ?? 0,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async fetchBulkPrices(): Promise<void> {
+    if (this.bulkFetchPromise) return this.bulkFetchPromise;
+    if (this.lastFetchTime > 0 && Date.now() - this.lastFetchTime < this.ttlMs) return;
+
+    this.bulkFetchPromise = (async () => {
+      try {
+        const response = await fetch(this.apiUrl, {
+          headers: { "User-Agent": "obsidian-solve/1.0" },
+        });
+        if (!response.ok) return;
+        const json = await response.json();
+        const data = json.data as Record<
+          string,
+          { high: number; low: number; highTime: number; lowTime: number }
+        >;
+        if (!data) return;
+
+        for (const [idStr, price] of Object.entries(data)) {
+          const itemId = parseInt(idStr, 10);
+          if (isNaN(itemId)) continue;
+          // midPrice = (high + low) / 2
+          this.priceCache.set(itemId, (price.high + price.low) / 2);
+        }
+        this.lastFetchTime = Date.now();
+      } catch (err) {
+        // Set lastFetchTime on failure to prevent immediate re-fetch loops
+        this.lastFetchTime = Date.now();
+        throw err;
+      } finally {
+        this.bulkFetchPromise = null;
+      }
+    })();
+
+    return this.bulkFetchPromise;
+  }
+}
+
+/**
  * Configurable worker with strategy pattern
  */
 export class ConfigurableWorker implements IWorker {
@@ -299,6 +430,9 @@ export class ConfigurableWorker implements IWorker {
         break;
       case 'http':
         strategy = new HttpDataSource(config);
+        break;
+      case 'osrs':
+        strategy = new OsrsDataSource();
         break;
       default:
         console.warn(`Unknown data source type: ${config.type}`);

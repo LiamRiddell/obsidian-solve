@@ -1,7 +1,7 @@
+import type { QueryClient } from "@tanstack/query-core";
 import type { Token } from "@solve-js/lexer";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import type { Value } from "@solve-js/vm/Value";
-import { AsyncResultCache } from "@solve-js/cache/AsyncResultCache";
 
 /**
  * Result from a resolver's preflight() check.
@@ -52,7 +52,7 @@ export interface IAsyncResolver {
 	 * @param pluginId - The plugin ID (for cache key scoping)
 	 * @param signal - AbortSignal for the current evaluation
 	 */
-	preflight?(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal): AsyncCheckResult | null;
+	preflight?(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal, queryClient: QueryClient): AsyncCheckResult | null;
 
 	/**
 	 * Called when the resolver's namespace is being unregistered.
@@ -103,14 +103,17 @@ export class ResolverRegistry {
 	 * Unregister a resolver by namespace.
 	 * Calls destroy() and clears all cache entries with that namespace prefix.
 	 */
-	unregister(namespace: string): void {
+	unregister(namespace: string, queryClient?: QueryClient): void {
 		const resolver = this.resolvers.get(namespace);
 		if (resolver) {
 			resolver.destroy();
 			this.resolvers.delete(namespace);
 		}
-		// Clear all cache entries for this namespace
-		AsyncResultCache.clearPrefix(`${namespace}:`);
+		// Clear all cache entries for this namespace via TanStack Query
+		// Hierarchical keys: ["osrs"] clears all ["osrs", ...] queries
+		if (queryClient) {
+			queryClient.removeQueries({ queryKey: [namespace] });
+		}
 	}
 
 	/**
@@ -120,10 +123,10 @@ export class ResolverRegistry {
 	 * Short-circuits on first pending — subsequent pending ops will be
 	 * discovered on re-evaluation when the first resolves.
 	 */
-	preflightAll(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal): AsyncCheckResult | null {
+	preflightAll(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal, queryClient: QueryClient): AsyncCheckResult | null {
 		for (const resolver of this.resolvers.values()) {
 			if (!resolver.preflight) continue;
-			const result = resolver.preflight(tokens, bytecode, packageId, signal);
+			const result = resolver.preflight(tokens, bytecode, packageId, signal, queryClient);
 			if (result) return result;
 		}
 		return null;

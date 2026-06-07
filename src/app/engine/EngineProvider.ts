@@ -2,7 +2,6 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
-
 /**
  * Shared engine provider — ensures a single ExpressionEngine instance
  * is used across all frontend components (CodeMirror plugin, highlights, workers).
@@ -29,10 +28,10 @@ class EngineProvider {
 
 		if (!this._instance || this._localeOverride !== locale) {
 			this._localeOverride = locale;
-			this._instance = new ExpressionEngine(locale, false,
-				EngineConfigMapper.toEngineConfig(settings)
-			);
-			logger.debug(`[EngineProvider] Created new ExpressionEngine (locale=${locale})`);
+		this._instance = new ExpressionEngine(locale, false,
+			EngineConfigMapper.toEngineConfig(settings)
+		);
+		logger.debug(`[EngineProvider] Created new ExpressionEngine (locale=${locale})`);
 		}
 
 		return this._instance;

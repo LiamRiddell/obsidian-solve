@@ -1,6 +1,6 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, arrayValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive } from "@solve-js/vm/Value";
-import { OpRegistry, type VM } from "@solve-js/vm/OpRegistry";
+import type { VM, OpRegistry } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
@@ -150,7 +150,6 @@ export function executeBytecode(
     expression?: string
 ): EvalResult {
     const { opcodes, numbers, strings } = bytecode;
-    const reg = vm.registry;
     let ip = 0;
     let localInstructionCount = 0;
     const maxInstructions = vm.getMaxInstructions();
@@ -489,8 +488,15 @@ export function executeBytecode(
         case OpCode.LOAD_VAR: {
           const varName = strings[opcodes[ip++]];
           const val = vm.getVar(varName);
-          if (val !== undefined) stack.push(val);
-          else stack.push(numberValue(0));
+          if (val !== undefined) {
+            stack.push(val);
+          } else {
+            throw ErrorFactory.execution(
+              "UNDEFINED_VARIABLE",
+              `Undefined variable: ${varName}`,
+              { varName },
+            );
+          }
           break;
         }
         case OpCode.STORE_VAR: {
@@ -681,26 +687,6 @@ export function executeBytecode(
           break;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // §11 Plugin extensibility  (OpCode 200+)
-        // ═══════════════════════════════════════════════════════════════
-        case OpCode.PLUGIN_CUSTOM: {
-          const handler = reg.get(OpCode.PLUGIN_CUSTOM);
-          if (handler) {
-            ip = handler(vm, opcodes, ip, numbers, strings);
-            continue; // plugin handler advances ip itself
-          }
-          break;
-        }
-        default:
-          if (op >= OpCode.PLUGIN_CUSTOM) {
-            const pluginHandler = reg.get(op as OpCode);
-            if (pluginHandler) {
-              ip = pluginHandler(vm, opcodes, ip, numbers, strings);
-              continue; // plugin handler advances ip itself
-            }
-          }
-          break;
       }
     }
 

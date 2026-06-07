@@ -1,4 +1,4 @@
-import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { ExpressionEngine, type EvalResults } from "@solve-js/engine/ExpressionEngine";
 import {
 	DocumentModel,
 	LineChange,
@@ -36,8 +36,10 @@ export interface EvalLineResult {
 	lineNumber: number;
 	/** Which tier was used. */
 	tier: EvalTier;
-	/** The evaluation result, or null on error / non-evaluable. */
+	/** The first evaluation result, or null on error / non-evaluable. */
 	result: Value | null;
+	/** All result groups (one per expression/inline-solve), or undefined if skipped. */
+	results?: Value[][];
 	/** Error message, or null. */
 	error: string | null;
 }
@@ -47,8 +49,8 @@ export interface EvalLineResult {
 export interface EvalResult {
 	/** Per-line evaluation results. */
 	lines: EvalLineResult[];
-	/** Map of line numbers → results for quick lookup. */
-	resultMap: Map<number, Value>;
+	/** Map of line numbers → flattened results for quick lookup. */
+	resultMap: Map<number, Value[]>;
 	/** Number of lines processed at each tier. */
 	tierCounts: { tier1: number; tier2: number; tier3: number; skipped: number };
 }
@@ -128,7 +130,7 @@ export class ThreeTierEvaluator {
 		enableValueArena();
 		try {
 			const lines: EvalLineResult[] = [];
-			const resultMap = new Map<number, Value>();
+			const resultMap = new Map<number, Value[]>();
 			const tierCounts = { tier1: 0, tier2: 0, tier3: 0, skipped: 0 };
 
 			// Process from line 1 to the end of the viewport for correct VM state.
@@ -154,8 +156,8 @@ export class ThreeTierEvaluator {
 				else if (lineResult.tier === EvalTier.Tier3) tierCounts.tier3++;
 				else tierCounts.skipped++;
 
-				if (lineResult.result && inViewport) {
-					resultMap.set(pos, lineResult.result);
+				if (lineResult.results && inViewport) {
+					resultMap.set(pos, lineResult.results.flat());
 				}
 			}
 
@@ -447,7 +449,7 @@ export class ThreeTierEvaluator {
 	 */
 	private collectEvalResults(startLine: number, endLine: number): EvalResult {
 		const lines: EvalLineResult[] = [];
-		const resultMap = new Map<number, Value>();
+		const resultMap = new Map<number, Value[]>();
 		const tierCounts = { tier1: 0, tier2: 0, tier3: 0, skipped: 0 };
 
 		const docEnd = this.doc.lineCount;
@@ -472,8 +474,8 @@ export class ThreeTierEvaluator {
 			else if (lineResult.tier === EvalTier.Tier3) tierCounts.tier3++;
 			else tierCounts.skipped++;
 
-			if (lineResult.result) {
-				resultMap.set(pos, lineResult.result);
+			if (lineResult.results) {
+				resultMap.set(pos, lineResult.results.flat());
 			}
 		}
 
@@ -580,8 +582,7 @@ export class ThreeTierEvaluator {
 		expressions: string[],
 		inlineSolveCount: number,
 		baseResult: Omit<EvalLineResult, "tier" | "result" | "error">
-	): EvalLineResult {
-		const allResults: Value[] = [];
+	): EvalLineResult {        const allResults: Value[][] = [];
 		const allBytecodes: BytecodeProgram[] = [];
 		const allReads = new Set<string>();
 		const allWrites = new Set<string>();
@@ -598,32 +599,27 @@ export class ThreeTierEvaluator {
 		// the third expression throws because 'b' references cross a VM state
 		// boundary or the engine encounters a transient error.
 		for (const expression of expressions) {
-			if (!expression.trim()) continue;
-
-			let value: Value | null = null;
+			if (!expression.trim()) continue;		let value: EvalResults | null = null;
 			let entry: { bytecode: BytecodeProgram; readVariables: string[]; writeVariable: string | null } | undefined;
 
 			try {
 				value = this.engine.evaluateLine(lineNumber, expression);
-				lastValue = value;
+				lastValue = value[0];
 				// Sync the DocumentModel from the LineCache.
 				// Use get(lineNumber, expression) instead of getEntryForLine(lineNumber)
 				// because multiple expressions on the same line share the same lineNumber
-				// and getEntryForLine always returns the FIRST entry (Map insertion order).
-				entry = this.engine.getLineCache().get(lineNumber, expression) as typeof entry;
-			} catch (e) {
-				const errorMessage = e instanceof Error ? e.message : String(e);
-				if (!firstError) firstError = errorMessage;
-				anyFailed = true;
-			}
-
-			if (value) {
-				allResults.push(value);
-			} else {
+				// and getEntryForLine always returns the FIRST entry (Map insertion order).            entry = this.engine.getLineCache().get(lineNumber, expression) as typeof entry;
+            } catch (e) {
+                const errorMessage = e instanceof Error ? e.message : String(e);
+                if (!firstError) firstError = errorMessage;
+                anyFailed = true;
+                value = null;
+            }            if (value) {
+                allResults.push(value);
+            } else {
 				// Expression failed — push an ErrorValue sentinel so results[] stays
 				// aligned with expressions[] and bytecodes[] indices. Downstream code
-				// checking result.type === Error will find it, vs a raw null that NPEs.
-				allResults.push(errorValue("eval_failed", firstError ?? "unknown error"));
+				// checking result.type === Error will find it, vs a raw null that NPEs.            allResults.push([errorValue("eval_failed", firstError ?? "unknown error")]);
 			}
 
 			if (entry) {
@@ -671,6 +667,7 @@ export class ThreeTierEvaluator {
 			);
 			// Also set results for the successful expressions
 			state.results = allResults;
+			state.result = allResults[0]?.[0] ?? null;
 			state.inlineSolveCount = inlineSolveCount;
 			state.expressions = expressions;
 		} else {
@@ -701,6 +698,7 @@ export class ThreeTierEvaluator {
 			...baseResult,
 			tier: EvalTier.Tier1,
 			result: lastValue,
+			results: allResults,
 			error: firstError,
 		};
 	}
@@ -721,9 +719,7 @@ export class ThreeTierEvaluator {
 	): EvalLineResult {
 		if (state.bytecodes.length === 0) {
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
-		}
-
-		const results: Value[] = [];
+		}        const results: Value[][] = [];
 		let lastValue: Value | null = null;
 		let firstError: string | null = null;
 		let anyFailed = false;
@@ -736,14 +732,12 @@ export class ThreeTierEvaluator {
 			if (bytecode.opcodes.length === 0) continue;
 			try {
 				const value = this.engine.executeCached(bytecode);
-				lastValue = value;
-				results.push(value);
+				lastValue = value;                results.push([value]);
 			} catch (e) {
 				const errorMessage = e instanceof Error ? e.message : String(e);
 				if (!firstError) firstError = errorMessage;
 				anyFailed = true;
-				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment
-				results.push(errorValue("exec_failed", errorMessage));
+				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment                results.push([errorValue("exec_failed", errorMessage)]);
 			}
 		}
 
@@ -751,16 +745,14 @@ export class ThreeTierEvaluator {
 		// Always register — even empty reads/writes so DAG line-presence queries work.
 		this.dag.registerLine(lineNumber, state.reads, state.writes);
 
+		state.results = results;
+		state.result = results[0]?.[0] ?? null;
 		if (anyFailed) {
-			// Push placeholder for failed bytecode to maintain results[i] ↔ bytecodes[i]
-			state.results = results;
 			// Mark dirty so failed bytecodes are re-compiled (Tier 1) next pass
 			state.dirty = true;
-		} else {
-			state.results = results;
 		}
 
-		return { ...baseResult, tier: EvalTier.Tier2, result: lastValue, error: firstError };
+		return { ...baseResult, tier: EvalTier.Tier2, result: lastValue, results, error: firstError };
 	}
 
 	/**
@@ -834,8 +826,8 @@ export class ThreeTierEvaluator {
 		// Always register — even empty reads/writes for DAG line-presence queries.
 		this.dag.registerLine(lineNumber, reads, writes);
 
-		if (hasVariableDef && lastResult && !anyFailed) {
-			state.results = [lastResult];
+		if (hasVariableDef && lastResult && !anyFailed) {            state.results = [[lastResult]];
+			state.result = lastResult;
 			state.dirty = false;
 
 			// ── Checkpoint after variable definition ────────────
@@ -844,7 +836,7 @@ export class ThreeTierEvaluator {
 			}
 		}
 
-		return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, error: firstError };
+		return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, results: hasVariableDef && lastResult && !anyFailed ? [[lastResult]] : undefined, error: firstError };
 	}
 
 	// ── Public checkpoint API (used by Phase 5.2e setViewport) ──────

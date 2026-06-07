@@ -11,22 +11,22 @@ import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/Bytecode
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import type { EvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { Value, numberValue, pendingValue, errorValue } from "@solve-js/vm/Value";
-import { PluginManager } from "@solve-js/plugins/PluginSystem";
+import { Value, numberValue, pendingValue } from "@solve-js/vm/Value";
+import { PackageManager } from "@solve-js/packages/PackageSystem";
 import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
 import type { ISolvePackage } from "@solve-js/api/SolveAPI";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
+import { QueryClient } from "@tanstack/query-core";
+import { createQueryClient } from "@solve-js/services/DataQueryService";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { AsyncResultCache } from "@solve-js/cache/AsyncResultCache";
 import {
 	ResolverRegistry,
-	type AsyncCheckResult,
 } from "@solve-js/resolvers/ResolverRegistry";
 import {
 	AsyncResolutionBatcher,
 	type AsyncResolutionEvent,
 } from "@solve-js/engine/AsyncResolutionBatcher";
-import { dataQueryService } from "@solve-js/services/DataQueryService";
+import { setOsrsQueryClient } from "@solve-js/packages/osrs/OsrsVmHandler";
 import { AllocationTracker, type PipelineTelemetry, type StageAllocation } from "@solve-js/telemetry";
 import {
     ParsingResult,
@@ -39,7 +39,6 @@ import type { Token, ScanLineResult } from "@solve-js/lexer";
 import { DEFAULT_CONFIG, type EngineConfig } from "@solve-js/constants/Configuration";
 import {
     DiagnosticPipeline,
-    NullDiagnosticCollector,
     TimelineDiagnosticCollector,
     DiagnosticEventType,
     type DiagnosticEvent,
@@ -49,11 +48,12 @@ import {
     checkExpressionLength,
     checkExpressionComplexity,
     extractReadsAndWrites,
+    splitMultiTargetExpression,
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
 import { abortLogger } from "@app/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
-import type { NormalizerRule, TokenFusion } from "@solve-js/normalizer";
+import type { TokenFusion } from "@solve-js/normalizer";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -70,6 +70,36 @@ import {
 // Re-export for consumers (playground imports these from ExpressionEngine)
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
 export type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
+
+// ── EvalResults: typed wrapper for partial-failure detection ──────────────
+
+/**
+ * Return type of {@link evaluateLine} and {@link evaluateExpression}.
+ *
+ * Extends `Value[]` with an optional, non-enumerable `errors` property.
+ * When a multi-target expression (e.g., "10 USD in EUR, GBP, JPY") has
+ * some sub-expressions fail, the successful results are returned in the
+ * array and the failure messages are attached as `errors`.
+ *
+ * Callers can detect partial failures without `any` casts:
+ * ```typescript
+ * const results = engine.evaluateLine(1, expr);
+ * if (results.errors) {
+ *   console.warn("Partial failure:", results.errors);
+ * }
+ * ```
+ *
+ * The `errors` property is **non-enumerable**: it does not appear in
+ * `for...in`, `Object.keys()`, `JSON.stringify()`, or spread copies.
+ */
+export interface EvalResults extends Array<Value> {
+    /**
+     * Error messages from failed sub-expressions (multi-target only).
+     * `undefined` when all sub-expressions succeeded.
+     * Non-enumerable — invisible to JSON and iteration.
+     */
+    errors?: string[];
+}
 
 //#endregion
 
@@ -114,7 +144,7 @@ export class ExpressionEngine {
     private localeCode: string;
     private vm: VM;
     private config: typeof DEFAULT_CONFIG;
-    private pluginManager: PluginManager;
+    private packageManager: PackageManager;
     private diagnosticPipeline: DiagnosticPipeline;
     /** Registry of async resolvers from registered packages. */
     private resolverRegistry = new ResolverRegistry();
@@ -138,11 +168,8 @@ export class ExpressionEngine {
     private batcher: AsyncResolutionBatcher;
     /** Post-lexer token normalizer for phrase fusion, implicit multiply, etc. */
     private normalizer: TokenNormalizer;
-
-    /**
-	 * Unsubscribe from DataQueryService cache updates.
-	 * Set in constructor, called in clear()/destroy.
-	 */    private _dqsUnsubscribe: (() => void) | null = null;
+    /** TanStack Query client — injected into resolvers for cache reads/writes. */
+    readonly queryClient: QueryClient;
     // Bytecode cache — avoids re-parsing identical expressions
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
     // Pre-allocated BytecodeBuilder pool
@@ -171,9 +198,9 @@ export class ExpressionEngine {
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.lexer = new Lexer(localeCode, buildTokenLookup(localeCode));
         this.registry = new ParseletRegistry();
-        this.pluginManager = new PluginManager(this.registry);
-        // Wire resolver registry so PluginManager can register async resolvers
-        this.pluginManager.resolverRegistry = this.resolverRegistry;
+        this.packageManager = new PackageManager(this.registry);
+        // Wire resolver registry so PackageManager can register async resolvers
+        this.packageManager.resolverRegistry = this.resolverRegistry;
 
 // Wire diagnostic pipeline: use provided, create timeline if enabled, or leave empty for production
          if (diagnosticPipeline) {
@@ -220,30 +247,8 @@ export class ExpressionEngine {
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
-        this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
-		this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
-
-		// ── Bridge: DataQueryService → batcher ──────────────────────
-		// DataQueryService resolves data independently (via its own worker).
-		// When a cache update fires, we feed it into the batcher so it goes
-		// through the same DAG-walk + re-execution + event-stream pipeline
-		// as engine-originated async resolutions. This eliminates the old
-		// parallel pipeline where MarkdownEditorViewPlugin subscribed to
-		// DataQueryService directly and did its own manual DAG walk.
-		this._dqsUnsubscribe = dataQueryService.onCacheUpdate(
-			(dataSourceId, queryKeys, _data) => {
-				// DataQueryService uses compound queryKeys (e.g., ["rate", "USD", "GBP"]).
-				// Join into a single string to match the DAG's stored format
-				// (registered via registerLineDataSourceDependency with [queryKey]).
-				const compositeKey = queryKeys.join(':');
-				this.batcher.add({
-					queryKey: compositeKey,
-					packageId: dataSourceId,
-					signal: new AbortController().signal,
-					isError: false,
-				});
-			},
-		);
+        this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);        this.queryClient = createQueryClient();
+        this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
 	}
 
     //#endregion
@@ -431,6 +436,7 @@ export class ExpressionEngine {
             controller.abort();
         };
 
+        setOsrsQueryClient(this.queryClient);
         const result = executeBytecode(program, this.vm);
 
         // Single stack cleanup (replaces 10 occurrences)
@@ -485,6 +491,7 @@ export class ExpressionEngine {
             controller.abort();
         };
 
+        setOsrsQueryClient(this.queryClient);
         const result = executeBytecode(program, this.vm);
 
         // Stack cleanup
@@ -509,19 +516,15 @@ export class ExpressionEngine {
         const { queryKey, resolver, packageId, signal } = pending;
         const effectivePackageId = packageId || '_engine';
 
-        // Dedup: skip if already in-flight
-        if (AsyncResultCache.isInFlight(effectivePackageId, queryKey)) return;
-
-        AsyncResultCache.registerInFlight(effectivePackageId, queryKey, resolver);
+        // TanStack Query handles dedup + caching automatically via fetchQuery().
+        // We just await the resolver and dispatch to the batcher on completion.
 
         try {
             const value = await resolver;
             if (signal.aborted) {
                 abortLogger.staleDataDiscarded(queryKey, "signal aborted after resolve");
-                return; // Stale — expression changed
+                return;
             }
-            AsyncResultCache.set(effectivePackageId, queryKey, value);
-
             // Defer re-evaluation to batcher (collapsed across microtask).
             this.batcher.add({
                 queryKey,
@@ -532,12 +535,9 @@ export class ExpressionEngine {
         } catch (err) {
             if (signal.aborted) {
                 abortLogger.staleDataDiscarded(queryKey, "signal aborted after error");
-                return; // Stale — expression changed
+                return;
             }
             const error = err instanceof Error ? err : new Error(String(err));
-            AsyncResultCache.setError(effectivePackageId, queryKey, error);
-
-            // Notify batcher of the error.
             this.batcher.add({
                 queryKey,
                 packageId: effectivePackageId,
@@ -555,15 +555,15 @@ export class ExpressionEngine {
     /**
      * Register an external plugin with the engine.
      */
-    registerPlugin(plugin: import("@solve-js/plugins/PluginSystem").SolvePlugin): void {
-        this.pluginManager.register(plugin);
+    registerPlugin(plugin: import("@solve-js/packages/PackageSystem").SolvePackage): void {
+        this.packageManager.register(plugin);
     }
 
     /**
      * Unregister an external plugin.
      */
     unregisterPlugin(pluginName: string): void {
-        this.pluginManager.unregister(pluginName);
+        this.packageManager.unregister(pluginName);
         this.bytecodeCache.clear();
     }
 
@@ -683,8 +683,9 @@ export class ExpressionEngine {
                 if (hasInlineSolves && !isVariableAssignment) {
                     for (const solve of inlineSolves) {
                         try {
-                            const value = this.evaluateLine(lineNumber, solve.expression);
-                            solve.result = value;
+                            const values = this.evaluateLine(lineNumber, solve.expression);
+                            solve.result = values[0];
+                            solve.results = values;
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             solve.error = errorMessage;
@@ -695,13 +696,13 @@ export class ExpressionEngine {
                     if (expression) {
                         // Pass pre-tokenized tokens from scanDocument to avoid re-lexing
                         try {
-                            const value = this.evaluateLineWithPreTokenized(
+                            const values = this.evaluateLineWithPreTokenized(
                                 lineNumber,
                                 expression,
                                 scanResult.tokens
                             );
                             parsedLine.expression = expression;
-                            parsedLine.result = value;
+                            parsedLine.result = values[0];
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             parsedLine.error = errorMessage;
@@ -731,7 +732,7 @@ export class ExpressionEngine {
         lineNumber: number,
         expression: string,
         preTokenized: Token[]
-    ): Value {
+    ): Value[] {
         // Filter markdown tokens as a defensive safety net.
         // ExpressionLexer never produces MD_* tokens, but this guard
         // prevents accidental breakage if the lexer mode changes.
@@ -743,7 +744,7 @@ export class ExpressionEngine {
         }
 
         // Directly invoke evaluateWithTokens — no lexing needed
-        return this.evaluateWithTokens(lineNumber, expression, tokens, hasParens);
+        return [this.evaluateWithTokens(lineNumber, expression, tokens, hasParens)];
     }
 
     //#endregion
@@ -866,7 +867,7 @@ export class ExpressionEngine {
 
         const preflightSignal = preflightController.signal;
         const asyncCheck = this.resolverRegistry.preflightAll(
-            normalizedTokens, program, '_engine', preflightSignal
+            normalizedTokens, program, '_engine', preflightSignal, this.queryClient
         );
         if (asyncCheck) {
             // Fire-and-forget — resolves asynchronously, re-evaluates on completion
@@ -900,27 +901,83 @@ export class ExpressionEngine {
 
     //#region Public API — Line-level evaluation
 
-    /**
-     * Evaluate a single expression line with full DAG and LineCache integration.
-     *
-     * @param lineNumber - 1-based line position in the document.
-     * @param lineText - The raw line text (may contain inline solve syntax).
-     * @returns The evaluated Value.
-     * @throws {SolveError} On safety validation failure or parse error.
-     */
+	/**
+	 * Evaluate a single expression line with full DAG and LineCache integration.
+	 *
+	 * Supports multi-target expressions like "10 USD in EUR, GBP, JPY" which
+	 * are split on commas after the "in" keyword into multiple sub-expressions.
+	 * Each sub-expression is evaluated independently and all results are returned.
+	 *
+	 * **Partial failure resilience:** When one sub-expression fails, the error
+	 * is recorded but evaluation continues for remaining sub-expressions. Successful
+	 * results are still returned alongside the aggregated error. Only throws when
+	 * ALL sub-expressions fail or the single-expression path fails.
+	 *
+	 * @param lineNumber - 1-based line position in the document.
+	 * @param lineText - The raw line text (may contain multi-target syntax).
+	 * @returns Array of evaluated Values (length 1 for single expressions).
+	 * @throws {SolveError} On total failure (all sub-expressions failed, or
+	 *         single-expression evaluation error).
+	 */
 	evaluateLine(
         lineNumber: number,
         lineText: string
-    ): Value {
-        const result = this.evaluateLineWithDebug(lineNumber, lineText);
-        if (result.error) {
+    ): EvalResults {
+        const subExpressions = splitMultiTargetExpression(lineText);
+        if (!subExpressions) {
+            const result = this.evaluateLineWithDebug(lineNumber, lineText);
+            if (result.error) {
+                throw ErrorFactory.execution(
+                    'EVALUATION_ERROR',
+                    result.error,
+                    { lineNumber }
+                );
+            }
+            return [result.value] as EvalResults;
+        }
+
+        const results: EvalResults = [] as EvalResults;
+        const errors: string[] = [];
+        for (const subExpr of subExpressions) {
+            const result = this.evaluateLineWithDebug(lineNumber, subExpr);
+            if (result.error) {
+                errors.push(result.error);
+            } else {
+                results.push(result.value);
+            }
+        }
+
+        // Only throw if ALL sub-expressions failed — otherwise return partial results.
+        // Attach errors as a non-enumerable property so callers can detect partial failures
+        // (e.g., results.length < expected count) without breaking the Value[] contract.
+        if (results.length === 0) {
             throw ErrorFactory.execution(
                 'EVALUATION_ERROR',
-                result.error,
+                errors.join('; '),
                 { lineNumber }
             );
         }
-        return result.value;
+        if (errors.length > 0) {
+            Object.defineProperty(results, 'errors', {
+                value: errors,
+                writable: false,
+                enumerable: false,
+                configurable: false,
+            });
+        }
+        return results;
+    }
+
+    /**
+     * Expose the multi-target expression splitter for playground consumption.
+     *
+     * The playground uses this directly instead of duplicating the regex,
+     * ensuring consistent splitting behavior between engine and UI.
+     *
+     * @see splitMultiTargetExpression in ExpressionEngineSafety.ts
+     */
+    splitMultiTargetExpression(expression: string): string[] | null {
+        return splitMultiTargetExpression(expression);
     }
 
     /**
@@ -1486,7 +1543,7 @@ export class ExpressionEngine {
 
         const preflightSignal = preflightController.signal;
         const asyncCheck = this.resolverRegistry.preflightAll(
-            normalizedTokens, program, '_engine', preflightSignal
+            normalizedTokens, program, '_engine', preflightSignal, this.queryClient
         );
         if (asyncCheck) {
             void this.resolveAsync({
@@ -1573,6 +1630,8 @@ export class ExpressionEngine {
             this.keystrokeSignal?.removeEventListener('abort', abortLocal);
             controller.abort();
         };
+
+        setOsrsQueryClient(this.queryClient);
 
         let evalResult: EvalResult;
         const vmResult = AllocationTracker.track('vm', () => {
@@ -1797,7 +1856,7 @@ export class ExpressionEngine {
 
         const preflightSignal = preflightController.signal;
         const asyncCheck = this.resolverRegistry.preflightAll(
-            [], entry.bytecode, '_engine', preflightSignal
+            [], entry.bytecode, '_engine', preflightSignal, this.queryClient
         );
         if (asyncCheck) {
             void this.resolveAsync({
@@ -1851,6 +1910,13 @@ export class ExpressionEngine {
 
     getLexer(): Lexer {
         return this.lexer;
+    }
+
+    getParseletRegistry(): { prefix: Array<{ tokenType: string; bindingPower: number; category?: string }>; infix: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> } {
+        return {
+            prefix: this.registry.getAllPrefix(),
+            infix: this.registry.getAllInfix(),
+        };
     }
 
     getParser(): PrecedenceParser {
@@ -1927,7 +1993,21 @@ export class ExpressionEngine {
             });
         }
 
-        const asyncCache = AsyncResultCache.getSnapshot();
+        // Build async cache snapshot from TanStack Query cache
+        const queryCache = this.queryClient.getQueryCache();
+        const allQueries = queryCache.getAll();
+        const asyncCache = allQueries.map(q => {
+            const status = q.state.status === 'success' ? 'resolved' as const
+                : q.state.status === 'error' ? 'error' as const
+                : 'in_flight' as const;
+            return {
+                packageId: (q.queryKey[0] as string) ?? 'unknown',
+                resolvedCount: q.state.status === 'success' ? 1 : 0,
+                inFlightCount: q.state.status !== 'success' && q.state.status !== 'error' ? 1 : 0,
+                errorCount: q.state.status === 'error' ? 1 : 0,
+                entries: [{ key: q.queryKey.join(':'), status }],
+            };
+        });
 
         return { bytecode, lineCache: lineCacheEntries, asyncCache };
     }
@@ -2001,7 +2081,7 @@ export class ExpressionEngine {
      * Evaluate a raw expression string without line-number context.
      * Returns the Value result. Throws on error.
      */
-    evaluateExpression(expression: string): Value {
+    evaluateExpression(expression: string): EvalResults {
         return this.evaluateLine(-1, expression);
     }
 
@@ -2144,8 +2224,8 @@ export class ExpressionEngine {
          }
 
          try {
-             const result = this.evaluateLine(-1, expression);
-             return result.toNumber();
+             const results = this.evaluateLine(-1, expression);
+             return results[0].toNumber();
          } catch {
              return NaN;
          }

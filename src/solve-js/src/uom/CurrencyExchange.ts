@@ -3,91 +3,43 @@
  * Integrates with DataQueryService for worker-based execution
  */
 
-import { dataQueryService, DataSourceConfig, DataSourceHandle } from "@solve-js/services/DataQueryService";
-
-// ============================================================================
-// CURRENCY DATA SOURCE CONFIGURATION
-// ============================================================================
-
-const CURRENCY_DATA_SOURCE_ID = "currency";
-
-const currencyDataSourceConfig: DataSourceConfig = {
-  id: CURRENCY_DATA_SOURCE_ID,
-  type: "currency",
-  endpoint: "https://api.frankfurter.dev/v2/rates?base=USD",
-  refreshInterval: 30 * 60 * 1000, // 30 minutes
-  timeout: 5000,
-  retryPolicy: {
-    maxRetries: 5,
-    backoffMs: 1000,
-    backoffMultiplier: 2
-  }
-};
-
 // ============================================================================
 // CURRENCY EXCHANGE SERVICE
 // ============================================================================
 
 export class CurrencyExchangeService {
-  private dataSourceHandle: DataSourceHandle;
   private subscriptions: Map<string, Set<(rate: number, error?: string) => void>> = new Map();
-  private cacheUpdateUnsubscribe: () => void;
-  private errorUnsubscribe: () => void;
 
-  constructor() {
-    // Register currency data source
-    this.dataSourceHandle = dataQueryService.registerDataSource(
-      currencyDataSourceConfig
-    );
-
-    // Currency logic is now handled natively in the worker
-    // No plugin registration needed
-  }
+  constructor() {}
 
   // ------------------------------------------------------------------------
   // RATE FETCHING
   // ------------------------------------------------------------------------
 
-  async getRate(from: string, to: string): Promise<number> {
-    const queryKey = ["currency", from, to];
-    return this.dataSourceHandle.get(queryKey) as Promise<number>;
+  async getRate(from: string, to: string, signal?: AbortSignal): Promise<number> {
+    const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${from.toUpperCase()}`, { signal });
+    if (!response.ok) throw new Error(`Currency API returned ${response.status}`);
+    const data = await response.json();
+    const rates: Record<string, number> = data.rates ?? {};
+    const toUpper = to.toUpperCase();
+    if (rates[toUpper] === undefined) throw new Error(`Unknown currency: ${toUpper}`);
+    return rates[toUpper];
   }
 
   getRateSync(from: string, to: string): number | null {
-    // For same currency, return 1
     if (from.toUpperCase() === to.toUpperCase()) {
       return 1;
     }
-    
-    const queryKey = ["currency", from, to];
-    const rate = this.dataSourceHandle.getSync(queryKey) as number | null;
-    
-    // If rate is not in cache, try to calculate it from fallback rates
-    if (rate === null) {
-      // Use fallback rates for calculation
-      const fallbackRates: Record<string, number> = {
-        USD: 1,
-        EUR: 0.854,
-        GBP: 0.739,
-        JPY: 151.5,
-        BTC: 60000,
-        ETH: 3000,
-        SOL: 140,
-        XRP: 0.55,
-        ADA: 0.45,
-        DOGE: 0.12,
-        DOT: 6.5,
-      };
-      
-      const fromUpper = from.toUpperCase();
-      const toUpper = to.toUpperCase();
-      
-      if (fallbackRates[fromUpper] && fallbackRates[toUpper]) {
-        return fallbackRates[toUpper] / fallbackRates[fromUpper];
-      }
+    const fallbackRates: Record<string, number> = {
+      USD: 1, EUR: 0.854, GBP: 0.739, JPY: 151.5,
+      BTC: 60000, ETH: 3000, SOL: 140, XRP: 0.55, ADA: 0.45, DOGE: 0.12, DOT: 6.5,
+    };
+    const fromUpper = from.toUpperCase();
+    const toUpper = to.toUpperCase();
+    if (fallbackRates[fromUpper] && fallbackRates[toUpper]) {
+      return fallbackRates[toUpper] / fallbackRates[fromUpper];
     }
-    
-    return rate;
+    return null;
   }
 
   async convert(value: number, from: string, to: string): Promise<number> {
@@ -167,12 +119,11 @@ export class CurrencyExchangeService {
   // ------------------------------------------------------------------------
 
   refreshRate(from: string, to: string): void {
-    // Trigger refresh through the data source handle
-    this.dataSourceHandle.refresh();
+    // No-op: TanStack Query handles refresh via invalidateQueries()
   }
 
   refreshAll(): void {
-    this.dataSourceHandle.refresh();
+    // No-op: TanStack Query handles refresh via invalidateQueries()
   }
 
   // ------------------------------------------------------------------------
@@ -197,21 +148,7 @@ export class CurrencyExchangeService {
   // ------------------------------------------------------------------------
 
   destroy(): void {
-    // Unsubscribe all
     this.subscriptions.clear();
-    
-    // Unsubscribe from cache updates
-    if (this.cacheUpdateUnsubscribe) {
-      this.cacheUpdateUnsubscribe();
-    }
-    
-    // Unsubscribe from errors
-    if (this.errorUnsubscribe) {
-      this.errorUnsubscribe();
-    }
-
-    // Unregister data source
-    this.dataSourceHandle.destroy();
   }
 }
 

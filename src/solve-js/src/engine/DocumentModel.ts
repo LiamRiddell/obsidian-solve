@@ -19,7 +19,11 @@ import { SegmentTree } from "@solve-js/engine/SegmentTree";
  * - `expressions[]` holds all extracted expression strings (1 entry for
  *   full-line expressions, N entries for N inline solves).
  * - `bytecodes[]` holds compiled bytecode in corresponding order.
- * - `results[]` holds evaluation results in corresponding order.
+ * - `results[]` holds evaluation **result groups** in corresponding order.
+ *   Each element is a `Value[]` — a group of Values produced by that expression.
+ *   For variable definitions, the group always has exactly 1 element.
+ *   For multi-output expressions (e.g., currency conversion), the group
+ *   may have multiple Values (one per target unit).
  * - `reads[]` and `writes[]` are aggregated across ALL expressions on
  *   the line — the DAG treats the line as a single dependency node.
  * - `inlineSolveCount` is 0 for full-line expressions, >0 for inline solves.
@@ -54,8 +58,21 @@ export interface LineState {
 	/** Variables this line writes (empty if not a variable definition). Aggregated across all expressions. */
 	writes: string[];
 
-	/** Evaluation results for each expression, in corresponding order. */
-	results: Value[];
+	/**
+	 * Evaluation result groups for each expression, in corresponding order.
+	 * Each `Value[]` is a group of Values produced by one expression.
+	 * Variable definitions always produce exactly 1 Value per group.
+	 * Multi-output expressions (e.g. currency conversion) may produce N Values.
+	 */
+	results: Value[][];
+
+	/**
+	 * Convenience accessor for the first expression's first result.
+	 * Equals `results[0]?.[0] ?? null`. For single-expression lines,
+	 * this is the primary result. For multi-expression (inline solve) lines,
+	 * prefer accessing `results[i][j]` directly.
+	 */
+	result: Value | null;
 
 	/** True if this line needs re-evaluation. */
 	dirty: boolean;
@@ -163,6 +180,7 @@ export class DocumentModel {
 				reads: [],
 				writes: [],
 				results: [],
+				result: null,
 				dirty: true,
 				isVariableDef: false,
 				isEmpty: rawLines[i].trim().length === 0,
@@ -217,6 +235,7 @@ export class DocumentModel {
 					reads: [],
 					writes: [],
 					results: [],
+					result: null,
 					dirty: true,
 					isVariableDef: false,
 					isEmpty: text.trim().length === 0,
@@ -289,6 +308,7 @@ export class DocumentModel {
 		state.expressions = [];
 		state.bytecodes = [];
 		state.results = [];
+		state.result = null;
 		state.inlineSolveCount = 0;
 		state.dirty = true;
 		state.isEmpty = newText.trim().length === 0;
@@ -429,7 +449,7 @@ export class DocumentModel {
 	 * Supports multi-expression lines (inline solves) via parallel arrays.
 	 *
 	 * @param lineId - Persistent line identifier.
-	 * @param results - Evaluation results for each expression (in order).
+	 * @param results - Evaluation result groups for each expression (in order). Each element is a Value[].
 	 * @param bytecodes - Compiled bytecode for each expression (in order).
 	 * @param expressions - Extracted expression strings (in order).
 	 * @param reads - Aggregated read variables across all expressions.
@@ -439,7 +459,7 @@ export class DocumentModel {
 	 */
 	updateLineResult(
 		lineId: number,
-		results: Value[],
+		results: Value[][],
 		bytecodes: BytecodeProgram[],
 		expressions: string[],
 		reads: string[],
@@ -450,6 +470,7 @@ export class DocumentModel {
 		const state = this.lines.get(lineId);
 		if (!state) return;
 		state.results = results;
+		state.result = results[0]?.[0] ?? null;
 		state.bytecodes = bytecodes;
 		state.expressions = expressions;
 		state.reads = reads;

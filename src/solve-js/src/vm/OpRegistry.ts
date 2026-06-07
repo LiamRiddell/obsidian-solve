@@ -1,16 +1,18 @@
-import { OpCode } from "@solve-js/parser/OpCode";
-import { Value } from "@solve-js/vm/Value";
+import type { Value } from "@solve-js/vm/Value";
 
 /**
- * Handler function for plugin-registered opcodes.
- * Called from the VM dispatch loop when an opcode >= PLUGIN_CUSTOM is encountered.
- * Returns the new instruction pointer after consuming operands.
+ * Handler function for plugin-registered opcodes via CALL_PLUGIN (opcode 50).
+ * No longer dispatched directly from the VM switch — plugins register
+ * functions in pluginFunctionRegistry instead.
+ *
+ * @deprecated Use CALL_PLUGIN + pluginFunctionRegistry for plugin functionality.
+ *   OpRegistry remains for the VM interface contract only.
  */
 export type OpcodeHandler = (vm: VM, opcodes: Uint8Array, ip: number, numbers: Float64Array, strings: string[]) => number;
 
 /** Registration payload for an opcode handler. Binds an OpCode to its handler function with plugin attribution. */
 export interface IOpcodeHandlerRegistration {
-	opcode: OpCode;
+	opcode: number;
 	handler: OpcodeHandler;
 	pluginName: string;
 }
@@ -18,34 +20,29 @@ export interface IOpcodeHandlerRegistration {
 /** Maximum safe opcode value for Uint8Array storage. */
 const MAX_OPCODE = 254;
 
+/** Starting point for dynamic opcode allocation. */
+const DYNAMIC_OPCODE_START = 200;
+
 /**
- * Plugin-extensible opcode registry for the VM.
+ * Legacy opcode registry — retained for the VM interface contract.
  *
- * Maps OpCode values → handler functions. Plugin custom opcodes (OpCode >= 200)
- * are registered here and dispatched by the VM's switch-default path.
- *
- * ## Dynamic opcode allocation
- *
- * Call {@link allocateOpcode} to get a unique opcode for your plugin.
- * Allocations start at `PLUGIN_CUSTOM + 1` (201) and increment per call.
- * The legacy `PLUGIN_CUSTOM` (200) remains as a shared fallback slot.
- *
- * Max 54 dynamic opcodes (201–254) — the Uint8Array bytecode format
- * caps all opcodes at 255.
+ * Previously dispatched custom opcodes (>= 200) from the VM switch-default
+ * branch. Now plugins should use CALL_PLUGIN (opcode 50) via
+ * pluginFunctionRegistry instead.
  */
 export class OpRegistry {
-	private handlers = new Map<OpCode, OpcodeHandler>();
-	private nextOpcode = OpCode.PLUGIN_CUSTOM + 1;
+	private handlers = new Map<number, OpcodeHandler>();
+	private nextOpcode = DYNAMIC_OPCODE_START + 1;
 
 	register(registration: IOpcodeHandlerRegistration): void {
 		this.handlers.set(registration.opcode, registration.handler);
 	}
 
-	get(opcode: OpCode): OpcodeHandler | undefined {
+	get(opcode: number): OpcodeHandler | undefined {
 		return this.handlers.get(opcode);
 	}
 
-	has(opcode: OpCode): boolean {
+	has(opcode: number): boolean {
 		return this.handlers.has(opcode);
 	}
 
@@ -56,17 +53,16 @@ export class OpRegistry {
 	 * returns a distinct value. Plugins should call this once during
 	 * registration and store the result.
 	 *
-	 * @throws If the dynamic opcode pool is exhausted (>254 allocations).
-	 * @returns A unique OpCode for the calling plugin.
+	 * @throws If the dynamic opcode pool is exhausted.
+	 * @returns A unique opcode number for the calling plugin.
 	 */
-	allocateOpcode(): OpCode {
+	allocateOpcode(): number {
 		if (this.nextOpcode > MAX_OPCODE) {
 			throw new Error(
-				`OpRegistry: dynamic opcode pool exhausted (max ${MAX_OPCODE - OpCode.PLUGIN_CUSTOM} allocations). ` +
-				`Consider using PLUGIN_CUSTOM (200) as a shared fallback.`
+				`OpRegistry: dynamic opcode pool exhausted (max ${MAX_OPCODE - DYNAMIC_OPCODE_START} allocations).`
 			);
 		}
-		return this.nextOpcode++ as OpCode;
+		return this.nextOpcode++;
 	}
 
 }

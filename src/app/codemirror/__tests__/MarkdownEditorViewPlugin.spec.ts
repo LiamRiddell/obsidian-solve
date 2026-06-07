@@ -1,5 +1,6 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, test, afterEach } from "@jest/globals";
 import { MarkdownEditorViewPlugin } from "@app/codemirror/MarkdownEditorViewPlugin";
+import { EngineProvider } from "@app/engine/EngineProvider";
 
 function createMockView(lines: string[]): any {
 	const text = lines.join("\n");
@@ -39,6 +40,13 @@ function createMockView(lines: string[]): any {
 }
 
 describe("MarkdownEditorViewPlugin with ThreeTierEvaluator", () => {
+	// Each test creates a MarkdownEditorViewPlugin which locks the engine's
+	// event stream via getReader(). Reset the engine between tests so each
+	// gets a fresh unlocked stream.
+	afterEach(() => {
+		EngineProvider.reset();
+	});
+
 	test("creates plugin and builds initial decorations", () => {
 		const view = createMockView(["1 + 2"]);
 		const plugin = new MarkdownEditorViewPlugin(view as any);
@@ -108,6 +116,13 @@ describe("MarkdownEditorViewPlugin with ThreeTierEvaluator", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("MarkdownEditorViewPlugin — abortKeystroke Lifecycle", () => {
+	// Each test creates a MarkdownEditorViewPlugin which locks the engine's
+	// event stream via getReader(). Reset the engine between tests so each
+	// gets a fresh unlocked stream.
+	afterEach(() => {
+		EngineProvider.reset();
+	});
+
 	test("constructor creates a non-aborted keystroke controller", () => {
 		const view = createMockView(["1 + 2"]);
 		const plugin = new MarkdownEditorViewPlugin(view as any);
