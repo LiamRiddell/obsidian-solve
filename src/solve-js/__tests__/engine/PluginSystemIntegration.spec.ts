@@ -1,6 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { PluginManager } from "@solve-js/plugins/PluginSystem";
+import { PluginManager } from "@solve-js/packages/PackageSystem";
 
 describe("Phase 7: Plugin System Integration", () => {
   test("ExpressionEngine has registerPlugin method", () => {

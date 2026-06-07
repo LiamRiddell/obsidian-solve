@@ -70,11 +70,11 @@ describe("Phase 5: evaluateNumber fast path", () => {
       expect(engine.evaluateNumber("x * 2")).toBe(20);
     });
 
-    test("identifier used in expression returns 5 when variable is undefined (VM defaults to 0)", () => {
-      // VM's LOAD_VAR defaults undefined variables to numberValue(0),
-      // so "x + 5" with undefined x evaluates to 0 + 5 = 5, not NaN.
+    test("identifier used in expression throws for undefined variable (no longer defaults to 0)", () => {
+      // VM's LOAD_VAR now throws for undefined variables instead of silently
+      // returning numberValue(0). So "x + 5" with undefined x throws.
       // Use evaluateNumber("x") directly for testing undefined → NaN.
-      expect(engine.evaluateNumber("x + 5")).toBe(5);
+      expect(engine.evaluateNumber("x + 5")).toBeNaN();
     });
 
     test("multi-character bare identifier preceded by colon resolves as variable", () => {

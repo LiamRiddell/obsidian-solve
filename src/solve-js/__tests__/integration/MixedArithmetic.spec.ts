@@ -16,7 +16,6 @@ import { registerDiceParselets } from "@solve-js/providers/dice/parselets/index"
 import { TokenTypes } from "@solve-js/lexer/Token";
 import { Value } from "@solve-js/vm/Value";
 import { currencyExchangeService } from "@solve-js/uom/CurrencyExchange";
-import { dataQueryService } from "@solve-js/services/DataQueryService";
 
 // Mock fetch and setup test environment
 beforeAll(async () => {
@@ -37,9 +36,6 @@ beforeAll(async () => {
     return { ok: false };
   });
   (global as any).fetch = mockFetch;
-
-  // Use main thread execution for tests (no worker)
-  (dataQueryService as any).config.useWorker = false;
 
   // Pre-populate cache with test rates
   await currencyExchangeService.getRate("USD", "EUR");

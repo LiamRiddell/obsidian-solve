@@ -29,7 +29,7 @@ describe("Issue #82: Function expressions lose equal sign", () => {
 
   test("function in expression preserves = in formatted output", () => {
     const enginePlain = new ExpressionEngine("en", false);
-    const value = enginePlain.evaluateLine(1, "round(55/5)");
+    const [value] = enginePlain.evaluateLine(1, "round(55/5)");
     // Use formatValue to format like the plugin does
     const { formatValue } = require("@solve-js/format/FormatEngine");
     const formatted = formatValue(value);
@@ -39,7 +39,7 @@ describe("Issue #82: Function expressions lose equal sign", () => {
 
   test("sin(pi/2)*2 maintains correct format", () => {
     const enginePlain = new ExpressionEngine("en", false);
-    const value = enginePlain.evaluateLine(1, "sin(pi/2)*2");
+    const [value] = enginePlain.evaluateLine(1, "sin(pi/2)*2");
     const { formatValue } = require("@solve-js/format/FormatEngine");
     const formatted = formatValue(value);
     expect(formatted.startsWith("= ")).toBe(true);

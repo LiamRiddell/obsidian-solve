@@ -280,7 +280,7 @@ s\`10% of $200\``;
       const expressions = ["1 + 2", "10 * 5", "100 / 4", "5 - 3"];
       
       expressions.forEach(expr => {
-        const directResult = engine.evaluateLine(1, expr);
+        const [directResult] = engine.evaluateLine(1, expr);
         const documentResult = engine.parseDocument(expr, { inputType: 'markdown' });
         
         expect(documentResult.lines[0].result?.toNumber()).toBe(directResult.toNumber());

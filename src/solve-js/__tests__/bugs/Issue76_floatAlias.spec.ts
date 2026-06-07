@@ -9,7 +9,8 @@ describe("Feature #76: float() as alias for vec()", () => {
   });
 
   test("float(5) creates a 1D vector", () => {
-    const result = engine.parseDocument("x = float(5)");
+    // Use colon prefix so LOAD_VAR doesn't throw on undefined 'x'.
+    const result = engine.parseDocument(":x = float(5)");
     expect(result.lines[0].error).toBeNull();
   });
 

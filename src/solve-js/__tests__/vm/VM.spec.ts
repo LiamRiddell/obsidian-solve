@@ -140,10 +140,11 @@ describe("VM executeBytecode", () => {
     expect(unwrapEvalResult(result).toNumber()).toBe(99);
   });
 
-  test("LOAD_VAR returns 0 for undefined variable", () => {
+  test("LOAD_VAR throws for undefined variable", () => {
     const vm = createVM(sharedOpRegistry);
-    const result = executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm);
-    expect(unwrapEvalResult(result).toNumber()).toBe(0);
+    expect(() => {
+      executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm);
+    }).toThrow(/Undefined variable: undefined_var/);
   });
 
   test("CALL_BUILTIN sqrt(16)", () => {

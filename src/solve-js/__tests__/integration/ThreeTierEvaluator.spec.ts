@@ -67,9 +67,9 @@ describe("ThreeTierEvaluator — Tier 1 (Full Pipeline)", () => {
 
 		expect(result.tierCounts.tier1).toBe(3);
 		expect(result.resultMap.size).toBe(3);
-		expect(result.resultMap.get(1)!.toNumber()).toBe(15);
-		expect(result.resultMap.get(2)!.toNumber()).toBe(40);
-		expect(result.resultMap.get(3)!.toNumber()).toBe(23);
+		expect(result.resultMap.get(1)![0].toNumber()).toBe(15);
+		expect(result.resultMap.get(2)![0].toNumber()).toBe(40);
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(23);
 	});
 
 	test("returns null result for lines outside viewport (before viewport, are Tier 3 if dirty)", () => {
@@ -94,7 +94,7 @@ describe("ThreeTierEvaluator — Tier 1 (Full Pipeline)", () => {
 		const state = doc.getLineAt(1)!;
 		expect(state.dirty).toBe(false);
 		expect(state.results.length).toBe(1);
-		expect(state.results[0].toNumber()).toBe(15);
+		expect(state.results[0][0].toNumber()).toBe(15);
 	});
 
 	test("keeps line dirty on evaluation error", () => {
@@ -137,9 +137,9 @@ describe("ThreeTierEvaluator — Tier 2 (Execute from Cached Bytecode)", () => {
 
 		expect(result.tierCounts.tier1).toBe(0);
 		expect(result.tierCounts.tier2).toBe(3);
-		expect(result.resultMap.get(1)!.toNumber()).toBe(15);
-		expect(result.resultMap.get(2)!.toNumber()).toBe(12);
-		expect(result.resultMap.get(3)!.toNumber()).toBe(6);
+		expect(result.resultMap.get(1)![0].toNumber()).toBe(15);
+		expect(result.resultMap.get(2)![0].toNumber()).toBe(12);
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(6);
 	});
 
 	test("Tier 2 execution produces correct results", () => {
@@ -150,7 +150,7 @@ describe("ThreeTierEvaluator — Tier 2 (Execute from Cached Bytecode)", () => {
 		const result = evaluator.evaluate({ startLine: 1, endLine: 3 });
 
 		expect(result.tierCounts.tier2).toBe(3);
-		expect(result.resultMap.get(1)!.toNumber()).toBe(15);
+		expect(result.resultMap.get(1)![0].toNumber()).toBe(15);
 	});
 
 	test("Tier 2 preserves VM variable state from preceding lines", () => {
@@ -171,8 +171,8 @@ describe("ThreeTierEvaluator — Tier 2 (Execute from Cached Bytecode)", () => {
 		const result = varEvaluator.evaluate({ startLine: 2, endLine: 3 });
 
 		expect(result.tierCounts.tier2).toBe(2);
-		expect(result.resultMap.get(2)!.toNumber()).toBe(15);
-		expect(result.resultMap.get(3)!.toNumber()).toBe(20);
+		expect(result.resultMap.get(2)![0].toNumber()).toBe(15);
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(20);
 	});
 
 	test("re-evaluates manually dirtied line in viewport as Tier 1", () => {
@@ -248,10 +248,10 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 		expect(line2.bytecodes.length).toBe(1);
 		expect(line2.dirty).toBe(false); // executed, now clean
 		expect(line2.results.length).toBe(1);
-		expect(line2.results[0].toNumber()).toBe(10);
+		expect(line2.results[0][0].toNumber()).toBe(10);
 
 		// Line 3 uses x — VM should have x=10 from Tier 3 execution of line 2
-		expect(result.resultMap.get(3)!.toNumber()).toBe(20);
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(20);
 	});
 
 	test("backgroundCompile processes only invisible dirty lines", () => {
@@ -488,7 +488,7 @@ describe("ThreeTierEvaluator — Edge Cases", () => {
 		const result = evaluator.evaluate({ startLine: 1, endLine: 1 });
 
 		expect(result.tierCounts.tier1).toBe(1);
-		expect(result.resultMap.get(1)!.toNumber()).toBe(4);
+		expect(result.resultMap.get(1)![0].toNumber()).toBe(4);
 	});
 
 	test("backgroundCompile handles end of document correctly", () => {
@@ -513,7 +513,7 @@ describe("ThreeTierEvaluator — Edge Cases", () => {
 
 		// Should extract just "203 + 2" and evaluate to 205, not the full prose line
 		expect(result.tierCounts.tier1).toBe(1);
-		expect(result.resultMap.get(1)!.toNumber()).toBe(205);
+		expect(result.resultMap.get(1)![0].toNumber()).toBe(205);
 
 		// DAG should have 0 reads — no IDENTs in "203 + 2"
 		const dag = engine.getDag();
@@ -550,10 +550,10 @@ describe("ThreeTierEvaluator — Edge Cases", () => {
 		const result = evaluator.evaluate({ startLine: 1, endLine: 15 });
 
 		// The inline solve line should evaluate correctly
-		expect(result.resultMap.get(15)!.toNumber()).toBe(205);
+		expect(result.resultMap.get(15)![0].toNumber()).toBe(205);
 
 		// :var + 205 should use var=20
-		expect(result.resultMap.get(13)!.toNumber()).toBe(225);
+		expect(result.resultMap.get(13)![0].toNumber()).toBe(225);
 
 		// Check DAG reads: should only have reads from "Hello world" (2 reads)
 		// and the :var lines (2 reads for var). Not 8 extra reads from the
@@ -638,7 +638,7 @@ describe("ThreeTierEvaluator — VMCheckpointer Integration", () => {
 		expect(checkpointer.getCheckpointAt(2)!.variables.x.toNumber()).toBe(42);
 
 		// Line 3 should correctly use x=42 via VM state from Tier 3 execution
-		expect(result.resultMap.get(3)!.toNumber()).toBe(43);
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(43);
 	});
 
 	test("restoreTo enables evaluating from midpoint without re-evaluating all lines", () => {
@@ -679,9 +679,9 @@ describe("ThreeTierEvaluator — VMCheckpointer Integration", () => {
 		const result = evaluator.evaluate({ startLine: 3, endLine: 5 });
 
 		// Lines 1-2 should be skipped (clean, not in viewport); only 3-5 processed
-		expect(result.resultMap.get(3)!.toNumber()).toBe(16); // cc = 8*2
-		expect(result.resultMap.get(4)!.toNumber()).toBe(13); // a + bb = 5+8
-		expect(result.resultMap.get(5)!.toNumber()).toBe(24); // bb + cc = 8+16
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(16); // cc = 8*2
+		expect(result.resultMap.get(4)![0].toNumber()).toBe(13); // a + bb = 5+8
+		expect(result.resultMap.get(5)![0].toNumber()).toBe(24); // bb + cc = 8+16
 	});
 
 	test("restoreTo with no matching checkpoint resets VM entirely", () => {
@@ -755,9 +755,9 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 
 		expect(result.tierCounts.tier2).toBe(3);
 		expect(result.tierCounts.tier1).toBe(0);
-		expect(result.resultMap.get(4)!.toNumber()).toBe(30);   // x + 20
-		expect(result.resultMap.get(5)!.toNumber()).toBe(7);    // x - 3
-		expect(result.resultMap.get(6)!.toNumber()).toBe(100);  // :y = 100
+		expect(result.resultMap.get(4)![0].toNumber()).toBe(30);   // x + 20
+		expect(result.resultMap.get(5)![0].toNumber()).toBe(7);    // x - 3
+		expect(result.resultMap.get(6)![0].toNumber()).toBe(100);  // :y = 100
 		expect(result.lines.length).toBe(3); // only visible lines
 	});
 
@@ -802,7 +802,7 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		const result = evaluator.setViewport({ startLine: 4, endLine: 4 });
 
 		expect(result.tierCounts.tier2).toBe(1);
-		expect(result.resultMap.get(4)!.toNumber()).toBe(65); // 5 + 15 + 45
+		expect(result.resultMap.get(4)![0].toNumber()).toBe(65); // 5 + 15 + 45
 	});
 
 	// ── Dirty-line fallback ──────────────────────────────────────────
@@ -833,8 +833,8 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		// Line 2: dirty + invisible → Tier 3 (non-var-def, compiled only)
 		// Lines 3-4: dirty + visible → Tier 1
 		expect(result.tierCounts.tier3).toBeGreaterThanOrEqual(1); // line 1 or 2
-		expect(result.resultMap.get(3)!.toNumber()).toBe(40); // xx*2 = 20*2
-		expect(result.resultMap.get(4)!.toNumber()).toBe(30); // xx+10 = 20+10
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(40); // xx*2 = 20*2
+		expect(result.resultMap.get(4)![0].toNumber()).toBe(30); // xx+10 = 20+10
 	});
 
 	test("no dirty before viewport: uses optimized path (no fallback)", () => {
@@ -881,7 +881,7 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 
 		// Should use optimized path: Tier 2 (no dirty before viewport)
 		expect(result.tierCounts.tier2).toBe(2);
-		expect(result.resultMap.get(1)!.toNumber()).toBe(5);
+		expect(result.resultMap.get(1)![0].toNumber()).toBe(5);
 	});
 
 	// ── Variable defs inside viewport ─────────────────────────────────
@@ -904,8 +904,8 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		const result = evaluator.setViewport({ startLine: 3, endLine: 4 });
 
 		// Line 3 is dirty + visible → Tier 1 with checkpoint
-		expect(result.resultMap.get(3)!.toNumber()).toBe(20); // y = 5*4
-		expect(result.resultMap.get(4)!.toNumber()).toBe(10); // y/2 = 10
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(20); // y = 5*4
+		expect(result.resultMap.get(4)![0].toNumber()).toBe(10); // y/2 = 10
 		expect(checkpointer.getCheckpointAt(3)).toBeDefined();
 	});
 
@@ -928,7 +928,7 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		const result = evaluator.setViewport({ startLine: 3, endLine: 3 });
 
 		expect(result.tierCounts.tier2).toBe(1);
-		expect(result.resultMap.get(3)!.toNumber()).toBe(10);
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(10);
 	});
 
 	// ── Edge cases ───────────────────────────────────────────────────
@@ -949,8 +949,8 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		const result = evaluator.setViewport({ startLine: 1, endLine: 2 });
 
 		expect(result.tierCounts.tier2).toBe(2);
-		expect(result.resultMap.get(1)!.toNumber()).toBe(42);
-		expect(result.resultMap.get(2)!.toNumber()).toBe(43);
+		expect(result.resultMap.get(1)![0].toNumber()).toBe(42);
+		expect(result.resultMap.get(2)![0].toNumber()).toBe(43);
 	});
 
 	test("setViewport beyond document end: clamped to docEnd", () => {
@@ -1000,7 +1000,7 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		// Line 2 (empty) → skipped, line 3 (x+10) → Tier 2, line 4 (# ) → skipped (bare structural marker)
 		expect(result.tierCounts.tier2).toBe(1);
 		expect(result.tierCounts.skipped).toBe(2);
-		expect(result.resultMap.get(3)!.toNumber()).toBe(15);
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(15);
 	});
 
 	// ── Performance characteristic ────────────────────────────────────
@@ -1124,13 +1124,13 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 
 		expect(result.tierCounts.tier1).toBe(1);
 		// resultMap stores the LAST result for the line
-		expect(result.resultMap.get(1)!.toNumber()).toBe(40);
+		expect(result.resultMap.get(1)![1].toNumber()).toBe(40);
 
 		// But state.results[] has all results in order
 		const state = doc.getLineAt(1)!;
 		expect(state.results.length).toBe(2);
-		expect(state.results[0].toNumber()).toBe(15);
-		expect(state.results[1].toNumber()).toBe(40);
+		expect(state.results[0][0].toNumber()).toBe(15);
+		expect(state.results[1][0].toNumber()).toBe(40);
 	});
 
 	test("results[] indices match inline solve left-to-right order", () => {
@@ -1143,7 +1143,7 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		const state = doc.getLineAt(1)!;
 		expect(state.results.length).toBe(5);
 		for (let i = 0; i < 5; i++) {
-			expect(state.results[i].toNumber()).toBe(i + 1);
+			expect(state.results[i][0].toNumber()).toBe(i + 1);
 		}
 	});
 
@@ -1158,9 +1158,9 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 
 		const state = doc.getLineAt(1)!;
 		expect(state.results.length).toBe(3);
-		expect(state.results[0].toNumber()).toBe(5);  // :x = 5
-		expect(state.results[1].toNumber()).toBe(15); // x + 10 = 15
-		expect(state.results[2].toNumber()).toBe(10); // x * 2 = 10
+		expect(state.results[0][0].toNumber()).toBe(5);  // :x = 5
+		expect(state.results[1][0].toNumber()).toBe(15); // x + 10 = 15
+		expect(state.results[2][0].toNumber()).toBe(10); // x * 2 = 10
 
 		// VM should have x=5 after the line evaluation
 		expect(engine.getVM().getVar("x")?.toNumber()).toBe(5);
@@ -1177,9 +1177,9 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		const result = evaluator.evaluate({ startLine: 1, endLine: 2 });
 
 		// Line 1 last result (x + 1) = 11
-		expect(result.resultMap.get(1)!.toNumber()).toBe(11);
+		expect(result.resultMap.get(1)![1].toNumber()).toBe(11);
 		// Line 2 uses x=10 (from line 1's variable def)
-		expect(result.resultMap.get(2)!.toNumber()).toBe(15);
+		expect(result.resultMap.get(2)![0].toNumber()).toBe(15);
 	});
 
 	// ── DAG aggregates reads/writes ─────────────────────────────────
@@ -1218,11 +1218,11 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		expect(state.expressions).toEqual([":a = 5", ":b = a + 3", "a + b"]);
 		expect(state.results.length).toBe(3);
 		// :a = 5 → 5
-		expect(state.results[0].toNumber()).toBe(5);
+		expect(state.results[0][0].toNumber()).toBe(5);
 		// :b = a + 3 → 8 (a=5 from previous inline solve)
-		expect(state.results[1].toNumber()).toBe(8);
+		expect(state.results[1][0].toNumber()).toBe(8);
 		// a + b → 13 (a=5, b=8 from previous inline solves)
-		expect(state.results[2].toNumber()).toBe(13);
+		expect(state.results[2][0].toNumber()).toBe(13);
 		// DAG should aggregate writes from :a and :b
 		expect(state.writes).toContain("a");
 		expect(state.writes).toContain("b");
@@ -1268,8 +1268,8 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		evaluator.evaluateAll();
 
 		const line2 = doc.getLineAt(2)!;
-		expect(line2.results[0].toNumber()).toBe(11);  // z + 1 = 11
-		expect(line2.results[1].toNumber()).toBe(20);  // z * 2 = 20
+		expect(line2.results[0][0].toNumber()).toBe(11);  // z + 1 = 11
+		expect(line2.results[1][0].toNumber()).toBe(20);  // z * 2 = 20
 
 		// Change z and mark line 2 dirty so it gets Tier 1 re-evaluation
 		doc.editLine(1, ":z = 100");
@@ -1278,10 +1278,10 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		const result = evaluator.evaluate({ startLine: 1, endLine: 2 });
 
 		// Line 2 re-evaluated with new z via Tier 1
-		expect(result.resultMap.get(2)!.toNumber()).toBe(200); // z * 2 = 200
+		expect(result.resultMap.get(2)![1].toNumber()).toBe(200); // z * 2 = 200
 		const updatedLine2 = doc.getLineAt(2)!;
-		expect(updatedLine2.results[0].toNumber()).toBe(101); // z + 1 = 101
-		expect(updatedLine2.results[1].toNumber()).toBe(200); // z * 2 = 200
+		expect(updatedLine2.results[0][0].toNumber()).toBe(101); // z + 1 = 101
+		expect(updatedLine2.results[1][0].toNumber()).toBe(200); // z * 2 = 200
 	});
 
 	// ── Bytecodes are stored per-expression ──────────────────────────
@@ -1312,8 +1312,8 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		expect(state.inlineSolveCount).toBe(2);
 		expect(state.bytecodes.length).toBe(2);
 		expect(state.results.length).toBe(2);
-		expect(state.results[0].toNumber()).toBe(15);
-		expect(state.results[1].toNumber()).toBe(40);
+		expect(state.results[0][0].toNumber()).toBe(15);
+		expect(state.results[1][0].toNumber()).toBe(40);
 
 		// Second pass: Tier 2 (clean + cached). Re-execute from bytecodes.
 		const result = evaluator.evaluateAll();
@@ -1362,8 +1362,8 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		expect(line4.inlineSolveCount).toBe(2);
 		expect(line4.expressions).toEqual(["10 * 2", "20 + 5"]);
 		expect(line4.results.length).toBe(2);
-		expect(line4.results[0].toNumber()).toBe(20);
-		expect(line4.results[1].toNumber()).toBe(25);
+		expect(line4.results[0][0].toNumber()).toBe(20);
+		expect(line4.results[1][0].toNumber()).toBe(25);
 		expect(result.tierCounts.tier3).toBe(3); // lines 1-3
 		expect(result.tierCounts.tier1).toBe(1); // line 4
 	});
@@ -1388,22 +1388,22 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		const line1 = doc.getLineAt(1)!;
 		expect(line1.inlineSolveCount).toBe(0);
 		expect(line1.expressions).toEqual([":base = 20"]);
-		expect(line1.results[0].toNumber()).toBe(20);
+		expect(line1.results[0][0].toNumber()).toBe(20);
 
 		// Line 2: multi-inline-solve (resultMap = last result)
 		const line2 = doc.getLineAt(2)!;
 		expect(line2.inlineSolveCount).toBe(2);
-		expect(line2.results[0].toNumber()).toBe(25);  // base + 5
-		expect(line2.results[1].toNumber()).toBe(60);  // base * 3
-		expect(result.resultMap.get(2)!.toNumber()).toBe(60); // last result
+		expect(line2.results[0][0].toNumber()).toBe(25);  // base + 5
+		expect(line2.results[1][0].toNumber()).toBe(60);  // base * 3
+		expect(result.resultMap.get(2)![1].toNumber()).toBe(60); // last result
 
 		// Line 3: full-line, uses base
-		expect(result.resultMap.get(3)!.toNumber()).toBe(21);
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(21);
 
 		// Line 4: single inline solve
 		const line4 = doc.getLineAt(4)!;
 		expect(line4.inlineSolveCount).toBe(1);
-		expect(line4.results[0].toNumber()).toBe(10);
+		expect(line4.results[0][0].toNumber()).toBe(10);
 	});
 
 	// ── Edge cases ──────────────────────────────────────────────────
@@ -1418,7 +1418,7 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		const state = doc.getLineAt(1)!;
 		expect(state.inlineSolveCount).toBe(1);
 		expect(state.expressions).toEqual(["42"]);
-		expect(state.results[0].toNumber()).toBe(42);
+		expect(state.results[0][0].toNumber()).toBe(42);
 	});
 
 	test("empty inline solve (s``) is skipped gracefully", () => {
@@ -1431,8 +1431,8 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		const state = doc.getLineAt(1)!;
 		// Empty inline solve is skipped — only 2 results (5+3=8 and 10*2=20)
 		expect(state.results.length).toBe(2);
-		expect(state.results[0].toNumber()).toBe(8);  // 5 + 3
-		expect(state.results[1].toNumber()).toBe(20); // 10 * 2
+		expect(state.results[0][0].toNumber()).toBe(8);  // 5 + 3
+		expect(state.results[1][0].toNumber()).toBe(20); // 10 * 2
 		// inlineSolveCount should still be 3 (empty one counted by lexer)
 		// or 2 if lexer filters — either is correct
 		expect(state.inlineSolveCount).toBeGreaterThanOrEqual(2);

@@ -96,10 +96,10 @@ describe("Variable Parselets", () => {
     expect(result.toNumber()).toBe(70);
   });
 
-  test("unset variable read returns 0", () => {
-    const result = parseAndExecute(":undefinedVar");
-    expect(result.type).toBe(ValueType.Number);
-    expect(result.toNumber()).toBe(0);
+  test("unset variable read throws Undefined variable", () => {
+    // LOAD_VAR now throws for undefined variables instead of silently
+    // returning numberValue(0). Unrecognized identifiers are errors.
+    expect(() => parseAndExecute(":undefinedVar")).toThrow(/Undefined variable/);
   });
 
   test("multi-line variable assignments", () => {

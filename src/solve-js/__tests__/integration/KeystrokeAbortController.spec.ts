@@ -6,7 +6,6 @@ import { numberValue, ValueType } from "@solve-js/vm/Value";
 import { pluginFunctionRegistry } from "@solve-js/vm/VMBuiltins";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { AsyncResultCache } from "@solve-js/cache/AsyncResultCache";
 
 /**
  * Helper: create a fresh engine (no diagnostic mode).
@@ -285,7 +284,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		diagnosticEngine.setKeystrokeSignal(controller.signal);
 
 		// Should not throw — preflight controller handles already-aborted signal
-		const result = diagnosticEngine.evaluateLine(1, "10 + 2");
+		const [result] = diagnosticEngine.evaluateLine(1, "10 + 2");
 
 		// Result should be correct even with aborted keystroke signal
 		expect(result.toNumber()).toBe(12);
@@ -350,7 +349,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 	test("stale async result discarded end-to-end: abort before resolve prevents cache storage", async () => {
 		// End-to-end test: verify that when a keystroke is aborted
 		// BEFORE an async resolution completes, the resolved value
-		// is NOT stored in AsyncResultCache and does NOT reach the
+		// is NOT stored in the query cache and does NOT reach the
 		// evaluator's result map.
 		//
 		// Flow:
@@ -358,7 +357,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		//   2. keystroke aborted (user typed again)
 		//   3. async promise resolves
 		//   4. resolveAsync checks signal.aborted → true → skips cache
-		//   5. AsyncResultCache.has() → false (stale value discarded)
+		//   5. queryClient.getQueryData() → undefined (stale value discarded)
 		let resolvePromise: ((v: unknown) => void) | null = null;
 		const asyncPromise = new Promise<unknown>((resolve) => {
 			resolvePromise = resolve;
@@ -407,7 +406,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 			// ── Assert: stale value was NOT stored ──────────────────
 			// The queryKey format is: "plugin:{fnIdx}:{args joined by |}"
 			// For CALL_PLUGIN 250 1 with arg "1": "plugin:250:1|"
-			expect(AsyncResultCache.has("_engine", "plugin:250:1|")).toBe(false);
+			expect(engine.queryClient.getQueryData(["plugin:250:1|"])).toBeUndefined();
 
 			// Also verify: the in-flight registration was made
 			// (resolveAsync called registerInFlight before awaiting).
@@ -430,7 +429,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 
 		// Keystroke 1
 		const result1 = evaluator.evaluate({ startLine: 1, endLine: 1 }, signal1.signal);
-		expect(result1.resultMap.get(1)!.toNumber()).toBe(15);
+		expect(result1.resultMap.get(1)![0].toNumber()).toBe(15);
 
 		// Abort keystroke 1 (simulates user typing again)
 		signal1.abort("New keystroke");
@@ -438,7 +437,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 
 		// Keystroke 2 — should produce correct results despite signal1 being aborted
 		const result2 = evaluator.evaluate({ startLine: 2, endLine: 2 }, signal2.signal);
-		expect(result2.resultMap.get(2)!.toNumber()).toBe(40);
+		expect(result2.resultMap.get(2)![0].toNumber()).toBe(40);
 
 		// Signal 2 should still be non-aborted (not affected by signal1)
 		expect(signal2.signal.aborted).toBe(false);
@@ -455,7 +454,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		// Second: evaluate without signal — should still work
 		const result = evaluator.evaluate({ startLine: 2, endLine: 2 });
 
-		expect(result.resultMap.get(2)!.toNumber()).toBe(15);
+		expect(result.resultMap.get(2)![0].toNumber()).toBe(15);
 	});
 
 	test("ExpressionEngine.setKeystrokeSignal accepts null to clear", () => {
@@ -469,7 +468,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		const doc = createDoc(["10 + 10"]);
 		const evaluator = new ThreeTierEvaluator(doc, engine);
 		const result = evaluator.evaluateAll(undefined);
-		expect(result.resultMap.get(1)!.toNumber()).toBe(20);
+		expect(result.resultMap.get(1)![0].toNumber()).toBe(20);
 	});
 });
 
@@ -486,19 +485,19 @@ describe("Keystroke AbortController — End-to-End Integration", () => {
 		// Keystroke 1: initial document load
 		const ks1 = new AbortController();
 		const r1 = evaluator.evaluateAll(ks1.signal);
-		expect(r1.resultMap.get(1)!.toNumber()).toBe(10);
-		expect(r1.resultMap.get(2)!.toNumber()).toBe(20);
-		expect(r1.resultMap.get(3)!.toNumber()).toBe(30);
-		expect(r1.resultMap.get(4)!.toNumber()).toBe(200);
-		expect(r1.resultMap.get(5)!.toNumber()).toBe(10);
+		expect(r1.resultMap.get(1)![0].toNumber()).toBe(10);
+		expect(r1.resultMap.get(2)![0].toNumber()).toBe(20);
+		expect(r1.resultMap.get(3)![0].toNumber()).toBe(30);
+		expect(r1.resultMap.get(4)![0].toNumber()).toBe(200);
+		expect(r1.resultMap.get(5)![0].toNumber()).toBe(10);
 
 		// Keystroke 2: user scrolls (abort old, create new)
 		ks1.abort("Scroll");
 		const ks2 = new AbortController();
 		const r2 = evaluator.setViewport({ startLine: 3, endLine: 5 }, ks2.signal);
-		expect(r2.resultMap.get(3)!.toNumber()).toBe(30);
-		expect(r2.resultMap.get(4)!.toNumber()).toBe(200);
-		expect(r2.resultMap.get(5)!.toNumber()).toBe(10);
+		expect(r2.resultMap.get(3)![0].toNumber()).toBe(30);
+		expect(r2.resultMap.get(4)![0].toNumber()).toBe(200);
+		expect(r2.resultMap.get(5)![0].toNumber()).toBe(10);
 		expect(r2.lines.length).toBe(3); // only visible lines
 
 		// Keystroke 3: user edits line 2 (abort old, create new)
@@ -507,10 +506,10 @@ describe("Keystroke AbortController — End-to-End Integration", () => {
 		doc.editLine(2, ":y = 30");
 		evaluator.applyTransaction([{ startLine: 2, deleteCount: 1, insertLines: [":y = 30"] }]);
 		const r3 = evaluator.evaluate({ startLine: 1, endLine: 5 }, ks3.signal);
-		expect(r3.resultMap.get(2)!.toNumber()).toBe(30); // y changed
-		expect(r3.resultMap.get(3)!.toNumber()).toBe(40); // x + y = 10 + 30
-		expect(r3.resultMap.get(4)!.toNumber()).toBe(300); // x * y
-		expect(r3.resultMap.get(5)!.toNumber()).toBe(20); // y - x = 30 - 10
+		expect(r3.resultMap.get(2)![0].toNumber()).toBe(30); // y changed
+		expect(r3.resultMap.get(3)![0].toNumber()).toBe(40); // x + y = 10 + 30
+		expect(r3.resultMap.get(4)![0].toNumber()).toBe(300); // x * y
+		expect(r3.resultMap.get(5)![0].toNumber()).toBe(20); // y - x = 30 - 10
 
 		// Verify all old signals are aborted
 		expect(ks1.signal.aborted).toBe(true);
@@ -534,8 +533,8 @@ describe("Keystroke AbortController — End-to-End Integration", () => {
 		const ks2 = new AbortController();
 		const result = evaluator.evaluate({ startLine: 2, endLine: 3 }, ks2.signal);
 
-		expect(result.resultMap.get(2)!.toNumber()).toBe(6); // v + 1 = 5 + 1
-		expect(result.resultMap.get(3)!.toNumber()).toBe(7); // v + 2 = 5 + 2
+		expect(result.resultMap.get(2)![0].toNumber()).toBe(6); // v + 1 = 5 + 1
+		expect(result.resultMap.get(3)![0].toNumber()).toBe(7); // v + 2 = 5 + 2
 	});
 
 	test("backward compatibility: evaluate without signal parameter works", () => {
@@ -545,14 +544,14 @@ describe("Keystroke AbortController — End-to-End Integration", () => {
 
 		// Old-style calls (no signal param) should still work
 		const r1 = evaluator.evaluateAll();
-		expect(r1.resultMap.get(1)!.toNumber()).toBe(10);
-		expect(r1.resultMap.get(2)!.toNumber()).toBe(7);
+		expect(r1.resultMap.get(1)![0].toNumber()).toBe(10);
+		expect(r1.resultMap.get(2)![0].toNumber()).toBe(7);
 
 		const r2 = evaluator.evaluate({ startLine: 1, endLine: 1 });
-		expect(r2.resultMap.get(1)!.toNumber()).toBe(10);
+		expect(r2.resultMap.get(1)![0].toNumber()).toBe(10);
 
 		const r3 = evaluator.setViewport({ startLine: 2, endLine: 2 });
-		expect(r3.resultMap.get(2)!.toNumber()).toBe(7);
+		expect(r3.resultMap.get(2)![0].toNumber()).toBe(7);
 	});
 
 	test("signal parameter type safety: undefined is handled as null", () => {
@@ -592,13 +591,13 @@ describe("Keystroke AbortController — abortKeystroke Pattern", () => {
 		for (let i = 0; i < 10; i++) {
 			const controller = new AbortController();
 			const result = evaluator.evaluate({ startLine: 1, endLine: 3 }, controller.signal);
-			expect(result.resultMap.get(1)!.toNumber()).toBe(3);
+			expect(result.resultMap.get(1)![0].toNumber()).toBe(3);
 			controller.abort(`Keystroke ${i}`);
 		}
 
 		// Final evaluation should still work
 		const finalController = new AbortController();
 		const finalResult = evaluator.evaluateAll(finalController.signal);
-		expect(finalResult.resultMap.get(1)!.toNumber()).toBe(3);
+		expect(finalResult.resultMap.get(1)![0].toNumber()).toBe(3);
 	});
 });

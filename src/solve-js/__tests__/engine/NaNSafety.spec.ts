@@ -30,13 +30,13 @@ describe("Phase 4: NaN Safety and Edge Cases", () => {
 
   test("division by zero returns Infinity", () => {
     const engine = new ExpressionEngine();
-    const r = engine.evaluateLine(1, "10 / 0");
+    const [r] = engine.evaluateLine(1, "10 / 0");
     expect(Math.abs(r.toNumber())).toBe(Infinity);
   });
 
   test("sqrt of negative returns guarded result", () => {
     const engine = new ExpressionEngine();
-    const r = engine.evaluateLine(1, "sqrt(-1)");
+    const [r] = engine.evaluateLine(1, "sqrt(-1)");
     expect(typeof r.toNumber()).toBe("number");
   });
 });

@@ -532,10 +532,11 @@ describe("VM — Variables", () => {
     expect(unwrapEvalResult(result).toNumber()).toBe(99);
   });
 
-  test("LOAD_VAR returns 0 for undefined variable", () => {
+  test("LOAD_VAR throws for undefined variable", () => {
     const vm = freshVM();
-    const result = executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm);
-    expect(unwrapEvalResult(result).toNumber()).toBe(0);
+    expect(() => {
+      executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm);
+    }).toThrow(/Undefined variable: undefined_var/);
   });
 });
 
@@ -672,40 +673,6 @@ describe("VM — Edge cases & error handling", () => {
       vm
     );
     // 255 is not a recognized opcode — falls through default which is a no-op
-    expect(unwrapEvalResult(result).toNumber()).toBe(42);
-  });
-});
-
-describe("VM — Custom opcode (PLUGIN_CUSTOM)", () => {
-  test("PLUGIN_CUSTOM dispatches to registered handler", () => {
-    const registry = new OpRegistry();
-    const vm: VM = createVM(registry, 200, 50000);
-
-    // Register a custom handler that multiplies top of stack by 2
-    registry.register({
-      opcode: OpCode.PLUGIN_CUSTOM,
-      handler: (_vm, _opcodes, ip) => {
-        const val = _vm.pop().toNumber();
-        _vm.push(numberValue(val * 2));
-        return ip;
-      },
-      pluginName: "test-doubler",
-    });
-
-    const result = executeBytecode(
-      bc([OpCode.PUSH_NUMBER, 0, OpCode.PLUGIN_CUSTOM, 0, OpCode.HALT], [21]),
-      vm
-    );
-    expect(unwrapEvalResult(result).toNumber()).toBe(42);
-  });
-
-  test("unregistered PLUGIN_CUSTOM is a no-op", () => {
-    const vm = freshVM();
-    const result = executeBytecode(
-      bc([OpCode.PUSH_NUMBER, 0, OpCode.PLUGIN_CUSTOM, 0, OpCode.HALT], [42]),
-      vm
-    );
-    // No handler registered for PLUGIN_CUSTOM — default fallthrough, stack unchanged
     expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 });

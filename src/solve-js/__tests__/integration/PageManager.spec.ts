@@ -110,25 +110,25 @@ describe("PageManager — Direction Detection", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("PageManager — Hot Pages (viewport ± 3 pages)", () => {
-	test("lines in viewport page retain bytecode + result after maintainAfterEval", () => {
+	test("lines in viewport page retain bytecodes + result after maintainAfterEval", () => {
 		const doc = createLargeDoc(200);
 		const engine = createEngine();
 		const evaluator = new ThreeTierEvaluator(doc, engine);
 
-		// Evaluate all → populates bytecode + results
+		// Evaluate all → populates bytecodes + results
 		evaluator.evaluateAll();
 
 		// Viewport at lines 65-95 (all in page 0)
 		const viewport = { startLine: 65, endLine: 95 };
 		evaluator.evaluate(viewport);
 
-		// Lines in page 0 should retain bytecode and results (hot)
+		// Lines in page 0 should retain bytecodes and results (hot)
 		const line1 = doc.getLineAt(1)!;
-		expect(line1.bytecode).not.toBeNull();
+		expect(line1.bytecodes.length).toBeGreaterThan(0);
 		expect(line1.result).not.toBeNull();
 
 		const line128 = doc.getLineAt(128)!;
-		expect(line128.bytecode).not.toBeNull();
+		expect(line128.bytecodes.length).toBeGreaterThan(0);
 		expect(line128.result).not.toBeNull();
 	});
 
@@ -147,14 +147,14 @@ describe("PageManager — Hot Pages (viewport ± 3 pages)", () => {
 		// Page 5 = viewport page
 		// Hot range: pages 2-8 inclusive
 
-		// Page 2 (lines 257-384): hot → bytecode + result retained
+		// Page 2 (lines 257-384): hot → bytecodes + result retained
 		const hotLine = doc.getLineAt(300)!;
-		expect(hotLine.bytecode).not.toBeNull();
+		expect(hotLine.bytecodes.length).toBeGreaterThan(0);
 		expect(hotLine.result).not.toBeNull();
 
-		// Page 8 (lines 1025-1152): hot → bytecode + result retained
+		// Page 8 (lines 1025-1152): hot → bytecodes + result retained
 		const hotLine2 = doc.getLineAt(1100)!;
-		expect(hotLine2.bytecode).not.toBeNull();
+		expect(hotLine2.bytecodes.length).toBeGreaterThan(0);
 		expect(hotLine2.result).not.toBeNull();
 	});
 });
@@ -164,7 +164,7 @@ describe("PageManager — Hot Pages (viewport ± 3 pages)", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("PageManager — Warm Pages (±4-6 from viewport)", () => {
-	test("warm pages retain bytecode but evict results", () => {
+	test("warm pages retain bytecodes but evict results", () => {
 		const doc = createLargeDoc(PAGE_SIZE * 15); // ~1920 lines
 		const engine = createEngine();
 		const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -176,14 +176,14 @@ describe("PageManager — Warm Pages (±4-6 from viewport)", () => {
 		evaluator.evaluate(viewport);
 
 		// Warm pages: 1-3 and 11-13
-		// Page 3 (lines 385-512): warm → bytecode kept, result evicted
+		// Page 3 (lines 385-512): warm → bytecodes kept, result evicted
 		const warmLine = doc.getLineAt(400)!;
-		expect(warmLine.bytecode).not.toBeNull();
+		expect(warmLine.bytecodes.length).toBeGreaterThan(0);
 		expect(warmLine.result).toBeNull(); // evicted
 
-		// Page 11 (lines 1409-1536): warm → bytecode kept, result evicted
+		// Page 11 (lines 1409-1536): warm → bytecodes kept, result evicted
 		const warmLine2 = doc.getLineAt(1500)!;
-		expect(warmLine2.bytecode).not.toBeNull();
+		expect(warmLine2.bytecodes.length).toBeGreaterThan(0);
 		expect(warmLine2.result).toBeNull(); // evicted
 	});
 
@@ -221,7 +221,7 @@ describe("PageManager — Warm Pages (±4-6 from viewport)", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("PageManager — Cold Pages (beyond ±6 from viewport)", () => {
-	test("cold pages evict bytecode + results, mark dirty", () => {
+	test("cold pages evict bytecodes + results, mark dirty", () => {
 		const doc = createLargeDoc(PAGE_SIZE * 20); // ~2560 lines
 		const engine = createEngine();
 		const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -234,7 +234,7 @@ describe("PageManager — Cold Pages (beyond ±6 from viewport)", () => {
 
 		// Page 1 (lines 129-256): distance = 9 pages → cold
 		const coldLine = doc.getLineAt(200)!;
-		expect(coldLine.bytecode).toBeNull();   // evicted
+		expect(coldLine.bytecodes.length).toBe(0);   // evicted
 		expect(coldLine.result).toBeNull();     // evicted
 		expect(coldLine.dirty).toBe(true);      // marked dirty for re-eval
 	});
@@ -249,9 +249,9 @@ describe("PageManager — Cold Pages (beyond ±6 from viewport)", () => {
 		// Push page 1 cold by setting viewport far away
 		evaluator.evaluate({ startLine: PAGE_SIZE * 10, endLine: PAGE_SIZE * 10 + 30 });
 
-		// Page 1 should now be cold (bytecode evicted, dirty)
+		// Page 1 should now be cold (bytecodes evicted, dirty)
 		const coldLine = doc.getLineAt(200)!;
-		expect(coldLine.bytecode).toBeNull();
+		expect(coldLine.bytecodes.length).toBe(0);
 		expect(coldLine.dirty).toBe(true);
 
 		// Now scroll back to page 1 — should get Tier 1 re-evaluation
@@ -259,11 +259,11 @@ describe("PageManager — Cold Pages (beyond ±6 from viewport)", () => {
 
 		expect(result.tierCounts.tier1).toBeGreaterThanOrEqual(1); // re-compiled
 		const evaledLine = doc.getLineAt(200)!;
-		expect(evaledLine.bytecode).not.toBeNull();
+		expect(evaledLine.bytecodes.length).toBeGreaterThan(0);
 		expect(evaledLine.dirty).toBe(false);
 	});
 
-	test("cold page variable definitions keep bytecode (never evicted)", () => {
+	test("cold page variable definitions keep bytecodes (never evicted)", () => {
 		const lines: string[] = [];
 		for (let i = 1; i <= PAGE_SIZE * 10; i++) {
 			lines.push(`${i} + ${i}`);
@@ -280,10 +280,10 @@ describe("PageManager — Cold Pages (beyond ±6 from viewport)", () => {
 		// Viewport at page 10 → page 1 is cold
 		evaluator.evaluate({ startLine: PAGE_SIZE * 10, endLine: PAGE_SIZE * 10 + 30 });
 
-		// Variable def in page 1 should still have bytecode (pinned)
+		// Variable def in page 1 should still have bytecodes (pinned)
 		const varDefLine = doc.getLineAt(201)!; // +1 for 1-based
 		expect(varDefLine.isVariableDef).toBe(true);
-		expect(varDefLine.bytecode).not.toBeNull(); // pinned — never evicted
+		expect(varDefLine.bytecodes.length).toBeGreaterThan(0); // pinned — never evicted
 	});
 });
 
@@ -362,7 +362,7 @@ describe("PageManager — Preload Targets", () => {
 		// from the page 12 viewport, so they're already cold-evicted.
 		//
 		// Viewport at page 12: warmStart=6, coldLeftEnd=5, coldLeftStart=3.
-		// Pages 3, 4, 5 get bytecode evicted. Then viewport moves to page 9
+		// Pages 3, 4, 5 get bytecodes evicted. Then viewport moves to page 9
 		// with direction "up". Preload target pages: 9-3-1=5, going back 2
 		// pages: 5, 4. Both were evicted → found as dirty preload targets.
 		const doc = createLargeDoc(PAGE_SIZE * 20);
@@ -376,7 +376,7 @@ describe("PageManager — Preload Targets", () => {
 
 		// Verify page 4 was actually evicted (within cold left buffer)
 		const evictedLine = doc.getLineAt(PAGE_SIZE * 4 + 1)!;
-		expect(evictedLine.bytecode).toBeNull();
+		expect(evictedLine.bytecodes.length).toBe(0);
 		expect(evictedLine.dirty).toBe(true);
 
 		// Step 2: Scroll up to page 9 → direction "up"
@@ -480,7 +480,7 @@ describe("ThreeTierEvaluator — Page Eviction Integration", () => {
 
 		// Page 1 should be evicted (cold)
 		const coldLine = doc.getLineAt(100)!;
-		expect(coldLine.bytecode).toBeNull();
+		expect(coldLine.bytecodes.length).toBe(0);
 		expect(coldLine.dirty).toBe(true);
 	});
 
@@ -497,7 +497,7 @@ describe("ThreeTierEvaluator — Page Eviction Integration", () => {
 
 		// Pages beyond ±6 from page 0 should be cold
 		const coldLine = doc.getLineAt(PAGE_SIZE * 10)!;
-		expect(coldLine.bytecode).toBeNull();
+		expect(coldLine.bytecodes.length).toBe(0);
 	});
 
 	test("getPageManager() returns the internal PageManager", () => {
@@ -510,7 +510,7 @@ describe("ThreeTierEvaluator — Page Eviction Integration", () => {
 		expect(pm).toBeInstanceOf(PageManager);
 	});
 
-	test("variable def bytecode survives cold eviction", () => {
+	test("variable def bytecodes survives cold eviction", () => {
 		const lines: string[] = [];
 		for (let i = 1; i <= PAGE_SIZE * 10; i++) {
 			lines.push(`${i} + ${i}`);
@@ -529,7 +529,7 @@ describe("ThreeTierEvaluator — Page Eviction Integration", () => {
 
 		const varDefLine = doc.getLineAt(201)!;
 		expect(varDefLine.isVariableDef).toBe(true);
-		expect(varDefLine.bytecode).not.toBeNull();
+		expect(varDefLine.bytecodes.length).toBeGreaterThan(0);
 	});
 });
 
@@ -551,7 +551,7 @@ describe("ThreeTierEvaluator — Preload Integration", () => {
 
 		// Cold pages should be evicted
 		const coldLine = doc.getLineAt(100)!;
-		expect(coldLine.bytecode).toBeNull();
+		expect(coldLine.bytecodes.length).toBe(0);
 	});
 
 	test("setViewport on new evaluator works (PageManager starts fresh)", () => {
@@ -578,7 +578,7 @@ describe("ThreeTierEvaluator — Preload Integration", () => {
 		evaluator.evaluate({ startLine: 1, endLine: 30 });
 		// Page 10 should be cold
 		const cold1 = doc.getLineAt(PAGE_SIZE * 10)!;
-		expect(cold1.bytecode).toBeNull();
+		expect(cold1.bytecodes.length).toBe(0);
 
 		// Re-evaluate all to make everything hot again
 		evaluator.evaluateAll();
@@ -590,7 +590,7 @@ describe("ThreeTierEvaluator — Preload Integration", () => {
 		evaluator2.setViewport({ startLine: 1, endLine: 30 });
 		// Page 10 should be cold again
 		const cold2 = doc.getLineAt(PAGE_SIZE * 10)!;
-		expect(cold2.bytecode).toBeNull();
+		expect(cold2.bytecodes.length).toBe(0);
 	});
 });
 
@@ -605,7 +605,7 @@ describe("PageManager — Edge Cases", () => {
 		pm.maintainAfterEval({ startLine: 1, endLine: 3 }, doc);
 
 		// All lines are in page 0 (viewport page), so hot — nothing evicted.
-		// maintainAfterEval only evicts, it doesn't populate bytecode.
+		// maintainAfterEval only evicts, it doesn't populate bytecodes.
 		// Verify that no lines were incorrectly evicted despite the
 		// small document where all pages past docEnd should be skipped.
 		// Lines should still be in their initial dirty state.
@@ -653,12 +653,12 @@ describe("PageManager — Edge Cases", () => {
 		expect(true).toBe(true);
 	});
 
-	test("preload excludes lines that already have bytecode", () => {
+	test("preload excludes lines that already have bytecodes", () => {
 		const doc = createLargeDoc(PAGE_SIZE * 15);
 		const engine = createEngine();
 		const evaluator = new ThreeTierEvaluator(doc, engine);
 
-		// Evaluate everything → all lines have bytecode
+		// Evaluate everything → all lines have bytecodes
 		evaluator.evaluateAll();
 
 		// Scroll a bit to establish direction
@@ -666,11 +666,11 @@ describe("PageManager — Edge Cases", () => {
 		pm.maintainAfterEval({ startLine: PAGE_SIZE * 5, endLine: PAGE_SIZE * 5 + 50 }, doc);
 		pm.maintainAfterEval({ startLine: PAGE_SIZE * 6, endLine: PAGE_SIZE * 6 + 50 }, doc);
 
-		// Now evict a single page to make it dirty + no-bytecode
+		// Now evict a single page to make it dirty + no-bytecodes
 		// (We can't easily do this via maintainAfterEval since the pages are warm)
 		// Instead, manually dirty a line and check it's included
 		const targetLine = doc.getLineAt(PAGE_SIZE * 10 + 50)!;
-		targetLine.bytecode = null;
+		targetLine.bytecodes = [];
 		targetLine.dirty = true;
 
 		const targets = pm.getPreloadTargets({ startLine: PAGE_SIZE * 6 + 1, endLine: PAGE_SIZE * 6 + 31 }, doc);

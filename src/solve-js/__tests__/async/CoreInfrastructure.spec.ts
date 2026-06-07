@@ -2,7 +2,7 @@
  * Phase A: Async Streaming Results — Core Infrastructure Tests
  *
  * Tests for:
- * - AsyncResultCache per-plugin isolation (set, get, has, inFlight, clearAll, clearDomain, clearPlugin)
+ * - TanStack QueryClient per-plugin isolation (setQueryData, getQueryData, fetchQuery, removeQueries, clear)
  * - ValueType.Pending + pendingValue() factory
  * - EResultType.Pending enum value
  * - VM CALL_PLUGIN returns EvalResult { type:'pending' } when plugin returns Promise
@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "@jest/globals";
-import { AsyncResultCache } from "@solve-js/cache";
+import { QueryClient } from "@tanstack/query-core";
 import { ValueType, Value, numberValue, stringValue, pendingValue } from "@solve-js/vm/Value";
 import { EResultType } from "@app/constants/EResultType";
 import { createVM, executeBytecode, unwrapEvalResult, type EvalResult } from "@solve-js/vm/VM";
@@ -51,136 +51,120 @@ function freshVM(): VM {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// §1  AsyncResultCache (per-plugin isolated)
+// §1  QueryClient (per-plugin isolated via hierarchical query keys)
 // ────────────────────────────────────────────────────────────────────────
 
 const TEST_PACKAGE = "test_0";
 const TEST_PACKAGE_B = "test_1";
 
-describe("AsyncResultCache", () => {
+function makeKey(pkg: string, key: string): string[] {
+    return [pkg, ...key.split(":")];
+}
+
+describe("QueryClient — cache isolation via hierarchical keys", () => {
+    let qc: QueryClient;
+
     beforeEach(() => {
-        AsyncResultCache.clearAll();
+        qc = new QueryClient();
     });
-	test("should store and retrieve values (plugin-scoped)", () => {
+
+	test("should store and retrieve values (package-scoped keys)", () => {
         const val = numberValue(42);
-        AsyncResultCache.set(TEST_PACKAGE, "rate:USD:GBP", val);
+        qc.setQueryData(makeKey(TEST_PACKAGE, "rate:USD:GBP"), val);
 
-        expect(AsyncResultCache.has(TEST_PACKAGE, "rate:USD:GBP")).toBe(true);
-        expect(AsyncResultCache.get(TEST_PACKAGE, "rate:USD:GBP")).toBe(val);
-        expect(AsyncResultCache.has(TEST_PACKAGE, "rate:USD:EUR")).toBe(false);
-        expect(AsyncResultCache.get(TEST_PACKAGE, "rate:USD:EUR")).toBeUndefined();
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "rate:USD:GBP"))).toBe(val);
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "rate:USD:EUR"))).toBeUndefined();
     });
-	test("should isolate plugins — Plugin A cannot read Plugin B's cache", () => {
+
+	test("should isolate packages — Package A cannot read Package B's cache", () => {
         const valA = numberValue(100);
-        AsyncResultCache.set(TEST_PACKAGE, "key", valA);
+        qc.setQueryData(makeKey(TEST_PACKAGE, "key"), valA);
 
-        expect(AsyncResultCache.has(TEST_PACKAGE, "key")).toBe(true);
-        expect(AsyncResultCache.has(TEST_PACKAGE_B, "key")).toBe(false);
-        expect(AsyncResultCache.get(TEST_PACKAGE_B, "key")).toBeUndefined();
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "key"))).toBe(valA);
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE_B, "key"))).toBeUndefined();
     });
-	test("should track in-flight promises (plugin-scoped)", () => {
-        expect(AsyncResultCache.isInFlight(TEST_PACKAGE, "key1")).toBe(false);
 
-        const promise = Promise.resolve(numberValue(1));
-        AsyncResultCache.registerInFlight(TEST_PACKAGE, "key1", promise);
+	test("should deduplicate in-flight requests (fetchQuery same-key dedup)", async () => {
+        let callCount = 0;
+        const queryFn = async () => {
+            callCount++;
+            return numberValue(1);
+        };
 
-        expect(AsyncResultCache.isInFlight(TEST_PACKAGE, "key1")).toBe(true);
-        expect(AsyncResultCache.getInFlight(TEST_PACKAGE, "key1")).toBe(promise);
+        // Simultaneous fetchQuery calls with the same key share one execution
+        const [r1, r2] = await Promise.all([
+            qc.fetchQuery({ queryKey: makeKey(TEST_PACKAGE, "key1"), queryFn }),
+            qc.fetchQuery({ queryKey: makeKey(TEST_PACKAGE, "key1"), queryFn }),
+        ]);
+
+        expect(callCount).toBe(1);
+        expect(r1).toBe(r2);
     });
-	test("should clear in-flight when value is set", () => {
-        const promise = Promise.resolve(numberValue(1));
-        AsyncResultCache.registerInFlight(TEST_PACKAGE, "fetch:items", promise);
-        expect(AsyncResultCache.isInFlight(TEST_PACKAGE, "fetch:items")).toBe(true);
 
-        AsyncResultCache.set(TEST_PACKAGE, "fetch:items", numberValue(100));
-        expect(AsyncResultCache.isInFlight(TEST_PACKAGE, "fetch:items")).toBe(false);
+	test("should overwrite in-flight data with setQueryData", () => {
+        qc.setQueryData(makeKey(TEST_PACKAGE, "fetch:items"), numberValue(100));
+
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "fetch:items"))).toEqual(numberValue(100));
     });
-	test("should store and retrieve errors", () => {
-        const err = new Error("Network timeout");
-        AsyncResultCache.setError(TEST_PACKAGE, "rate:FAIL", err);
 
-        expect(AsyncResultCache.getError(TEST_PACKAGE, "rate:FAIL")).toBe(err);
-        expect(AsyncResultCache.has(TEST_PACKAGE, "rate:FAIL")).toBe(false); // error ≠ resolved value
+	test("should isolate entries by package-level key prefix", () => {
+        qc.setQueryData(makeKey(TEST_PACKAGE, "a"), numberValue(1));
+        qc.setQueryData(makeKey(TEST_PACKAGE, "b"), numberValue(2));
+        qc.setQueryData(makeKey(TEST_PACKAGE_B, "c"), stringValue("other"));
+
+        // Verify isolation: same package sees its own entries
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "a"))).toEqual(numberValue(1));
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE_B, "a"))).toBeUndefined();
+
+        // Verify all 3 entries exist
+        expect(qc.getQueryCache().getAll().length).toBe(3);
+
+        // Clear only one package using removeQueries with exact prefix match
+        qc.removeQueries({ queryKey: makeKey(TEST_PACKAGE, "a") });
+
+        // After removal: the exact match is gone, others remain
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "a"))).toBeUndefined();
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "b"))).not.toBeUndefined();
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE_B, "c"))).not.toBeUndefined();
     });
-	test("should clear error when value is set", () => {
-        AsyncResultCache.setError(TEST_PACKAGE, "key", new Error("fail"));
-        AsyncResultCache.set(TEST_PACKAGE, "key", numberValue(1));
 
-        expect(AsyncResultCache.getError(TEST_PACKAGE, "key")).toBeUndefined();
-        expect(AsyncResultCache.has(TEST_PACKAGE, "key")).toBe(true);
+	test("should clear entire package (removeQueries with package prefix)", () => {
+        qc.setQueryData(makeKey(TEST_PACKAGE, "a"), numberValue(1));
+        qc.setQueryData(makeKey(TEST_PACKAGE, "b"), numberValue(2));
+
+        qc.removeQueries({ queryKey: [TEST_PACKAGE] });
+
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "a"))).toBeUndefined();
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "b"))).toBeUndefined();
     });
-	test("should clear entries by domain", () => {
-        AsyncResultCache.set(TEST_PACKAGE, "rate:USD:GBP", numberValue(1));
-        AsyncResultCache.set(TEST_PACKAGE, "rate:USD:EUR", numberValue(2));
-        AsyncResultCache.set(TEST_PACKAGE, "weather:London", stringValue("sunny"));
 
-        AsyncResultCache.clearDomain(TEST_PACKAGE, "rate");
+	test("should clear all entries across all packages", () => {
+        qc.setQueryData(makeKey(TEST_PACKAGE, "a"), numberValue(1));
+        qc.setQueryData(makeKey(TEST_PACKAGE_B, "b"), numberValue(2));
 
-        expect(AsyncResultCache.has(TEST_PACKAGE, "rate:USD:GBP")).toBe(false);
-        expect(AsyncResultCache.has(TEST_PACKAGE, "rate:USD:EUR")).toBe(false);
-        expect(AsyncResultCache.has(TEST_PACKAGE, "weather:London")).toBe(true);
+        qc.clear();
+
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE, "a"))).toBeUndefined();
+        expect(qc.getQueryData(makeKey(TEST_PACKAGE_B, "b"))).toBeUndefined();
     });
-	test("should clear in-flight by domain", () => {
-        AsyncResultCache.registerInFlight(TEST_PACKAGE, "rate:USD:GBP", Promise.resolve(numberValue(1)));
-        AsyncResultCache.registerInFlight(TEST_PACKAGE, "weather:London", Promise.resolve(stringValue("rain")));
 
-        AsyncResultCache.clearDomain(TEST_PACKAGE, "rate");
+	test("should report cache size via getAll()", () => {
+        expect(qc.getQueryCache().getAll().length).toBe(0);
 
-        expect(AsyncResultCache.isInFlight(TEST_PACKAGE, "rate:USD:GBP")).toBe(false);
-        expect(AsyncResultCache.isInFlight(TEST_PACKAGE, "weather:London")).toBe(true);
+        qc.setQueryData(makeKey(TEST_PACKAGE, "k1"), numberValue(1));
+        qc.setQueryData(makeKey(TEST_PACKAGE, "k2"), numberValue(2));
+
+        expect(qc.getQueryCache().getAll().length).toBe(2);
     });
-	test("should clear errors by domain", () => {
-        AsyncResultCache.setError(TEST_PACKAGE, "rate:FAIL", new Error("oops"));
-        AsyncResultCache.setError(TEST_PACKAGE, "weather:FAIL", new Error("nope"));
 
-        AsyncResultCache.clearDomain(TEST_PACKAGE, "rate");
+	test("should count unique packages via distinct first-level keys", () => {
+        expect(qc.getQueryCache().getAll().length).toBe(0);
 
-        expect(AsyncResultCache.getError(TEST_PACKAGE, "rate:FAIL")).toBeUndefined();
-        expect(AsyncResultCache.getError(TEST_PACKAGE, "weather:FAIL")).toBeDefined();
-    });
-	test("should clear entire package", () => {
-        AsyncResultCache.set(TEST_PACKAGE, "a", numberValue(1));
-        AsyncResultCache.set(TEST_PACKAGE, "b", numberValue(2));
-        AsyncResultCache.registerInFlight(TEST_PACKAGE, "c", Promise.resolve(numberValue(3)));
-        AsyncResultCache.setError(TEST_PACKAGE, "d", new Error("e"));
+        qc.setQueryData(makeKey(TEST_PACKAGE, "k"), numberValue(1));
+        expect(qc.getQueryCache().getAll().length).toBe(1);
 
-        AsyncResultCache.clearPackage(TEST_PACKAGE);
-
-        expect(AsyncResultCache.has(TEST_PACKAGE, "a")).toBe(false);
-        expect(AsyncResultCache.get(TEST_PACKAGE, "b")).toBeUndefined();
-        expect(AsyncResultCache.isInFlight(TEST_PACKAGE, "c")).toBe(false);
-        expect(AsyncResultCache.getError(TEST_PACKAGE, "d")).toBeUndefined();
-    });
-	test("should clear all entries across all plugins", () => {
-        AsyncResultCache.set(TEST_PACKAGE, "a", numberValue(1));
-        AsyncResultCache.set(TEST_PACKAGE_B, "b", numberValue(2));
-        AsyncResultCache.registerInFlight(TEST_PACKAGE, "c", Promise.resolve(numberValue(3)));
-        AsyncResultCache.setError(TEST_PACKAGE, "d", new Error("e"));
-
-        AsyncResultCache.clearAll();
-
-        expect(AsyncResultCache.has(TEST_PACKAGE, "a")).toBe(false);
-        expect(AsyncResultCache.has(TEST_PACKAGE_B, "b")).toBe(false);
-        expect(AsyncResultCache.isInFlight(TEST_PACKAGE, "c")).toBe(false);
-        expect(AsyncResultCache.getError(TEST_PACKAGE, "d")).toBeUndefined();
-    });
-	test("should report size and inFlightCount", () => {
-        expect(AsyncResultCache.size).toBe(0);
-        expect(AsyncResultCache.inFlightCount).toBe(0);
-
-        AsyncResultCache.set(TEST_PACKAGE, "k1", numberValue(1));
-        AsyncResultCache.set(TEST_PACKAGE, "k2", numberValue(2));
-        AsyncResultCache.registerInFlight(TEST_PACKAGE, "k3", Promise.resolve(numberValue(3)));
-
-        expect(AsyncResultCache.size).toBe(2);
-        expect(AsyncResultCache.inFlightCount).toBe(1);
-    });
-	test("should report packageCount", () => {
-        expect(AsyncResultCache.packageCount).toBe(0);
-        AsyncResultCache.set(TEST_PACKAGE, "k", numberValue(1));
-        expect(AsyncResultCache.packageCount).toBe(1);
-        AsyncResultCache.set(TEST_PACKAGE_B, "k", numberValue(1));
-        expect(AsyncResultCache.packageCount).toBe(2);
+        qc.setQueryData(makeKey(TEST_PACKAGE_B, "k"), numberValue(1));
+        expect(qc.getQueryCache().getAll().length).toBe(2);
     });
 });
 
@@ -231,9 +215,6 @@ describe("EResultType.Pending", () => {	test("should exist in the enum", () => {
 // ────────────────────────────────────────────────────────────────────────
 
 describe("VM CALL_PLUGIN → EvalResult", () => {
-    beforeEach(() => {
-        AsyncResultCache.clearAll();
-    });
 	test("should return { type:'pending' } when plugin function returns Promise", () => {
         // Register a plugin function that returns a Promise
         const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
@@ -322,7 +303,6 @@ describe("ExpressionEngine EvalResult handling", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-        AsyncResultCache.clearAll();
         engine = new ExpressionEngine("en", false);
     });
 
@@ -435,7 +415,6 @@ describe("ExpressionEngine evaluateExpression with async plugin", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-        AsyncResultCache.clearAll();
         engine = new ExpressionEngine("en", false);
     });
 

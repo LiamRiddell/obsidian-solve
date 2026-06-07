@@ -152,39 +152,39 @@ describe("ExpressionLexer — identifiers & keywords", () => {
     expect(t.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("'increase by' → INCREASE + IDENT (raw lexer)", () => {
+  test("'increase by' → INCREASE + BY (raw lexer)", () => {
     const t = tokenize("increase by");
     expect(t).toHaveLength(2);
     expect(t[0].type).toBe("INCREASE");
-    expect(t[1].type).toBe("IDENT");
+    expect(t[1].type).toBe("BY");
   });
 
-  test("'decrease by' → DECREASE + IDENT (raw lexer)", () => {
+  test("'decrease by' → DECREASE + BY (raw lexer)", () => {
     const t = tokenize("decrease by");
     expect(t).toHaveLength(2);
     expect(t[0].type).toBe("DECREASE");
-    expect(t[1].type).toBe("IDENT");
+    expect(t[1].type).toBe("BY");
   });
 
-  test("'times by' → STAR + IDENT (raw lexer)", () => {
+  test("'times by' → STAR + BY (raw lexer)", () => {
     const t = tokenize("times by");
     expect(t).toHaveLength(2);
     expect(t[0].type).toBe("STAR");
-    expect(t[1].type).toBe("IDENT");
+    expect(t[1].type).toBe("BY");
   });
 
-  test("'multiply by' → STAR + IDENT (raw lexer)", () => {
+  test("'multiply by' → STAR + BY (raw lexer)", () => {
     const t = tokenize("multiply by");
     expect(t).toHaveLength(2);
     expect(t[0].type).toBe("STAR");
-    expect(t[1].type).toBe("IDENT");
+    expect(t[1].type).toBe("BY");
   });
 
-  test("'divide by' → SLASH + IDENT (raw lexer)", () => {
+  test("'divide by' → SLASH + BY (raw lexer)", () => {
     const t = tokenize("divide by");
     expect(t).toHaveLength(2);
     expect(t[0].type).toBe("SLASH");
-    expect(t[1].type).toBe("IDENT");
+    expect(t[1].type).toBe("BY");
   });
 
   test("phrase match case-insensitive — raw TO + IDENT tokens", () => {

@@ -59,7 +59,7 @@ it("supports registerPackage with prefix parselets", () => {
     const pkg: ISolvePackage = {
       name: "test-package",
       opcodeHandlers: [{
-        opcode: OpCode.PLUGIN_CUSTOM,
+        opcode: OpCode.CALL_PLUGIN,
         handler: () => 0,
         pluginName: "test",
       }],

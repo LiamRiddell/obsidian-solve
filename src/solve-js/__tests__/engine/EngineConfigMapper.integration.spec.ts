@@ -36,10 +36,10 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const engine = new ExpressionEngine("en", false, config);
 
     // A simple expression should evaluate correctly
-    expect(engine.evaluateLine(1, "10 + 20").toNumber()).toBe(30);
+    expect(engine.evaluateLine(1, "10 + 20")[0].toNumber()).toBe(30);
 
     // A longer expression with many operations should also work
-    expect(engine.evaluateLine(1, "1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10").toNumber()).toBe(55);
+    expect(engine.evaluateLine(1, "1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10")[0].toNumber()).toBe(55);
   });
 
   // ── Low maxInstructions enforcement ───────────────────────────────────
@@ -102,8 +102,8 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
 
     // The hot path bypasses the push() bounds check, so expressions
     // that need >1 stack slots still work correctly.
-    expect(engine.evaluateLine(1, "2 + 3").toNumber()).toBe(5);
-    expect(engine.evaluateLine(1, "max(1, 2, 3)").toNumber()).toBe(3);
+    expect(engine.evaluateLine(1, "2 + 3")[0].toNumber()).toBe(5);
+    expect(engine.evaluateLine(1, "max(1, 2, 3)")[0].toNumber()).toBe(3);
   });
 
   test("generous maxStackDepth via mapper allows complex expressions", () => {
@@ -112,7 +112,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
 
     const engine = new ExpressionEngine("en", false, config);
 
-    expect(engine.evaluateLine(1, "max(1, 2, 3)").toNumber()).toBe(3);
+    expect(engine.evaluateLine(1, "max(1, 2, 3)")[0].toNumber()).toBe(3);
     expect(engine.getConfig().vm.maxStackDepth).toBe(10);
   });
 
@@ -194,6 +194,6 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
 
     // The hot path bypasses the push() bounds check, so even maxStackDepth=0
     // doesn't prevent expressions from evaluating correctly.
-    expect(engine.evaluateLine(1, "42").toNumber()).toBe(42);
+    expect(engine.evaluateLine(1, "42")[0].toNumber()).toBe(42);
   });
 });

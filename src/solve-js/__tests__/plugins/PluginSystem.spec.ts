@@ -9,9 +9,9 @@
  */
 
 import { describe, expect, test, jest } from "@jest/globals";
-import { PluginManager, ProviderPackage } from "@solve-js/plugins/PluginSystem";
-import { PluginRegistry } from "@solve-js/plugins/PluginSystem";
-import type { SolvePlugin } from "@solve-js/plugins/PluginSystem";
+import { PluginManager, ProviderPackage } from "@solve-js/packages/PackageSystem";
+import { PluginRegistry } from "@solve-js/packages/PackageSystem";
+import type { SolvePlugin } from "@solve-js/packages/PackageSystem";
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 
 describe("PluginManager", () => {
@@ -26,11 +26,11 @@ describe("PluginManager", () => {
     };
 
     manager.register(plugin);
-    expect(manager.hasPlugin("test-plugin")).toBe(true);
+    expect(manager.hasPackage("test-plugin")).toBe(true);
     expect(plugin.register).toHaveBeenCalledWith(registry);
   });
 
-  test("register throws when plugin name already registered", () => {
+  test("register throws when package name already registered", () => {
     const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
     const manager = new PluginManager(registry);
 
@@ -73,17 +73,17 @@ describe("PluginManager", () => {
     manager.unregister("test-plugin");
 
     expect(unregister).toHaveBeenCalledWith(registry);
-    expect(manager.hasPlugin("test-plugin")).toBe(false);
+    expect(manager.hasPackage("test-plugin")).toBe(false);
   });
 
-  test("unregister throws when plugin not found", () => {
+  test("unregister throws when package not found", () => {
     const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
     const manager = new PluginManager(registry);
 
     expect(() => manager.unregister("nonexistent")).toThrow(/not registered/i);
   });
 
-  test("getPlugin returns the plugin by name", () => {
+  test("getPackage returns the package by name", () => {
     const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
     const manager = new PluginManager(registry);
 
@@ -94,24 +94,24 @@ describe("PluginManager", () => {
     };
 
     manager.register(plugin);
-    expect(manager.getPlugin("test-plugin")).toBe(plugin);
+    expect(manager.getPackage("test-plugin")).toBe(plugin);
   });
 
-  test("getPlugin returns undefined for missing plugin", () => {
+  test("getPackage returns undefined for missing package", () => {
     const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
     const manager = new PluginManager(registry);
 
-    expect(manager.getPlugin("nonexistent")).toBeUndefined();
+    expect(manager.getPackage("nonexistent")).toBeUndefined();
   });
 
-  test("hasPlugin returns false for unregistered name", () => {
+  test("hasPackage returns false for unregistered name", () => {
     const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
     const manager = new PluginManager(registry);
 
-    expect(manager.hasPlugin("nonexistent")).toBe(false);
+    expect(manager.hasPackage("nonexistent")).toBe(false);
   });
 
-  test("getPlugins returns all registered plugins", () => {
+  test("getPackages returns all registered packages", () => {
     const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
     const manager = new PluginManager(registry);
 
@@ -120,22 +120,22 @@ describe("PluginManager", () => {
     manager.register(p1);
     manager.register(p2);
 
-    const all = manager.getPlugins();
+    const all = manager.getPackages();
     expect(all).toHaveLength(2);
     expect(all).toContain(p1);
     expect(all).toContain(p2);
   });
 
-  test("registerPackage registers all plugins in a package", () => {
+  test("registerBundle registers all packages in a bundle", () => {
     const registry = new (require("@solve-js/parser/registry/ParseletRegistry").ParseletRegistry)();
     const manager = new PluginManager(registry);
 
     const p1: SolvePlugin = { name: "pkg:a", version: "1.0.0", register: jest.fn() };
     const p2: SolvePlugin = { name: "pkg:b", version: "1.0.0", register: jest.fn() };
 
-    manager.registerPackage({ name: "test-pkg", version: "1.0.0", plugins: [p1, p2] });
-    expect(manager.hasPlugin("pkg:a")).toBe(true);
-    expect(manager.hasPlugin("pkg:b")).toBe(true);
+    manager.registerBundle({ name: "test-pkg", version: "1.0.0", packages: [p1, p2] });
+    expect(manager.hasPackage("pkg:a")).toBe(true);
+    expect(manager.hasPackage("pkg:b")).toBe(true);
   });
 
   test("register with lexerPlugin registers keywords on sharedLexer", () => {
@@ -249,8 +249,8 @@ describe("PluginManager", () => {
     manager.register(p2);
 
     manager.clear();
-    expect(manager.hasPlugin("a")).toBe(false);
-    expect(manager.hasPlugin("b")).toBe(false);
+    expect(manager.hasPackage("a")).toBe(false);
+    expect(manager.hasPackage("b")).toBe(false);
     // Only p1 has unregister — should have been called once
     expect(unregister).toHaveBeenCalledTimes(1);
   });

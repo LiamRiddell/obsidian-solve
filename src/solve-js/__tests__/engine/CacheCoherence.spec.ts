@@ -108,10 +108,10 @@ describe("Cache Coherence", () => {
 			const line2 = doc.getLineAt(2);
 			expect(line1).toBeDefined();
 			expect(line2).toBeDefined();
-			expect(line1!.bytecode).not.toBeNull();
-			expect(line2!.bytecode).not.toBeNull();
-			expect(line1!.bytecode!.opcodes.length).toBeGreaterThan(0);
-			expect(line2!.bytecode!.opcodes.length).toBeGreaterThan(0);
+			expect(line1!.bytecodes.length).toBeGreaterThan(0);
+			expect(line2!.bytecodes.length).toBeGreaterThan(0);
+			expect(line1!.bytecodes[0].opcodes.length).toBeGreaterThan(0);
+			expect(line2!.bytecodes[0].opcodes.length).toBeGreaterThan(0);
 
 			// LineCache should also have the same entries
 			const cache = engine.getLineCache();
@@ -178,8 +178,8 @@ describe("Cache Coherence", () => {
 
 			expect(line1.dirty).toBe(false);
 			expect(line2.dirty).toBe(false);
-			expect(line1.bytecode).not.toBeNull();
-			expect(line2.bytecode).not.toBeNull();
+			expect(line1.bytecodes.length).toBeGreaterThan(0);
+			expect(line2.bytecodes.length).toBeGreaterThan(0);
 		});
 
 		test("editing a line clears its bytecode and marks it dirty", () => {
@@ -195,7 +195,7 @@ describe("Cache Coherence", () => {
 
 			const line1 = doc.getLineAt(1)!;
 			expect(line1.dirty).toBe(true);
-			expect(line1.bytecode).toBeNull();
+			expect(line1.bytecodes.length).toBe(0);
 			expect(line1.result).toBeNull();
 		});
 
@@ -354,7 +354,7 @@ describe("Cache Coherence", () => {
 			engine.evaluateIncremental("x", 7);
 
 			// :x should now be 7 (direct variable lookup via evaluateLine)
-			const result = engine.evaluateLine(3, ":x");
+			const [result] = engine.evaluateLine(3, ":x");
 			expect(result.toNumber()).toBe(7);
 		});
 	});

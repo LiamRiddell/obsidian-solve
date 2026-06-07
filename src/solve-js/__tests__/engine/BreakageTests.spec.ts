@@ -51,14 +51,14 @@ describe("Engine Breakage Tests", () => {
   describe("Unicode Math Operators", () => {
     test("unicode multiplication × works", () => {
       const engine = new ExpressionEngine();
-      const result = engine.evaluateLine(1, "2 × 3");
+      const [result] = engine.evaluateLine(1, "2 × 3");
       expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(6);
     });
 
     test("unicode division ÷ works", () => {
       const engine = new ExpressionEngine();
-      const result = engine.evaluateLine(1, "6 ÷ 3");
+      const [result] = engine.evaluateLine(1, "6 ÷ 3");
       expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(2);
     });
@@ -172,13 +172,13 @@ Expression: 3 * 4
       const engine = new ExpressionEngine("en", false, {
         validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: true },
       });
-      const result = engine.evaluateLine(1, "(1 + 2");
+      const [result] = engine.evaluateLine(1, "(1 + 2");
       expect(result.toNumber()).toBe(3);
     });
 
     test("division by zero returns Infinity", () => {
       const engine = new ExpressionEngine();
-      const result = engine.evaluateLine(1, "1 / 0");
+      const [result] = engine.evaluateLine(1, "1 / 0");
       expect(result.type).toBe(ValueType.Number);
     });
 

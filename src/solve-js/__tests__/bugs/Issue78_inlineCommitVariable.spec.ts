@@ -13,7 +13,7 @@ describe("Issue #78: Committing Inline w/ Variable Fails", () => {
     engine.evaluateLine(1, ":x = 10");
 
     // Use it in an inline solve
-    const result = engine.evaluateLine(2, "s`x + 5`");
+    const [result] = engine.evaluateLine(2, "s`x + 5`");
     expect(result.toNumber()).toBe(15);
   });
 
@@ -25,22 +25,22 @@ describe("Issue #78: Committing Inline w/ Variable Fails", () => {
     engine.evaluateLine(1, ":x = 20");
 
     // The inline solve should reflect the updated value when re-evaluated
-    const result = engine.evaluateLine(2, "s`x + 5`");
+    const [result] = engine.evaluateLine(2, "s`x + 5`");
     expect(result.toNumber()).toBe(25);
   });
 
   test("inline solve without variable commits correctly", () => {
     // Baseline: inline solve without variables should work
-    const result = engine.evaluateLine(1, "s`10 + 20`");
+    const [result] = engine.evaluateLine(1, "s`10 + 20`");
     expect(result.toNumber()).toBe(30);
   });
 
   test("multiple inline solves referencing same variable", () => {
     engine.evaluateLine(1, ":x = 3");
 
-    const r1 = engine.evaluateLine(2, "s`x + 1`");
-    const r2 = engine.evaluateLine(3, "s`x * 2`");
-    const r3 = engine.evaluateLine(4, "s`x ^ 2`");
+    const [r1] = engine.evaluateLine(2, "s`x + 1`");
+    const [r2] = engine.evaluateLine(3, "s`x * 2`");
+    const [r3] = engine.evaluateLine(4, "s`x ^ 2`");
 
     expect(r1.toNumber()).toBe(4);
     expect(r2.toNumber()).toBe(6);
@@ -59,7 +59,7 @@ describe("Issue #78: Committing Inline w/ Variable Fails", () => {
 
   test("complex inline expression with function and variable", () => {
     engine.evaluateLine(1, ":radius = 5");
-    const result = engine.evaluateLine(2, "s`round(pi * :radius ^ 2)`");
+    const [result] = engine.evaluateLine(2, "s`round(pi * :radius ^ 2)`");
     expect(result.toNumber()).toBeCloseTo(79, 0);
   });
 
@@ -72,7 +72,7 @@ describe("Issue #78: Committing Inline w/ Variable Fails", () => {
 
     // Should be able to redefine and evaluate after clear
     engine.evaluateLine(1, ":x = 100");
-    const result = engine.evaluateLine(2, "s`x + 5`");
+    const [result] = engine.evaluateLine(2, "s`x + 5`");
     expect(result.toNumber()).toBe(105);
   });
 });
