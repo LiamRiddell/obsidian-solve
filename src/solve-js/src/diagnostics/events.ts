@@ -1,7 +1,4 @@
-import { Token } from "@solve-js/lexer/Token";
-import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
-import { Value } from "@solve-js/vm/Value";
-import { OpCode } from "@solve-js/parser/OpCode";
+
 
 /**
  * Diagnostic event types as string constants (not const enum — for cross-module compatibility with isolatedModules)

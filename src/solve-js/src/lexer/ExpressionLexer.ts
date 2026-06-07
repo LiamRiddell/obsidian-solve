@@ -1,8 +1,8 @@
-import { Token, registerTokenType, tokenTypeId, registerAllTokenTypes } from '@solve-js/lexer/Token';
+import { Token, tokenTypeId, registerAllTokenTypes } from '@solve-js/lexer/Token';
 import { knownUnits } from '@solve-js/lexer/units';
 import { getLocale, type ILocale } from '@solve-js/constants/locales';
 import { ErrorFactory } from '@solve-js/errors/UnifiedErrorFramework';
-import type { TokenLookup, PhraseNode as RegistryPhraseNode } from '@solve-js/lexer/TokenClassRegistry';
+import type { TokenLookup } from '@solve-js/lexer/TokenClassRegistry';
 
 // Bootstrap all token types at module load
 registerAllTokenTypes();
@@ -147,35 +147,7 @@ function buildCharClassTable(): Uint8Array {
   table[96] = CharClass.BACKTICK; // `
 
   return table;
-}
-
-// ── Pre-computed operator token type IDs ──────────────────────────────────
-// Cached at module load for the hot path — avoids Map.get() per operator token.
-const OP_TYPE_IDS: Record<string, number> = {
-  '+': tokenTypeId('PLUS'),     '-': tokenTypeId('MINUS'),
-  '*': tokenTypeId('STAR'),     '/': tokenTypeId('SLASH'),
-  '^': tokenTypeId('CARET'),    '%': tokenTypeId('PERCENT'),
-  '(': tokenTypeId('LPAREN'),   ')': tokenTypeId('RPAREN'),
-  '[': tokenTypeId('LBRACKET'), ']': tokenTypeId('RBRACKET'),
-  '{': tokenTypeId('LBRACE'),   '}': tokenTypeId('RBRACE'),
-  ',': tokenTypeId('COMMA'),    '=': tokenTypeId('EQUALS'),
-  ':': tokenTypeId('COLON'),    ';': tokenTypeId('SEMICOLON'),
-  '?': tokenTypeId('QUESTION'), '!': tokenTypeId('BANG'),
-  '&': tokenTypeId('BIT_AND'),  '|': tokenTypeId('BIT_OR'),
-  '~': tokenTypeId('BIT_NOT'),
-};
-
-// Pre-computed two-char operator type IDs
-const TWO_CHAR_OP_IDS: Record<string, { typeId: number; text: string }> = {
-  '==': { typeId: tokenTypeId('EQUALITY'), text: '==' },
-  '!=': { typeId: tokenTypeId('NEQ'), text: '!=' },
-  '>=': { typeId: tokenTypeId('GTE'), text: '>=' },
-  '<=': { typeId: tokenTypeId('LTE'), text: '<=' },
-  '<<': { typeId: tokenTypeId('LSHIFT'), text: '<<' },
-  '>>': { typeId: tokenTypeId('RSHIFT'), text: '>>' },
-};
-
-// ── Monomorphic Token class ───────────────────────────────────────────────
+}// ── Monomorphic Token class ───────────────────────────────────────────────
 // V8 assigns a single stable HiddenClass because all properties are
 // initialized in the constructor and never added/removed afterwards.
 // This enables fast property access (inline cache hits) and allows
@@ -319,10 +291,9 @@ export class ExpressionLexer {
    * Set at construction time via the constructor parameter. Plugin-registered
    * keywords/units (via registerPlugin()) are checked alongside
    * the configuredLookup — neither source is bypassed.
-   */
-  private configuredLookup: TokenLookup | null = null;
+   */	private configuredLookup: TokenLookup | null = null;
 
-  // Instance state
+	// Instance state
   private input: string = '';
   private pos: number = 0;
   private len: number = 0;
@@ -345,12 +316,8 @@ export class ExpressionLexer {
   private pluginOperators: Map<number, Map<number, string>> = new Map();
 
   // Plugin-extensible units (merged with knownUnits)
-  private pluginUnits: Set<string> = new Set();
-
-  // Fast-path guards: skip plugin lookups entirely when no plugins registered
-  private hasPluginUnits = false;
-  private hasPluginKeywords = false;
-  private hasPluginOps = false;
+  private pluginUnits: Set<string> = new Set();	// Fast-path guards: skip plugin lookups entirely when no plugins registered
+	private hasPluginOps = false;
 
   // Locale for function-identifier lookups
   private localeCode: string;
@@ -396,7 +363,6 @@ export class ExpressionLexer {
    */
   registerPlugin(plugin: LexerPlugin): void {
     if (plugin.keywords) {
-      this.hasPluginKeywords = true;
       for (const [keyword, tokenType] of Object.entries(plugin.keywords)) {
         const lower = keyword.toLowerCase();
         // Guard: prevent overriding built-in locale keywords
@@ -469,7 +435,6 @@ export class ExpressionLexer {
     }
 
     if (plugin.units) {
-      this.hasPluginUnits = true;
       for (const unit of plugin.units) {
         // Guard: prevent overriding built-in units
         if (knownUnits.has(unit)) {
@@ -502,7 +467,7 @@ export class ExpressionLexer {
       for (const keyword of Object.keys(plugin.keywords)) {
         this.pluginKeywordMap.delete(keyword.toLowerCase());
       }
-      this.hasPluginKeywords = this.pluginKeywordMap.size > 0;
+      
       this.rebuildMergedCollections();
     }
 
@@ -527,7 +492,7 @@ export class ExpressionLexer {
       for (const unit of plugin.units) {
         this.pluginUnits.delete(unit);
       }
-      this.hasPluginUnits = this.pluginUnits.size > 0;
+      
       this.rebuildMergedCollections();
     }
   }

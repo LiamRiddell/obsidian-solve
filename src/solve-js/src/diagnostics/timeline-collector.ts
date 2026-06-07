@@ -1,6 +1,5 @@
 import { DiagnosticCollector } from "./collector";
 import { DiagnosticReport, DiagnosticReportJSON, DiagnosticEvent } from "./events";
-import { DiagnosticEventType } from "./events";
 
 /**
  * Collects all pipeline events with high-resolution timestamps.

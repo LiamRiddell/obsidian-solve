@@ -8,12 +8,16 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 export class VariableParselet implements PrefixParselet {
 	readonly category = "Variable";
 	parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
-    // Handle :var syntax
+    // Handle :var syntax — accept IDENT and UNIT tokens as variable names.
+    // UNIT tokens occur when the variable name collides with a known unit
+    // (e.g., ":b = 5" — "b" is a known unit for bits). The colon prefix
+    // unambiguously signals a variable definition context, so the token
+    // type override is safe and intentional.
     const nameToken = parser.consume();
-    if (nameToken.type !== "IDENT") {
+    if (nameToken.type !== "IDENT" && nameToken.type !== "UNIT") {
       throw ErrorFactory.parsing(
         'EXPECTED_IDENTIFIER',
-        `Expected identifier after colon, got ${nameToken.type}`,
+        `Expected identifier or unit after colon, got ${nameToken.type}`,
         { tokenType: nameToken.type }
       );
     }

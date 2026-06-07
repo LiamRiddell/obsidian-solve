@@ -110,6 +110,11 @@ export const VARIABLES_PACKAGE: ISolvePackage = {
   prefixParselets: [
     { tokenType: "COLON", parselet: new VariableParselet() },
     { tokenType: "IDENT", parselet: new IdentifierParselet() },
+    // UNIT tokens in prefix position (standalone or after operators) are
+    // resolved as variable references via LOAD_VAR, same as IDENT tokens.
+    // This handles cases like `a + b` where "b" is classified as UNIT
+    // because it collides with a known unit (e.g., "b" = bits).
+    { tokenType: "UNIT", parselet: new IdentifierParselet() },
   ],
 };
 
@@ -169,8 +174,8 @@ export const BIGINT_PACKAGE: ISolvePackage = {
   ],
 };
 
-// ── OSRS Grand Exchange (demo package) ────────────────────────────────────
-import { OSRS_GE_PACKAGE } from "./osrs/OsrsGePackage";
+// ── OSRS bare-item-name / keyword support (normalizer + parselet + opcode approach) ──
+import { OSRS_PACKAGE } from "@solve-js/packages/osrs";
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
 export const BUILTIN_PACKAGES: ISolvePackage[] = [
@@ -184,5 +189,5 @@ export const BUILTIN_PACKAGES: ISolvePackage[] = [
   CURRENCY_PACKAGE,
   VECTOR_PACKAGE,
   BIGINT_PACKAGE,
-  OSRS_GE_PACKAGE,
+  OSRS_PACKAGE,
 ];
