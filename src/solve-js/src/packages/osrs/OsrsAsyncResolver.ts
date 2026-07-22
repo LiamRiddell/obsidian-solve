@@ -96,8 +96,13 @@ export class OsrsAsyncResolver implements IAsyncResolver {
       queryKey: osrsItemQueryKey(firstItemId),
       queryFn: ({ signal: qSignal }) => {
         return fetchOsrsBulkPrices(qSignal).then((prices) => {
-          // Fan out bulk result into per-item query cache entries
+          // Fan out bulk result into per-item query cache entries.
+          // Skip the primary item (firstItemId) — TanStack Query handles
+          // that one natively via the fetchQuery return value. Calling
+          // setQueryData on the same queryKey that fetchQuery manages
+          // causes a state inconsistency where fetchStatus stays "fetching".
           for (const id of cachedItemIds) {
+            if (id === firstItemId) continue;
             const price = prices[id.toString()] ?? 0;
             queryClient.setQueryData(osrsItemQueryKey(id), uomValue(price, "gp"));
           }
@@ -105,11 +110,19 @@ export class OsrsAsyncResolver implements IAsyncResolver {
           return uomValue(price, "gp");
         }).catch((err) => {
           console.warn("[osrs-solve] Bulk price fetch failed:", err);
-          // Store 0 gp for all items so re-evaluation doesn't loop
+          // Store 0 gp for all OTHER items so re-evaluation doesn't loop.
+          // Skip the primary item — TanStack Query handles it via the
+          // fetchQuery return value (same setQueryData avoidance as above).
+          // Tag the fallback so the playground can show a timeout indicator.
           for (const id of cachedItemIds) {
-            queryClient.setQueryData(osrsItemQueryKey(id), uomValue(0, "gp"));
+            if (id === firstItemId) continue;
+            const fallback = uomValue(0, "gp");
+            fallback.timedOut = true;
+            queryClient.setQueryData(osrsItemQueryKey(id), fallback);
           }
-          return uomValue(0, "gp");
+          const result = uomValue(0, "gp");
+          result.timedOut = true;
+          return result;
         });
       },
       staleTime: 5 * 60 * 1000, // 5 min — prices change infrequently
@@ -133,17 +146,51 @@ export class OsrsAsyncResolver implements IAsyncResolver {
 
 const OSRS_API_URL = "https://prices.runescape.wiki/api/v1/osrs/latest";
 
-async function fetchOsrsBulkPrices(signal: AbortSignal): Promise<Record<string, number>> {
-  const response = await fetch(OSRS_API_URL, { signal });
-  if (!response.ok) throw new Error(`OSRS API returned ${response.status}`);
-  const json = await response.json();
-  const data = json?.data as Record<string, { high: number; low: number }> | undefined;
-  if (!data) return {};
+/**
+ * Timeout (ms) for OSRS bulk price fetches.
+ *
+ * If the Grand Exchange API doesn't respond within this window, the fetch
+ * is aborted and the resolver falls back to 0 gp — preventing indefinite
+ * "Pending" states in the playground and Obsidian plugin.
+ */
+const OSRS_FETCH_TIMEOUT_MS = 10_000;
 
-  const prices: Record<string, number> = {};
-  for (const [id, price] of Object.entries(data)) {
-    // Use average of high/low for a fair price estimate
-    prices[id] = Math.round((price.high + price.low) / 2);
+async function fetchOsrsBulkPrices(signal: AbortSignal): Promise<Record<string, number>> {
+  // Combine the caller's abort signal with a hard timeout so a hanging
+  // OSRS API never blocks re-evaluation indefinitely.
+  //
+  // We manually multiplex two signals into one AbortController rather than
+  // using AbortSignal.any() (Chrome 116+) to stay compatible with the
+  // TypeScript lib targets used by this project.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(new DOMException(`OSRS API fetch timed out after ${OSRS_FETCH_TIMEOUT_MS}ms`, "TimeoutError")),
+    OSRS_FETCH_TIMEOUT_MS,
+  );
+
+  // When the caller's signal aborts (e.g. keystroke-level cancel), propagate
+  // the abort to our controller so the in-flight fetch is cancelled.
+  const onCallerAbort = () => {
+    clearTimeout(timeoutId);
+    try { controller.abort(signal.reason); } catch { /* already aborted */ }
+  };
+  signal.addEventListener("abort", onCallerAbort, { once: true });
+
+  try {
+    const response = await fetch(OSRS_API_URL, { signal: controller.signal });
+    if (!response.ok) throw new Error(`OSRS API returned ${response.status}`);
+    const json = await response.json();
+    const data = json?.data as Record<string, { high: number; low: number }> | undefined;
+    if (!data) return {};
+
+    const prices: Record<string, number> = {};
+    for (const [id, price] of Object.entries(data)) {
+      // Use average of high/low for a fair price estimate
+      prices[id] = Math.round((price.high + price.low) / 2);
+    }
+    return prices;
+  } finally {
+    clearTimeout(timeoutId);
+    signal.removeEventListener("abort", onCallerAbort);
   }
-  return prices;
 }

@@ -129,6 +129,8 @@ export class Value {
 	public type: ValueType;
 	public value: number | bigint | string | boolean | number[];
 	public unit?: string;
+	/** Set by async resolvers when a fetch timed out — the result is a fallback (typically 0). */
+	public timedOut?: boolean;
 
 	constructor(
 		type: ValueType,
@@ -156,6 +158,8 @@ export class Value {
 		// Clear cache — value changed, cached number is stale.
 		// Re-eager-cache for Number type (most common).
 		this._cachedNumber = typeof value === 'number' ? value : undefined;
+		// Clear timeout flag — recycled Values shouldn't inherit stale metadata.
+		this.timedOut = undefined;
 	}
 
 	isNumber(): this is Value & { value: number } {

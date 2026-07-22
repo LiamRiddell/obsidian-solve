@@ -2,9 +2,12 @@ import type { PerformanceStats, VmStackValue } from './engine.js';
 
 /* ── Formatting ─────────────────────────────────────────────────── */
 
-/** Format nanoseconds as a millisecond string (e.g., "1.23 ms"). */
+/** Format nanoseconds with auto-scaled units (ns → µs → ms → s). */
 export function fmt(ns: number): string {
-  return (ns / 1_000_000).toFixed(2) + ' ms';
+  if (ns < 1_000) return ns.toFixed(0) + ' ns';
+  if (ns < 1_000_000) return (ns / 1_000).toFixed(1) + ' µs';
+  if (ns < 1_000_000_000) return (ns / 1_000_000).toFixed(1) + ' ms';
+  return (ns / 1_000_000_000).toFixed(2) + ' s';
 }
 
 /** Escape HTML entities to prevent XSS. */

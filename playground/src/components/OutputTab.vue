@@ -92,6 +92,9 @@
             <span class="token-line-result-value" :style="{ color: entry.result.error ? 'var(--error)' : 'var(--accent)' }">
               {{ entry.result.error || entry.result.result }}
             </span>
+            <span v-if="entry.result.timedOut" class="token-line-result-timeout" title="API fetch timed out — result is a 0 gp fallback, not real data">
+              ⚠ timed out
+            </span>
             <button
               class="token-line-result-copy"
               :data-copy="entry.result.error || entry.result.result"

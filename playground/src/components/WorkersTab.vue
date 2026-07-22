@@ -34,6 +34,28 @@
         </div>
       </div>
 
+      <!-- QueryClient Config Card -->
+      <div class="worker-card">
+        <div class="worker-card-header">
+          <span class="worker-card-icon">⚙️</span>
+          <span class="worker-card-name">QueryClient Config</span>
+        </div>
+        <div class="worker-card-body">
+          <div class="worker-metric">
+            <span class="worker-metric-label">Default staleTime</span>
+            <span class="worker-metric-value">{{ formatDuration(ws.queryClientConfig.staleTime) }}</span>
+          </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Default gcTime</span>
+            <span class="worker-metric-value">{{ formatDuration(ws.queryClientConfig.gcTime) }}</span>
+          </div>
+        </div>
+        <div class="worker-card-footer">
+          <span class="worker-metric-label">Provider</span>
+          <span class="worker-metric-value">@tanstack/query-core</span>
+        </div>
+      </div>
+
       <!-- Query Cache Card (TanStack Query) -->
       <div class="worker-card">
         <div class="worker-card-header">
@@ -134,5 +156,16 @@ function formatTime(ts: number): string {
     d.getMinutes().toString().padStart(2, '0') + ':' +
     d.getSeconds().toString().padStart(2, '0') + '.' +
     d.getMilliseconds().toString().padStart(3, '0');
+}
+
+function formatDuration(ms: number): string {
+  if (ms === Infinity) return '∞';
+  if (ms <= 0) return '0s';
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m`;
+  const hrs = Math.floor(min / 60);
+  return `${hrs}h`;
 }
 </script>

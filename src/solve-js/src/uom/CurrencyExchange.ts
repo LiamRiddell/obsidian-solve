@@ -16,14 +16,49 @@ export class CurrencyExchangeService {
   // RATE FETCHING
   // ------------------------------------------------------------------------
 
+  /**
+   * Timeout (ms) for currency exchange rate fetches.
+   *
+   * If the frankfurter API doesn't respond within this window, the fetch
+   * is aborted — preventing indefinite "Pending" states in the playground
+   * and Obsidian plugin when the exchange rate API is unreachable.
+   */
+  private static readonly FETCH_TIMEOUT_MS = 10_000;
+
   async getRate(from: string, to: string, signal?: AbortSignal): Promise<number> {
-    const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${from.toUpperCase()}`, { signal });
-    if (!response.ok) throw new Error(`Currency API returned ${response.status}`);
-    const data = await response.json();
-    const rates: Record<string, number> = data.rates ?? {};
-    const toUpper = to.toUpperCase();
-    if (rates[toUpper] === undefined) throw new Error(`Unknown currency: ${toUpper}`);
-    return rates[toUpper];
+    // Combine the caller's optional abort signal with a hard timeout so a
+    // hanging currency API never blocks re-evaluation indefinitely.
+    // Uses the same manual AbortController multiplexing pattern as
+    // OsrsAsyncResolver.fetchOsrsBulkPrices.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(new DOMException(`Currency API fetch timed out after ${CurrencyExchangeService.FETCH_TIMEOUT_MS}ms`, "TimeoutError")),
+      CurrencyExchangeService.FETCH_TIMEOUT_MS,
+    );
+
+    let onCallerAbort: (() => void) | undefined;
+    if (signal) {
+      onCallerAbort = () => {
+        clearTimeout(timeoutId);
+        try { controller.abort(signal.reason); } catch { /* already aborted */ }
+      };
+      signal.addEventListener("abort", onCallerAbort, { once: true });
+    }
+
+    try {
+      const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${from.toUpperCase()}`, { signal: controller.signal });
+      if (!response.ok) throw new Error(`Currency API returned ${response.status}`);
+      const data = await response.json();
+      const rates: Record<string, number> = data.rates ?? {};
+      const toUpper = to.toUpperCase();
+      if (rates[toUpper] === undefined) throw new Error(`Unknown currency: ${toUpper}`);
+      return rates[toUpper];
+    } finally {
+      clearTimeout(timeoutId);
+      if (signal && onCallerAbort) {
+        signal.removeEventListener("abort", onCallerAbort);
+      }
+    }
   }
 
   getRateSync(from: string, to: string): number | null {

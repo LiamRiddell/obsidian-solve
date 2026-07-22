@@ -65,6 +65,7 @@ export const useEngineStore = defineStore('engine', () => {
 
     // Update Query Cache telemetry
     ws.updateQueryCacheTelemetry(result.queryCache ?? []);
+    ws.updateQueryClientConfig(result.queryClientConfig);
   };
 
   /* ── Actions ────────────────────────────────────────────── */

@@ -607,6 +607,55 @@ html, body {
     box-shadow: 0 0 6px var(--accent-glow);
 }
 
+/* Pipeline sticky context header (like NormalizerTab's) */
+.pipeline-context-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid rgba(41,206,153,0.12);
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+.pipeline-context-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.pipeline-context-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.pipeline-context-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: rgba(41,206,153,0.15);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    border: 1px solid rgba(41,206,153,0.25);
+}
+.pipeline-context-expr {
+    flex: 1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
 .pipeline-flow {
   display: flex;
   flex-direction: column;
@@ -774,7 +823,7 @@ html, body {
 
 /* ── Pipeline Opcodes Table (inside Compiler stage) ────────────── */
 .pipeline-opcodes-wrap {
-  max-height: 240px;
+  max-height: 480px;
   overflow: auto;
   width: 100%;
   border-radius: 4px;
@@ -1467,6 +1516,22 @@ html, body {
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-line-result-timeout {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  background: rgba(220, 220, 170, 0.15);
+  color: var(--warn);
+  border: 1px solid rgba(220, 220, 170, 0.3);
+  flex-shrink: 0;
+  cursor: help;
   white-space: nowrap;
 }
 
@@ -3470,3 +3535,301 @@ html, body {
 .ttl-fresh { color: var(--accent); }
 .ttl-warning { color: var(--stage-vm); }
 .ttl-expiring { color: var(--error); }
+
+/* ── Query Cache Expandable Entries ────────────────────────────── */
+.qc-entry {
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
+}
+.qc-entry:last-child {
+  border-bottom: none;
+}
+.qc-entry:hover {
+  background: var(--bg-tertiary);
+}
+.qc-entry-expanded {
+  background: var(--bg-tertiary);
+}
+
+.qc-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+.qc-entry-header:hover {
+  background: var(--bg-elevated);
+}
+
+.qc-entry-chevron {
+  font-size: 8px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+  transition: transform var(--transition-fast);
+}
+
+.qc-entry-key {
+  flex: 1;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.qc-entry-status {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.qc-entry-type {
+  font-size: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.qc-entry-age {
+  font-size: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ── Freshness Progress Bars ───────────────────────────────────── */
+.qc-freshness-bar {
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  position: relative;
+}
+.qc-freshness-mini {
+  width: 48px;
+  height: 6px;
+}
+.qc-freshness-full {
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+}
+
+.qc-freshness-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s var(--ease), background 0.3s var(--ease);
+  min-width: 0;
+}
+
+.qc-freshness-bar.ttl-fresh .qc-freshness-fill {
+  background: var(--accent);
+}
+.qc-freshness-bar.ttl-warning .qc-freshness-fill {
+  background: var(--stage-vm);
+}
+.qc-freshness-bar.ttl-expiring .qc-freshness-fill {
+  background: var(--error);
+}
+
+.qc-freshness-text {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* ── Query Cache Expanded Detail ────────────────────────────────── */
+.qc-entry-body {
+  padding: 6px 12px 10px 32px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  animation: fadeIn 0.15s var(--ease) both;
+}
+
+.qc-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.qc-detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.qc-detail-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  min-width: 80px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.qc-detail-value {
+  font-size: 10px;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  word-break: break-all;
+}
+
+.qc-detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.qc-key-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+}
+.qc-key-chip:first-child {
+  background: rgba(41, 206, 153, 0.12);
+  color: var(--accent);
+  border-color: rgba(41, 206, 153, 0.25);
+}
+
+.qc-data-preview {
+  color: var(--accent);
+  font-weight: 600;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Cache Trend Charts ────────────────────────────────────────── */
+.cache-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px 8px;
+}
+
+.cache-chart-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  transition: background var(--transition-fast);
+}
+.cache-chart-row:hover {
+  background: var(--bg-primary);
+}
+
+.cache-chart-label {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 28px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.cache-chart-bar {
+  flex: 1;
+  height: 18px;
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+
+.cache-chart-hit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: var(--accent);
+  color: rgba(255,255,255,0.9);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  transition: width 0.4s var(--ease);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.cache-chart-miss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: var(--error);
+  color: rgba(255,255,255,0.9);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  transition: width 0.4s var(--ease);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.cache-chart-size-bar {
+  height: 100%;
+  background: var(--stage-compiler);
+  border-radius: 3px;
+  transition: width 0.4s var(--ease);
+  min-width: 2px;
+  opacity: 0.85;
+}
+
+.cache-chart-pct {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 36px;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+.cache-chart-legend {
+  display: flex;
+  gap: 14px;
+  padding: 4px 12px 4px 40px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.cache-chart-legend-item {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.cache-chart-legend-item.hit { color: var(--accent); }
+.cache-chart-legend-item.miss { color: var(--error); }

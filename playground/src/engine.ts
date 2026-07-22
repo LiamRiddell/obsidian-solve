@@ -47,6 +47,8 @@ export interface DebugResult {
     /** ValueArena stats from bump-allocator (usage/capacity). */
     arenaStats: ArenaStats;	/** TanStack Query cache entries — per-query status, staleness, TTL. */
 	queryCache: QueryCacheEntry[];
+	/** QueryClient default configuration (staleTime, gcTime). */
+	queryClientConfig: QueryClientConfig;
 	/** Registered parselets from the engine's ParseletRegistry. */
     parseletRegistry?: {
         prefix: Array<{ tokenType: string; bindingPower: number; category?: string }>;
@@ -57,11 +59,21 @@ export interface DebugResult {
 /** TanStack Query cache entry for diagnostic rendering. */
 export interface QueryCacheEntry {
 	queryKey: string;
+	/** Raw query key array (e.g. ['osrs', 'item', '1267']) for expanded detail view. */
+	queryKeyArray: string[];
 	status: 'fresh' | 'stale' | 'fetching' | 'error';
 	dataType: string;
 	updatedAt: number;
 	staleTime: number;
 	cacheTime: number;
+	/** Short string preview of the cached data payload. */
+	dataPreview: string;
+}
+
+/** QueryClient default configuration surfaced for diagnostics. */
+export interface QueryClientConfig {
+	staleTime: number;
+	gcTime: number;
 }
 
 // ── Arena Stats ───────────────────────────────────────────────────────────
@@ -83,6 +95,8 @@ export interface LineResult {
 	error?: string;
 	opcodeCount: number;
 	wasCached: boolean;
+	/** Set when an async resolver timed out — the result is a 0-gp fallback, not real data. */
+	timedOut?: boolean;
 }
 
 export interface OpcodeInfo {
@@ -813,6 +827,7 @@ export function runEngineWithStreaming(
 							parselet,
 							opcodeCount: perLineOpCount,
 							wasCached,
+							timedOut: result.value.timedOut ?? false,
 						});
 					}
 				}
@@ -910,15 +925,34 @@ export function runEngineWithStreaming(
 	// Extract TanStack Query cache entries for Workers tab display
 	const defaultStaleTime = engine?.queryClient.getDefaultOptions().queries?.staleTime ?? 0;
 	const defaultCacheTime = engine?.queryClient.getDefaultOptions().queries?.gcTime ?? 0;
+	const queryClientConfig: QueryClientConfig = {
+		staleTime: defaultStaleTime,
+		gcTime: defaultCacheTime,
+	};
 	const queryCache: QueryCacheEntry[] = engine
-		? engine.queryClient.getQueryCache().getAll().map(q => ({
-			queryKey: q.queryKey.join(':'),
-			status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
-			dataType: q.state.data != null && typeof q.state.data === 'object' ? (q.state.data as any)?.unit || 'object' : typeof q.state.data,
-			updatedAt: q.state.dataUpdatedAt,
-			staleTime: defaultStaleTime,
-			cacheTime: defaultCacheTime,
-		}))
+		? engine.queryClient.getQueryCache().getAll().map(q => {
+			const data = q.state.data;
+			let dataPreview = '—';
+			if (data == null) {
+				dataPreview = 'null';
+			} else if (typeof data === 'object') {
+				const obj = data as any;
+				if (obj.value !== undefined) dataPreview = String(obj.value) + (obj.unit ? ' ' + obj.unit : '');
+				else dataPreview = JSON.stringify(data).slice(0, 120);
+			} else {
+				dataPreview = String(data);
+			}
+			return {
+				queryKey: q.queryKey.join(':'),
+				queryKeyArray: q.queryKey as string[],
+				status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
+				dataType: data != null && typeof data === 'object' ? (data as any)?.unit || 'object' : typeof data,
+				dataPreview,
+				updatedAt: q.state.dataUpdatedAt,
+				staleTime: defaultStaleTime,
+				cacheTime: defaultCacheTime,
+			};
+		})
 		: [];
 
 	const diagnosticEvents: DiagnosticEventInfo[] = lastDebugEvents
@@ -977,6 +1011,7 @@ export function runEngineWithStreaming(
 		parselets,
 		vmTrace,
 		queryCache,
+		queryClientConfig,
 		cacheSnapshot,
 		diagnosticEvents,
 		pipelineTelemetry,
@@ -1173,6 +1208,7 @@ export function runEngine(expression: string): DebugResult {
 					parselet,
 					opcodeCount: perLineOpCount,
 					wasCached,
+					timedOut: (result.value as any).timedOut ?? false,
 				});
 			}
 		});
@@ -1268,14 +1304,29 @@ export function runEngine(expression: string): DebugResult {
 
 		const defaultStaleTime = engine.queryClient.getDefaultOptions().queries?.staleTime ?? 0;
 		const defaultCacheTime = engine.queryClient.getDefaultOptions().queries?.gcTime ?? 0;
-		queryCache = engine.queryClient.getQueryCache().getAll().map(q => ({
-			queryKey: q.queryKey.join(':'),
-			status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
-			dataType: q.state.data != null && typeof q.state.data === 'object' ? (q.state.data as any)?.unit || 'object' : typeof q.state.data,
-			updatedAt: q.state.dataUpdatedAt,
-			staleTime: defaultStaleTime,
-			cacheTime: defaultCacheTime,
-		}));
+		queryCache = engine.queryClient.getQueryCache().getAll().map(q => {
+			const data = q.state.data;
+			let dataPreview = '—';
+			if (data == null) {
+				dataPreview = 'null';
+			} else if (typeof data === 'object') {
+				const obj = data as any;
+				if (obj.value !== undefined) dataPreview = String(obj.value) + (obj.unit ? ' ' + obj.unit : '');
+				else dataPreview = JSON.stringify(data).slice(0, 120);
+			} else {
+				dataPreview = String(data);
+			}
+			return {
+				queryKey: q.queryKey.join(':'),
+				queryKeyArray: q.queryKey as string[],
+				status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
+				dataType: data != null && typeof data === 'object' ? (data as any)?.unit || 'object' : typeof data,
+				dataPreview,
+				updatedAt: q.state.dataUpdatedAt,
+				staleTime: defaultStaleTime,
+				cacheTime: defaultCacheTime,
+			};
+		});
 
 		diagnosticEvents = lastDebugEvents
 			? lastDebugEvents.map((e) => ({ type: e.type, timestamp: Date.now(), elapsedNs: e.elapsedNs, expression: (e as any).expression ?? "", details: (e as any).details ?? "", groupKey: (e as any).expression ?? "" }))
@@ -1410,6 +1461,7 @@ export function runEngine(expression: string): DebugResult {
 		parselets,
 		vmTrace,
 		queryCache: [],
+		queryClientConfig: { staleTime: 0, gcTime: 0 },
 		cacheSnapshot,
 		diagnosticEvents,
 		pipelineTelemetry: null,

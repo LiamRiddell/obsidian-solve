@@ -158,7 +158,7 @@ const EDITOR_THEME = EditorView.theme({
 onMounted(() => {
   if (!editorRef.value) return;
 
-  const initialDoc = '10 + 5 * 2';
+  const initialDoc = '10 + 5 * 2\nosrs(Iron Axe)';
 
   editorView = new EditorView({
     state: EditorState.create({

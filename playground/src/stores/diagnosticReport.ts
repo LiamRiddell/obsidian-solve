@@ -20,6 +20,18 @@ import type { PipelineTelemetry } from '@/solve-js/src/telemetry/AllocationTrack
 /** Maximum number of performance history entries to keep. */
 const MAX_HISTORY = 50;
 
+/** Per-evaluation cache metrics for trend charts. */
+export interface CacheHistoryEntry {
+  /** Monotonic run number. */
+  runId: number;
+  /** Number of lines that hit the bytecode cache. */
+  cacheHits: number;
+  /** Number of lines that missed the cache (freshly compiled). */
+  cacheMisses: number;
+  /** Total bytecode cache entries after this evaluation. */
+  bytecodeCacheSize: number;
+}
+
 export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
   /* ══════════════════════════════════════════════════════════════
      Result-derived State
@@ -122,6 +134,9 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
   /** Rolling history of aggregate performance stats (last N evaluations). */
   const statsHistory = ref<PerformanceStats[]>([]);
 
+  /** Rolling history of cache metrics per evaluation (last N evaluations). */
+  const cacheHistory = ref<CacheHistoryEntry[]>([]);
+
   /* ══════════════════════════════════════════════════════════════
      Derived Computed Properties
      ══════════════════════════════════════════════════════════════ */
@@ -209,6 +224,22 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
         statsHistory.value.shift();
       }
     }
+
+    // Accumulate cache history for trend charts
+    {
+      const hits = (r.lineResults ?? []).filter(lr => lr.wasCached).length;
+      const misses = (r.lineResults ?? []).filter(lr => !lr.wasCached).length;
+      const bytecodeSize = r.cacheSnapshot?.bytecode?.length ?? 0;
+      cacheHistory.value.push({
+        runId: runId.value,
+        cacheHits: hits,
+        cacheMisses: misses,
+        bytecodeCacheSize: bytecodeSize,
+      });
+      if (cacheHistory.value.length > MAX_HISTORY) {
+        cacheHistory.value.shift();
+      }
+    }
   }
 
   /** Set engine status (called by engine store's evaluate/abort). */
@@ -249,6 +280,7 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
     parselets,
     parseletRegistry,
     statsHistory,
+    cacheHistory,
     // Derived
     tokenCount,
     opcodeCount,

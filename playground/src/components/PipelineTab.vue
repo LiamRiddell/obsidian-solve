@@ -23,6 +23,16 @@
 
     <!--#region Pipeline Flow — Data-driven Stage Rendering ──────────────────-->
     <div class="pipeline-flow" v-if="displayStages.length > 0">
+      <!-- Sticky Context Header -->
+      <div v-if="hasResult" class="pipeline-context-header">
+        <div class="pipeline-context-left">
+          <span class="pipeline-context-label">Pipeline</span>
+          <span class="pipeline-context-badge">{{ stageLabel }}</span>
+        </div>
+        <span class="pipeline-context-expr" :title="activeExpression">{{ activeExpression || '(empty expression)' }}</span>
+      </div>
+
+      <!-- Stage cards -->
       <template v-for="(stage, i) in displayStages" :key="stage.stage">
         <pipeline-stage
           :step-number="stage.stepNumber"
@@ -232,6 +242,7 @@
 import { computed, onUnmounted, ref, watch, h } from "vue";
 import { useDiagnosticReportStore } from "../stores/diagnosticReport.js";
 import { usePipelineStore } from "../stores/pipeline.js";
+import { useUiStore } from "../stores/ui.js";
 import { fmt } from "../utils.js";
 import PipelineStage from "./PipelineStage.vue";
 import type { Token, ConstantInfo } from "../engine.js";
@@ -244,6 +255,7 @@ import type {
 
 const dr = useDiagnosticReportStore();
 const pl = usePipelineStore();
+const ui = useUiStore();
 
 /** The latest evaluation result from the diagnostic report store. */
 const result = computed(() => dr.result);
@@ -261,7 +273,9 @@ const lineResults = computed(() => dr.lineResults);
  * Structured pipeline stages from the diagnostic report store.
  * Populated by the engine store's onmessage handler via dr.setResult().
  */
-const displayStages = computed<PipelineStageResult[]>(() => dr.stages);
+const displayStages = computed<PipelineStageResult[]>(() =>
+  dr.stages.filter(s => s.stage !== 'pipeline_start' && s.stage !== 'pipeline_end'),
+);
 
 /** Number of stages to display (or 8 as a minimum for the fallback). */
 const numStages = computed(() => dr.stageCount);
@@ -428,6 +442,17 @@ const stageLabel = computed(() =>
     : "All",
 );
 
+/** Expression text for the selected line (or the first line, or full expression). */
+const activeExpression = computed(() => {
+  const ln = pl.selectedLine;
+  if (ln !== null) {
+    const lr = dr.lineResults.find(r => r.lineNumber === ln);
+    return lr?.expression ?? '';
+  }
+  const first = dr.lineResults[0];
+  return first?.expression ?? dr.expression ?? '';
+});
+
 //#endregion
 //#endregion
 //#region ─── Stage Helper Functions ───────────────────────────────────────────
@@ -463,7 +488,6 @@ function getStageTime(stage: PipelineStageResult): string {
  */
 function getStageInput(stage: PipelineStageResult): string {
   const inputs: Record<string, string> = {
-    pipeline_start: "Initialize",
     line_classification: "Expression → Classification",
     safety_length: "Expression → Limit Check",
     lexer: "Expression → Tokens",
@@ -478,7 +502,6 @@ function getStageInput(stage: PipelineStageResult): string {
     dag_registration: "Reads/Writes → DAG",
     linecache: "Store Result",
     result: "",
-    pipeline_end: "",
   };
   return inputs[stage.stage] || stage.stage;
 }
@@ -489,7 +512,6 @@ function getStageInput(stage: PipelineStageResult): string {
  */
 function getStageOutputLabel(stage: PipelineStageResult): string {
   const labels: Record<string, string> = {
-    pipeline_start: "Status",
     line_classification: "Type",
     safety_length: "Status",
     lexer: "Tokens",
@@ -504,7 +526,6 @@ function getStageOutputLabel(stage: PipelineStageResult): string {
     dag_registration: "Registered",
     linecache: "Line",
     result: "",
-    pipeline_end: "",
   };
   return labels[stage.stage] || "";
 }
@@ -685,17 +706,7 @@ const stageRenderers: Record<
   string,
   (stage: PipelineStageResult) => ReturnType<typeof h>
 > = {
-  // ── Stage 1: Pipeline Start ───────────────────────────────────────────
-  pipeline_start(stage) {
-    const o = stage.output as any;
-    return h(
-      "span",
-      { style: { color: "#6b6b75", fontSize: "10px" } },
-      o.inputType ?? "—",
-    );
-  },
-
-  // ── Stage 2: Line Classification ──────────────────────────────────────
+  // ── Line Classification ──────────────────────────────────────
   line_classification(stage) {
     const o = stage.output as any;
     const classification = o.classification ?? "—";
@@ -795,7 +806,7 @@ const stageRenderers: Record<
     return h("div", { style: { display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" } }, chips);
   },
 
-  // ── Stage 3: Safety — Expression Length ───────────────────────────────
+  // ── Safety Length ───────────────────────────────────────────
   safety_length(stage) {
     const o = stage.output as any;
     const color = o.passed ? "#4ec9b0" : "#f48771";
@@ -805,7 +816,7 @@ const stageRenderers: Record<
     return h("span", { style: { color, fontSize: "10px" } }, text);
   },
 
-  // ── Stage 3: Lexer ────────────────────────────────────────────────────
+  // ── Lexer ─────────────────────────────────────────────────
   lexer(stage) {
     const o = stage.output as any;
     const tokens = (o.tokens ?? []) as Token[];
@@ -878,7 +889,7 @@ const stageRenderers: Record<
     ]);
   },
 
-  // ── Stage 4: Normalizer (compact output) ──────────────────────────────
+  // ── Normalizer ────────────────────────────────────────────
   normalizer(stage) {
     const o = stage.output as any;
     const fusions: any[] = o.fusions ?? [];
@@ -944,7 +955,7 @@ const stageRenderers: Record<
     ]);
   },
 
-  // ── Stage 5: Safety — Complexity ──────────────────────────────────────
+  // ── Safety Complexity ─────────────────────────────────────
   safety_complexity(stage) {
     const o = stage.output as any;
     const color = o.passed ? "#4ec9b0" : "#f48771";
@@ -954,7 +965,7 @@ const stageRenderers: Record<
     return h("span", { style: { color, fontSize: "10px" } }, text);
   },
 
-  // ── Stage 6: Read/Write Extraction ────────────────────────────────────
+  // ── Read/Write ────────────────────────────────────────────
   readwrite(stage) {
     const o = stage.output as any;
     const reads: string[] = o.reads ?? [];
@@ -1001,7 +1012,7 @@ const stageRenderers: Record<
     return h("span", { style: { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" } }, chips);
   },
 
-  // ── Stage 7: Cache Check ──────────────────────────────────────────────
+  // ── Cache Check ───────────────────────────────────────────
   cache_check(stage) {
     const o = stage.output as any;
     const hit = o.hit as boolean;
@@ -1035,7 +1046,7 @@ const stageRenderers: Record<
     ]);
   },
 
-  // ── Stage 8: Parser (Pratt) ───────────────────────────────────────────
+  // ── Parser ────────────────────────────────────────────────
   parser(stage) {
     if (stage.skipped)
       return h(
@@ -1052,8 +1063,10 @@ const stageRenderers: Record<
               display: "inline-flex", alignItems: "center", gap: "4px",
               background: "rgba(155,123,236,0.12)", border: "1px solid rgba(155,123,236,0.2)",
               borderRadius: "4px", padding: "2px 8px", fontSize: "10px",
+              cursor: "pointer",
             },
-            title: `Parselet: ${p}`,
+            title: `Parselet: ${p}\nClick to inspect in Parselets tab`,
+            onClick: () => ui.focusParselet(p),
           }, [
             h("span", { style: { color: "#6b6b75", fontWeight: "600", fontSize: "8px", textTransform: "uppercase", letterSpacing: "0.4px" } }, "PARSELET"),
             h("span", { style: { color: "#9b7bec", fontWeight: "700", fontFamily: "'JetBrains Mono', monospace" } }, p),
@@ -1064,7 +1077,7 @@ const stageRenderers: Record<
     return h("span", { class: "empty" }, "—");
   },
 
-  // ── Stage 9: Compiler ─────────────────────────────────────────────────
+  // ── Compiler ──────────────────────────────────────────────
   compiler(stage) {
     if (stage.skipped)
       return h(
@@ -1102,7 +1115,7 @@ const stageRenderers: Record<
     );
   },
 
-  // ── Stage 10: Async Preflight ─────────────────────────────────────────
+  // ── Async Preflight ───────────────────────────────────────
   async_preflight(stage) {
     const o = stage.output as any;
     if (o.path === "pending")
@@ -1124,7 +1137,7 @@ const stageRenderers: Record<
     );
   },
 
-  // ── Stage 11: VM Execute ──────────────────────────────────────────────
+  // ── VM Execute ────────────────────────────────────────────
   vm_execute(stage) {
     const o = stage.output as any;
     return h(
@@ -1134,7 +1147,7 @@ const stageRenderers: Record<
     );
   },
 
-  // ── Stage 12: DAG Registration ────────────────────────────────────────
+  // ── DAG Registration ──────────────────────────────────────
   dag_registration(stage) {
     const o = stage.output as any;
     const parts: string[] = [];
@@ -1155,7 +1168,7 @@ const stageRenderers: Record<
     );
   },
 
-  // ── Stage 13: LineCache Storage ───────────────────────────────────────
+  // ── LineCache ─────────────────────────────────────────────
   linecache(stage) {
     const o = stage.output as any;
     return h(
@@ -1165,7 +1178,7 @@ const stageRenderers: Record<
     );
   },
 
-  // ── Stage 14: Result ──────────────────────────────────────────────────
+  // ── Result ────────────────────────────────────────────────
   result(stage) {
     const o = stage.output as any;
     if (o.error)
@@ -1226,17 +1239,6 @@ const stageRenderers: Record<
         h("span", { style: { color: "#29ce99", fontSize: "14px", fontWeight: "700" } }, formatted),
       ]),
     ]);
-  },
-
-  // ── Stage 15: Pipeline End ────────────────────────────────────────────
-  pipeline_end(stage) {
-    const o = stage.output as any;
-    const color = o.success ? "#4ec9b0" : "#f48771";
-    return h(
-      "span",
-      { style: { color, fontSize: "10px" } },
-      `${o.totalTokens} tokens, ${o.totalOpcodes} opcodes`,
-    );
   },
 };
 

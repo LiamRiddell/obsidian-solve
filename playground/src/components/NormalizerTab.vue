@@ -9,6 +9,15 @@
     </div>
 
     <template v-else>
+      <!-- Sticky Context Header -->
+      <div class="normalizer-context-header">
+        <div class="normalizer-context-left">
+          <span class="normalizer-context-label">Normalizing</span>
+          <span class="normalizer-context-badge">{{ activeLine !== null ? 'L' + activeLine : 'All Lines' }}</span>
+        </div>
+        <span class="normalizer-context-expr" :title="activeExpression">{{ activeExpression || '(empty expression)' }}</span>
+      </div>
+
       <!-- Stats Cards -->
       <div class="normalizer-stats-row">
         <div class="normalizer-stat-card">
@@ -33,96 +42,13 @@
         </div>
       </div>
 
-      <!-- PhraseTrie Overview -->
-      <div class="normalizer-section">
-        <div class="normalizer-section-header" @click="trieExpanded = !trieExpanded" role="button" :aria-expanded="trieExpanded">
-          <span class="normalizer-section-title">🌳 PhraseTrie Overview</span>
-          <span class="normalizer-tag">{{ triePhraseCount }} phrases</span>
-          <span class="normalizer-section-chevron" :class="{ expanded: trieExpanded }">▸</span>
-        </div>
-        <div v-if="trieExpanded" class="normalizer-section-body scrollable-section">
-          <div v-if="triePhraseCount === 0" class="normalizer-empty">No phrases registered</div>
-          <template v-else>
-            <div class="trie-description">
-              <span class="trie-desc-text">Word-level trie — single-pass O(depth) matching per position. Longest-match-wins.</span>
-            </div>
-            <div class="trie-tree">
-              <div v-for="group in trieTree" :key="group.root" class="trie-root-node">
-                <div class="trie-root-label">
-                  <span class="trie-root-dot" :class="{ matched: group.matched }"></span>
-                  <span class="trie-root-word">{{ group.root }}</span>
-                  <span v-if="group.matched" class="trie-matched-badge">matched</span>
-                </div>
-                <div v-if="group.children.length > 0" class="trie-children">
-                  <div v-for="child in group.children" :key="child.path" class="trie-branch">
-                    <span class="trie-branch-line">├─</span>
-                    <span class="trie-branch-word">{{ child.word }}</span>
-                    <span class="trie-branch-type">{{ child.tokenType }}</span>
-                    <span v-if="child.matched" class="trie-matched-badge">matched</span>
-                    <span v-else-if="child.singleton" class="trie-leaf-badge">leaf</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- Normalization Flow -->
-      <div class="normalizer-section">
-        <div class="normalizer-section-header" @click="flowExpanded = !flowExpanded" role="button" :aria-expanded="flowExpanded">
-          <span class="normalizer-section-title">🔀 Normalization Flow</span>
-          <span class="normalizer-tag">{{ flowSteps.length }} steps</span>
-          <span class="normalizer-section-chevron" :class="{ expanded: flowExpanded }">▸</span>
-        </div>
-        <div v-if="flowExpanded" class="normalizer-section-body scrollable-section">
-          <div v-if="flowSteps.length === 0" class="normalizer-empty">No tokens to normalize</div>
-          <div v-else class="flow-timeline">
-            <div v-for="(step, si) in flowSteps" :key="si" class="flow-step" :class="{ 'flow-step-skip': step.action === 'skip', 'flow-step-fuse': step.action === 'fuse', 'flow-step-pass': step.action === 'pass' }">
-              <div class="flow-step-pos">{{ step.position }}</div>
-              <div class="flow-step-token">
-                <span class="flow-step-token-chip" :class="tokenClass({ type: step.tokenType })">{{ step.tokenValue }}</span>
-              </div>
-              <div class="flow-step-action">
-                <span v-if="step.action === 'skip'" class="flow-action-label skip-label">⏭ Type-guard skip</span>
-                <span v-else-if="step.action === 'fuse'" class="flow-action-label fuse-label">
-                  🔗 {{ step.fusionRule }}
-                  <span class="flow-fuse-arrow">→</span>
-                  <span class="flow-fuse-result-chip">{{ step.fusedValue }}</span>
-                </span>
-                <span v-else class="flow-action-label pass-label">→ pass through</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Rules Applied Section -->
-      <div class="normalizer-section">
-        <div class="normalizer-section-header" @click="rulesExpanded = !rulesExpanded" role="button" :aria-expanded="rulesExpanded">
-          <span class="normalizer-section-title">📋 Rules Applied</span>
-          <span class="normalizer-tag">{{ data.rulesApplied.length }} rules</span>
-          <span class="normalizer-section-chevron" :class="{ expanded: rulesExpanded }">▸</span>
-        </div>
-        <div v-if="rulesExpanded" class="normalizer-section-body scrollable-section">
-          <div v-if="data.rulesApplied.length === 0" class="normalizer-empty">No rules were applied</div>
-          <div v-else class="normalizer-rules-grid">
-            <div v-for="r in data.rulesApplied" :key="r.rule" class="normalizer-rule-chip" :class="{ 'rule-trie': r.rule === 'phrase-trie' }">
-              <span class="normalizer-rule-name">{{ r.rule }}</span>
-              <span class="normalizer-rule-count">×{{ r.count }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Token Fusions -->
       <div class="normalizer-section">
-        <div class="normalizer-section-header" @click="fusionsExpanded = !fusionsExpanded" role="button" :aria-expanded="fusionsExpanded">
+        <div class="normalizer-section-header">
           <span class="normalizer-section-title">🔗 Token Fusions</span>
           <span class="normalizer-tag">{{ data.fusions.length }} fusions</span>
-          <span class="normalizer-section-chevron" :class="{ expanded: fusionsExpanded }">▸</span>
         </div>
-        <div v-if="fusionsExpanded" class="normalizer-section-body scrollable-section">
+        <div class="normalizer-section-body scrollable-section">
           <div v-if="data.fusions.length === 0" class="normalizer-empty">No tokens were fused</div>
           <div v-for="(group, gi) in fusionGroups" :key="gi" class="fusion-group">
             <div class="fusion-group-header">
@@ -163,12 +89,11 @@
 
       <!-- Token Diff (Before/After) -->
       <div class="normalizer-section">
-        <div class="normalizer-section-header" @click="diffExpanded = !diffExpanded" role="button" :aria-expanded="diffExpanded">
+        <div class="normalizer-section-header">
           <span class="normalizer-section-title">📊 Token Diff</span>
           <span class="normalizer-tag">{{ rawTokens.length }} → {{ data.tokens.length }}</span>
-          <span class="normalizer-section-chevron" :class="{ expanded: diffExpanded }">▸</span>
         </div>
-        <div v-if="diffExpanded" class="normalizer-section-body scrollable-section">
+        <div class="normalizer-section-body scrollable-section">
           <div class="diff-column-headers">
             <div class="diff-header-left">
               <span class="diff-header-label">Raw (before)</span>
@@ -226,6 +151,85 @@
           </div>
         </div>
       </div>
+
+      <!-- Rules Applied -->
+      <div class="normalizer-section">
+        <div class="normalizer-section-header">
+          <span class="normalizer-section-title">📋 Rules Applied</span>
+          <span class="normalizer-tag">{{ data.rulesApplied.length }} rules</span>
+        </div>
+        <div class="normalizer-section-body scrollable-section">
+          <div v-if="data.rulesApplied.length === 0" class="normalizer-empty">No rules were applied</div>
+          <div v-else class="normalizer-rules-grid">
+            <div v-for="r in data.rulesApplied" :key="r.rule" class="normalizer-rule-chip" :class="{ 'rule-trie': r.rule === 'phrase-trie' }">
+              <span class="normalizer-rule-name">{{ r.rule }}</span>
+              <span class="normalizer-rule-count">×{{ r.count }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Normalization Flow -->
+      <div class="normalizer-section">
+        <div class="normalizer-section-header">
+          <span class="normalizer-section-title">🔀 Normalization Flow</span>
+          <span class="normalizer-tag">{{ flowSteps.length }} steps</span>
+        </div>
+        <div class="normalizer-section-body scrollable-section">
+          <div v-if="flowSteps.length === 0" class="normalizer-empty">No tokens to normalize</div>
+          <div v-else class="flow-timeline">
+            <div v-for="(step, si) in flowSteps" :key="si" class="flow-step" :class="{ 'flow-step-skip': step.action === 'skip', 'flow-step-fuse': step.action === 'fuse', 'flow-step-pass': step.action === 'pass' }">
+              <div class="flow-step-pos">{{ step.position }}</div>
+              <div class="flow-step-token">
+                <span class="flow-step-token-chip" :class="tokenClass({ type: step.tokenType })">{{ step.tokenValue }}</span>
+              </div>
+              <div class="flow-step-action">
+                <span v-if="step.action === 'skip'" class="flow-action-label skip-label">⏭ Type-guard skip</span>
+                <span v-else-if="step.action === 'fuse'" class="flow-action-label fuse-label">
+                  🔗 {{ step.fusionRule }}
+                  <span class="flow-fuse-arrow">→</span>
+                  <span class="flow-fuse-result-chip">{{ step.fusedValue }}</span>
+                </span>
+                <span v-else class="flow-action-label pass-label">→ pass through</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PhraseTrie Overview -->
+      <div class="normalizer-section">
+        <div class="normalizer-section-header">
+          <span class="normalizer-section-title">🌳 PhraseTrie Overview</span>
+          <span class="normalizer-tag">{{ triePhraseCount }} phrases</span>
+        </div>
+        <div class="normalizer-section-body scrollable-section">
+          <div v-if="triePhraseCount === 0" class="normalizer-empty">No phrases registered</div>
+          <template v-else>
+            <div class="trie-description">
+              <span class="trie-desc-text">Word-level trie — single-pass O(depth) matching per position. Longest-match-wins.</span>
+            </div>
+            <div class="trie-tree">
+              <div v-for="group in trieTree" :key="group.root" class="trie-root-node">
+                <div class="trie-root-label">
+                  <span class="trie-root-dot" :class="{ matched: group.matched }"></span>
+                  <span class="trie-root-word">{{ group.root }}</span>
+                  <span v-if="group.matched" class="trie-matched-badge">matched</span>
+                </div>
+                <div v-if="group.children.length > 0" class="trie-children">
+                  <div v-for="child in group.children" :key="child.path" class="trie-branch">
+                    <span class="trie-branch-line">├─</span>
+                    <span class="trie-branch-word">{{ child.word }}</span>
+                    <span class="trie-branch-type">{{ child.tokenType }}</span>
+                    <span v-if="child.matched" class="trie-matched-badge">matched</span>
+                    <span v-else-if="child.singleton" class="trie-leaf-badge">leaf</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
     </template>
     </div>
   </div>
@@ -234,16 +238,27 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
+import { usePipelineStore } from '../stores/pipeline.js';
 import type { PipelineStageResult, NormalizerOutput, LexerOutput } from '@/solve-js/src/types/DiagnosticPipelineResult';
 import type { Token } from '@/solve-js/src/lexer/Token';
 
 const dr = useDiagnosticReportStore();
+const pl = usePipelineStore();
 
-const rulesExpanded = ref(true);
-const fusionsExpanded = ref(true);
-const diffExpanded = ref(true);
-const trieExpanded = ref(true);
-const flowExpanded = ref(true);
+
+
+/* ── Sticky header data ─────────────────────────────────────── */
+const activeLine = computed(() => pl.selectedLine);
+const activeExpression = computed(() => {
+  const ln = activeLine.value;
+  if (ln !== null) {
+    const lr = dr.lineResults.find(r => r.lineNumber === ln);
+    return lr?.expression ?? '';
+  }
+  // All lines — show first evaluated line
+  const first = dr.lineResults[0];
+  return first?.expression ?? dr.expression ?? '';
+});
 
 /* ── Data access ─────────────────────────────────────────────── */
 const normalizerStage = computed<PipelineStageResult | null>(() => {
@@ -471,27 +486,32 @@ function tokenClass(t: { type?: string }): string {
 </script>
 
 <style scoped>
-#panel-normalizer { display: flex; flex-direction: column; overflow-y: visible; max-height: none; }
+#panel-normalizer { display: flex; flex-direction: column; min-height: 0; }
 #panel-normalizer .panel-scroll { display: flex; flex-direction: column; gap: 12px; padding: 8px; }
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 180px; gap: 8px; color: var(--text-muted, #6b6b75); }
 .empty-state-icon { font-size: 28px; opacity: 0.5; }
 .empty-state-text { font-size: 13px; font-weight: 500; }
 .empty-state-hint { font-size: 10px; opacity: 0.6; }
 
+/* ── Sticky Context Header ──────────────────────────────────── */
+.normalizer-context-header { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--background-primary, #1e1e2e); border: 1px solid rgba(41,206,153,0.15); border-radius: 6px; flex-shrink: 0; position: sticky; top: 0; z-index: 5; }
+.normalizer-context-left { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.normalizer-context-label { font-size: 10px; font-weight: 600; color: var(--text-muted, #6b6b75); text-transform: uppercase; letter-spacing: 0.4px; }
+.normalizer-context-badge { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 3px; background: rgba(41,206,153,0.15); color: var(--accent, #29ce99); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; border: 1px solid rgba(41,206,153,0.25); }
+.normalizer-context-expr { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-primary, #d4d4d8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
 .normalizer-stats-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .normalizer-stat-card { flex: 1; min-width: 80px; background: rgba(107,107,117,0.08); border: 1px solid rgba(107,107,117,0.15); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
 .normalizer-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted, #6b6b75); }
 .normalizer-stat-value { font-size: 20px; font-weight: 700; color: var(--text-normal, #d4d4d8); font-variant-numeric: tabular-nums; }
 
-.normalizer-section { background: rgba(107,107,117,0.06); border: 1px solid rgba(107,107,117,0.12); border-radius: 6px; overflow: hidden; }
-.normalizer-section-header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; user-select: none; transition: background 0.15s; }
-.normalizer-section-header:hover { background: rgba(107,107,117,0.08); }
+.normalizer-section { background: rgba(107,107,117,0.06); border: 1px solid rgba(107,107,117,0.12); border-radius: 6px; }
+.normalizer-section-header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
 .normalizer-section-title { font-size: 12px; font-weight: 600; color: var(--text-normal, #d4d4d8); }
 .normalizer-tag { font-size: 9px; color: var(--text-muted, #6b6b75); background: rgba(107,107,117,0.12); padding: 1px 6px; border-radius: 4px; margin-left: auto; }
-.normalizer-section-chevron { font-size: 10px; color: var(--text-muted, #6b6b75); transition: transform 0.2s; }
-.normalizer-section-chevron.expanded { transform: rotate(90deg); }
+
 .normalizer-section-body { padding: 8px 10px; border-top: 1px solid rgba(107,107,117,0.08); }
-.normalizer-section-body.scrollable-section { max-height: 320px; overflow-y: auto; }
+.normalizer-section-body.scrollable-section { overflow-y: visible; }
 .normalizer-empty { font-size: 10px; color: var(--text-muted, #6b6b75); padding: 8px 0; }
 
 /* ── PhraseTrie Tree ─────────────────────────────────────────── */

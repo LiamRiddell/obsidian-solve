@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, reactive, computed } from 'vue';
-import type { DebugResult } from '../engine.js';
+import type { DebugResult, QueryClientConfig } from '../engine.js';
 
 /** Worker activity log entry. */
 export interface WorkerLogEntry {
@@ -49,6 +49,12 @@ export const useWorkersStore = defineStore('workers', () => {
     fetchingQueries: 0,
     errorQueries: 0,
     lastActivityTs: 0,
+  });
+
+  /* ── QueryClient Configuration ────────────────────────────── */
+  const queryClientConfig = reactive<QueryClientConfig>({
+    staleTime: 0,
+    gcTime: 0,
   });
 
   /* ── Compilation Worker Metrics (placeholder — real data from engine) ── */
@@ -138,9 +144,16 @@ export const useWorkersStore = defineStore('workers', () => {
     queryCache.lastActivityTs = Date.now();
   }
 
+  /** Update QueryClient default configuration. */
+  function updateQueryClientConfig(config: QueryClientConfig): void {
+    queryClientConfig.staleTime = config.staleTime;
+    queryClientConfig.gcTime = config.gcTime;
+  }
+
   return {
     engine,
     queryCache,
+    queryClientConfig,
     compilationWorker,
     activityLog,
     // Derived
@@ -157,5 +170,6 @@ export const useWorkersStore = defineStore('workers', () => {
     logActivity,
     updateEngineTelemetry,
     updateQueryCacheTelemetry,
+    updateQueryClientConfig,
   };
 });
