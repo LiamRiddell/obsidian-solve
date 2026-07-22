@@ -92,6 +92,13 @@ export class AsyncResolutionBatcher {
 	 */
 	private executionPool: ExecutionPool | null = null;
 
+	/**
+	 * Number of flushes actually dispatched to the worker pool (as opposed
+	 * to falling back to the main thread because Worker is unavailable).
+	 * Exposed via {@link workerOffloadCount} for the Workers diagnostic tab.
+	 */
+	private workerOffloadDispatchCount = 0;
+
 	// ── Web Streams API integration ──────────────────────────────────
 
 	/**
@@ -196,6 +203,34 @@ export class AsyncResolutionBatcher {
 		return this._eventStream;
 	}
 
+	/** Number of resolutions currently queued for the next flush. */
+	get pendingCount(): number {
+		return this.pending.length;
+	}
+
+	/** Number of pending entries collapsed by (packageId, queryKey) deduplication. */
+	get dedupCount(): number {
+		const dedup = new Set<string>();
+		for (const entry of this.pending) {
+			dedup.add(`${entry.packageId}:${entry.queryKey}`);
+		}
+		return Math.max(0, this.pending.length - dedup.size);
+	}
+
+	/**
+	 * Whether the internal event stream currently has an active reader.
+	 * `1` if a consumer has called `getEventStream().getReader()` (or
+	 * otherwise locked the stream) and not released it, `0` otherwise.
+	 */
+	get listenerCount(): number {
+		return this._eventStream.locked ? 1 : 0;
+	}
+
+	/** Number of flushes that were actually dispatched to the worker pool. */
+	get workerOffloadCount(): number {
+		return this.workerOffloadDispatchCount;
+	}
+
 	/** Remove all listeners and cancel pending batch. Called on engine clear. */
 	clearAll(): void {
 		this.pending = [];
@@ -222,6 +257,8 @@ export class AsyncResolutionBatcher {
 			this.executionPool.clear();
 			this.executionPool = null;
 		}
+
+		this.workerOffloadDispatchCount = 0;
 	}
 
 	// ── Private: flush ────────────────────────────────────────────────
@@ -438,6 +475,8 @@ export class AsyncResolutionBatcher {
 			this.reExecuteMainThread(ordered, allQueryKeys, entryMap);
 			return;
 		}
+
+		this.workerOffloadDispatchCount++;
 
 		// Await worker results.
 		const workerResults = await results;

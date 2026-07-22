@@ -2055,24 +2055,16 @@ export class ExpressionEngine {
     /**
      * Get serializable batcher metrics for the Workers diagnostic tab.
      *
-     * Previously accessed via `(engine as any).batcher` with manual
-     * extraction of pending/listener/dedup counts.
+     * Reads the typed read-only accessors on {@link AsyncResolutionBatcher}
+     * (`pendingCount`/`dedupCount`/`workerOffloadCount`/`listenerCount`)
+     * instead of reaching into its private fields via `(this.batcher as any)`.
      */
     getBatcherMetrics(): BatcherMetrics {
-        const pending = (this.batcher as any).pending as unknown[] ?? [];
-        const listeners = (this.batcher as any).listeners as Set<unknown> ?? new Set();
-        const pool = (this.batcher as any).executionPool as { executionCount?: number } | null;
-
-        const dedup = new Set<string>();
-        for (const entry of pending) {
-            dedup.add(`${(entry as any).packageId}:${(entry as any).queryKey}`);
-        }
-
         return {
-            pendingCount: pending.length,
-            dedupCount: Math.max(0, pending.length - dedup.size),
-            workerOffloadCount: pool?.executionCount ?? 0,
-            listenerCount: listeners.size,
+            pendingCount: this.batcher.pendingCount,
+            dedupCount: this.batcher.dedupCount,
+            workerOffloadCount: this.batcher.workerOffloadCount,
+            listenerCount: this.batcher.listenerCount,
         };
     }
 

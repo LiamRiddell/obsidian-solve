@@ -172,6 +172,9 @@ const config = {
 	testPathIgnorePatterns: [
 		"\\\\node_modules\\\\",
 		"__mocks__",
+		// Claude Code agent worktrees are full checkouts — without this,
+		// every suite runs twice (once from the worktree copy).
+		"\\.claude[\\\\/]",
 		// Heavy / stress tests — not part of the normal dev cycle
 		"heavy/",
 		"benchmarks/",
