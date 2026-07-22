@@ -63,7 +63,7 @@ export const exampleData: ExampleCategory[] = [
     description: "Dice rolling operations",
     examples: [
       { name: "Roll d6", expression: "roll(1, 6)", description: "Roll one 6-sided die" },
-      { name: "Multiple dice", expression: "roll(2, 6)", description: "Roll two 6-sided dice" },
+      { name: "Multiple dice", expression: "roll(1, 6) + roll(1, 6)", description: "Sum of two 6-sided dice (2d6) — roll() itself only takes a single range, so multiple dice are composed by adding independent rolls" },
       { name: "Roll d20", expression: "roll(1, 20)", description: "Roll one 20-sided die" },
     ]
   },
