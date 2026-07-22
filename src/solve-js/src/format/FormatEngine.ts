@@ -63,8 +63,13 @@ function formatVector(values: number[], locale: ILocale): string {
 }
 
 function formatPercentage(value: number, locale: ILocale, settings: FormattingSettings): string {
+  // ValueType.Percentage stores a fraction (0.25 for 25%) — see Value.ts's
+  // documented contract and the sole producer, VM.ts's TO_PERCENTAGE opcode
+  // (`right/left - 1`, e.g. 0.25 for "800 to 1000"). Multiply by 100 before
+  // formatting; without this every percentage-change result displayed as
+  // e.g. "0.25%" instead of "25.00%".
   const dp = settings.percentageResult.decimalPlaces;
-  const formatted = value.toFixed(dp);
+  const formatted = (value * 100).toFixed(dp);
   return `= ${formatted}${locale.display.percentageSuffix}`;
 }
 

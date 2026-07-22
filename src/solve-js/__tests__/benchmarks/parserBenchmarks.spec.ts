@@ -9,6 +9,7 @@ import { describe, expect, test, afterAll } from "@jest/globals";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { Lexer } from "@solve-js/lexer/Lexer";
+import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 
 // Import all provider registration functions
 import { registerArithmeticParselets } from "@solve-js/providers/arithmetic/parselets/index";
@@ -86,6 +87,11 @@ describe("Parser Benchmarks", () => {
         const start = performance.now();
         for (let i = 0; i < c.perBatch; i++) {
           const p = createConfiguredParser();
+          // Parser (PrecedenceParser) emits opcodes into a BytecodeBuilder —
+          // parselets read `this.builder` internally, so it must be set
+          // before parseExpression() runs (mirrors ExpressionEngine's own
+          // private parseExpression() helper).
+          p.setBuilder(new BytecodeBuilder());
           p.load(tokens);
           p.parseExpression(0);
         }

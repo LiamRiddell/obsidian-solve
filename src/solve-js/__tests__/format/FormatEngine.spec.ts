@@ -61,9 +61,16 @@ describe("FormatEngine", () => {
     expect(result).not.toBe("");
   });
 
-  it("formats percentage values", () => {
-    const result = formatValue(new Value(ValueType.Percentage, 25));
+  it("formats percentage values (stored as a fraction, e.g. 0.25 for 25%)", () => {
+    // ValueType.Percentage's sole producer (VM.ts TO_PERCENTAGE opcode)
+    // always stores a fraction — matches Value.ts's documented contract.
+    // A prior version of this test constructed Value(Percentage, 25)
+    // directly, which doesn't match how the VM ever actually produces one,
+    // and masked a real bug: formatPercentage wasn't multiplying by 100,
+    // so "800 to 1000" (a 25% change) displayed as "0.25%" instead of "25%".
+    const result = formatValue(new Value(ValueType.Percentage, 0.25));
     expect(result).toContain("25");
+    expect(result).not.toContain("0.25");
   });
 
   it("formats duration values (as UoM)", () => {

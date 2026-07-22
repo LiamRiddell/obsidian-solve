@@ -8,6 +8,15 @@
  */
 export const knownUnits = new Set([
   // Length
+  // NOTE: "in" (inches) is deliberately NOT listed here even though the
+  // underlying `convert` package accepts it — the lexer prioritizes the
+  // reserved "IN" keyword (conversion operator) over unit recognition for
+  // that exact word, and registering "in" as a known unit interferes with
+  // that priority (regressed "3 ft in in" to silently drop the conversion
+  // when tried). ConvertParselet/UomLiteralParselet/PercentageChangeParselet
+  // all special-case token TYPE "IN" directly instead, trusting its literal
+  // text as the unit name without consulting this set — see each of their
+  // "in in" collision comments.
   "mm", "cm", "m", "km", "ft", "yd", "mi",
   "inch", "inches", "foot", "feet", "yard", "yards", "mile", "miles",
   // Mass
@@ -54,6 +63,14 @@ export const knownUnits = new Set([
   "SVC", "SYP", "SZL", "TJS", "TMT", "TND", "TOP", "TTD",
   "TZS", "UGX", "UYU", "VEB", "VUV", "WST", "XCD", "XDR",
   "XPF", "YER", "ZMW", "ZWL",
+  // Cryptocurrencies — not ISO 4217, but recognized the same way as fiat
+  // currency codes: routed through CurrencyExchangeService, not the
+  // `convert` package. Must stay in sync with CurrencyExchangeService's
+  // isCurrency() list, which already recognized these — without a matching
+  // lexer entry, a code never becomes a UNIT token in the first place, so
+  // e.g. `1 BTC to USD` failed at tokenization with "Undefined variable: BTC"
+  // before ever reaching the currency service that could have handled it.
+  "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "DOT",
 ]);
 
 /** Units are case-sensitive to eliminate ambiguity (e.g. C=Celsius ≠ c=centiliter). */
