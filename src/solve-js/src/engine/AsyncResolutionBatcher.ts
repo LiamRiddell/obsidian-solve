@@ -1,5 +1,6 @@
 import type { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import type { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
+import type { Value } from "@solve-js/vm/Value";
 import { executeBytecode } from "@solve-js/vm/VM";
 import type { VM } from "@solve-js/vm/OpRegistry";
 import {
@@ -127,6 +128,16 @@ export class AsyncResolutionBatcher {
 	 */
 	public _testCaptures: AsyncResolutionEvent[] | null = null;
 
+	/**
+	 * Optional hook invoked for each line whose result is patched after an
+	 * async resolution (main-thread and worker-pool paths). The view layer
+	 * sets this to mirror resolved values straight into its own document
+	 * state (DocumentModel) — without it, consumers would have to mark
+	 * lines dirty and run a whole re-evaluation pass just to copy values
+	 * out of the LineCache. Cleared by clearAll(); re-wire on re-subscribe.
+	 */
+	onLineResult: ((lineNumber: number, value: Value) => void) | null = null;
+
 	/** High-water mark used when (re)creating the event stream. */
 	private readonly highWaterMark: number;
 
@@ -240,6 +251,7 @@ export class AsyncResolutionBatcher {
 		// Clear test capture to match stream-close semantics — after
 		// clearAll(), no further events reach old subscribers.
 		this._testCaptures = null;
+		this.onLineResult = null;
 
 		// Close the old stream gracefully so existing consumers get a clean
 		// done signal, then create a fresh stream. The engine instance (and
@@ -499,6 +511,7 @@ export class AsyncResolutionBatcher {
 			// Reconstruct Value from serialized result.
 			const value = reconstructValue(wr);
 			entry.result = value;
+			this.onLineResult?.(wr.lineNumber, value);
 			updatedLineNumbers.push(wr.lineNumber);
 		}
 
@@ -548,6 +561,7 @@ export class AsyncResolutionBatcher {
 
 			if (result.type === "value") {
 				entry.result = result.value;
+				this.onLineResult?.(lineNumber, result.value);
 				updatedLineNumbers.push(lineNumber);
 			}
 			// If still pending, don't mark as updated — will be handled by the

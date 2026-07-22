@@ -96,9 +96,34 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		const eventStream = engine.getEventStream();
 		this.eventStreamReader = eventStream.getReader();
 		this.startEventStreamReader(view);
+		this.wireAsyncResultMirror();
 
 		this.currentDoc = view.state.doc;
 		this.decorations = this.buildDecorations(view);
+	}
+
+	/**
+	 * Mirror async-resolved line results straight into the DocumentModel.
+	 *
+	 * The batcher patches the engine's LineCache; decorations render from
+	 * DocumentModel. This hook copies each resolved value across as it
+	 * lands, so handleAsyncEvent only has to rebuild decorations — no
+	 * mark-dirty + re-evaluation pass. Re-wired after engine.clear()
+	 * (which nulls the hook) on document switch.
+	 */
+	private wireAsyncResultMirror(): void {
+		this.engine.getBatcher().onLineResult = (lineNumber, value) => {
+			const state = this.docModel.getLineAt(lineNumber);
+			if (!state) return;
+			if (state.results.length === 0) {
+				state.results = [[value]];
+			} else {
+				// Replace the pending group if one exists, else the first group.
+				const idx = state.results.findIndex(g => g[0]?.type === ValueType.Pending);
+				state.results[idx >= 0 ? idx : 0] = [value];
+			}
+			state.result = state.results[0]?.[0] ?? value;
+		};
 	}
 
 	update(update: ViewUpdate) {
@@ -147,6 +172,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			}
 			this.eventStreamReader = this.engine.getEventStream().getReader();
 			this.startEventStreamReader(update.view);
+			this.wireAsyncResultMirror();
 
 			this.decorations = this.buildDecorations(update.view);
 
@@ -274,18 +300,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private handleAsyncEvent(event: AsyncResolutionEvent, view: EditorView): void {
 		switch (event.type) {
 			case "lines-updated": {
-				// The batcher patched the LineCache, but decorations render from
-				// the DocumentModel (lineState.results). Mark the affected lines
-				// dirty and re-run the evaluator so resolved values land in the
-				// DocumentModel, then rebuild decorations explicitly — an empty
-				// dispatch alone does not trigger a decoration rebuild (update()
-				// only rebuilds on docChanged/viewportChanged).
-				if (event.lineNumbers.length > 0) {
-					for (const lineNumber of event.lineNumbers) {
-						this.docModel.markDirtyByLineNumber(lineNumber);
-					}
-					this.evaluator.evaluate(this.getViewportFromView(view));
-				}
+				// Resolved values were already mirrored into the DocumentModel
+				// by the onLineResult hook (see wireAsyncResultMirror), so this
+				// handler only rebuilds decorations — an empty dispatch alone
+				// does not trigger a rebuild (update() only rebuilds on
+				// docChanged/viewportChanged).
 				this.decorations = this.buildDecorations(view);
 				view.dispatch({});
 				break;
