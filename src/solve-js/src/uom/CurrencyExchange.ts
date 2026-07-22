@@ -58,7 +58,21 @@ export class CurrencyExchangeService {
       const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${from.toUpperCase()}`, { signal: fetchSignal });
       if (!response.ok) throw new Error(`Currency API returned ${response.status}`);
       const data = await response.json();
-      const rates: Record<string, number> = data.rates ?? {};
+      // The v2 endpoint returns a flat array of { date, base, quote, rate }
+      // entries (one per target currency) rather than the classic v1 shape
+      // { base, date, rates: { CODE: rate } }. Reading data.rates against
+      // the real response is always undefined, so every conversion used to
+      // throw "Unknown currency" no matter which currencies were requested.
+      // Accept both shapes so a future API revision back to the object form
+      // doesn't silently break this again.
+      const rates: Record<string, number> = Array.isArray(data)
+        ? Object.fromEntries(
+            data
+              .filter((entry: unknown): entry is { quote: string; rate: number } =>
+                !!entry && typeof (entry as any).quote === "string" && typeof (entry as any).rate === "number")
+              .map((entry: { quote: string; rate: number }) => [entry.quote.toUpperCase(), entry.rate])
+          )
+        : (data.rates ?? {});
       const fromUpper = from.toUpperCase();
       const toUpper = to.toUpperCase();
       if (rates[toUpper] === undefined) throw new Error(`Unknown currency: ${toUpper}`);

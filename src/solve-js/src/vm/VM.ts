@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, arrayValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, arrayValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue } from "@solve-js/vm/Value";
 import type { VM, OpRegistry } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -548,7 +548,13 @@ export function executeBytecode(
             if (converted !== null) {
               stack.push(uomValue(converted, toUnit));
             } else {
-              stack.push(uomValue(val, fromUnit));
+              // No live rate cached yet (or the fetch failed). Pushing the
+              // unconverted value under its original unit would silently
+              // masquerade as a correct conversion — e.g. "450 EUR to USD"
+              // displaying as "450.00 EUR", which reads as a successful
+              // no-op rather than the missing-data case it actually is.
+              // An Error value makes the failure visible instead.
+              stack.push(errorValue("CURRENCY_RATE_UNAVAILABLE", `No exchange rate available for ${fromUnit} to ${toUnit}`));
             }
           } else {
             stack.push(uomValue(val, fromUnit));
@@ -577,7 +583,10 @@ export function executeBytecode(
               if (converted !== null) {
                 stack.push(uomValue(converted, toUnit));
               } else {
-                stack.push(left);
+                // See the matching comment in UOM_CONVERT_TO — pushing the
+                // original value here would silently pass off a missing
+                // exchange rate as a successful (non-)conversion.
+                stack.push(errorValue("CURRENCY_RATE_UNAVAILABLE", `No exchange rate available for ${fromUnit} to ${toUnit}`));
               }
             } else {
               stack.push(left);
