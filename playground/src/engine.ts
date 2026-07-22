@@ -13,6 +13,13 @@ import { Value, ValueType, enableValueArena, disableValueArena } from "@/solve-j
 import { AllocationTracker } from "@/solve-js/src/telemetry/AllocationTracker";
 import type { PipelineTelemetry } from "@/solve-js/src/telemetry/AllocationTracker";
 export type { ParseletInfo, Token };
+import {
+	buildStats,
+	buildLineStats,
+	buildVmTrace,
+	buildDiagnosticEvents,
+	buildQueryCacheState,
+} from "./engineShared.js";
 
 export interface DebugResult {
 	tokens: Token[];
@@ -261,143 +268,6 @@ function decodeOpcodeArgs(
 	return [];
 }
 
-/**
- * Extract per-stage wall-clock timings from the diagnostic event timeline.
- *
- * Each event carries a real `elapsedNs` stamp (set by TimelineDiagnosticCollector)
- * relative to `pipeline_start`. We derive:
- *   - lexerTime:  first `token_emitted` → last `token_emitted`
- *   - parserTime: last `token_emitted` → `bytecode_built`
- *   - bytecodeTime: last `parselet_matched` → `bytecode_built` (compilation tail)
- *   - executionTime: first `vm_step` (or `bytecode_built`) → `vm_halt`
- *   - totalTime: `pipeline_start` → `pipeline_end`
- *
- * Falls back to zeros when events are unavailable (non-diagnostic mode).
- *
- * When a bytecode cache hit occurs, lexer/parser/compiler stages are skipped
- * entirely — we report zero for those and only capture VM + total time.
- */
-
-/**
- * Extract per-stage timings from a single line's diagnostic events.
- * This is a simpler version of extractStageTimings that doesn't depend
- * on pipeline_start/pipeline_end events (which only appear once globally).
- * The total time for the line is derived from the first-to-last event span. */
-function extractLineTimings(
-	events: readonly { type: string; elapsedNs: number }[]
-): PerformanceStats {
-	if (events.length === 0) {
-		return {
-			lexerTime: 0,
-			parserTime: 0,
-			bytecodeTime: 0,
-			executionTime: 0,
-			totalTime: 0,
-		};
-	}
-
-	const firstEvent = events[0];
-	const lastEvent = events[events.length - 1];
-
-	const firstToken = events.find((e) => e.type === "token_emitted");
-	const lastToken = [...events]
-		.reverse()
-		.find((e) => e.type === "token_emitted");
-	const lastParselet = [...events]
-		.reverse()
-		.find((e) => e.type === "parselet_matched");
-	const bytecodeBuilt = events.find((e) => e.type === "bytecode_built");
-	const firstVmStep = events.find((e) => e.type === "vm_step");
-	const lastVmHalt = [...events].reverse().find((e) => e.type === "vm_halt");
-
-	const lexStart = firstToken?.elapsedNs ?? firstEvent.elapsedNs;
-	const lexEnd = lastToken?.elapsedNs ?? lexStart;
-	const parseStart = lexEnd;
-	const parseEnd =
-		bytecodeBuilt?.elapsedNs ?? lastParselet?.elapsedNs ?? parseStart;
-	const compileStart = lastParselet?.elapsedNs ?? parseEnd;
-	const compileEnd = parseEnd;
-	const vmStart =
-		firstVmStep?.elapsedNs ?? bytecodeBuilt?.elapsedNs ?? parseEnd;
-	const vmEnd = lastVmHalt?.elapsedNs ?? lastEvent.elapsedNs;
-
-	return {
-		lexerTime: Math.max(0, lexEnd - lexStart),
-		parserTime: Math.max(0, parseEnd - parseStart),
-		bytecodeTime: Math.max(0, compileEnd - compileStart),
-		executionTime: Math.max(0, vmEnd - vmStart),
-		totalTime: Math.max(0, lastEvent.elapsedNs - firstEvent.elapsedNs),
-	};
-}
-
-function extractStageTimings(
-	events: readonly { type: string; elapsedNs: number }[]
-): PerformanceStats {
-	const hasCacheHit = events.some((e) => e.type === "cache_hit");
-
-	const byType = {
-		tokenEmitted: events.filter((e) => e.type === "token_emitted"),
-		parseletMatched: events.filter((e) => e.type === "parselet_matched"),
-		bytecodeBuilt: events.find((e) => e.type === "bytecode_built"),
-		vmStep: events.filter((e) => e.type === "vm_step"),
-		vmHalt: events.find((e) => e.type === "vm_halt"),
-		pipelineStart: events.find((e) => e.type === "pipeline_start"),
-		pipelineEnd: events.find((e) => e.type === "pipeline_end"),
-	};
-
-	if (hasCacheHit) {
-		// Cache hit: lexer/parser/compiler were skipped entirely.
-		// Only VM execution and total wall-clock time are meaningful.
-		const vmStart =
-			byType.vmStep[0]?.elapsedNs ?? byType.bytecodeBuilt?.elapsedNs ?? 0;
-		const vmEnd =
-			byType.vmHalt?.elapsedNs ??
-			byType.pipelineEnd?.elapsedNs ??
-			vmStart;
-		const totalStart = byType.pipelineStart?.elapsedNs ?? 0;
-		const totalEnd = byType.pipelineEnd?.elapsedNs ?? vmEnd;
-		return {
-			lexerTime: 0,
-			parserTime: 0,
-			bytecodeTime: 0,
-			executionTime: Math.max(0, vmEnd - vmStart),
-			totalTime: Math.max(0, totalEnd - totalStart),
-		};
-	}
-
-	// Lexer: first token to last token
-	const lexStart = byType.tokenEmitted[0]?.elapsedNs ?? 0;
-	const lexEnd =
-		byType.tokenEmitted[byType.tokenEmitted.length - 1]?.elapsedNs ??
-		lexStart;
-
-	// Parser: last token → bytecode built
-	const parseStart = lexEnd;
-	const parseEnd = byType.bytecodeBuilt?.elapsedNs ?? parseStart;
-
-	// Compiler tail: last parselet matched → bytecode built
-	const lastParselet =
-		byType.parseletMatched[byType.parseletMatched.length - 1];
-	const compileStart = lastParselet?.elapsedNs ?? parseEnd;
-	const compileEnd = parseEnd;
-
-	// VM: first vm_step (or bytecode built) → vm_halt
-	const vmStart = byType.vmStep[0]?.elapsedNs ?? parseEnd;
-	const vmEnd =
-		byType.vmHalt?.elapsedNs ?? byType.pipelineEnd?.elapsedNs ?? vmStart;
-
-	// Total: pipeline_start → pipeline_end
-	const totalStart = byType.pipelineStart?.elapsedNs ?? 0;
-	const totalEnd = byType.pipelineEnd?.elapsedNs ?? vmEnd;
-
-	return {
-		lexerTime: Math.max(0, lexEnd - lexStart),
-		parserTime: Math.max(0, parseEnd - parseStart),
-		bytecodeTime: Math.max(0, compileEnd - compileStart),
-		executionTime: Math.max(0, vmEnd - vmStart),
-		totalTime: Math.max(0, totalEnd - totalStart),
-	};
-}
 
 // ── Line classification helper ──────────────────────────────────────────
 
@@ -876,95 +746,15 @@ export function runEngineWithStreaming(
 		},
 	});
 
-	const stats: PerformanceStats = lastDebugEvents
-		? extractStageTimings(lastDebugEvents)
-		: {
-				lexerTime: 0,
-				parserTime: 0,
-				bytecodeTime: 0,
-				executionTime: 0,
-				totalTime: 0,
-		  };
+	const stats: PerformanceStats = buildStats(lastDebugEvents);
+	const lineStats: LineStats[] = buildLineStats(lineEventSnapshots);
+	const vmTrace: VmTraceStep[] = buildVmTrace(lastDebugEvents);
 
-	const lineStats: LineStats[] = [];
-	let prevEventCount = 0;
-	for (const snap of lineEventSnapshots) {
-		const lineOnlyEvents = snap.events.slice(prevEventCount);
-		prevEventCount = snap.events.length;
-		lineStats.push({
-			lineNumber: snap.lineNumber,
-			stats: extractLineTimings(lineOnlyEvents),
-		});
-	}
+	// TanStack Query cache entries for Workers tab display
+	const { queryCache, queryClientConfig } = buildQueryCacheState(engine);
 
-	const vmTrace: VmTraceStep[] = lastDebugEvents
-		? lastDebugEvents
-				.filter((e) => e.type === "vm_step")
-				.map((e) => {
-					const step = e as {
-						type: "vm_step";
-						ip: number;
-						opcodeName: string;
-						opcode: number;
-						stackDepth: number;
-						instructionNumber: number;
-						elapsedNs: number;
-					};
-					return {
-						ip: step.ip,
-						opcodeName: step.opcodeName,
-						opcode: step.opcode,
-						stackDepth: step.stackDepth,
-						instructionNumber: step.instructionNumber,
-						elapsedNs: step.elapsedNs,
-						stack: (step as any).stack ?? [],
-					};
-				})
-		: [];
-
-	// Extract TanStack Query cache entries for Workers tab display
-	const defaultStaleTime = engine?.queryClient.getDefaultOptions().queries?.staleTime ?? 0;
-	const defaultCacheTime = engine?.queryClient.getDefaultOptions().queries?.gcTime ?? 0;
-	const queryClientConfig: QueryClientConfig = {
-		staleTime: defaultStaleTime,
-		gcTime: defaultCacheTime,
-	};
-	const queryCache: QueryCacheEntry[] = engine
-		? engine.queryClient.getQueryCache().getAll().map(q => {
-			const data = q.state.data;
-			let dataPreview = '—';
-			if (data == null) {
-				dataPreview = 'null';
-			} else if (typeof data === 'object') {
-				const obj = data as any;
-				if (obj.value !== undefined) dataPreview = String(obj.value) + (obj.unit ? ' ' + obj.unit : '');
-				else dataPreview = JSON.stringify(data).slice(0, 120);
-			} else {
-				dataPreview = String(data);
-			}
-			return {
-				queryKey: q.queryKey.join(':'),
-				queryKeyArray: q.queryKey as string[],
-				status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
-				dataType: data != null && typeof data === 'object' ? (data as any)?.unit || 'object' : typeof data,
-				dataPreview,
-				updatedAt: q.state.dataUpdatedAt,
-				staleTime: defaultStaleTime,
-				cacheTime: defaultCacheTime,
-			};
-		})
-		: [];
-
-	const diagnosticEvents: DiagnosticEventInfo[] = lastDebugEvents
-		? lastDebugEvents.map((e) => ({
-				type: e.type,
-				timestamp: Date.now(),
-				elapsedNs: e.elapsedNs,
-				expression: (e as any).expression ?? "",
-				details: (e as any).details ?? "",
-				groupKey: (e as any).expression ?? "",
-		  }))
-		: [];
+	const diagnosticEvents: DiagnosticEventInfo[] =
+		buildDiagnosticEvents(lastDebugEvents);
 
 	// ── Read all snapshot data from the last line's diagnostic result ──
 	cacheSnapshot = lastDiagnostic?.cacheSnapshot ?? cacheSnapshot;
@@ -1261,76 +1051,14 @@ export function runEngine(expression: string): DebugResult {
 		disableValueArena();
 
 		// ── Compute stats before returning from try block ──
-		stats = lastDebugEvents
-			? extractStageTimings(lastDebugEvents)
-			: { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 };
+		stats = buildStats(lastDebugEvents);
+		lineStats = buildLineStats(lineEventSnapshots);
+		vmTrace = buildVmTrace(lastDebugEvents);
 
-		{
-			let prevCount = 0;
-			for (const snap of lineEventSnapshots) {
-				const lineOnlyEvents = snap.events.slice(prevCount);
-				prevCount = snap.events.length;
-				lineStats.push({
-					lineNumber: snap.lineNumber,
-					stats: extractLineTimings(lineOnlyEvents),
-				});
-			}
-		}
+		const qcState = buildQueryCacheState(engine);
+		queryCache = qcState.queryCache;
 
-		vmTrace = lastDebugEvents
-			? lastDebugEvents
-				.filter((e) => e.type === "vm_step")
-				.map((e) => {
-					const step = e as {
-						type: "vm_step";
-						ip: number;
-						opcodeName: string;
-						opcode: number;
-						stackDepth: number;
-						instructionNumber: number;
-						elapsedNs: number;
-					};
-					return {
-						ip: step.ip,
-						opcodeName: step.opcodeName,
-						opcode: step.opcode,
-						stackDepth: step.stackDepth,
-						instructionNumber: step.instructionNumber,
-						elapsedNs: step.elapsedNs,
-						stack: (step as any).stack ?? [],
-					};
-				})
-			: [];
-
-		const defaultStaleTime = engine.queryClient.getDefaultOptions().queries?.staleTime ?? 0;
-		const defaultCacheTime = engine.queryClient.getDefaultOptions().queries?.gcTime ?? 0;
-		queryCache = engine.queryClient.getQueryCache().getAll().map(q => {
-			const data = q.state.data;
-			let dataPreview = '—';
-			if (data == null) {
-				dataPreview = 'null';
-			} else if (typeof data === 'object') {
-				const obj = data as any;
-				if (obj.value !== undefined) dataPreview = String(obj.value) + (obj.unit ? ' ' + obj.unit : '');
-				else dataPreview = JSON.stringify(data).slice(0, 120);
-			} else {
-				dataPreview = String(data);
-			}
-			return {
-				queryKey: q.queryKey.join(':'),
-				queryKeyArray: q.queryKey as string[],
-				status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
-				dataType: data != null && typeof data === 'object' ? (data as any)?.unit || 'object' : typeof data,
-				dataPreview,
-				updatedAt: q.state.dataUpdatedAt,
-				staleTime: defaultStaleTime,
-				cacheTime: defaultCacheTime,
-			};
-		});
-
-		diagnosticEvents = lastDebugEvents
-			? lastDebugEvents.map((e) => ({ type: e.type, timestamp: Date.now(), elapsedNs: e.elapsedNs, expression: (e as any).expression ?? "", details: (e as any).details ?? "", groupKey: (e as any).expression ?? "" }))
-			: [];
+		diagnosticEvents = buildDiagnosticEvents(lastDebugEvents);
 
 		return {
 			tokens: rawTokens,
@@ -1349,6 +1077,7 @@ export function runEngine(expression: string): DebugResult {
 			parselets,
 			vmTrace,
 			queryCache,
+			queryClientConfig: qcState.queryClientConfig,
 			cacheSnapshot,
 			diagnosticEvents,
 			pipelineTelemetry: engine.getLastTelemetry(),
@@ -1364,68 +1093,11 @@ export function runEngine(expression: string): DebugResult {
 		errors.push(error instanceof Error ? error.message : String(error));
 	}
 
-	// Extract aggregate per-stage timings from the last accumulated event set.
-	stats = lastDebugEvents
-		? extractStageTimings(lastDebugEvents)
-		: {
-				lexerTime: 0,
-				parserTime: 0,
-				bytecodeTime: 0,
-				executionTime: 0,
-				totalTime: 0,
-		  };
-
-	// Extract per-line timings from event snapshot deltas.
-	// Each snapshot is cumulative; we slice the delta between consecutive snapshots
-	// to get the events that belong to each line.
-	lineStats = [];
-	let prevEventCount = 0;
-	for (const snap of lineEventSnapshots) {
-		const lineOnlyEvents = snap.events.slice(prevEventCount);
-		prevEventCount = snap.events.length;
-		lineStats.push({
-			lineNumber: snap.lineNumber,
-			stats: extractLineTimings(lineOnlyEvents),
-		});
-	}
-
-	// Extract VM trace steps from the last accumulated event set
-	vmTrace = lastDebugEvents
-		? lastDebugEvents
-				.filter((e) => e.type === "vm_step")
-				.map((e) => {
-					const step = e as {
-						type: "vm_step";
-						ip: number;
-						opcodeName: string;
-						opcode: number;
-						stackDepth: number;
-						instructionNumber: number;
-						elapsedNs: number;
-					};
-					return {
-						ip: step.ip,
-						opcodeName: step.opcodeName,
-						opcode: step.opcode,
-						stackDepth: step.stackDepth,
-						instructionNumber: step.instructionNumber,
-						elapsedNs: step.elapsedNs,
-						stack: (step as any).stack ?? [],
-					};
-				})
-		: [];
-
-	// Diagnostic events from the last run
-	diagnosticEvents = lastDebugEvents
-		? lastDebugEvents.map((e) => ({
-				type: e.type,
-				timestamp: Date.now(),
-				elapsedNs: e.elapsedNs,
-				expression: (e as any).expression ?? "",
-				details: (e as any).details ?? "",
-				groupKey: (e as any).expression ?? "",
-		  }))
-		: [];
+	// Error path — assemble what we can from the last accumulated events.
+	stats = buildStats(lastDebugEvents);
+	lineStats = buildLineStats(lineEventSnapshots);
+	vmTrace = buildVmTrace(lastDebugEvents);
+	diagnosticEvents = buildDiagnosticEvents(lastDebugEvents);
 
 	// ── Engine not available here (caught error path), use defaults ──
 	const dagSnapshot: DagSnapshot = {
