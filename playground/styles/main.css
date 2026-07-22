@@ -439,13 +439,16 @@ html, body {
 }
 
 .tab-bar {
-  display: flex; gap: 0;
+  display: flex; flex-wrap: wrap; gap: 0;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   padding: 0 8px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Wrap instead of horizontally scroll: a scrolled tab bar hid entire
+     tabs (Perf, Stream) off-screen with zero visual indication more tabs
+     existed — no scrollbar, no fade, nothing to suggest hidden content.
+     Wrapping guarantees every tab stays visible/clickable regardless of
+     how narrow the diagnostics panel gets. */
 }
 .tab-btn {
   padding: 8px 14px;
@@ -2475,11 +2478,28 @@ html, body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ── Scrollbar ─────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* ── Scrollbar ─────────────────────────────────────────────────────
+   Previously used --border-color (#3a3a44) at 5px on backgrounds ranging
+   #1b1b1f-#32323a — near-zero contrast made every scrollable panel in
+   the app look non-scrollable even though the underlying scroll worked
+   fine. Wider + --text-muted gives a visible-but-still-subtle thumb. */
+::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+  background-clip: padding-box;
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
 
 /* ── Responsive ────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
