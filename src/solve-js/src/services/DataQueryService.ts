@@ -17,6 +17,26 @@
 
 import { QueryClient } from "@tanstack/query-core";
 
+// ── Active query client (execution context) ───────────────────────────────
+// Synchronous VM plugin functions (dispatched via CALL_PLUGIN) can't receive
+// the engine's QueryClient through their (args) => Value ABI, so the engine
+// publishes the client here before each execution and package handlers read
+// it back. This module is the package-agnostic home for that hand-off —
+// the engine must not import from a specific package (e.g. packages/osrs)
+// to wire it.
+
+let _activeQueryClient: QueryClient | null = null;
+
+/** Publish the QueryClient for the execution about to run. Set by the engine. */
+export function setActiveQueryClient(qc: QueryClient | null): void {
+  _activeQueryClient = qc;
+}
+
+/** Read the QueryClient of the currently executing engine, if any. */
+export function getActiveQueryClient(): QueryClient | null {
+  return _activeQueryClient;
+}
+
 /**
  * Create a new TanStack Query QueryClient with project defaults.
  * Each engine instance gets its own client for isolation.

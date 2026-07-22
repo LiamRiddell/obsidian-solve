@@ -17,48 +17,74 @@ export class LineCacheEntry {
   ) {}
 }
 
+/**
+ * Per-line result + bytecode cache.
+ *
+ * Entries are stored in a two-level map (line number → expression → entry)
+ * so per-line operations — getEntryForLine, removeAllForLine — are O(1)
+ * lookups instead of scans over every cached key. Entries with no
+ * expression are stored under the empty-string key.
+ *
+ * The string keys exposed by keys()/forEach() keep the historical
+ * "line" / "line:expression" format for diagnostics consumers.
+ */
 export class LineCache {
-  private entries: Map<string, LineCacheEntry> = new Map();
+  /** line number → (expression, or "" for expressionless entries) → entry */
+  private byLine: Map<number, Map<string, LineCacheEntry>> = new Map();
+  private count = 0;
 
-  private getKey(line: number, expression?: string): string {
-    return expression ? `${line}:${expression}` : `${line}`;
+  private static exprKey(expression?: string): string {
+    return expression ?? "";
   }
 
-get(line: number, expression?: string): LineCacheEntry | undefined {
-     return this.entries.get(this.getKey(line, expression));
-   }
+  private static displayKey(line: number, exprKey: string): string {
+    return exprKey === "" ? `${line}` : `${line}:${exprKey}`;
+  }
 
-   /** Find any cache entry for the given line number, regardless of expression suffix */
-   getEntryForLine(line: number): LineCacheEntry | undefined {
-     const linePrefix = `${line}:`;
-     for (const [key, entry] of this.entries) {
-       if (key === `${line}` || key.startsWith(linePrefix)) {
-         return entry;
-       }
-     }
-     return undefined;
-   }
+  get(line: number, expression?: string): LineCacheEntry | undefined {
+    return this.byLine.get(line)?.get(LineCache.exprKey(expression));
+  }
+
+  /** Find any cache entry for the given line number, regardless of expression suffix */
+  getEntryForLine(line: number): LineCacheEntry | undefined {
+    const entries = this.byLine.get(line);
+    if (!entries) return undefined;
+    // First entry in insertion order — matches the historical scan behavior.
+    for (const entry of entries.values()) {
+      return entry;
+    }
+    return undefined;
+  }
 
   set(line: number, entry: LineCacheEntry, expression?: string): void {
-    this.entries.set(this.getKey(line, expression), entry);
+    let entries = this.byLine.get(line);
+    if (!entries) {
+      entries = new Map();
+      this.byLine.set(line, entries);
+    }
+    const key = LineCache.exprKey(expression);
+    if (!entries.has(key)) this.count++;
+    entries.set(key, entry);
   }
 
   has(line: number, expression?: string): boolean {
-    return this.entries.has(this.getKey(line, expression));
+    return this.byLine.get(line)?.has(LineCache.exprKey(expression)) ?? false;
   }
 
   remove(line: number, expression?: string): void {
-    const key = this.getKey(line, expression);
-    this.entries.delete(key);
+    const entries = this.byLine.get(line);
+    if (!entries) return;
+    if (entries.delete(LineCache.exprKey(expression))) {
+      this.count--;
+      if (entries.size === 0) this.byLine.delete(line);
+    }
   }
 
   removeAllForLine(line: number): void {
-    const prefix = `${line}:`;
-    for (const key of Array.from(this.entries.keys())) {
-      if (key === `${line}` || key.startsWith(prefix)) {
-        this.entries.delete(key);
-      }
-    }
+    const entries = this.byLine.get(line);
+    if (!entries) return;
+    this.count -= entries.size;
+    this.byLine.delete(line);
   }
 
   clearLine(line: number): void {
@@ -69,24 +95,35 @@ get(line: number, expression?: string): LineCacheEntry | undefined {
    * Number of entries in the cache. Useful for diagnostics.
    */
   get size(): number {
-    return this.entries.size;
+    return this.count;
   }
 
   clear(): void {
-    this.entries.clear();
+    this.byLine.clear();
+    this.count = 0;
   }
 
   /**
    * Iterate all cache entries for diagnostics/debugging.
    */
   forEach(callback: (key: string, entry: LineCacheEntry) => void): void {
-    this.entries.forEach((entry, key) => callback(key, entry));
+    for (const [line, entries] of this.byLine) {
+      for (const [exprKey, entry] of entries) {
+        callback(LineCache.displayKey(line, exprKey), entry);
+      }
+    }
   }
 
   /**
    * Get all entry keys.
    */
   keys(): string[] {
-    return Array.from(this.entries.keys());
+    const result: string[] = [];
+    for (const [line, entries] of this.byLine) {
+      for (const exprKey of entries.keys()) {
+        result.push(LineCache.displayKey(line, exprKey));
+      }
+    }
+    return result;
   }
 }

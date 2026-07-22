@@ -3,6 +3,8 @@
  * Integrates with DataQueryService for worker-based execution
  */
 
+import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
+
 // ============================================================================
 // CURRENCY EXCHANGE SERVICE
 // ============================================================================
@@ -28,25 +30,14 @@ export class CurrencyExchangeService {
   async getRate(from: string, to: string, signal?: AbortSignal): Promise<number> {
     // Combine the caller's optional abort signal with a hard timeout so a
     // hanging currency API never blocks re-evaluation indefinitely.
-    // Uses the same manual AbortController multiplexing pattern as
-    // OsrsAsyncResolver.fetchOsrsBulkPrices.
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(new DOMException(`Currency API fetch timed out after ${CurrencyExchangeService.FETCH_TIMEOUT_MS}ms`, "TimeoutError")),
+    const { signal: fetchSignal, cleanup } = createTimeoutSignal(
+      signal,
       CurrencyExchangeService.FETCH_TIMEOUT_MS,
+      "Currency API fetch",
     );
 
-    let onCallerAbort: (() => void) | undefined;
-    if (signal) {
-      onCallerAbort = () => {
-        clearTimeout(timeoutId);
-        try { controller.abort(signal.reason); } catch { /* already aborted */ }
-      };
-      signal.addEventListener("abort", onCallerAbort, { once: true });
-    }
-
     try {
-      const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${from.toUpperCase()}`, { signal: controller.signal });
+      const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${from.toUpperCase()}`, { signal: fetchSignal });
       if (!response.ok) throw new Error(`Currency API returned ${response.status}`);
       const data = await response.json();
       const rates: Record<string, number> = data.rates ?? {};
@@ -54,10 +45,7 @@ export class CurrencyExchangeService {
       if (rates[toUpper] === undefined) throw new Error(`Unknown currency: ${toUpper}`);
       return rates[toUpper];
     } finally {
-      clearTimeout(timeoutId);
-      if (signal && onCallerAbort) {
-        signal.removeEventListener("abort", onCallerAbort);
-      }
+      cleanup();
     }
   }
 

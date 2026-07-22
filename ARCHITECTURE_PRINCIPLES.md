@@ -59,14 +59,12 @@ The user writes natural markdown text — `10 + 2`, `£100 in GBP`, `Now + 20 da
 | `vm/` | `DependencyGraph` | Track line→variable dependencies | None |
 | `vm/` | `Value` | Typed value representation | None |
 | `cache/` | `LineCache` | Per-line result + bytecode cache | None |
-| `cache/` | `UnifiedCache`, `LFUCache` | Generic cache (legacy — deprecated) | None |
+| `cache/` | `LFUCache` | Bounded frequency-based cache (used by UomConverter) | None |
 | `engine/` | `ExpressionEngine` | Orchestrates full pipeline | Everything above |
-| `engine/` | `DynamicValueResolver` | Resolves dynamic values at eval time | `ExpressionEngine` |
+| `engine/` | `ThreeTierEvaluator` | Viewport-tiered evaluation over DocumentModel | `ExpressionEngine`, `DocumentModel` |
+| `packages/` | `PackageSystem` | External package management | `ParseletRegistry`, resolvers |
 | `providers/` | 9 provider modules | Domain-specific parselets and ops | `ParseletRegistry`, `OpRegistry` |
-| `plugins/` | `PluginSystem` | External plugin management | `ParseletRegistry`, `OpRegistry` |
-| `workers/` | `DataQueryWorker` | Web Worker message handling | `ExpressionEngine` |
-| `workers/` | `DataSourceStrategy` | HTTP/data source abstraction | None |
-| `workers/` | `CurrencyExchange` | Currency rate management | Data sources |
+| `workers/` | `compilation.worker`, `execution.worker` | Off-main-thread compile/execute | Transferable bytecode |
 | `diagnostics/` | `Event`, `Collector`, `Pipeline` | Diagnostic event system | None |
 | `errors/` | `UnifiedErrorFramework` | `SolveError`, `Result<T,E>`, `ErrorFactory` | None |
 | `api/` | `SolveAPI` | Public API exposure | `ExpressionEngine`, `PluginSystem` |
@@ -98,7 +96,13 @@ lexer ← parser ← bytecode ← VM ← cache ← engine ← providers/plugins/
 
 ### 3.3 VM Execution Model
 - Stack-based bytecode VM
-- `Value` is immutable — operations create new Values
+- `Value` is immutable **by convention, not enforcement** — operations create
+  new Values, and external code must never mutate Value fields. Internally the
+  ValueArena reuses Value objects via `recycle()` during Tier-2 scroll
+  execution, async resolvers may attach metadata (`timedOut`), and cache
+  layers replace `entry.result` in place. Values handed out while the arena
+  is active are only valid until the next arena reset — persist them with
+  `persistentValue()` before storing.
 - All numeric types: `Number`, `Hex`, `BigInt`, `Percentage`, `Uom`, plus vectors
 - VM has hard instruction limit and stack depth limit
 - Errors during execution throw `SolveError` with category `EXECUTION`

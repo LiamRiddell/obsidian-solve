@@ -17,7 +17,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
 import type { ISolvePackage } from "@solve-js/api/SolveAPI";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { QueryClient } from "@tanstack/query-core";
-import { createQueryClient } from "@solve-js/services/DataQueryService";
+import { createQueryClient, setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import {
 	ResolverRegistry,
@@ -26,7 +26,6 @@ import {
 	AsyncResolutionBatcher,
 	type AsyncResolutionEvent,
 } from "@solve-js/engine/AsyncResolutionBatcher";
-import { setOsrsQueryClient } from "@solve-js/packages/osrs/OsrsVmHandler";
 import { AllocationTracker, type PipelineTelemetry, type StageAllocation } from "@solve-js/telemetry";
 import {
     ParsingResult,
@@ -261,7 +260,8 @@ export class ExpressionEngine {
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
-        this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);        this.queryClient = createQueryClient();
+        this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
+        this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
 	}
 
@@ -450,7 +450,7 @@ export class ExpressionEngine {
             controller.abort();
         };
 
-        setOsrsQueryClient(this.queryClient);
+        setActiveQueryClient(this.queryClient);
         const result = executeBytecode(program, this.vm);
 
         // Single stack cleanup (replaces 10 occurrences)
@@ -511,7 +511,7 @@ export class ExpressionEngine {
             controller.abort();
         };
 
-        setOsrsQueryClient(this.queryClient);
+        setActiveQueryClient(this.queryClient);
         const result = executeBytecode(program, this.vm);
 
         // Stack cleanup
@@ -1664,7 +1664,7 @@ export class ExpressionEngine {
             controller.abort();
         };
 
-        setOsrsQueryClient(this.queryClient);
+        setActiveQueryClient(this.queryClient);
 
         let evalResult: EvalResult;
         const vmResult = AllocationTracker.track('vm', () => {

@@ -6,6 +6,7 @@ import { uomValue, type Value } from "@solve-js/vm/Value";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { OSRS_ITEM_NAME_TO_ID, osrsItemQueryKey } from "./OsrsItemVocabulary";
 import { OSRS_PLUGIN_FN_IDX } from "./OsrsParselet";
+import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
 
 const OSRS_BULK_KEY = ["osrs", "bulk"];
 
@@ -120,6 +121,22 @@ export class OsrsAsyncResolver implements IAsyncResolver {
             fallback.timedOut = true;
             queryClient.setQueryData(osrsItemQueryKey(id), fallback);
           }
+
+          // Bound the poisoning window: without this, the 0 gp fallbacks
+          // would be served as real prices for the full staleTime (5 min).
+          // After a short cool-down, evict any entry that is still the
+          // tagged fallback so the next evaluation refetches. Entries that
+          // a later successful fetch replaced are left alone.
+          setTimeout(() => {
+            for (const id of cachedItemIds) {
+              const key = osrsItemQueryKey(id);
+              const current = queryClient.getQueryData<Value>(key);
+              if (current?.timedOut) {
+                queryClient.removeQueries({ queryKey: key, exact: true });
+              }
+            }
+          }, OSRS_FAILURE_COOLDOWN_MS);
+
           const result = uomValue(0, "gp");
           result.timedOut = true;
           return result;
@@ -155,29 +172,25 @@ const OSRS_API_URL = "https://prices.runescape.wiki/api/v1/osrs/latest";
  */
 const OSRS_FETCH_TIMEOUT_MS = 10_000;
 
+/**
+ * How long failed-fetch 0 gp fallbacks stay in the query cache before being
+ * evicted for a retry. Long enough to stop keystroke-driven refetch loops
+ * while the API is down; short enough that wrong prices don't persist for
+ * the full 5-minute staleTime.
+ */
+const OSRS_FAILURE_COOLDOWN_MS = 30_000;
+
 async function fetchOsrsBulkPrices(signal: AbortSignal): Promise<Record<string, number>> {
   // Combine the caller's abort signal with a hard timeout so a hanging
   // OSRS API never blocks re-evaluation indefinitely.
-  //
-  // We manually multiplex two signals into one AbortController rather than
-  // using AbortSignal.any() (Chrome 116+) to stay compatible with the
-  // TypeScript lib targets used by this project.
-  const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(new DOMException(`OSRS API fetch timed out after ${OSRS_FETCH_TIMEOUT_MS}ms`, "TimeoutError")),
+  const { signal: fetchSignal, cleanup } = createTimeoutSignal(
+    signal,
     OSRS_FETCH_TIMEOUT_MS,
+    "OSRS API fetch",
   );
 
-  // When the caller's signal aborts (e.g. keystroke-level cancel), propagate
-  // the abort to our controller so the in-flight fetch is cancelled.
-  const onCallerAbort = () => {
-    clearTimeout(timeoutId);
-    try { controller.abort(signal.reason); } catch { /* already aborted */ }
-  };
-  signal.addEventListener("abort", onCallerAbort, { once: true });
-
   try {
-    const response = await fetch(OSRS_API_URL, { signal: controller.signal });
+    const response = await fetch(OSRS_API_URL, { signal: fetchSignal });
     if (!response.ok) throw new Error(`OSRS API returned ${response.status}`);
     const json = await response.json();
     const data = json?.data as Record<string, { high: number; low: number }> | undefined;
@@ -190,7 +203,6 @@ async function fetchOsrsBulkPrices(signal: AbortSignal): Promise<Record<string, 
     }
     return prices;
   } finally {
-    clearTimeout(timeoutId);
-    signal.removeEventListener("abort", onCallerAbort);
+    cleanup();
   }
 }
