@@ -242,7 +242,13 @@ function renderInlineResults(lineResults: LineResult[]): void {
     const text = isPending ? '…' : lr.result;
     effects.push({ from: line.to, to: line.to, deco: Decoration.widget({ widget: new ResultWidget(text, lr.type, isPending), side: 1 }) });
   }
-  if (effects.length > 0) editorView.dispatch({ effects: resultEffect.of(effects) });
+  // Always dispatch, even with an empty effects array: resultField's update()
+  // rebuilds the ENTIRE decoration set from this list every time, so skipping
+  // the dispatch when every line errored (or otherwise produced no widget)
+  // left whatever was previously rendered — e.g. a stale "= 293.00 gp" from
+  // the last successful evaluation — stuck on screen after the line was
+  // edited into something that no longer parses.
+  editorView.dispatch({ effects: resultEffect.of(effects) });
 }
 
 // Expose for parent to call
