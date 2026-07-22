@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { GAME_ITEM_TYPE } from "./OsrsItemNormalizer";
 
 /** Index in pluginFunctionRegistry for the OSRS resolveGameItem function. */
@@ -56,14 +57,13 @@ export class OsrsKeywordParselet implements PrefixParselet {
         parser.consume(GAME_ITEM_TYPE);
         itemName = arg.value;
       } else {
-        // Unknown argument — push 0 and consume remaining unknown tokens up to RPAREN
-        while (parser.peek() && parser.peek()!.type !== "RPAREN") {
-          parser.consume();
-        }
-        parser.consume("RPAREN");
-        builder.emitOpcode(OpCode.PUSH_NUMBER);
-        builder.emitNumber(0);
-        return;
+        // Unknown argument — surface a parse error rather than silently
+        // pushing 0, which read as a real (and wrong) price of zero gp.
+        throw ErrorFactory.parsing(
+          "OSRS_INVALID_ARGUMENT",
+          `Expected a quoted item name or item reference inside osrs.ge(...)/osrs.price(...), got ${arg?.type ?? "nothing"}`,
+          { tokenType: arg?.type }
+        );
       }
 
       parser.consume("RPAREN");
@@ -109,9 +109,16 @@ export class OsrsKeywordParselet implements PrefixParselet {
     // ── Keyword + GAME_ITEM path: osrs Iron Axe ──
     const itemToken = parser.peek();
     if (!itemToken || itemToken.type !== GAME_ITEM_TYPE) {
-      builder.emitOpcode(OpCode.PUSH_NUMBER);
-      builder.emitNumber(0);
-      return;
+      // No recognized item name followed "osrs" — surfacing a parse error
+      // instead of silently pushing 0, which read as a real (and wrong)
+      // price of zero gp for whatever was typed.
+      throw ErrorFactory.parsing(
+        "OSRS_MISSING_ITEM_NAME",
+        itemToken
+          ? `Expected an OSRS item name after 'osrs', got "${itemToken.value}"`
+          : `Expected an OSRS item name after 'osrs' (e.g. "osrs Iron Axe" or osrs("Iron Axe"))`,
+        { tokenType: itemToken?.type }
+      );
     }
 
     parser.consume(GAME_ITEM_TYPE);

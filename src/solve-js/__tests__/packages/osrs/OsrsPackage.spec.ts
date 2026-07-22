@@ -278,7 +278,10 @@ describe("OsrsKeywordParselet", () => {
     expect(program.strings[0]).toBe("Abyssal Whip");
   });
 
-  test("pushes 0 when GAME_ITEM token is missing", () => {
+  test("throws a parse error when GAME_ITEM token is missing (was: silently pushed 0)", () => {
+    // Bare "osrs" with nothing after it used to compile to PUSH_NUMBER 0 —
+    // indistinguishable from a genuine "0 gp" result. It must now surface
+    // as a parse error instead.
     const parselet = new OsrsKeywordParselet();
     const builder = new BytecodeBuilder();
 
@@ -286,13 +289,7 @@ describe("OsrsKeywordParselet", () => {
       peek: () => null,
     } as any;
 
-    parselet.parse(mockParser, {} as any, builder);
-
-    const program = builder.build();
-    const opcodes = Array.from(program.opcodes);
-    expect(opcodes[0]).toBe(OpCode.PUSH_NUMBER);
-    // Numbers: [0] (pushed by emitNumber)
-    expect(program.numbers[0]).toBe(0);
+    expect(() => parselet.parse(mockParser, {} as any, builder)).toThrow(/Expected an OSRS item name/);
   });
 
   test("compiles keyword + GAME_ITEM to bytecode (no 'price'/'of' filler words)", () => {
@@ -560,7 +557,7 @@ describe("OSRS keyword prefix path (end-to-end)", () => {
     expect(program.strings[0]).toBe("Dragon Hide");
   });
 
-  test("OsrsKeywordParselet pushes 0 when GAME_ITEM is missing after keyword", () => {
+  test("OsrsKeywordParselet throws when GAME_ITEM is missing after keyword (was: silently pushed 0)", () => {
     const { lexer, normalizer, parser } = createEngine();
 
     // "osrs" followed by a non-item identifier — normalizer won't fuse it
@@ -574,16 +571,12 @@ describe("OSRS keyword prefix path (end-to-end)", () => {
     expect(normalized[0].type).toBe("OSRS_KEYWORD");
     expect(normalized[1].type).toBe("IDENT"); // NOT fused
 
-    // Parse — OsrsKeywordParselet sees IDENT, not GAME_ITEM → pushes 0
+    // Parse — OsrsKeywordParselet sees IDENT, not GAME_ITEM → must throw,
+    // not silently push 0 (which was indistinguishable from a real 0 gp result).
     const builder = new BytecodeBuilder();
     parser.load(normalized);
     parser.setBuilder(builder);
-    parser.parseExpression(0);
-
-    const program = builder.build();
-    const opcodes = Array.from(program.opcodes);
-    expect(opcodes[0]).toBe(OpCode.PUSH_NUMBER);
-    expect(program.numbers[0]).toBe(0);
+    expect(() => parser.parseExpression(0)).toThrow(/Expected an OSRS item name/);
   });
 });
 
@@ -673,15 +666,14 @@ describe("ExpressionEngine integration", () => {
     engine.clear();
   });
 
-  test("returns 0 for unknown item after osrs keyword (graceful fallback)", () => {
+  test("surfaces a parse error for unknown item after osrs keyword (was: silently returned 0)", () => {
+    // OsrsKeywordParselet sees OSRS_KEYWORD + IDENT (not GAME_ITEM) and must
+    // report a parse error — a bare "0" here was indistinguishable from a
+    // genuine "this item is worth 0 gp" result. See: Issue_OsrsBareKeywordReturnedZero.
     const engine = new ExpressionEngine("en", false);
     const result = engine.evaluateLineWithDebug(1, "osrs NonexistentBlarg");
 
-    // The parser succeeds (OSRS_KEYWORD + IDENT), OsrsKeywordParselet
-    // sees non-GAME_ITEM → pushes PUSH_NUMBER 0
-    expect(result.error).toBeUndefined();
-    expect(result.value.unit).toBeUndefined(); // raw number 0, not a gp UoM
-    expect(result.value.value).toBe(0);
+    expect(result.error).toMatch(/Expected an OSRS item name/);
 
     engine.clear();
   });
