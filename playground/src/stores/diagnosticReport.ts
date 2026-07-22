@@ -172,6 +172,34 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
      ══════════════════════════════════════════════════════════════ */
 
   /**
+   * Patch a single line's result after it resolves asynchronously
+   * (an OSRS price, a currency rate, ...) — called by the engine store's
+   * onmessage handler when a stream event carries a `lineUpdate`.
+   *
+   * The worker's engine re-evaluates the line correctly as soon as the
+   * fetch resolves, but that only reaches the diagnostics Stream tab as a
+   * log line unless something also updates the ACTUAL rendered state here.
+   * Without this, a line shows "Pending" forever even after its data has
+   * successfully arrived — the editor and Output tab were never told.
+   *
+   * Replaces `result`/`lineResults` with new array/object references
+   * (rather than mutating in place) so Vue's `watch(() => dr.result, ...)`
+   * in EditorPane fires — a shallow watch does not see in-place mutation
+   * of a nested array element.
+   */
+  function patchLineResult(update: { lineNumber: number; result: string; type: string; timedOut?: boolean }): void {
+    if (!result.value) return;
+    const nextLineResults = result.value.lineResults.map((lr) =>
+      lr.lineNumber === update.lineNumber
+        ? { ...lr, result: update.result, type: update.type, timedOut: update.timedOut, error: undefined }
+        : lr
+    );
+    result.value = { ...result.value, lineResults: nextLineResults };
+    lineResults.value = nextLineResults;
+    hasAsync.value = nextLineResults.some((lr) => lr.type === 'Pending');
+  }
+
+  /**
    * Populate ALL diagnostic data from a DebugResult.
    * This is the single entry point — called by the engine store's
    * onmessage handler. Every UI component reads from this store.
@@ -291,6 +319,7 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
     expression,
     // Actions
     setResult,
+    patchLineResult,
     setStatus,
     incrementRunId,
   };

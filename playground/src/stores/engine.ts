@@ -26,6 +26,14 @@ export const useEngineStore = defineStore('engine', () => {
     // from the worker and popped into the store here.
     if (stream && streamEvent && id === dr.runId) {
       useStreamStore().addEvent(streamEvent);
+      // If this event carries a freshly resolved line value (an OSRS
+      // price, a currency rate that finished fetching), patch the actual
+      // rendered result too — logging it to the Stream tab alone left the
+      // editor and Output tab showing "Pending" forever even after the
+      // underlying data had successfully arrived.
+      if (streamEvent.lineUpdate) {
+        dr.patchLineResult(streamEvent.lineUpdate);
+      }
       return;
     }
 

@@ -3,7 +3,6 @@ import type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEn
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo };
 import type { DagSnapshot } from "@/solve-js/src/vm/DependencyGraph";
 export type { DagSnapshot };
-import { formatValue } from "@/solve-js/src/format/FormatEngine";
 import type { Token } from "@/solve-js/src/lexer/Token";
 import type { AsyncResolutionEvent } from "@/solve-js/src/engine/AsyncResolutionBatcher";
 import { getOpCodeName, OpCode } from "@/solve-js/src/parser/OpCode";
@@ -152,6 +151,21 @@ export interface DiagnosticEventInfo {
 	details: string;
 	/** Key used to group related events (e.g. the expression text for async events). */
 	groupKey: string;
+	/**
+	 * Present on "async_resolved" events: the freshly re-evaluated line
+	 * result, so the main thread can patch DiagnosticReportStore's
+	 * lineResults (what the editor and Output tab actually render) instead
+	 * of only logging a description string to the Stream tab. Without this,
+	 * an async value (OSRS price, currency rate) resolves inside the
+	 * worker's engine but the UI never learns about it — the line stays
+	 * "Pending" forever even though the underlying fetch succeeded.
+	 */
+	lineUpdate?: {
+		lineNumber: number;
+		result: string;
+		type: string;
+		timedOut?: boolean;
+	};
 }
 export interface MarkdownNode {
 	id: string;
@@ -488,7 +502,7 @@ export function runEngineWithStreaming(
 								);
 								const resultValue = reResult.error
 									? reResult.error
-									: formatValue(reResult.value);
+									: formatLineResultValue(reResult.value);
 								transformController.enqueue({
 									type: "async_resolved",
 									timestamp: Date.now(),
@@ -498,6 +512,19 @@ export function runEngineWithStreaming(
 										", "
 									)})`,
 									groupKey: lineText || `Line ${ln}`,
+									// Carry the fresh value back so the main thread can
+									// patch dr.lineResults — without this, an async
+									// resolution updates the worker's own engine state
+									// but the UI (which only saw the initial Pending
+									// value) never learns about it and stays stuck.
+									lineUpdate: reResult.error
+										? undefined
+										: {
+												lineNumber: ln,
+												result: resultValue,
+												type: formatType(reResult.value),
+												timedOut: (reResult.value as any).timedOut ?? false,
+										  },
 								});
 							} catch {
 								transformController.enqueue({
