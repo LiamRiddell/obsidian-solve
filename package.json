@@ -31,6 +31,7 @@
 		"esbuild-plugin-inline-worker": "^0.1.1",
 		"eslint": "8.45.0",
 		"jest": "^29.6.2",
+		"moment": "^2.29.4",
 		"obsidian": "latest",
 		"prettier": "3.0.0",
 		"ts-jest": "^29.1.1",
@@ -40,8 +41,6 @@
 	"dependencies": {
 		"@tanstack/query-core": "^5.100.10",
 		"animate.css": "^4.1.1",
-		"convert": "^7.0.0",
-		"debug": "^4.3.4",
-		"moment": "^2.29.4"
+		"convert": "^7.0.0"
 	}
 }

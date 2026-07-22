@@ -66,11 +66,41 @@ const mainBuild = await esbuild.context({
 	entryPoints: ["src/app/main.ts", "src/app/styles.css"],
 	plugins: [cssCommentPlugin, inlineWorker({ minify: prod })],
 	outdir: ".",
+	metafile: prod,
 });
 
 if (prod) {
-	await mainBuild.rebuild();
+	const result = await mainBuild.rebuild();
+	if (result.metafile) {
+		await printBundleSizeReport(result.metafile);
+	}
 	process.exit(0);
 } else {
 	await mainBuild.watch();
+}
+
+/**
+ * Print a short bundle-size summary after a production build: total output
+ * size plus the top contributors to main.js by bundled input size. This is
+ * a lightweight regression signal for `npm run build` — not a CI gate
+ * (see plans/ARCHITECTURE_IMPROVEMENTS.md Part II, L3/L4).
+ */
+async function printBundleSizeReport(metafile) {
+	const outputs = Object.entries(metafile.outputs);
+	const mainOutput = outputs.find(([path]) => path.endsWith("main.js"));
+	if (!mainOutput) return;
+
+	const [, meta] = mainOutput;
+	const inputs = Object.entries(meta.inputs)
+		.sort((a, b) => b[1].bytesInOutput - a[1].bytesInOutput)
+		.slice(0, 10);
+
+	const kb = (bytes) => (bytes / 1024).toFixed(1) + " KB";
+
+	console.log(`\nBundle size: main.js = ${kb(meta.bytes)}`);
+	console.log("Top contributors:");
+	for (const [path, input] of inputs) {
+		console.log(`  ${kb(input.bytesInOutput).padStart(10)}  ${path}`);
+	}
+	console.log("");
 }

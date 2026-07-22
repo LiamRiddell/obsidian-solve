@@ -99,6 +99,7 @@ const config = {
 		"test/(.*)": "<rootDir>/src/solve-js/__tests__/$1",
 		"^@codemirror/language$": "<rootDir>/src/solve-js/__tests__/__mocks__/codemirror-language.ts",
 		"^@lezer/common$": "<rootDir>/src/solve-js/__tests__/__mocks__/lezer-common.ts",
+		"^obsidian$": "<rootDir>/src/solve-js/__tests__/__mocks__/obsidian.ts",
 	},
 
 	// An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader

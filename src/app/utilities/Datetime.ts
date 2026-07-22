@@ -1,4 +1,6 @@
-import moment from "moment";
+// Use Obsidian's bundled moment instead of the npm package — the host app
+// already ships one, so importing our own would duplicate ~230KB in main.js.
+import { moment } from "obsidian";
 
 /**
  * Convert a day-of-week name to its numeric index (0 = Sunday, 6 = Saturday).

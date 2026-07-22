@@ -1,6 +1,8 @@
 import { EDatetimeParsingFormat } from "@app/constants/EDatetimeFormat";
 import { IPluginSettings } from "@app/settings/definition/IPluginSettings";
-import moment from "moment";
+// Use Obsidian's bundled moment instead of the npm package — the host app
+// already ships one, so importing our own would duplicate ~230KB in main.js.
+import { moment } from "obsidian";
 
 /**
  * Default plugin settings used as the baseline for `deepMerge`.
