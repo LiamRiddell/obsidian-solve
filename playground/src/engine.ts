@@ -19,6 +19,7 @@ import {
 	buildVmTrace,
 	buildDiagnosticEvents,
 	buildQueryCacheState,
+	formatLineResultValue,
 } from "./engineShared.js";
 
 export interface DebugResult {
@@ -692,7 +693,7 @@ export function runEngineWithStreaming(
 						lineResults.push({
 							lineNumber: lineNum,
 							expression: trimmed,
-							result: formatValue(result.value),
+							result: formatLineResultValue(result.value),
 							type: formatType(result.value),
 							parselet,
 							opcodeCount: perLineOpCount,
@@ -993,7 +994,7 @@ export function runEngine(expression: string): DebugResult {
 				lineResults.push({
 					lineNumber: lineNum,
 					expression: trimmed,
-					result: formatValue(result.value),
+					result: formatLineResultValue(result.value),
 					type: formatType(result.value),
 					parselet,
 					opcodeCount: perLineOpCount,

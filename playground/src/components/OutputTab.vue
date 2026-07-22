@@ -90,7 +90,7 @@
             </span>
             <span class="token-line-result-arrow">→</span>
             <span class="token-line-result-value" :style="{ color: entry.result.error ? 'var(--error)' : 'var(--accent)' }">
-              {{ entry.result.error || entry.result.result }}
+              {{ entry.result.error || entry.result.result || (entry.result.type === 'Pending' ? '…' : '') }}
             </span>
             <span v-if="entry.result.timedOut" class="token-line-result-timeout" title="API fetch timed out — result is a 0 gp fallback, not real data">
               ⚠ timed out

@@ -32,12 +32,12 @@ const highlightProvider = new SolveHighlightProvider();
 
 /* ── Inline Result Widget ─────────────────────────────────────── */
 class ResultWidget extends WidgetType {
-  constructor(readonly text: string, readonly type: string) { super(); }
+  constructor(readonly text: string, readonly type: string, readonly pending = false) { super(); }
   toDOM() {
     const span = document.createElement('span');
-    span.className = 'os-result-inline';
+    span.className = this.pending ? 'os-result-inline os-result-pending' : 'os-result-inline';
     span.textContent = this.text;
-    span.title = this.type;
+    span.title = this.pending ? 'Awaiting async resolution…' : this.type;
     return span;
   }
 }
@@ -211,9 +211,16 @@ function renderInlineResults(lineResults: LineResult[]): void {
   if (!editorView.dom || !editorView.dom.parentNode) return;
   const effects: { from: number; to: number; deco: Decoration }[] = [];
   for (const lr of lineResults) {
-    if (!lr.result || lr.error) continue;
+    if (lr.error) continue;
+    const isPending = lr.type === 'Pending';
+    // A Pending result formats to "" (see formatLineResultValue in
+    // engineShared.ts — the queryKey must never be shown as if it were
+    // the answer), so it needs its own branch instead of the `!lr.result`
+    // skip other empty/non-evaluable lines take.
+    if (!lr.result && !isPending) continue;
     const line = editorView.state.doc.line(lr.lineNumber ?? 1);
-    effects.push({ from: line.to, to: line.to, deco: Decoration.widget({ widget: new ResultWidget(lr.result, lr.type), side: 1 }) });
+    const text = isPending ? '…' : lr.result;
+    effects.push({ from: line.to, to: line.to, deco: Decoration.widget({ widget: new ResultWidget(text, lr.type, isPending), side: 1 }) });
   }
   if (effects.length > 0) editorView.dispatch({ effects: resultEffect.of(effects) });
 }

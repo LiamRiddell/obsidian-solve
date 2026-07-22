@@ -180,7 +180,7 @@ export const fullDocumentExamples: FullDocumentExample[] = [
   {
     name: "Workout Tracker",
     description: "Calculate workout metrics with volume and percentages",
-    content: ":squatWeight = 135lbs to kg\n:benchWeight = 185lbs to kg\n:deadliftWeight = 225lbs to kg\n:totalVolume = :squatWeight + :benchWeight + :deadliftWeight\n:warmupSet = 50% of :squatWeight\n:workingSet = :squatWeight * 3\n:weeklyVolume = :totalVolume * 3"
+    content: ":squatWeight = 135lb to kg\n:benchWeight = 185lb to kg\n:deadliftWeight = 225lb to kg\n:totalVolume = :squatWeight + :benchWeight + :deadliftWeight\n:warmupSet = 50% of :squatWeight\n:workingSet = :squatWeight * 3\n:weeklyVolume = :totalVolume * 3"
   },
   {
     name: "Recipe Scaling",
@@ -195,17 +195,17 @@ export const fullDocumentExamples: FullDocumentExample[] = [
   {
     name: "Fitness Body Measurements",
     description: "Track body measurements with unit conversions",
-    content: ":heightCm = 175\n:weightKg = 78\n:heightM = :heightCm to m\n:bmi = :weightKg / (:heightM ^ 2)\n:chestCm = 102\n:waistCm = 86\n:chestIn = :chestCm to in\n:waistIn = :waistCm to in\n:waistToHip = :waistCm / :chestCm\n:weightLbs = :weightKg to lb"
+    content: ":heightCm = 175cm\n:weightKg = 78kg\n:heightM = :heightCm to m\n:bmi = :weightKg / (:heightM ^ 2)\n:chestCm = 102cm\n:waistCm = 86cm\n:chestIn = :chestCm to in\n:waistIn = :waistCm to in\n:waistToHip = :waistCm / :chestCm\n:weightLbs = :weightKg to lb"
   },
   {
     name: "Currency Travel Budget",
     description: "Plan a trip budget with live currency conversions",
-    content: ":flightCostUSD = 1200\n:hotelPerNightEUR = 150\n:nights = 5\n:hotelTotalEUR = :hotelPerNightEUR * :nights\n:hotelTotalUSD = :hotelTotalEUR to USD\n:foodPerDayEUR = 60\n:foodTotalEUR = :foodPerDayEUR * :nights\n:foodTotalUSD = :foodTotalEUR to USD\n:totalEUR = :hotelTotalEUR + :foodTotalEUR\n:totalTripUSD = :flightCostUSD + :hotelTotalUSD + :foodTotalUSD\n:spendingMoneyEUR = 200\n:spendingMoneyUSD = :spendingMoneyEUR to USD\n:grandTotalUSD = :totalTripUSD + :spendingMoneyUSD"
+    content: ":flightCostUSD = 1200 USD\n:hotelPerNightEUR = 150 EUR\n:nights = 5\n:hotelTotalEUR = :hotelPerNightEUR * :nights\n:hotelTotalUSD = :hotelTotalEUR to USD\n:foodPerDayEUR = 60 EUR\n:foodTotalEUR = :foodPerDayEUR * :nights\n:foodTotalUSD = :foodTotalEUR to USD\n:totalEUR = :hotelTotalEUR + :foodTotalEUR\n:totalTripUSD = :flightCostUSD + :hotelTotalUSD + :foodTotalUSD\n:spendingMoneyEUR = 200 EUR\n:spendingMoneyUSD = :spendingMoneyEUR to USD\n:grandTotalUSD = :totalTripUSD + :spendingMoneyUSD"
   },
   {
     name: "Currency Import Cost",
     description: "Calculate import cost with conversion, tax, and duty",
-    content: ":itemPriceEUR = 450\n:shippingEUR = 35\n:subtotalEUR = :itemPriceEUR + :shippingEUR\n:subtotalUSD = :subtotalEUR to USD\n:importDuty = 5% of :subtotalUSD\n:afterDuty = :subtotalUSD + :importDuty\n:salesTax = 10% of :afterDuty\n:totalCostUSD = :afterDuty + :salesTax"
+    content: ":itemPriceEUR = 450 EUR\n:shippingEUR = 35 EUR\n:subtotalEUR = :itemPriceEUR + :shippingEUR\n:subtotalUSD = :subtotalEUR to USD\n:importDuty = 5% of :subtotalUSD\n:afterDuty = :subtotalUSD + :importDuty\n:salesTax = 10% of :afterDuty\n:totalCostUSD = :afterDuty + :salesTax"
   },
   {
     name: "Crypto Portfolio Tracker",

@@ -10,6 +10,8 @@
  */
 
 import type { ExpressionEngine } from '@/solve-js/src/engine/ExpressionEngine';
+import { formatValue } from '@/solve-js/src/format/FormatEngine';
+import { Value, ValueType } from '@/solve-js/src/vm/Value';
 import type {
 	PerformanceStats,
 	LineStats,
@@ -158,6 +160,21 @@ export function extractLineTimings(
 		executionTime: Math.max(0, vmEnd - vmStart),
 		totalTime: Math.max(0, lastEvent.elapsedNs - firstEvent.elapsedNs),
 	};
+}
+
+/**
+ * Format a line result's display string with the SAME contract the real
+ * Obsidian widget uses (MarkdownEditorViewPlugin.buildDecorations):
+ * `isPending ? "" : formatValue(value)`. solve-js's formatValue() has no
+ * special case for Pending/Error Values — it falls through to
+ * `= ${String(value.value)}`, which for a Pending Value is the internal
+ * TanStack Query key (e.g. "osrs:item:1267"), not a result. Callers must
+ * guard it; the playground previously didn't, so the raw query key was
+ * shown to the user as if it were the answer.
+ */
+export function formatLineResultValue(value: Value): string {
+	if (value.type === ValueType.Pending) return '';
+	return formatValue(value);
 }
 
 /** Aggregate stage timings, or zeros when no diagnostic events exist. */

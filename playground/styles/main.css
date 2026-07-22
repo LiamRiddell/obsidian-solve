@@ -2283,6 +2283,15 @@ html, body {
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   white-space: nowrap;
 }
+.os-result-inline.os-result-pending {
+  background: rgba(255, 216, 102, 0.15);
+  color: var(--stage-vm);
+  animation: os-result-pending-pulse 1.2s ease-in-out infinite;
+}
+@keyframes os-result-pending-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
 
 /* ── CodeMirror Overrides ──────────────────────────────────────── */
 .cm-editor {
