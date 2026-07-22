@@ -1,4 +1,4 @@
-import { ExpressionEngine, type EvalResults } from "@solve-js/engine/ExpressionEngine";
+import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import {
 	DocumentModel,
 	LineChange,
@@ -602,12 +602,19 @@ export class ThreeTierEvaluator {
 		for (const expression of expressions) {
 			if (!expression.trim()) continue;
 
-			let value: EvalResults | null = null;
+			let value: Value[] | null = null;
 			let entry: { bytecode: BytecodeProgram; readVariables: string[]; writeVariable: string | null } | undefined;
 
 			try {
-				value = this.engine.evaluateLine(lineNumber, expression);
+				const evaluation = this.engine.evaluateLineDetailed(lineNumber, expression);
+				value = evaluation.values;
 				lastValue = value[0];
+				// Partial multi-target failures don't throw — surface the first
+				// message in the line's error field without marking the line
+				// failed (the successful values are stored and rendered).
+				if (evaluation.errors.length > 0 && !firstError) {
+					firstError = evaluation.errors[0];
+				}
 				// Sync the DocumentModel from the LineCache.
 				// Use get(lineNumber, expression) instead of getEntryForLine(lineNumber)
 				// because multiple expressions on the same line share the same lineNumber

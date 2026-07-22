@@ -96,8 +96,23 @@ export interface EvalResults extends Array<Value> {
      * Error messages from failed sub-expressions (multi-target only).
      * `undefined` when all sub-expressions succeeded.
      * Non-enumerable — invisible to JSON and iteration.
+     *
+     * @deprecated Prefer {@link ExpressionEngine.evaluateLineDetailed},
+     * whose explicit `{ values, errors }` shape survives spread/map/JSON.
      */
     errors?: string[];
+}
+
+/**
+ * Explicit result of {@link ExpressionEngine.evaluateLineDetailed}.
+ * `errors` is always present (empty when everything succeeded), so callers
+ * never need existence checks or non-enumerable-property tricks.
+ */
+export interface LineEvaluation {
+    /** Successfully evaluated values, one per succeeded (sub-)expression. */
+    values: Value[];
+    /** Failure messages from failed sub-expressions; empty on full success. */
+    errors: string[];
 }
 
 //#endregion
@@ -1013,6 +1028,36 @@ export class ExpressionEngine {
         lineNumber: number,
         lineText: string
     ): EvalResults {
+        const detailed = this.evaluateLineDetailed(lineNumber, lineText);
+        const results = detailed.values.slice() as EvalResults;
+        if (detailed.errors.length > 0) {
+            Object.defineProperty(results, 'errors', {
+                value: detailed.errors,
+                writable: false,
+                enumerable: false,
+                configurable: false,
+            });
+        }
+        return results;
+    }
+
+    /**
+     * Evaluate a line and return an explicit `{ values, errors }` object.
+     *
+     * This is the preferred API over {@link evaluateLine}: the legacy shape
+     * smuggles partial-failure messages through a non-enumerable `errors`
+     * property on the returned array, which is silently dropped by spread,
+     * `.map()`, `structuredClone`, and JSON — several consumers lost it.
+     *
+     * Semantics are identical to evaluateLine:
+     * - Single expression: throws on failure, otherwise one value, no errors.
+     * - Multi-target ("10 USD in EUR, GBP"): throws only when ALL
+     *   sub-expressions fail; otherwise returns the successful values plus
+     *   the failure messages in `errors`.
+     *
+     * @throws {SolveError} On total failure.
+     */
+    evaluateLineDetailed(lineNumber: number, lineText: string): LineEvaluation {
         const subExpressions = splitMultiTargetExpression(lineText);
         if (!subExpressions) {
             const result = this.evaluateLineWithDebug(lineNumber, lineText);
@@ -1023,39 +1068,30 @@ export class ExpressionEngine {
                     { lineNumber }
                 );
             }
-            return [result.value] as EvalResults;
+            return { values: [result.value], errors: [] };
         }
 
-        const results: EvalResults = [] as EvalResults;
+        const values: Value[] = [];
         const errors: string[] = [];
         for (const subExpr of subExpressions) {
             const result = this.evaluateLineWithDebug(lineNumber, subExpr);
             if (result.error) {
                 errors.push(result.error);
             } else {
-                results.push(result.value);
+                values.push(result.value);
             }
         }
 
-        // Only throw if ALL sub-expressions failed — otherwise return partial results.
-        // Attach errors as a non-enumerable property so callers can detect partial failures
-        // (e.g., results.length < expected count) without breaking the Value[] contract.
-        if (results.length === 0) {
+        // Only throw if ALL sub-expressions failed — otherwise return
+        // partial results alongside the failure messages.
+        if (values.length === 0) {
             throw ErrorFactory.execution(
                 'EVALUATION_ERROR',
                 errors.join('; '),
                 { lineNumber }
             );
         }
-        if (errors.length > 0) {
-            Object.defineProperty(results, 'errors', {
-                value: errors,
-                writable: false,
-                enumerable: false,
-                configurable: false,
-            });
-        }
-        return results;
+        return { values, errors };
     }
 
     /**
