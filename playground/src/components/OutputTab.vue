@@ -32,7 +32,7 @@
       <span
         class="tier-summary-pill tier-pill-3"
         :title="tierTooltips.t3"
-      >T3: {{ tierSummary.t3 }} pending</span>
+      ><span v-if="tierSummary.t3 > 0" class="microstat-pending-spinner">⟳</span>T3: {{ tierSummary.t3 }} pending</span>
       <span
         v-if="tierSummary.skip > 0"
         class="tier-summary-pill tier-pill-skip"
@@ -63,7 +63,7 @@
                   :class="entry.result.wasCached ? 'microstat-cache-hit' : 'microstat-cache-miss'"
                 >{{ entry.result.wasCached ? 'HIT' : 'MISS' }}</span>
                 <span class="microstat-badge" :class="entry.result.error ? 'microstat-status-error' : entry.result.type === 'Pending' ? 'microstat-status-pending' : 'microstat-status-ok'">
-                  {{ entry.result.error ? 'ERROR' : entry.result.type === 'Pending' ? 'PENDING' : 'OK' }}
+                  <span v-if="entry.result.type === 'Pending' && !entry.result.error" class="microstat-pending-spinner">⟳</span>{{ entry.result.error ? 'ERROR' : entry.result.type === 'Pending' ? 'PENDING' : 'OK' }}
                 </span>
               </span>
             </div>
@@ -90,7 +90,7 @@
             </span>
             <span class="token-line-result-arrow">→</span>
             <span class="token-line-result-value" :style="{ color: entry.result.error ? 'var(--error)' : 'var(--accent)' }">
-              {{ entry.result.error || entry.result.result || (entry.result.type === 'Pending' ? '…' : '') }}
+              <span v-if="entry.result.type === 'Pending' && !entry.result.error" class="microstat-pending-spinner">⟳</span>{{ entry.result.error || entry.result.result || (entry.result.type === 'Pending' ? 'awaiting resolution…' : '') }}
             </span>
             <span v-if="entry.result.timedOut" class="token-line-result-timeout" title="API fetch timed out — result is a 0 gp fallback, not real data">
               ⚠ timed out

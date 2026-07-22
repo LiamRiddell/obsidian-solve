@@ -33,11 +33,31 @@ const highlightProvider = new SolveHighlightProvider();
 /* ── Inline Result Widget ─────────────────────────────────────── */
 class ResultWidget extends WidgetType {
   constructor(readonly text: string, readonly type: string, readonly pending = false) { super(); }
+  eq(other: ResultWidget) {
+    return this.text === other.text && this.type === other.type && this.pending === other.pending;
+  }
   toDOM() {
     const span = document.createElement('span');
-    span.className = this.pending ? 'os-result-inline os-result-pending' : 'os-result-inline';
-    span.textContent = this.text;
     span.title = this.pending ? 'Awaiting async resolution…' : this.type;
+
+    if (this.pending) {
+      // Matches the real Obsidian widget's spinner treatment
+      // (ExpressionResultWidget.ts) — a rotating icon plus a label,
+      // rather than a plain pulsing "…" text.
+      span.className = 'os-result-inline os-result-pending';
+      const spinner = document.createElement('span');
+      spinner.className = 'os-result-inline-spinner';
+      spinner.textContent = '⟳';
+      const label = document.createElement('span');
+      label.className = 'os-result-inline-pending-label';
+      label.textContent = '...';
+      span.appendChild(spinner);
+      span.appendChild(label);
+      return span;
+    }
+
+    span.className = 'os-result-inline';
+    span.textContent = this.text;
     return span;
   }
 }

@@ -1462,6 +1462,11 @@ html, body {
 .microstat-status-ok       { background: rgba(41, 206, 153, 0.15); color: var(--accent);        border-color: rgba(41, 206, 153, 0.25); }
 .microstat-status-pending  { background: rgba(255, 216, 102, 0.15); color: var(--stage-vm);    border-color: rgba(255, 216, 102, 0.25); }
 .microstat-status-error    { background: rgba(244, 135, 113, 0.15); color: var(--error);       border-color: rgba(244, 135, 113, 0.25); }
+.microstat-pending-spinner {
+  display: inline-block;
+  margin-right: 3px;
+  animation: os-result-spin 1s linear infinite;
+}
 
 .token-line-counts {
   display: flex;
@@ -2289,11 +2294,19 @@ html, body {
 .os-result-inline.os-result-pending {
   background: rgba(255, 216, 102, 0.15);
   color: var(--stage-vm);
-  animation: os-result-pending-pulse 1.2s ease-in-out infinite;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
-@keyframes os-result-pending-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+.os-result-inline-spinner {
+  display: inline-block;
+  animation: os-result-spin 1s linear infinite;
+}
+@keyframes os-result-spin {
+  100% { transform: rotate(360deg); }
+}
+.os-result-inline-pending-label {
+  font-style: italic;
 }
 
 /* ── CodeMirror Overrides ──────────────────────────────────────── */
