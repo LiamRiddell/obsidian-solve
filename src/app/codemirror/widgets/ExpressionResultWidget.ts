@@ -47,7 +47,9 @@ export class ExpressionResultWidget extends WidgetType {
 
 	toDOM(view: EditorView): HTMLElement {
 		const div = document.createElement("div");
-		div.id = `osr-${this.lineNumber}`;
+		// data attribute, not an id: ids must be document-unique, but the
+		// same line number renders in every split pane showing this note.
+		div.dataset.osrLine = String(this.lineNumber);
 
 		if (this.isPending) {
 			// Loading indicator for async results

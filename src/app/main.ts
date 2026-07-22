@@ -161,7 +161,7 @@ export default class SolvePlugin extends Plugin {
 
 				const resultElement = (
 					containerEl
-				).querySelector<HTMLElement>(`#osr-${currentLineNumber}`);
+				).querySelector<HTMLElement>(`[data-osr-line="${currentLineNumber}"]`);
 
 				if (resultElement) {
 					resultElement.click();
@@ -216,8 +216,8 @@ export default class SolvePlugin extends Plugin {
 					return;
 				}
 
-				// Editor lines are 0-based; result widget ids are 1-based
-				// (`#osr-${line + 1}`, matching commit-result-current-line).
+				// Editor lines are 0-based; result widget line numbers are
+				// 1-based (matching commit-result-current-line).
 				for (
 					let i = selectionStart.line;
 					i <= selectionEnd.line;
@@ -225,7 +225,7 @@ export default class SolvePlugin extends Plugin {
 				) {
 					const resultElement = (
 						containerEl
-					).querySelector<HTMLElement>(`#osr-${i + 1}`);
+					).querySelector<HTMLElement>(`[data-osr-line="${i + 1}"]`);
 
 					if (resultElement) {
 						resultElement.click();

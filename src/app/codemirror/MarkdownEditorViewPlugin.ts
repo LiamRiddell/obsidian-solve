@@ -1,5 +1,6 @@
 import { ExpressionResultWidget } from "@app/codemirror/widgets/ExpressionResultWidget";
-import { EngineProvider } from "@app/engine/EngineProvider";
+import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
+import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import UserSettings from "@app/settings/UserSettings";
@@ -20,12 +21,34 @@ import {
 } from "@codemirror/view";
 
 export class MarkdownEditorViewPlugin implements PluginValue {
+	/**
+	 * Registry of live plugin instances keyed by their EditorView.
+	 * Lets command handlers (main.ts) reach the evaluator/document state of
+	 * the active editor without querying rendered DOM.
+	 */
+	private static readonly instances = new WeakMap<EditorView, MarkdownEditorViewPlugin>();
+
+	/** Look up the plugin instance owning the given view, if any. */
+	static forView(view: EditorView): MarkdownEditorViewPlugin | undefined {
+		return MarkdownEditorViewPlugin.instances.get(view);
+	}
+
 	public decorations: DecorationSet;
 	private userSettings: UserSettings;
 	/** Reader for the engine's async resolution event stream (Web Streams API). */
 	private eventStreamReader: ReadableStreamDefaultReader<AsyncResolutionEvent> | null = null;
 
 	private currentDoc: object | null = null;
+	/** The view this instance decorates (WeakMap key for cleanup). */
+	private readonly view: EditorView;
+
+	/**
+	 * Per-editor engine instance. Each editor pane owns its own engine so
+	 * variables, caches, and checkpoints never bleed between panes or
+	 * documents — the old shared-singleton design meant two panes fought
+	 * over one VM and a document switch in one pane reset the other.
+	 */
+	private engine: ExpressionEngine;
 
 	// ── Three-tier evaluator (Phase 5.2 integration) ─────────────────
 	private docModel: DocumentModel;
@@ -42,9 +65,16 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		logger.debug(`[SolveViewPlugin] Constructor`);
 
 		this.userSettings = UserSettings.getInstance();
+		this.view = view;
+		MarkdownEditorViewPlugin.instances.set(view, this);
 
-		// FIX #1: Use shared engine instead of creating own instance
-		const engine = EngineProvider.get();
+		// Per-editor engine — see the field doc for why this is not shared.
+		const engine = new ExpressionEngine(
+			this.userSettings.settings.engine.locale,
+			false,
+			EngineConfigMapper.toEngineConfig(this.userSettings)
+		);
+		this.engine = engine;
 
 		// ── Initialize DocumentModel + ThreeTierEvaluator ────────────
 		this.docModel = new DocumentModel();
@@ -72,8 +102,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	}
 
 	update(update: ViewUpdate) {
-		// Detect document switch — reset shared engine to prevent variable
-		// leaking between documents.
+		// Detect document switch — clear this pane's engine to prevent
+		// variable leaking between documents.
 		//
 		// A *switch* (a different file loaded into this editor) arrives as a
 		// state replacement WITHOUT an edit transaction: the doc instance
@@ -93,28 +123,29 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			// Abort in-flight async work from the old document
 			this.abortKeystroke('Document switch');
 
-			EngineProvider.reset();
+			// Clear THIS pane's engine — variables, caches, DAG, and
+			// checkpoints from the old document must not leak into the new
+			// one. Other panes own their own engines and are unaffected.
+			this.engine.clear();
 
 			// Terminate old evaluator's worker before recreating
 			this.evaluator.terminateWorker();
 
 			// Recreate evaluator for new document
-			const engine = EngineProvider.get();
 			this.docModel = new DocumentModel();
 			this.docModel.setDocument(newDoc.toString());
-			const checkpointer = new VMCheckpointer(engine.getVM());
-			this.evaluator = new ThreeTierEvaluator(this.docModel, engine, checkpointer);
+			const checkpointer = new VMCheckpointer(this.engine.getVM());
+			this.evaluator = new ThreeTierEvaluator(this.docModel, this.engine, checkpointer);
 			this.keystrokeController = new AbortController();
 			abortLogger.keystrokeCreated();
 			this.evaluator.evaluateAll(this.keystrokeController.signal);
 
-			// Re-subscribe to the NEW engine's event stream — the old reader
-			// is bound to the previous engine's (now closed) stream and would
-			// never deliver async results for this document.
+			// Re-subscribe to the event stream — engine.clear() closes the
+			// old stream (readers get a clean done) and creates a fresh one.
 			if (this.eventStreamReader) {
 				try { this.eventStreamReader.cancel(); } catch { /* already closed */ }
 			}
-			this.eventStreamReader = engine.getEventStream().getReader();
+			this.eventStreamReader = this.engine.getEventStream().getReader();
 			this.startEventStreamReader(update.view);
 
 			this.decorations = this.buildDecorations(update.view);
@@ -177,6 +208,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 		// Phase 5.2h: Clean up compilation worker through evaluator
 		this.evaluator.terminateWorker();
+		// Tear down this pane's engine — pending resolutions, batcher
+		// state, and caches die with the pane.
+		this.engine.clear();
+		MarkdownEditorViewPlugin.instances.delete(this.view);
 	}
 
 	// ── Keystroke cancellation ─────────────────────────────────────────
@@ -402,7 +437,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		inlineSolves: ReturnType<typeof findInlineSolvesInLine>,
 		builder: RangeSetBuilder<Decoration>
 	): void {
-		const engine = EngineProvider.get();
+		const engine = this.engine;
 
 		for (const solve of inlineSolves) {
 			if (!solve.expression.trim()) continue;
@@ -433,7 +468,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	// FIX #3: Activate evaluateLine() for on-demand evaluation
 	private evaluateLine(lineNumber: number, expression: string): string | undefined {
 		try {
-			const engine = EngineProvider.get();
+			const engine = this.engine;
 			const [value] = engine.evaluateLine(lineNumber, expression);
 			return formatValue(value);
 		} catch {
@@ -444,7 +479,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	// FIX #3: Wire evaluateLine into command-facing API
 	evaluateExpression(expression: string): Value | undefined {
 		try {
-			const engine = EngineProvider.get();
+			const engine = this.engine;
 			const [result] = engine.evaluateExpression(expression);
 			return result;
 		} catch {
