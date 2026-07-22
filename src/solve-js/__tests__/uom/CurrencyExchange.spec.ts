@@ -37,10 +37,11 @@ describe("CurrencyExchange with TanStack Query", () => {
 		global.fetch = originalFetch;
 	});
 
-	test("initial state has fallback rates", () => {
-		const rates = fx.getAllRates();
-		expect(rates).not.toBeNull();
-		expect(rates).toHaveProperty("USD", 1);
+	test("initial state has NO rates — nothing fetched yet", () => {
+		// No hardcoded fallback table: a stale made-up rate presented as a
+		// real conversion is worse than a Pending state.
+		expect(fx.getAllRates()).toBeNull();
+		expect(fx.hasRates()).toBe(false);
 	});
 
 	test("getRate fetches from API", async () => {
@@ -48,11 +49,14 @@ describe("CurrencyExchange with TanStack Query", () => {
 		expect(rate).toBe(0.92);
 	});
 
-	test("getRateSync returns fallback rate (without needing fetch)", () => {
-		// Fallback rates: EUR = 0.854, USD = 1 → EUR/USD = 0.854
-		const rate = fx.getRateSync("USD", "EUR");
-		expect(rate).not.toBeNull();
-		expect(rate).toBe(0.854);
+	test("getRateSync returns null before any fetch, live rate after", async () => {
+		// Before a fetch there is no data — sync lookup must not invent one.
+		expect(fx.getRateSync("USD", "EUR")).toBeNull();
+
+		// A successful fetch makes the pair available synchronously
+		// within the freshness window.
+		await fx.getRate("USD", "EUR");
+		expect(fx.getRateSync("USD", "EUR")).toBe(0.92);
 	});
 
 	test("getRateSync returns 1 for same currency", () => {
@@ -71,16 +75,22 @@ describe("CurrencyExchange with TanStack Query", () => {
 		expect(fx.isCurrency("xyz")).toBe(false);
 	});
 
-	test("getRateSync works with fallback rates", () => {
-		const rate = fx.getRateSync("USD", "EUR");
+	test("getRateSync triangulates cross pairs through a fetched base table", async () => {
+		// One USD-base fetch caches EUR and GBP — the EUR→GBP cross pair
+		// resolves synchronously via triangulation: 0.79 / 0.92.
+		await fx.getRate("USD", "EUR");
+		const rate = fx.getRateSync("EUR", "GBP");
 		expect(rate).not.toBeNull();
-		expect(rate).toBeGreaterThan(0);
+		expect(rate).toBeCloseTo(0.79 / 0.92, 5);
 	});
 
-	test("convertSync works with fallback rates", () => {
+	test("convertSync uses live rates after a fetch, null before", async () => {
+		expect(fx.convertSync(100, "USD", "EUR")).toBeNull();
+
+		await fx.getRate("USD", "EUR");
 		const result = fx.convertSync(100, "USD", "EUR");
 		expect(result).not.toBeNull();
-		expect(result).toBeCloseTo(85.4, 1); // Fallback: 100 * 0.854 ≈ 85.4
+		expect(result).toBeCloseTo(92, 5); // Live: 100 * 0.92
 	});
 
 	test("convertSync returns null for unknown currencies", () => {
@@ -93,7 +103,9 @@ describe("CurrencyExchange with TanStack Query", () => {
 		expect(rate).toBeNull();
 	});
 
-	test("hasRates returns true (fallback rates always available)", () => {
+	test("hasRates reflects whether fresh live rates are cached", async () => {
+		expect(fx.hasRates()).toBe(false);
+		await fx.getRate("USD", "EUR");
 		expect(fx.hasRates()).toBe(true);
 	});
 

@@ -12,6 +12,24 @@ import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
 export class CurrencyExchangeService {
   private subscriptions: Map<string, Set<(rate: number, error?: string) => void>> = new Map();
 
+  /**
+   * Live rate tables cached from successful getRate() fetches, keyed by
+   * uppercase base currency. Each table holds every rate the API returned
+   * for that base (plus the base itself at 1), so any pair whose two codes
+   * appear in one fresh table can be served synchronously — including
+   * cross pairs via triangulation (EUR→GBP through a USD-base table).
+   * Stale tables are ignored, not evicted; the next successful fetch for
+   * the same base overwrites them.
+   */
+  private baseTables: Map<string, { fetchedAt: number; rates: Record<string, number> }> = new Map();
+
+  /**
+   * How long a fetched rate may be served synchronously by getRateSync().
+   * Beyond this window callers fall through to the async path (expression
+   * shows Pending until the fetch lands).
+   */
+  private static readonly RATE_FRESHNESS_MS = 15 * 60 * 1000;
+
   constructor() {}
 
   // ------------------------------------------------------------------------
@@ -41,26 +59,66 @@ export class CurrencyExchangeService {
       if (!response.ok) throw new Error(`Currency API returned ${response.status}`);
       const data = await response.json();
       const rates: Record<string, number> = data.rates ?? {};
+      const fromUpper = from.toUpperCase();
       const toUpper = to.toUpperCase();
       if (rates[toUpper] === undefined) throw new Error(`Unknown currency: ${toUpper}`);
+
+      // The API returns ALL rates for the base currency — cache the whole
+      // table so subsequent conversions (including cross pairs via
+      // triangulation) resolve synchronously within the freshness window
+      // instead of going Pending again.
+      this.baseTables.set(fromUpper, {
+        fetchedAt: Date.now(),
+        rates: { ...rates, [fromUpper]: 1 },
+      });
+
       return rates[toUpper];
     } finally {
       cleanup();
     }
   }
 
+  /**
+   * Seed a base rate table without a network fetch.
+   *
+   * Intended for tests and for future user-provided offline rates —
+   * production live data always comes from {@link getRate}. Seeded rates
+   * obey the same freshness window as fetched ones.
+   *
+   * @param base - Base currency code (e.g. "USD").
+   * @param rates - Map of currency code → rate relative to the base.
+   */
+  primeRates(base: string, rates: Record<string, number>): void {
+    const baseUpper = base.toUpperCase();
+    this.baseTables.set(baseUpper, {
+      fetchedAt: Date.now(),
+      rates: { ...rates, [baseUpper]: 1 },
+    });
+  }
+
+  /**
+   * Synchronous rate lookup: `1` for same-currency pairs, a cached LIVE
+   * rate if one was fetched within {@link RATE_FRESHNESS_MS}, otherwise
+   * `null` — callers fall through to the async fetch path and the
+   * expression shows Pending until real data arrives.
+   *
+   * There is deliberately no hardcoded fallback table: a stale made-up
+   * rate presented as a real conversion is worse than a Pending state.
+   */
   getRateSync(from: string, to: string): number | null {
-    if (from.toUpperCase() === to.toUpperCase()) {
-      return 1;
-    }
-    const fallbackRates: Record<string, number> = {
-      USD: 1, EUR: 0.854, GBP: 0.739, JPY: 151.5,
-      BTC: 60000, ETH: 3000, SOL: 140, XRP: 0.55, ADA: 0.45, DOGE: 0.12, DOT: 6.5,
-    };
     const fromUpper = from.toUpperCase();
     const toUpper = to.toUpperCase();
-    if (fallbackRates[fromUpper] && fallbackRates[toUpper]) {
-      return fallbackRates[toUpper] / fallbackRates[fromUpper];
+    if (fromUpper === toUpper) {
+      return 1;
+    }
+    const now = Date.now();
+    for (const table of this.baseTables.values()) {
+      if (now - table.fetchedAt > CurrencyExchangeService.RATE_FRESHNESS_MS) continue;
+      const fromRate = table.rates[fromUpper];
+      const toRate = table.rates[toUpper];
+      if (fromRate && toRate) {
+        return toRate / fromRate;
+      }
     }
     return null;
   }
@@ -71,25 +129,28 @@ export class CurrencyExchangeService {
   }
 
   /**
-   * Get all currently cached rates
-   * @returns Record of currency codes to rates relative to base currency, or null if not available
+   * Get all currently cached fresh rates, keyed "FROM:TO".
+   * @returns Snapshot of fresh live rates, or null when none are cached.
    */
   getAllRates(): Record<string, number> | null {
-    // For now, return a basic structure with known currencies
-    // In a production system, this would query the cache
-    return {
-      "USD": 1,
-      "EUR": 0.854,
-      "GBP": 0.739,
-      "JPY": 151.5,
-    };
+    const now = Date.now();
+    const snapshot: Record<string, number> = {};
+    let any = false;
+    for (const [base, table] of this.baseTables) {
+      if (now - table.fetchedAt > CurrencyExchangeService.RATE_FRESHNESS_MS) continue;
+      for (const [code, rate] of Object.entries(table.rates)) {
+        snapshot[`${base}:${code}`] = rate;
+        any = true;
+      }
+    }
+    return any ? snapshot : null;
   }
 
   /**
-   * Check if rates are currently available
+   * Check whether any fresh live rates are currently cached.
    */
   hasRates(): boolean {
-    return true; // We always have fallback rates
+    return this.getAllRates() !== null;
   }
 
   /**

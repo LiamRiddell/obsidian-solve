@@ -9,8 +9,9 @@
  * - Edge cases: "in" inside words, invalid targets, whitespace, etc.
  */
 
-import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach, beforeAll } from "@jest/globals";
 import { ExpressionEngine, type EvalResults } from "@solve-js/engine/ExpressionEngine";
+import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { ThreeTierEvaluator, EvalTier } from "@solve-js/engine/ThreeTierEvaluator";
 import { DocumentModel, ViewportRange } from "@solve-js/engine/DocumentModel";
@@ -20,6 +21,18 @@ import type { ParsedLine, InlineSolvePosition } from "@solve-js/types/ParsingRes
 // ═══════════════════════════════════════════════════════════════════════════
 // Helpers
 // ═══════════════════════════════════════════════════════════════════════════
+
+// Currency model is pending-until-live: without a fetch (or seed), currency
+// conversions return Pending instead of inventing rates. Seed a USD-base
+// table so this suite's multi-target conversions resolve synchronously.
+beforeAll(() => {
+  sharedCurrencyExchange.primeRates("USD", {
+    EUR: 0.854,
+    GBP: 0.739,
+    JPY: 151.5,
+    CHF: 0.912,
+  });
+});
 
 function createEngine(locale = "en", diagnosticMode = false): ExpressionEngine {
   return new ExpressionEngine(locale, diagnosticMode);
