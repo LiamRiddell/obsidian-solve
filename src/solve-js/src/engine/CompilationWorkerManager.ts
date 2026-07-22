@@ -18,7 +18,7 @@
 
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
-import createCompilationWorker from "@solve-js/workers/compilation.worker";
+import createCompilationWorker from "@solve-js/workers/engine.worker";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

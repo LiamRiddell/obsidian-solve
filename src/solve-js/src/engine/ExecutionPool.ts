@@ -16,7 +16,7 @@
  * - Falls back to synchronous main-thread execution when Worker is
  *   unavailable (Node.js, SSR, testing without jsdom worker support).
  *
- * Transferable protocol (reuses compilation.worker.ts patterns):
+ * Transferable protocol (shares engine.worker.ts with CompilationWorkerManager):
  * - Main thread clones bytecode ArrayBuffers via .slice() per entry
  * - Transfers cloned buffers to worker (zero-copy, detached on main side)
  * - Worker receives buffers, reconstructs TypedArrays, executes, returns
@@ -39,9 +39,9 @@ const WORKER_BATCH_TIMEOUT_MS = 30_000;
 // esbuild-plugin-inline-worker transforms this into a function that
 // returns Worker (using blob URL or equivalent). At build time it's a
 // factory; at dev time it throws.
-import createExecutionWorker from "@solve-js/workers/execution.worker";
+import createExecutionWorker from "@solve-js/workers/engine.worker";
 
-// ── Worker message types (mirrors execution.worker.ts) ────────────────────
+// ── Worker message types (mirrors the EXECUTE_* shapes in engine.worker.ts) ──
 
 interface ExecuteItem {
 	lineNumber: number;

@@ -62,7 +62,7 @@ function createMockWorker(): MockWorkerInst {
 // redirects to this fn so beforeEach can reconfigure it per test.
 const mockFactory = jest.fn<() => MockWorkerInst>();
 
-jest.mock("@solve-js/workers/execution.worker", () => ({
+jest.mock("@solve-js/workers/engine.worker", () => ({
 	__esModule: true,
 	default: () => mockFactory(),
 }));
