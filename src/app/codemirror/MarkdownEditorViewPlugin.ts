@@ -1,5 +1,7 @@
 import { ExpressionResultWidget } from "@app/codemirror/widgets/ExpressionResultWidget";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
+import { EPluginEvent } from "@app/constants/EPluginEvent";
+import { pluginEventBus } from "@app/eventbus/PluginEventBus";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
@@ -238,6 +240,55 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		// state, and caches die with the pane.
 		this.engine.clear();
 		MarkdownEditorViewPlugin.instances.delete(this.view);
+	}
+
+	// ── Commit commands (state-driven, no DOM queries) ────────────────
+
+	/**
+	 * Commit rendered results for lines in [startLine, endLine] (1-based,
+	 * inclusive) by emitting the same write events a result-widget click
+	 * produces. Reads evaluator state from the DocumentModel instead of
+	 * querying rendered DOM, so it works for any evaluated line — not just
+	 * ones whose widgets happen to be rendered — and is testable headless.
+	 *
+	 * Pending and Error results are skipped (their widgets are not
+	 * clickable either).
+	 *
+	 * @returns The number of results committed.
+	 */
+	commitResults(startLine: number, endLine: number): number {
+		let committed = 0;
+		for (let line = startLine; line <= endLine; line++) {
+			const state = this.docModel.getLineAt(line);
+			if (!state || state.isEmpty || state.results.length === 0) continue;
+
+			const isInline = state.inlineSolveCount > 0;
+			for (let i = 0; i < state.results.length; i++) {
+				const value = state.results[i]?.[0];
+				if (!value) continue;
+				if (value.type === ValueType.Pending || value.type === ValueType.Error) continue;
+
+				const expression = state.expressions[i] ?? state.text.trim();
+				pluginEventBus.emit(
+					EPluginEvent.WriteResultToActiveDocumentLine,
+					line,
+					expression,
+					formatValue(value),
+					isInline
+				);
+				committed++;
+			}
+		}
+		return committed;
+	}
+
+	/**
+	 * Commit results for all currently visible lines.
+	 * @returns The number of results committed.
+	 */
+	commitVisibleResults(): number {
+		const viewport = this.getViewportFromView(this.view);
+		return this.commitResults(viewport.startLine, viewport.endLine);
 	}
 
 	// ── Keystroke cancellation ─────────────────────────────────────────

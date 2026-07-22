@@ -12,8 +12,21 @@ import { minValueExcludingBelow } from "@app/utilities/Array";
 import { deepMerge } from "@app/utilities/DeepMerge";
 import { logger } from "@app/utilities/Logger";
 import { insertAtIndex } from "@app/utilities/String";
-import { ViewPlugin } from "@codemirror/view";
-import { Notice, Plugin } from "obsidian";
+import { EditorView, ViewPlugin } from "@codemirror/view";
+import { Editor, Notice, Plugin } from "obsidian";
+
+/**
+ * Resolve the MarkdownEditorViewPlugin instance behind an Obsidian editor.
+ *
+ * Obsidian exposes the underlying CodeMirror 6 EditorView as `editor.cm`
+ * (untyped internal, the established community-plugin pattern). The view
+ * plugin registers itself per view in a WeakMap, so commands can reach the
+ * evaluator's document state directly instead of querying rendered DOM.
+ */
+function resolveViewPlugin(editor: Editor): MarkdownEditorViewPlugin | undefined {
+	const view = (editor as unknown as { cm?: EditorView }).cm;
+	return view ? MarkdownEditorViewPlugin.forView(view) : undefined;
+}
 
 /**
  * Solve — the main Obsidian plugin class.
@@ -154,18 +167,18 @@ export default class SolvePlugin extends Plugin {
 			id: "commit-result-current-line",
 			name: "Commit result on current line",
 			editorCallback(editor, ctx) {
+				const viewPlugin = resolveViewPlugin(editor);
+				if (!viewPlugin) {
+					new Notice("Solve: No active Solve editor found.");
+					return;
+				}
+
 				const currentLineNumber = editor.getCursor("head").line + 1;
-
-				// Use type assertion to access containerEl
-				const containerEl = (editor as any).containerEl as HTMLElement;
-
-				const resultElement = (
-					containerEl
-				).querySelector<HTMLElement>(`[data-osr-line="${currentLineNumber}"]`);
-
-				if (resultElement) {
-					resultElement.click();
-				} else {
+				const committed = viewPlugin.commitResults(
+					currentLineNumber,
+					currentLineNumber
+				);
+				if (committed === 0) {
 					new Notice(
 						"Solve: Failed to commit, no result found on the current line."
 					);
@@ -177,20 +190,13 @@ export default class SolvePlugin extends Plugin {
 			id: "commit-result-all-visible",
 			name: "Commit all visible results",
 			editorCallback(editor, ctx) {
-				// Use type assertion to access containerEl
-				const containerEl = (editor as any).containerEl as HTMLElement;
-
-				const resultElements = (
-					containerEl
-				).querySelectorAll<HTMLElement>(`.os-result`);
-
-				for (let i = 0; i < resultElements.length; i++) {
-					const resultElement = resultElements[i];
-
-					if (resultElement) {
-						resultElement.click();
-					}
+				const viewPlugin = resolveViewPlugin(editor);
+				if (!viewPlugin) {
+					new Notice("Solve: No active Solve editor found.");
+					return;
 				}
+
+				viewPlugin.commitVisibleResults();
 			},
 		});
 
@@ -209,28 +215,17 @@ export default class SolvePlugin extends Plugin {
 					return;
 				}
 
-				// Use type assertion to access containerEl
-				const containerEl = (editor as any).containerEl as HTMLElement;
-
-				if (!containerEl) {
+				const viewPlugin = resolveViewPlugin(editor);
+				if (!viewPlugin) {
+					new Notice("Solve: No active Solve editor found.");
 					return;
 				}
 
-				// Editor lines are 0-based; result widget line numbers are
-				// 1-based (matching commit-result-current-line).
-				for (
-					let i = selectionStart.line;
-					i <= selectionEnd.line;
-					i++
-				) {
-					const resultElement = (
-						containerEl
-					).querySelector<HTMLElement>(`[data-osr-line="${i + 1}"]`);
-
-					if (resultElement) {
-						resultElement.click();
-					}
-				}
+				// Editor lines are 0-based; evaluator line numbers are 1-based.
+				viewPlugin.commitResults(
+					selectionStart.line + 1,
+					selectionEnd.line + 1
+				);
 			},
 		});
 	}
