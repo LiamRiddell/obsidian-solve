@@ -258,11 +258,16 @@ function generateMarkdownOutline(text: string): MarkdownNode[] {
 /**
  * Decode opcode operands from the bytecode stream.
  *
- * Opcodes that carry an operand (index into numbers/strings/variables):
+ * Opcodes that carry a single operand (index into numbers/strings/variables):
  *   PUSH_NUMBER(10), PUSH_BIGINT(11), PUSH_HEX(12),
  *   PUSH_STRING(13), PUSH_BOOLEAN(14), PUSH_VARIABLE(15)
- *   CALL_PLUGIN(50), CALL_BUILTIN(51)
  *   LOAD_VAR(60), STORE_VAR(61)
+ *   ARR_NEW(100) — element count
+ *
+ * Opcodes that carry TWO operands (registry index, then arg count) —
+ * see VM.ts's CALL_PLUGIN/CALL_BUILTIN handlers, which read
+ * `opcodes[ip++]` twice before popping args off the stack:
+ *   CALL_PLUGIN(50), CALL_BUILTIN(51)
  *
  * All other opcodes (arithmetic, comparison, stack ops, etc.) have zero operands.
  */
@@ -271,12 +276,17 @@ function decodeOpcodeArgs(
 	opcodeArray: Uint8Array,
 	ip: number
 ): number[] {
+	if (op === OpCode.CALL_PLUGIN || op === OpCode.CALL_BUILTIN) {
+		const args: number[] = [];
+		if (ip + 1 < opcodeArray.length) args.push(opcodeArray[ip + 1]);
+		if (ip + 2 < opcodeArray.length) args.push(opcodeArray[ip + 2]);
+		return args;
+	}
 	// Opcodes that take exactly 1 operand (an index)
 	const hasOperand =
 		(op >= OpCode.PUSH_NUMBER && op <= OpCode.PUSH_VARIABLE) ||
-		op === OpCode.CALL_PLUGIN ||
-		op === OpCode.CALL_BUILTIN ||
-		(op >= OpCode.LOAD_VAR && op <= OpCode.STORE_VAR);
+		(op >= OpCode.LOAD_VAR && op <= OpCode.STORE_VAR) ||
+		op === OpCode.ARR_NEW;
 	if (hasOperand && ip + 1 < opcodeArray.length) {
 		return [opcodeArray[ip + 1]];
 	}
