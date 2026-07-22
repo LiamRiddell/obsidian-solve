@@ -300,16 +300,21 @@ produces the same line text as the widget path.
 cached. Users get a plausible-looking but wrong/stale conversion with no
 indication.
 
-**Options (pick one with the project owner before implementing):**
-- **A (recommended):** Return `null` unless a live rate is cached
-  (`RateCache`-style store fed by `getRate`); expression shows Pending →
-  resolves when the fetch lands. Delete the hardcoded table.
-- **B:** Keep fallbacks but tag the resulting Value (`approximate: true`
-  metadata, like `timedOut`) and render an indicator in the widget/playground.
-- **C:** Keep table but move it to user-visible settings ("offline rates").
+**DECIDED (owner, 2026-07-22): Option A with a freshness window.**
+Delete the hardcoded table. `getRateSync(from, to)` must return:
+1. `1` for same-currency pairs (unchanged);
+2. a cached **live** rate if one was fetched recently — maintain a
+   `Map<"FROM:TO", { rate: number; fetchedAt: number }>` inside
+   `CurrencyExchangeService`, written by `getRate()` on every successful
+   fetch (store both directions), served by `getRateSync` while
+   `Date.now() - fetchedAt <= RATE_FRESHNESS_MS` (use 15 minutes);
+3. otherwise `null` → the caller (`CurrencyResolver`) falls through to the
+   async path and the expression shows Pending until the fetch lands.
 
-Whichever is chosen: `__tests__/uom/CurrencyExchange.spec.ts` currently
-asserts the fallback behavior and must be updated deliberately.
+`__tests__/uom/CurrencyExchange.spec.ts` asserts the old fallback-table
+behavior — update those tests deliberately: same-currency still 1, unknown
+pair now null, and add a test that a successful `getRate` makes the pair
+available synchronously within the freshness window (inject/fake `fetch`).
 
 ---
 
@@ -333,7 +338,7 @@ stores) is a larger project; do NOT attempt it in the same change.
 
 ---
 
-## Task 9 — Typed batcher metrics (small)
+## Task 9 — Typed batcher metrics (small) — ✅ DONE (commit b520953)
 
 `ExpressionEngine.getBatcherMetrics()` reads `(this.batcher as any).pending`
 etc. Add read-only accessors on `AsyncResolutionBatcher`
@@ -343,12 +348,140 @@ use them. Delete the `as any` casts. Pure mechanical change; existing
 
 ---
 
+# Part II — Large-scale improvements (post-Task-1..9 roadmap)
+
+These are the structural changes that SHOULD happen once Part I lands. They
+are bigger than one sitting each; every one should get its own detailed spec
+(in the style of Part I) before implementation. Ordered by recommended
+sequence — later items depend on earlier ones.
+
+## L1 — EngineContext: eliminate module-global engine state
+
+**Why.** True isolation is impossible today: `sharedLexer`
+(`lexer/Lexer.ts`), `sharedOpRegistry` (`vm/OpRegistry.ts`),
+`sharedVariableResolver` (`variables/VariableResolver.ts`),
+`pluginFunctionRegistry` (`vm/VMBuiltins.ts`), `sharedCurrencyExchange`
+(`uom/CurrencyExchange.ts`), and the active-query-client hand-off
+(`services/DataQueryService.ts`) are all module globals. Two engine
+instances interfere; tests need careful clears; Task 3 (per-document
+engines) is only safe because registration happens to be idempotent.
+
+**Shape.** Introduce an `EngineContext` object created in the
+`ExpressionEngine` constructor that owns instances of all of the above.
+Everything that currently imports a `shared*` singleton receives the context
+(or the specific dependency) via constructor/parameter injection. The VM
+plugin-function ABI grows a context parameter:
+`(args: Value[], ctx: EngineContext) => Value | Promise<Value>` — this also
+retires the `setActiveQueryClient` hand-off entirely. Keep thin deprecated
+`shared*` exports (bound to a default context) during migration so tests can
+be moved incrementally.
+
+**Sequencing.** Do AFTER Task 1 (pipeline unification) — the pipeline is the
+main consumer of these globals and unifying first means the injection happens
+in one place, not three. Migrate one global at a time, full gate between
+each: pluginFunctionRegistry → opRegistry → variableResolver → lexer →
+currencyExchange. `sharedLexer` is last because `PackageSystem.register()`
+writes lexer plugins into it at package-registration time.
+
+## L2 — Unified reactive line-result store
+
+**Why.** Line results currently live in three stores (LineCache in the
+engine, `LineState.results` in DocumentModel, TanStack Query for async) with
+hand-written bridging (Task 8 adds a callback; the view plugin re-evaluates
+on async events). Every new consumer multiplies the sync paths.
+
+**Shape.** One `ResultStore` owned by the evaluator: keyed by lineId,
+holding `{ values, errors, bytecodeRef, source: 'sync' | 'async' }`, with a
+subscribe API. The engine writes to it (replacing LineCache's result role —
+LineCache keeps only bytecode+reads/writes), the batcher writes async
+patches to it, decorations and the playground subscribe. DocumentModel keeps
+document structure (lineId/text/dirty) and drops its result fields.
+Migration is mechanical but wide: grep `state.results`, `entry.result`,
+`lineState.results`.
+
+## L3 — Bundle diet and dependency audit
+
+**Why.** Runtime deps: `moment` (~230 KB min) while Obsidian ships its own
+moment; `animate.css` imported wholesale; `debug`; `convert`;
+`@tanstack/query-core`. The production main.js is ~550 KB — a large Obsidian
+plugin.
+
+**Shape.**
+1. Add `metafile: true` to esbuild and check in a `scripts/bundle-report`
+   step; record the baseline.
+2. Replace direct `moment` imports inside `src/solve-js` with an injected
+   date-port interface (solve-js must stay Obsidian-independent); the app
+   layer supplies Obsidian's `moment`, the playground supplies the npm one
+   as a devDependency.
+3. Import only the used animate.css keyframes (or inline them in
+   styles.css); drop `debug` in favor of the existing `logger`.
+4. Budget assertion in CI: fail if main.js exceeds the recorded baseline
+   by >10 %.
+
+## L4 — CI adoption
+
+ARCHITECTURE_PRINCIPLES.md §5 already specifies the workflows; they were
+never created. Add `.github/workflows/test.yml` (push/PR: `npm ci`,
+`tsc --noEmit`, default jest suite — it runs in ~7 s), `heavy.yml` (weekly:
+fuzz/robustness/benchmark suites via the `test:oom` script), and
+`release.yml` (tag → build → attach main.js/styles.css/manifest.json to the
+release). Then **untrack `main.js` and `styles.css`** (they are already in
+.gitignore but tracked, so every build dirties the diff) — releases become
+the artifact channel, matching the .gitignore's stated intent.
+
+## L5 — Value model hardening
+
+**Why.** `Value` is documented immutable but is mutated by design in four
+places (arena `recycle`, `timedOut` tagging, `entry.result` replacement,
+`_cachedNumber` memo). The arena hands out objects that are recycled on the
+next scroll frame — any consumer that retains one (widget, store, test)
+holds a time bomb; today discipline is enforced only by comments.
+
+**Shape.** Pick ONE:
+- **A (cheap):** dev-mode-only `Object.freeze` on Values leaving the engine
+  boundary (`evaluateLine*` returns, store writes) behind a
+  `__DEV__`-style flag, plus an ESLint `no-restricted-syntax` rule banning
+  assignment to `Value` fields outside `src/solve-js/src/vm/`. Catches
+  violations in tests without production cost.
+- **B (thorough):** make arena Values an internal-only type
+  (`ArenaValue`), with `persistentValue()` conversion REQUIRED at every
+  boundary, enforced by the type system (brand the arena type). Bigger
+  change to VM signatures.
+Start with A; consider B during L2 since the store is the natural boundary.
+
+## L6 — Worker consolidation
+
+**Why.** `compilation.worker.ts` and `execution.worker.ts` duplicate the
+Transferable-bytecode protocol, init/error handling, and pool management
+(CompilationWorkerManager vs ExecutionPool, each with its own fallback
+logic).
+
+**Shape.** One `engine.worker.ts` speaking a discriminated-union protocol
+(`{ kind: 'compile' } | { kind: 'execute' }`), one `WorkerPool` with
+size/timeout/fallback policy, thin typed facades for the two call sites.
+Deletes ~200 duplicated lines and gives one place to add future offloads
+(e.g. Tier-3 batch evaluation).
+
+## L7 — Structured error propagation
+
+**Why.** Errors flow as bare strings (`ParsedLine.error`,
+`LineState`/eval results, `EvalResults.errors`), losing the code, category,
+and character span that `SolveError`/`ErrorFactory` already capture. The UI
+can only show generic messages; it cannot underline the offending token.
+
+**Shape.** Thread `SolveError` (or a serializable
+`{ code, message, span? }`) through `LineEvaluation` (Task 5's type),
+DocumentModel, and the decoration builder; add span info to parser errors
+(PrecedenceParser knows the failing token's offset). Widget/tooltip renders
+the message; a squiggle decoration marks the span. Do after Task 5 and L2 so
+the error type rides the new result plumbing instead of the legacy fields.
+
+---
+
 ## Deliberately NOT planned
 
-- Replacing the shared `sharedLexer` global — too entangled with
-  PackageSystem registration order; revisit after Task 3 ships.
 - Merging `runEngine`/`runEngineWithStreaming` control flow (only their
   assembly logic — Task 4).
-- Swapping `moment` for Obsidian's bundled moment — worth doing for bundle
-  size, but verify the engine (`src/solve-js`) stays Obsidian-independent;
-  would need a date-adapter injection at the app layer.
+- Alternate evaluation backends / JIT — no evidence the VM is a bottleneck
+  after the P1 fixes; revisit only with profiling data from L3's CI perf
+  runs.
