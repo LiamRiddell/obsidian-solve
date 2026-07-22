@@ -145,8 +145,8 @@ export const exampleData: ExampleCategory[] = [
     name: "BigInt",
     description: "Large integer operations",
     examples: [
-      { name: "Large number", expression: "12345678901234567890", description: "Big integer literal" },
-      { name: "BigInt addition", expression: "12345678901234567890 + 1", description: "BigInt addition" },
+      { name: "Large number", expression: "12345678901234567890n", description: "Big integer literal (the 'n' suffix is required for arbitrary precision — without it, this parses as an imprecise plain Number, same as JavaScript's own BigInt literal syntax)" },
+      { name: "BigInt addition", expression: "12345678901234567890n + 1n", description: "BigInt addition — full precision preserved beyond Number.MAX_SAFE_INTEGER" },
     ]
   },
 ];

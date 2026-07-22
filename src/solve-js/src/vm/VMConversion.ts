@@ -54,8 +54,16 @@ export function binaryOp(
     }
 
     if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-        const lb = BigInt(l.toNumber());
-        const rb = BigInt(r.toNumber());
+        // Read an already-BigInt operand's raw bigint directly — routing it
+        // through .toNumber() first (as this used to do unconditionally)
+        // round-trips through an IEEE754 double, silently truncating any
+        // value beyond ~2^53 before the bigint math even runs. E.g.
+        // `12345678901234567890n + 0` corrupted to 12345678901234567168n.
+        // A genuinely Number-typed operand has no extra precision to lose,
+        // so it still converts via toNumber() (BigInt() throws on
+        // fractional input here, same as before this fix).
+        const lb = l.type === ValueType.BigInt ? (l.value as bigint) : BigInt(l.toNumber());
+        const rb = r.type === ValueType.BigInt ? (r.value as bigint) : BigInt(r.toNumber());
         if (bigOp) return bigIntValue(bigOp(lb, rb));
         return bigIntValue(lb + rb);
     }
