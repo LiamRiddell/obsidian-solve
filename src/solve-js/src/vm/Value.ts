@@ -115,6 +115,41 @@ export function persistentValue(v: Value): Value {
 	return new Value(v.type, v.value, v.unit);
 }
 
+// ── Dev-mode immutability guard (Part II, L5 — Value model hardening) ──
+//
+// Value is documented immutable by convention, not enforcement: the arena
+// mutates objects in place via recycle() (by design, for Tier-2 scroll
+// performance), so Value can never be unconditionally frozen. This guard
+// freezes a Value ONLY when it is safe to do so — i.e. NOT while the arena
+// is active, since an arena-active Value may still be recycled later in
+// the same scroll frame. It is a no-op outside development builds (matches
+// the existing `process.env.NODE_ENV === "development"` convention used by
+// the app-layer logger) so there is zero runtime cost in production.
+const isDevelopmentBuild = process.env.NODE_ENV === "development";
+
+/**
+ * Freeze a Value in development builds, catching accidental external
+ * mutation of "immutable" results early. Safe to call unconditionally —
+ * it is a no-op in production and a no-op whenever the arena is active
+ * (an arena-active Value may still be recycle()'d before this scroll
+ * frame ends, and freezing it would make recycle() throw).
+ *
+ * Intended for values leaving a public evaluation boundary
+ * (ExpressionEngine.evaluateLine* / evaluateExpression), not for values
+ * still moving through internal VM/arena machinery.
+ */
+export function freezeIfDev<T extends Value>(value: T): T {
+	if (isDevelopmentBuild && !isArenaActive()) {
+		// toNumber() lazily memoizes _cachedNumber for bigint/string values
+		// (Number/Hex are already eagerly cached by the constructor) — warm
+		// it now so a later toNumber() call on the frozen object doesn't
+		// try to write to a frozen field.
+		value.toNumber();
+		Object.freeze(value);
+	}
+	return value;
+}
+
 /**
  * Universal runtime value for the solve-js VM.
  *

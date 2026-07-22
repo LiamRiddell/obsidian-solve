@@ -27,7 +27,26 @@
 
 ---
 
-## Task 1 — Unify the triplicated evaluation pipeline in ExpressionEngine
+## Task 1 — Unify the triplicated evaluation pipeline in ExpressionEngine — ⚠️ PARTIAL (step 1/2 done)
+
+**Status 2026-07-22:** Step 1 shipped — `prepareExpression()` (length check
+→ COMMENT filter → normalize → complexity → read/write extraction →
+bytecode cache lookup or parse+compile) now backs both
+`evaluateWithTokens()` and `compileExpression()`, returning a discriminated
+union so each caller maps failures to its own SolveError category.
+
+Step 2 — folding `evaluateExpressionWithDiagnostic()` (the ~675-line,
+15-stage diagnostic path) onto the same pipeline — was deliberately
+**deferred**, not attempted quickly. It is the one task in this document
+explicitly flagged as needing an enumeration of every early-exit before
+touching it (see "Risk notes" below), the method is interleaved with
+per-stage diagnostic event firing at a granularity `prepareExpression`
+does not capture (per-token lex events, per-fusion normalizer events,
+cache-hit-skips-parser-and-compiler-stages), and it is live in a shipping
+Obsidian plugin. Attempting it under time pressure risks exactly the kind
+of subtle drift this task exists to eliminate. Do step 2 in its own
+focused session with the enumeration below done FIRST, in writing, before
+any code changes.
 
 **Problem.** `src/solve-js/src/engine/ExpressionEngine.ts` implements the same
 pipeline three times:

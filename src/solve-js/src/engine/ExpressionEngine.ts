@@ -11,7 +11,7 @@ import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/Bytecode
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import type { EvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { Value, numberValue, pendingValue } from "@solve-js/vm/Value";
+import { Value, numberValue, pendingValue, freezeIfDev } from "@solve-js/vm/Value";
 import { PackageManager } from "@solve-js/packages/PackageSystem";
 import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
 import type { ISolvePackage } from "@solve-js/api/SolveAPI";
@@ -1090,7 +1090,7 @@ export class ExpressionEngine {
                     { lineNumber }
                 );
             }
-            return { values: [result.value], errors: [] };
+            return { values: [freezeIfDev(result.value)], errors: [] };
         }
 
         const values: Value[] = [];
@@ -1100,7 +1100,7 @@ export class ExpressionEngine {
             if (result.error) {
                 errors.push(result.error);
             } else {
-                values.push(result.value);
+                values.push(freezeIfDev(result.value));
             }
         }
 
