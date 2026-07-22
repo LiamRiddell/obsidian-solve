@@ -34,7 +34,7 @@
         </div>
         <div class="normalizer-stat-card">
           <span class="normalizer-stat-label">Tokens Removed</span>
-          <span class="normalizer-stat-value" style="color: #f48771">-{{ tokensRemoved }}</span>
+          <span class="normalizer-stat-value" style="color: #f48771">{{ tokensRemoved }}</span>
         </div>
         <div class="normalizer-stat-card">
           <span class="normalizer-stat-label">Type-Guard Skips</span>
