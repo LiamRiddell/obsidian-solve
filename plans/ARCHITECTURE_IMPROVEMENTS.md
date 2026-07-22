@@ -374,7 +374,24 @@ are bigger than one sitting each; every one should get its own detailed spec
 (in the style of Part I) before implementation. Ordered by recommended
 sequence — later items depend on earlier ones.
 
-## L1 — EngineContext: eliminate module-global engine state
+## L1 — EngineContext: eliminate module-global engine state — NOT ATTEMPTED
+
+**Status 2026-07-22:** Deliberately not started in the fast pass that did
+Part I and L3/L5/L6. This is the single largest item in this document: it
+changes the plugin-function ABI (`pluginFunctionRegistry`'s
+`(args: Value[]) => Value` signature), touches six module-global
+singletons each referenced from multiple files (`sharedLexer`,
+`sharedOpRegistry`, `sharedVariableResolver`, `pluginFunctionRegistry`,
+`sharedCurrencyExchange`, the active-query-client hand-off), and its own
+spec says to do it "AFTER Task 1" (which is only half-done — see above).
+Attempting it now would mean redesigning the ABI on top of an
+already-substantially-modified engine core (Task 2's registry-unregister
+tracking, the P2 layering change, this session's LineCache rewrite) without
+the settled foundation the ordering was designed to provide. Do this in
+its own dedicated session, after Task 1 step 2 is complete, migrating one
+global at a time per the original spec (pluginFunctionRegistry → opRegistry
+→ variableResolver → lexer → currencyExchange) with the full gate between
+each.
 
 **Why.** True isolation is impossible today: `sharedLexer`
 (`lexer/Lexer.ts`), `sharedOpRegistry` (`vm/OpRegistry.ts`),
@@ -402,7 +419,23 @@ each: pluginFunctionRegistry → opRegistry → variableResolver → lexer →
 currencyExchange. `sharedLexer` is last because `PackageSystem.register()`
 writes lexer plugins into it at package-registration time.
 
-## L2 — Unified reactive line-result store
+## L2 — Unified reactive line-result store — PARTIALLY ADDRESSED (see below)
+
+**Status 2026-07-22:** Task 8 shipped a narrower fix for the symptom this
+item describes: `AsyncResolutionBatcher.onLineResult` mirrors resolved
+async values into `DocumentModel.LineState.results` directly, so the view
+plugin no longer has to mark lines dirty and re-run a full evaluator pass
+just to copy a value from LineCache into DocumentModel. That removes the
+worst cost (a redundant re-evaluation per async resolution) without the
+"wide migration" this item calls for (grep `state.results`, `entry.result`,
+`lineState.results` across ExpressionEngine, LineCache, DocumentModel,
+ThreeTierEvaluator, AsyncResolutionBatcher, MarkdownEditorViewPlugin, and
+the playground bridge). The full `ResultStore` unification below is still
+worth doing — it removes the *need* for bridging callbacks like Task 8's
+entirely — but is a maintainability project with no user-facing bug
+attached, on top of a LineCache that was just rewritten (P2) and a
+DocumentModel/AsyncResolutionBatcher that were just touched twice each
+(Tasks 3, 6, 8). Give it its own session once the code has settled.
 
 **Why.** Line results currently live in three stores (LineCache in the
 engine, `LineState.results` in DocumentModel, TanStack Query for async) with
@@ -418,7 +451,23 @@ document structure (lineId/text/dirty) and drops its result fields.
 Migration is mechanical but wide: grep `state.results`, `entry.result`,
 `lineState.results`.
 
-## L3 — Bundle diet and dependency audit
+## L3 — Bundle diet and dependency audit — ✅ MOSTLY DONE (commit "perf: bundle diet")
+
+**Status 2026-07-22:** Shipped: esbuild metafile + a post-build bundle-size
+report (top-10 contributors by bundled size — not a CI budget gate, since
+CI is explicitly out of scope for now); `moment` deduped against
+Obsidian's bundled copy via `import { moment } from "obsidian"` (solve-js
+never depended on moment at all, so the plan's "date-port injection"
+concern didn't apply — only two `src/app` files needed the swap); the
+unused `debug` dependency removed. Result: main.js 488KB → 428.7KB.
+
+**Not done:** trimming `animate.css` to only-used keyframes. Investigation
+found `ANIMATE_CSS_TRANSITIONS_OPTIONS` deliberately exposes ~90 of the
+library's animations as a user-facing settings dropdown (only the
+exit/"Out" variants are commented out) — trimming the stylesheet would
+silently remove animations from that picker. Not a safe mechanical change;
+if bundle size on this specific file matters later, the fix is a
+build-time filter driven by that exact options list, not manual trimming.
 
 **Why.** Runtime deps: `moment` (~230 KB min) while Obsidian ships its own
 moment; `animate.css` imported wholesale; `debug`; `convert`;
@@ -448,7 +497,26 @@ release). Then **untrack `main.js` and `styles.css`** (they are already in
 .gitignore but tracked, so every build dirties the diff) — releases become
 the artifact channel, matching the .gitignore's stated intent.
 
-## L5 — Value model hardening
+## L5 — Value model hardening — ✅ DONE, option A (commit "feat: dev-mode Value immutability guard")
+
+**Status 2026-07-22:** Shipped `freezeIfDev()` — freezes a Value in
+development builds only, and only when the arena is inactive (an
+arena-active Value may still be `recycle()`'d later in the same scroll
+frame). Applied at the `evaluateLineDetailed()` boundary, the shared root
+of `evaluateLine()`/`evaluateExpression()`. Caught a real pre-existing
+issue immediately: `toNumber()` lazily memoizes `_cachedNumber` for
+bigint/string values on first call, which would throw once frozen — fixed
+by warming the cache before freezing. Verified by running the full suite
+with `NODE_ENV=development` (exercises freezing) in addition to the
+default run.
+
+**Not done:** the ESLint half of option A. A syntax-only
+`no-restricted-syntax` rule banning `.value =` assignment can't
+distinguish a `Value` instance from the many unrelated `.value`-named
+fields elsewhere in this codebase (`Token`, `EvalResult`,
+`DiagnosticEvent`, ...) without type-aware linting (`parserOptions.project`
++ a type-aware rule), which is a heavier setup change out of scope for
+this pass. The runtime guard is the enforcement mechanism for now.
 
 **Why.** `Value` is documented immutable but is mutated by design in four
 places (arena `recycle`, `timedOut` tagging, `entry.result` replacement,
@@ -468,7 +536,24 @@ holds a time bomb; today discipline is enforced only by comments.
   change to VM signatures.
 Start with A; consider B during L2 since the store is the natural boundary.
 
-## L6 — Worker consolidation
+## L6 — Worker consolidation — ✅ DONE, scoped (commit "refactor: merge compilation and execution workers")
+
+**Status 2026-07-22:** Shipped the file-merge (`engine.worker.ts` replaces
+`compilation.worker.ts` + `execution.worker.ts` behind one
+`self.onmessage` dispatching on `msg.type`) — ~200 lines of duplicated
+postMessage/Transferable boilerplate removed, verified via a full
+production build (confirms esbuild-plugin-inline-worker's filename-based
+detection still transforms the merged file correctly).
+
+**Not done:** unifying `CompilationWorkerManager` and `ExecutionPool` into
+one `WorkerPool` class with shared size/timeout/fallback policy, as the
+original spec describes. They intentionally kept their own pooling
+policy (single lazy worker vs. N-worker round-robin + 30s timeout) — the
+two have genuinely different needs, `ExecutionPool` has an extensive
+existing test suite (~30 tests) tightly coupled to its current design, and
+this is a "nice to have" with no correctness payoff. If pursued later, do
+it as its own change with its own test-suite migration, not bundled into
+a fast pass.
 
 **Why.** `compilation.worker.ts` and `execution.worker.ts` duplicate the
 Transferable-bytecode protocol, init/error handling, and pool management
@@ -481,7 +566,17 @@ size/timeout/fallback policy, thin typed facades for the two call sites.
 Deletes ~200 duplicated lines and gives one place to add future offloads
 (e.g. Tier-3 batch evaluation).
 
-## L7 — Structured error propagation
+## L7 — Structured error propagation — NOT ATTEMPTED
+
+**Status 2026-07-22:** Not started. A version with real UI payoff (a
+squiggle under the offending token) needs to thread a span type through
+`LineEvaluation`, `DocumentModel`, and the decoration builder — the same
+wide surface L2 touches, deferred for the same reason (settle the code
+that was rewritten twice this session first). A narrower, purely additive
+slice (add an optional `span` field to `SolveError` populated by the
+parser, with no consumer required to change) was considered but produces
+data nothing reads yet — better to do it together with the UI consumer in
+one focused session than land unused plumbing now.
 
 **Why.** Errors flow as bare strings (`ParsedLine.error`,
 `LineState`/eval results, `EvalResults.errors`), losing the code, category,
