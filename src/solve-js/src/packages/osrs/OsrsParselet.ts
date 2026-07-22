@@ -112,11 +112,17 @@ export class OsrsKeywordParselet implements PrefixParselet {
       // No recognized item name followed "osrs" — surfacing a parse error
       // instead of silently pushing 0, which read as a real (and wrong)
       // price of zero gp for whatever was typed.
+      // The bare `osrs Iron Axe` form below is grammatically supported, but
+      // isn't reliably reachable in practice (e.g. the playground's own
+      // line classifier treats a plain "osrs Iron Axe" line as prose and
+      // never evaluates it at all) and isn't shown anywhere as a documented
+      // example. Only advertise the function-call form here, since that's
+      // the one that's actually discoverable and works everywhere.
       throw ErrorFactory.parsing(
         "OSRS_MISSING_ITEM_NAME",
         itemToken
           ? `Expected an OSRS item name after 'osrs', got "${itemToken.value}"`
-          : `Expected an OSRS item name after 'osrs' (e.g. "osrs Iron Axe" or osrs("Iron Axe"))`,
+          : `Expected an OSRS item name after 'osrs', e.g. osrs("Iron Axe")`,
         { tokenType: itemToken?.type }
       );
     }
