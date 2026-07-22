@@ -24,6 +24,21 @@ export class VariableResolver {
 	}
 
 	/**
+	 * Remove a previously registered variable source (identity match).
+	 * The lookup cache is cleared because resolution results may change
+	 * once the source no longer participates.
+	 *
+	 * @param source - The exact source instance passed to registerSource.
+	 */
+	unregisterSource(source: IVariableSource): void {
+		const idx = this.sources.indexOf(source);
+		if (idx !== -1) {
+			this.sources.splice(idx, 1);
+			this.cache.clear();
+		}
+	}
+
+	/**
 	 * Resolve a variable name to its value.
 	 *
 	 * Checks the cache first (if enabled), then queries registered sources

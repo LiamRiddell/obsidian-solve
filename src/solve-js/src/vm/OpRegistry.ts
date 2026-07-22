@@ -38,6 +38,14 @@ export class OpRegistry {
 		this.handlers.set(registration.opcode, registration.handler);
 	}
 
+	/**
+	 * Remove a previously registered opcode handler.
+	 * Used by package unregistration to reverse shared-registry contributions.
+	 */
+	unregister(opcode: number): void {
+		this.handlers.delete(opcode);
+	}
+
 	get(opcode: number): OpcodeHandler | undefined {
 		return this.handlers.get(opcode);
 	}

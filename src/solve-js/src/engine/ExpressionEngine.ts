@@ -149,6 +149,17 @@ export class ExpressionEngine {
     private resolverRegistry = new ResolverRegistry();
 
     /**
+     * Per-package record of contributions made to the SHARED registries
+     * (sharedOpRegistry / sharedVariableResolver / resolver namespaces),
+     * so {@link unregisterPackage} can reverse them. Keyed by package name.
+     */
+    private packageContributions = new Map<string, {
+        opcodes: number[];
+        variableSources: import("@solve-js/variables/IVariableSource").IVariableSource[];
+        resolverNamespaces: string[];
+    }>();
+
+    /**
      * Keystroke-level AbortSignal — set by the UI layer (MarkdownEditorViewPlugin)
      * before each evaluation. When the user types a new keystroke, the old signal
      * is aborted, causing all in-flight async work (fetches, preflight checks,
@@ -321,6 +332,15 @@ export class ExpressionEngine {
      * @param pkg - The package to register.
      */
     registerPackage(pkg: ISolvePackage): void {
+        // Track shared-registry contributions so unregisterPackage() can
+        // reverse them. Isolated per-engine registrations (parselets, lexer
+        // plugins, phrases) die with the engine and don't need tracking.
+        const contribution = {
+            opcodes: [] as number[],
+            variableSources: [] as import("@solve-js/variables/IVariableSource").IVariableSource[],
+            resolverNamespaces: [] as string[],
+        };
+
         if (pkg.lexerPlugin) {
             this.lexer.registerPlugin(pkg.lexerPlugin);
         }
@@ -337,16 +357,19 @@ export class ExpressionEngine {
         if (pkg.opcodeHandlers) {
             for (const oh of pkg.opcodeHandlers) {
                 sharedOpRegistry.register(oh);
+                contribution.opcodes.push(oh.opcode);
             }
         }
         if (pkg.variableSources) {
             for (const vs of pkg.variableSources) {
                 sharedVariableResolver.registerSource(vs);
+                contribution.variableSources.push(vs);
             }
         }
         if (pkg.asyncResolvers) {
             for (const resolver of pkg.asyncResolvers) {
                 this.resolverRegistry.register(resolver);
+                contribution.resolverNamespaces.push(resolver.namespace);
             }
         }
         if (pkg.phrases) {
@@ -359,6 +382,43 @@ export class ExpressionEngine {
                 this.normalizer.register(rule);
             }
         }
+
+        this.packageContributions.set(pkg.name, contribution);
+    }
+
+    /**
+     * Unregister a package previously registered via {@link registerPackage}.
+     *
+     * Reverses the package's contributions to the SHARED registries — opcode
+     * handlers (sharedOpRegistry), variable sources (sharedVariableResolver),
+     * and async resolvers — which registerPackage wrote into process-wide
+     * state. Per-engine registrations (parselets, lexer plugins, phrases)
+     * are left in place: they live in this engine's isolated registries and
+     * are discarded with the engine instance.
+     *
+     * Clears the bytecode cache — removing handlers changes what compiled
+     * bytecode is valid.
+     *
+     * @param packageName - The `name` the package was registered under.
+     * @returns true if the package was found and unregistered.
+     */
+    unregisterPackage(packageName: string): boolean {
+        const contribution = this.packageContributions.get(packageName);
+        if (!contribution) return false;
+
+        for (const opcode of contribution.opcodes) {
+            sharedOpRegistry.unregister(opcode);
+        }
+        for (const vs of contribution.variableSources) {
+            sharedVariableResolver.unregisterSource(vs);
+        }
+        for (const namespace of contribution.resolverNamespaces) {
+            this.resolverRegistry.unregister(namespace);
+        }
+
+        this.packageContributions.delete(packageName);
+        this.bytecodeCache.clear();
+        return true;
     }
 
     //#endregion
