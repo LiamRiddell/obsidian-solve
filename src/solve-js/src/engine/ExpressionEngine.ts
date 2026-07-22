@@ -871,12 +871,78 @@ export class ExpressionEngine {
     }
 
     /**
+     * Shared pipeline front-half: safety checks → COMMENT filter →
+     * normalize → complexity → read/write extraction → bytecode cache
+     * lookup or parse+compile.
+     *
+     * Used by {@link evaluateWithTokens} (which continues into preflight +
+     * execution) and {@link compileExpression} (compile-only). Previously
+     * both carried their own copy of this sequence, which had already
+     * drifted. Returns a discriminated union instead of throwing so each
+     * caller can wrap failures in its own SolveError category
+     * (execution vs validation/parsing).
+     */
+    private prepareExpression(
+        expression: string,
+        tokens: Token[],
+        hasParens: boolean | undefined,
+    ):
+        | { kind: 'empty' }
+        | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; message: string }
+        | { kind: 'ready'; normalizedTokens: Token[]; reads: string[]; writes: string[]; program: BytecodeProgram; cached: boolean } {
+        // ══ SAFETY CHECK 1: Expression length limit ══
+        const lengthCheck = checkExpressionLength(expression, this.config.validation);
+        if (!lengthCheck.passed) {
+            return { kind: 'error', stage: 'length', message: lengthCheck.error!.error };
+        }
+
+        // Filter COMMENT tokens — they have no parselet.
+        const exprTokens = tokens.filter(t => t.type !== 'COMMENT');
+        if (exprTokens.length === 0) {
+            return { kind: 'empty' };
+        }
+
+        // ══ NORMALIZER ══
+        // Phrase fusion, implicit multiply, domain token merging.
+        const normalizedTokens = this.normalizer.normalize(exprTokens);
+
+        // ══ SAFETY CHECK 2: Complexity scoring ══
+        const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
+        if (!complexityCheck.passed) {
+            return { kind: 'error', stage: 'complexity', message: complexityCheck.errorMessage! };
+        }
+
+        const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+
+        // ══ BYTECODE CACHE / PARSE+COMPILE ══
+        const cachedProgram = this.bytecodeCache.get(expression);
+        if (cachedProgram) {
+            return { kind: 'ready', normalizedTokens, reads, writes, program: cachedProgram, cached: true };
+        }
+
+        // Get a pooled builder — avoids 4 heap allocations per expression
+        const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
+        builder.reset();
+        try {
+            this.parseExpression(builder, normalizedTokens, hasParens);
+        } catch (e) {
+            return { kind: 'error', stage: 'parse', message: e instanceof Error ? e.message : String(e) };
+        }
+
+        // build() allocates TypedArrays directly from builder arrays —
+        // a single copy (builder → TypedArray).
+        const program = builder.build();
+        this.cacheBytecode(expression, program);
+        return { kind: 'ready', normalizedTokens, reads, writes, program, cached: false };
+    }
+
+    /**
      * Evaluate an expression using already-lexed tokens.
      *
      * This is the shared core of both evaluateLine (which lexes via
      * resetExpression) and evaluateLineWithPreTokenized() (which uses
-     * tokens from scanDocument). It handles safety checks, bytecode
-     * caching, parsing, and VM execution.
+     * tokens from scanDocument). Delegates the front-half to
+     * {@link prepareExpression}, then runs async preflight + VM execution.
      */
     private evaluateWithTokens(
         lineNumber: number,
@@ -884,66 +950,22 @@ export class ExpressionEngine {
         tokens: Token[],
         hasParens?: boolean
     ): Value {
-        // ══ SAFETY CHECK 1: Expression length limit ══
-        const lengthCheck = checkExpressionLength(expression, this.config.validation);
-        if (!lengthCheck.passed) {
-            throw ErrorFactory.execution(
-                'EVALUATION_ERROR',
-                lengthCheck.error!.error,
-                { lineNumber }
-            );
-        }
+        const prep = this.prepareExpression(expression, tokens, hasParens);
 
-        // Filter COMMENT tokens before evaluation — they have no parselet.
-        const exprTokens = tokens.filter(t => t.type !== 'COMMENT');
-
-        if (exprTokens.length === 0) {
+        if (prep.kind === 'empty') {
             const v = numberValue(0);
             this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null), expression);
             return v;
         }
-
-        // ══ NORMALIZER ══
-        // Normalize tokens for phrase fusion, implicit multiply, domain token merging.
-        const normalizedTokens = this.normalizer.normalize(exprTokens);
-
-        // ══ SAFETY CHECK 2: Complexity scoring ══
-        const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
-        if (!complexityCheck.passed) {
+        if (prep.kind === 'error') {
             throw ErrorFactory.execution(
                 'EVALUATION_ERROR',
-                complexityCheck.errorMessage!,
+                prep.message,
                 { lineNumber }
             );
         }
 
-        const { reads, writes } = extractReadsAndWrites(normalizedTokens);
-
-        let program: BytecodeProgram;
-        const cachedProgram = this.bytecodeCache.get(expression);
-        if (cachedProgram) {
-            program = cachedProgram;
-        } else {
-            // Get a pooled builder — avoids 4 heap allocations per expression
-            const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
-            builder.reset();
-            try {
-                this.parseExpression(builder, normalizedTokens, hasParens);
-            } catch (e) {
-                const errorMessage = e instanceof Error ? e.message : String(e);
-                throw ErrorFactory.execution(
-                    'EVALUATION_ERROR',
-                    errorMessage,
-                    { lineNumber }
-                );
-            }
-
-            // Use build() which allocates TypedArrays directly from builder arrays.
-            // This is a single copy (builder → TypedArray) instead of the old
-            // double copy (builder → pool buffer → TypedArray for cache).
-            program = builder.build();
-            this.cacheBytecode(expression, program);
-        }
+        const { normalizedTokens, reads, writes, program } = prep;
 
         // ══ PRE-FLIGHT ASYNC CHECK ══
         // O(1) guard: skip the O(n) resolver scan when the bytecode has no
@@ -2236,14 +2258,8 @@ export class ExpressionEngine {
 		reads: string[];
 		writes: string[];
 	} {
-		// Safety checks — delegate to ExpressionEngineSafety.ts
-		const lengthCheck = checkExpressionLength(expression, this.config.validation);
-		if (!lengthCheck.passed) {
-			throw ErrorFactory.validation("EXPRESSION_TOO_LONG", lengthCheck.error!.error);
-		}
-
-		// Lexing — skip classifyLine overhead since caller knows this is an expression.
-		// COMMENT tokens are filtered — they have no parselet.
+		// Lexing — skip classifyLine overhead since caller knows this is an
+		// expression. COMMENT tokens are filtered — they have no parselet.
 		const tokens: Token[] = [];
 		let hasParens = false;
 		this.lexer.resetExpression(expression);
@@ -2253,7 +2269,10 @@ export class ExpressionEngine {
 			tokens.push(t);
 		}
 
-		if (tokens.length === 0) {
+		// Shared front-half: safety → normalize → complexity → cache/compile.
+		const prep = this.prepareExpression(expression, tokens, hasParens);
+
+		if (prep.kind === 'empty') {
 			return {
 				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
 				tokens: [],
@@ -2261,44 +2280,20 @@ export class ExpressionEngine {
 				writes: [],
 			};
 		}
-
-		// Normalize tokens for phrase fusion, implicit multiply, domain token merging.
-		const normalizedTokens = this.normalizer.normalize(tokens);
-
-		// Complexity check — delegate to ExpressionEngineSafety.ts
-		const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
-		if (!complexityCheck.passed) {
-			throw ErrorFactory.validation("EXPRESSION_TOO_COMPLEX", complexityCheck.errorMessage!);
+		if (prep.kind === 'error') {
+			// Compile-only callers get validation/parsing error categories
+			// (evaluateWithTokens wraps the same failures as execution errors).
+			switch (prep.stage) {
+				case 'length':
+					throw ErrorFactory.validation("EXPRESSION_TOO_LONG", prep.message);
+				case 'complexity':
+					throw ErrorFactory.validation("EXPRESSION_TOO_COMPLEX", prep.message);
+				case 'parse':
+					throw ErrorFactory.parsing("PARSE_ERROR", prep.message);
+			}
 		}
 
-		const { reads, writes } = extractReadsAndWrites(normalizedTokens);
-
-		// Check bytecode cache
-		const cachedProgram = this.bytecodeCache.get(expression);
-		if (cachedProgram) {
-			return { program: cachedProgram, tokens, reads, writes };
-		}
-
-		// Parse and compile — get a pooled builder to avoid heap allocations
-		const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
-		builder.reset();
-		try {
-			this.parseExpression(builder, normalizedTokens, hasParens);
-		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : String(e);
-			throw ErrorFactory.parsing(
-				"PARSE_ERROR",
-				errorMessage
-			);
-		}
-
-		// Use build() which allocates TypedArrays directly from builder arrays.
-		// This is a single copy (builder → TypedArray) instead of the old
-		// double copy (builder → pool buffer → TypedArray for cache).
-		const program = builder.build();
-		this.cacheBytecode(expression, program);
-
-		return { program, tokens, reads, writes };
+		return { program: prep.program, tokens, reads: prep.reads, writes: prep.writes };
 	}
 
 	/**
