@@ -231,6 +231,17 @@ export class PrecedenceParser {
         // ⚡ Tier 1: Built-in infix — full inline emission, zero parselet delegation
         if (bp <= minBp) break;
 
+        if (this.diagnosticPipeline) {
+          // Fast path skips the registry, but built-ins are still registered
+          // there (for introspection/tests) — look them up only in this
+          // diagnostics-only branch so the playground's "matched parselets"
+          // view isn't permanently blind to every arithmetic operator.
+          const infixParselet = registry.getInfix(lookahead.typeId);
+          if (infixParselet) {
+            this.fireParseletMatched(infixParselet, lookahead, false, bp);
+          }
+        }
+
         this.current = ++idx;
         const typeId = lookahead.typeId;
 
@@ -280,6 +291,17 @@ export class PrecedenceParser {
   private parsePrefix(token: Token): void {
     const builder = this.builder;
     const typeId = token.typeId;
+
+    if (this.diagnosticPipeline) {
+      // Fast path below skips the registry for built-ins, but they're still
+      // registered there (for introspection/tests) — look up here so the
+      // playground's "matched parselets" view isn't permanently blind to
+      // every number, identifier, paren, and unary operator.
+      const parselet = this.registry.getPrefix(typeId);
+      if (parselet) {
+        this.fireParseletMatched(parselet, token, true);
+      }
+    }
 
     switch (typeId) {
       // ── Numeric literals ──────────────────────────────────────────────────
@@ -371,10 +393,6 @@ export class PrecedenceParser {
         `No prefix parselet found for token: ${token.type} ("${token.value}")`,
         { tokenType: token.type, tokenValue: token.value }
       );
-    }
-
-    if (this.diagnosticPipeline) {
-      this.fireParseletMatched(prefixParselet, token, true);
     }
 
     prefixParselet.parse(this as any, token, builder);
