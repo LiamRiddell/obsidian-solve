@@ -1,5 +1,4 @@
 import { ExpressionResultWidget } from "@app/codemirror/widgets/ExpressionResultWidget";
-import { SolveHighlightProvider } from "@app/codemirror/SolveHighlightProvider";
 import { EngineProvider } from "@app/engine/EngineProvider";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
@@ -23,7 +22,6 @@ import {
 export class MarkdownEditorViewPlugin implements PluginValue {
 	public decorations: DecorationSet;
 	private userSettings: UserSettings;
-	private highlightProvider: SolveHighlightProvider;
 	/** Reader for the engine's async resolution event stream (Web Streams API). */
 	private eventStreamReader: ReadableStreamDefaultReader<AsyncResolutionEvent> | null = null;
 
@@ -47,8 +45,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		// FIX #1: Use shared engine instead of creating own instance
 		const engine = EngineProvider.get();
-
-		this.highlightProvider = new SolveHighlightProvider(engine);
 
 		// ── Initialize DocumentModel + ThreeTierEvaluator ────────────
 		this.docModel = new DocumentModel();
@@ -76,15 +72,28 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	}
 
 	update(update: ViewUpdate) {
-		// Detect document switch — reset shared engine to prevent variable leaking between documents
-		const newDoc = update.state?.doc;
-		if (newDoc && newDoc !== this.currentDoc) {
+		// Detect document switch — reset shared engine to prevent variable
+		// leaking between documents.
+		//
+		// A *switch* (a different file loaded into this editor) arrives as a
+		// state replacement WITHOUT an edit transaction: the doc instance
+		// differs from the last one we processed but update.docChanged is
+		// false. Ordinary typing always sets docChanged — CM6 documents are
+		// immutable, so comparing instances alone would classify every
+		// keystroke as a switch and reset the engine (destroying the bytecode
+		// cache, DAG, and checkpoints) on each character typed.
+		const newDoc = update.state?.doc ?? null;
+		const isDocumentSwitch =
+			!update.docChanged && newDoc !== null && newDoc !== this.currentDoc;
+		if (newDoc) {
+			this.currentDoc = newDoc;
+		}
+
+		if (isDocumentSwitch && newDoc) {
 			// Abort in-flight async work from the old document
 			this.abortKeystroke('Document switch');
 
-			this.currentDoc = newDoc;
 			EngineProvider.reset();
-			this.highlightProvider = new SolveHighlightProvider(EngineProvider.get());
 
 			// Terminate old evaluator's worker before recreating
 			this.evaluator.terminateWorker();
@@ -98,6 +107,15 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			this.keystrokeController = new AbortController();
 			abortLogger.keystrokeCreated();
 			this.evaluator.evaluateAll(this.keystrokeController.signal);
+
+			// Re-subscribe to the NEW engine's event stream — the old reader
+			// is bound to the previous engine's (now closed) stream and would
+			// never deliver async results for this document.
+			if (this.eventStreamReader) {
+				try { this.eventStreamReader.cancel(); } catch { /* already closed */ }
+			}
+			this.eventStreamReader = engine.getEventStream().getReader();
+			this.startEventStreamReader(update.view);
 
 			this.decorations = this.buildDecorations(update.view);
 
@@ -115,8 +133,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			this.abortKeystroke('New keystroke');
 			this.keystrokeController = new AbortController();
 			abortLogger.keystrokeCreated();
-
-			this.highlightProvider.invalidateCache();
 
 			// ── Phase 5.2f: Incremental document update ──────────────
 			// Instead of rebuilding the entire DocumentModel via setDocument()
@@ -223,9 +239,19 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private handleAsyncEvent(event: AsyncResolutionEvent, view: EditorView): void {
 		switch (event.type) {
 			case "lines-updated": {
-				// Batcher already updated LineCache with fresh results.
-				// Just trigger a view re-render — no need to mark dirty
-				// (avoids double re-evaluation by ThreeTierEvaluator).
+				// The batcher patched the LineCache, but decorations render from
+				// the DocumentModel (lineState.results). Mark the affected lines
+				// dirty and re-run the evaluator so resolved values land in the
+				// DocumentModel, then rebuild decorations explicitly — an empty
+				// dispatch alone does not trigger a decoration rebuild (update()
+				// only rebuilds on docChanged/viewportChanged).
+				if (event.lineNumbers.length > 0) {
+					for (const lineNumber of event.lineNumbers) {
+						this.docModel.markDirtyByLineNumber(lineNumber);
+					}
+					this.evaluator.evaluate(this.getViewportFromView(view));
+				}
+				this.decorations = this.buildDecorations(view);
 				view.dispatch({});
 				break;
 			}
@@ -319,8 +345,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 						side: 1,
 					}),
 				);
-
-				this.addHighlightDecorations(line.text, line.number);
 
 				nextLineTextOffset += lineTextRaw.length;
 			}
@@ -428,9 +452,6 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 	}
 
-	private addHighlightDecorations(lineText: string, lineNumber: number): void {
-		this.highlightProvider.getLineHighlights(lineText, lineNumber);
-	}
 }
 
 // ── Change conversion helper ──────────────────────────────────────────────

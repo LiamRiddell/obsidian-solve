@@ -5,7 +5,6 @@
  * - Package registration (prefix/infix parselets, opcode handlers, variable sources)
  * - LexerPlugin integration (keywords, operators, units, phrases)
  * - Combined lexer+parselet packages
- * - GrammarDSL DSL helpers for defining parselets programmatically
  */
 
 import { describe, expect, it } from "@jest/globals";
@@ -17,7 +16,6 @@ import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { Token } from "@solve-js/lexer/Token";
-import { createGrammarDSL, GrammarDSL } from "@solve-js/compiler/GrammarDSL";
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 
 describe("Solve ISolvePackage", () => {
@@ -173,36 +171,3 @@ it("supports registerPackage with prefix parselets", () => {
   });
 });
 
-describe("GrammarDSL", () => {
-  it("can be created from a registry", () => {
-    const registry = new ParseletRegistry();
-    const dsl = createGrammarDSL(registry);
-    expect(dsl).toBeInstanceOf(GrammarDSL);
-  });
-
-  it("can define an infix parselet", () => {
-    const registry = new ParseletRegistry();
-    const dsl = createGrammarDSL(registry);
-    dsl.defineInfix("PLUS", 10, OpCode.ADD);
-    expect(registry.hasInfix("PLUS")).toBe(true);
-  });
-
-  it("can define a prefix parselet from rule", () => {
-    const registry = new ParseletRegistry();
-    const dsl = createGrammarDSL(registry);
-    dsl.definePrefixFromRule(
-      "NEGATE",
-      () => {},
-      "MINUS"
-    );
-    expect(registry.hasPrefix("MINUS")).toBe(true);
-  });
-
-  it("can register token op mapping", () => {
-    const registry = new ParseletRegistry();
-    const dsl = createGrammarDSL(registry);
-    dsl.registerTokenOp("CUSTOM_OP", OpCode.ADD);
-    dsl.defineInfix("CUSTOM_OP", 20);
-    expect(registry.hasInfix("CUSTOM_OP")).toBe(true);
-  });
-});

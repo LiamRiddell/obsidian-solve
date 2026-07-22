@@ -29,6 +29,22 @@ export class ExpressionResultWidget extends WidgetType {
 		this.queryKey = queryKey;
 	}
 
+	/**
+	 * Widget equality — lets CodeMirror reuse the existing DOM node when the
+	 * decoration is rebuilt with identical content. Without this, every
+	 * decoration rebuild recreates every result widget's DOM.
+	 */
+	eq(other: ExpressionResultWidget): boolean {
+		return (
+			this.lineNumber === other.lineNumber &&
+			this.isInlineSolve === other.isInlineSolve &&
+			this.expression === other.expression &&
+			this.result === other.result &&
+			this.isPending === other.isPending &&
+			this.queryKey === other.queryKey
+		);
+	}
+
 	toDOM(view: EditorView): HTMLElement {
 		const div = document.createElement("div");
 		div.id = `osr-${this.lineNumber}`;

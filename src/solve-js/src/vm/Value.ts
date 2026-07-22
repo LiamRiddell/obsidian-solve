@@ -79,23 +79,31 @@ export class ValueArena {
 // Module-level arena toggle. Single-threaded JS, so global state is safe.
 // The arena is ONLY active during Tier 2 scroll execution — the ThreeTierEvaluator
 // enables it before evaluating visible lines and disables it after.
+//
+// The arena INSTANCE survives disable(): constructing a ValueArena allocates
+// its whole initial block (512 Values), so dropping it on every disable would
+// pay that allocation cost again on the next enable — more garbage than the
+// arena saves. Instead, an `_arenaActive` flag gates use of the long-lived
+// instance; enable() just resets the bump index.
 let _arena: ValueArena | null = null;
+let _arenaActive = false;
 
 /** Enable the Value arena for zero-allocation scroll execution. */
 export function enableValueArena(size?: number): ValueArena {
 	if (!_arena) _arena = new ValueArena(size);
 	_arena.reset();
+	_arenaActive = true;
 	return _arena;
 }
 
 /** Disable the arena (returns to normal GC-collected allocation). */
 export function disableValueArena(): void {
-	_arena = null;
+	_arenaActive = false;
 }
 
 /** Check if arena is active (used by STORE_VAR / HALT to decide cloning). */
 export function isArenaActive(): boolean {
-	return _arena !== null;
+	return _arenaActive;
 }
 
 /**
@@ -213,31 +221,31 @@ export class Value {
  * This is the most common factory — over 90% of all Value creations.
  */
 export function numberValue(n: number): Value {
-	if (_arena) return _arena.acquire(ValueType.Number, n);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Number, n);
 	return new Value(ValueType.Number, n);
 }
 
 /** Create a Hex-typed Value (0x-prefix literals). */
 export function hexValue(n: number): Value {
-	if (_arena) return _arena.acquire(ValueType.Hex, n);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Hex, n);
 	return new Value(ValueType.Hex, n);
 }
 
 /** Create a BigInt-typed Value (arbitrary-precision integer). */
 export function bigIntValue(n: bigint): Value {
-	if (_arena) return _arena.acquire(ValueType.BigInt, n);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.BigInt, n);
 	return new Value(ValueType.BigInt, n);
 }
 
 /** Create a String-typed Value. */
 export function stringValue(s: string): Value {
-	if (_arena) return _arena.acquire(ValueType.String, s);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.String, s);
 	return new Value(ValueType.String, s);
 }
 
 /** Create a Unit-of-Measurement Value (typed number with unit annotation). */
 export function uomValue(n: number, unit: string): Value {
-	if (_arena) return _arena.acquire(ValueType.Uom, n, unit);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Uom, n, unit);
 	return new Value(ValueType.Uom, n, unit);
 }
 
@@ -246,7 +254,7 @@ export function uomValue(n: number, unit: string): Value {
  * Replaces the old vectorValue() which selected Vec2/Vec3/Vec4 based on length.
  */
 export function arrayValue(v: number[]): Value {
-	if (_arena) return _arena.acquire(ValueType.Array, v);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Array, v);
 	return new Value(ValueType.Array, v);
 }
 
@@ -254,19 +262,19 @@ export function arrayValue(v: number[]): Value {
 
 /** Create a Boolean-typed Value. */
 export function boolValue(b: boolean): Value {
-	if (_arena) return _arena.acquire(ValueType.Boolean, b);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Boolean, b);
 	return new Value(ValueType.Boolean, b);
 }
 
 /** Create a Datetime-typed Value (Unix timestamp in milliseconds). */
 export function datetimeValue(n: number): Value {
-	if (_arena) return _arena.acquire(ValueType.Datetime, n);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Datetime, n);
 	return new Value(ValueType.Datetime, n);
 }
 
 /** Create a Percentage-typed Value (stored as fraction, e.g. 0.5 for 50%). */
 export function percentageValue(n: number): Value {
-	if (_arena) return _arena.acquire(ValueType.Percentage, n);
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Percentage, n);
 	return new Value(ValueType.Percentage, n);
 }
 

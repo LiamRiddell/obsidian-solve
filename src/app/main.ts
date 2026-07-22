@@ -216,9 +216,11 @@ export default class SolvePlugin extends Plugin {
 					return;
 				}
 
+				// Editor lines are 0-based; result widget ids are 1-based
+				// (`#osr-${line + 1}`, matching commit-result-current-line).
 				for (
-					let i = selectionStart.line + 1;
-					i < selectionEnd.line + 1;
+					let i = selectionStart.line;
+					i <= selectionEnd.line;
 					i++
 				) {
 					const resultElement = (

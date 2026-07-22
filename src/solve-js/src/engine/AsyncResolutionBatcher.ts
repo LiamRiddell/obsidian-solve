@@ -120,6 +120,9 @@ export class AsyncResolutionBatcher {
 	 */
 	public _testCaptures: AsyncResolutionEvent[] | null = null;
 
+	/** High-water mark used when (re)creating the event stream. */
+	private readonly highWaterMark: number;
+
 	constructor(
 		dag: DependencyGraph,
 		lineCache: LineCache,
@@ -129,16 +132,26 @@ export class AsyncResolutionBatcher {
 		this.dag = dag;
 		this.lineCache = lineCache;
 		this.vm = vm;
+		this.highWaterMark = highWaterMark;
 
-		// ── Create the internal event stream ──
-		this._eventStream = new ReadableStream<AsyncResolutionEvent>({
+		this._eventStream = this.createEventStream();
+	}
+
+	/**
+	 * Create a fresh internal event stream and wire its controller.
+	 * Called from the constructor and again from clearAll() so the batcher
+	 * keeps emitting events after an engine clear — the engine instance
+	 * (and this batcher) live on across clear() calls.
+	 */
+	private createEventStream(): ReadableStream<AsyncResolutionEvent> {
+		return new ReadableStream<AsyncResolutionEvent>({
 			start: (controller) => {
 				this._streamController = controller;
 			},
 			cancel: () => {
 				this._streamController = null;
 			},
-		}, new CountQueuingStrategy({ highWaterMark }));
+		}, new CountQueuingStrategy({ highWaterMark: this.highWaterMark }));
 	}
 
 	// ── Public API ────────────────────────────────────────────────────
@@ -193,15 +206,17 @@ export class AsyncResolutionBatcher {
 		// clearAll(), no further events reach old subscribers.
 		this._testCaptures = null;
 
-		// Close the stream gracefully so consumers get a clean done signal.
-		// New consumers of getEventStream() will get a new stream from the
-		// engine's next ctor (engine.clear() recreates the engine).
+		// Close the old stream gracefully so existing consumers get a clean
+		// done signal, then create a fresh stream. The engine instance (and
+		// this batcher) survive clear(), so getEventStream() must keep
+		// returning a live stream for new subscribers.
 		try {
 			this._streamController?.close();
 		} catch {
 			// Controller may already be closed or errored.
 		}
 		this._streamController = null;
+		this._eventStream = this.createEventStream();
 
 		if (this.executionPool) {
 			this.executionPool.clear();
@@ -481,8 +496,16 @@ export class AsyncResolutionBatcher {
 				: this.lineCache.getEntryForLine(lineNumber);
 			if (!entry || entry.bytecode.opcodes.length === 0) continue;
 
-			this.vm.reset();
+			// Do NOT reset the VM here: reset() clears the variable table, which
+			// would wipe values produced by earlier lines in this topologically
+			// ordered batch (and by unaffected lines outside it). Instead, mirror
+			// the engine's execution pattern: snapshot the stack depth and pop
+			// back to it after execution.
+			const stackBefore = this.vm.getStack().length;
 			const result = executeBytecode(entry.bytecode, this.vm);
+			while (this.vm.getStack().length > stackBefore) {
+				this.vm.pop();
+			}
 
 			if (result.type === "value") {
 				entry.result = result.value;

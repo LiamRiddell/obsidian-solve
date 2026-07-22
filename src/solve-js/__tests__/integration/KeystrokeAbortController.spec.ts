@@ -167,7 +167,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 
 	// ── Synchronous cancellation propagation ──────────────────────────
 
-	test("keystroke abort propagates to local AbortController via engine.evaluateLine()", () => {
+	test("completed sync evaluation detaches its keystroke listener (no retroactive abort)", () => {
 		// Use engine.evaluateLine() directly — avoids the evaluator's
 		// setKeystrokeSignal(null) in its finally block, which would
 		// overwrite the signal before executeAndStore runs.
@@ -175,21 +175,24 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		engine.setKeystrokeSignal(controller.signal);
 
 		// evaluateLine → evaluateWithTokens → executeAndStore
-		// executeAndStore links its local AbortController to keystrokeSignal
+		// executeAndStore links its local AbortController to keystrokeSignal,
+		// then DETACHES it when the evaluation completes synchronously —
+		// otherwise one listener per evaluated line accumulates on the
+		// keystroke signal (listener leak on large documents).
 		engine.evaluateLine(1, "5 + 3");
 
 		// After executeAndStore, vm.activeSignal was set to the local controller's signal
 		const vmSignal = engine.getVM().activeSignal;
 		expect(vmSignal).toBeDefined();
 
-		// Abort the keystroke — propagates through the linked listener
+		// Abort the keystroke AFTER the evaluation finished — there is no
+		// in-flight work, so the completed evaluation's controller must NOT
+		// be retroactively aborted.
 		controller.abort("New keystroke");
-
-		// The local controller's signal should now be aborted
-		expect(vmSignal!.aborted).toBe(true);
+		expect(vmSignal!.aborted).toBe(false);
 	});
 
-	test("keystroke abort propagates to local AbortController via executeRaw", () => {
+	test("completed executeRaw evaluation detaches its keystroke listener", () => {
 		// executeRaw is used by executeCached (Tier 2) and reEvaluateLine.
 		const controller = new AbortController();
 		engine.setKeystrokeSignal(controller.signal);
@@ -197,14 +200,15 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		// Compile first to get bytecode in cache
 		const { program } = engine.compileExpression("10 * 2");
 
-		// executeCached → executeRaw → links local controller to keystrokeSignal
+		// executeCached → executeRaw → links local controller to keystrokeSignal,
+		// then detaches it on sync completion (see executeRaw listener cleanup).
 		engine.executeCached(program);
 
 		const vmSignal = engine.getVM().activeSignal;
 		expect(vmSignal).toBeDefined();
 
 		controller.abort("New keystroke");
-		expect(vmSignal!.aborted).toBe(true);
+		expect(vmSignal!.aborted).toBe(false);
 	});
 
 	// ── VM linkage ────────────────────────────────────────────────────
@@ -225,7 +229,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		expect(vm.abortCurrent).toBeUndefined();
 	});
 
-	test("vm.activeSignal reflects abort state after keystroke abort", () => {
+	test("vm.activeSignal stays unaborted after post-completion keystroke abort", () => {
 		const controller = new AbortController();
 		engine.setKeystrokeSignal(controller.signal);
 
@@ -237,7 +241,8 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 
 		controller.abort("Keystroke");
 
-		expect(vm.activeSignal!.aborted).toBe(true);
+		// Completed evaluation — listener already detached, no retroactive abort.
+		expect(vm.activeSignal!.aborted).toBe(false);
 	});
 
 	// ── Async cancellation: signal propagates to pending results ──────
@@ -264,9 +269,11 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		expect(vmSignal).toBeDefined();
 		expect(vmSignal!.aborted).toBe(false);
 
-		// Abort the keystroke — should propagate through the VM controller
+		// The evaluation completed synchronously, so both the preflight and
+		// VM controllers detached their keystroke listeners — a later
+		// keystroke abort must not retroactively abort the finished work.
 		controller.abort("New keystroke");
-		expect(vmSignal!.aborted).toBe(true);
+		expect(vmSignal!.aborted).toBe(false);
 
 		// Clean up: reset engine to avoid leaking state to other tests
 		diagnosticEngine.clear();

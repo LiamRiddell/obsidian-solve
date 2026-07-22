@@ -1437,14 +1437,20 @@ describe("AsyncResolutionBatcher — stream close", () => {
 		expect(reachedDone).toBe(true);
 	});
 
-	test("should null _streamController after clearAll()", async () => {
+	test("should replace _streamController with a fresh one after clearAll()", async () => {
 		const { batcher } = freshBatcher();
 
-		expect((batcher as any)._streamController).not.toBeNull();
+		const controllerBefore = (batcher as any)._streamController;
+		expect(controllerBefore).not.toBeNull();
 
 		batcher.clearAll();
 
-		expect((batcher as any)._streamController).toBeNull();
+		// The old controller is closed and a new stream/controller is created —
+		// the engine (and this batcher) survive clear(), so the batcher must
+		// keep emitting events for new subscribers.
+		const controllerAfter = (batcher as any)._streamController;
+		expect(controllerAfter).not.toBeNull();
+		expect(controllerAfter).not.toBe(controllerBefore);
 	});
 
 	test("should not enqueue new events after clearAll() closes the stream", async () => {
@@ -1488,23 +1494,26 @@ describe("AsyncResolutionBatcher — stream close", () => {
 		expect(() => batcher.clearAll()).not.toThrow();
 	});
 
-	test("getEventStream() should return the same stream after clearAll()", async () => {
+	test("getEventStream() should return a fresh live stream after clearAll()", async () => {
 		const { batcher } = freshBatcher();
 
 		const streamBefore = batcher.getEventStream();
 		batcher.clearAll();
 		const streamAfter = batcher.getEventStream();
 
-		// Same stream instance, but now closed
-		expect(streamBefore).toBe(streamAfter);
+		// Old stream is closed; new subscribers get a fresh, readable stream.
+		expect(streamBefore).not.toBe(streamAfter);
+		expect(streamAfter.locked).toBe(false);
 	});
 
-	test("reading from a stream closed by clearAll() should return done immediately", async () => {
+	test("readers subscribed before clearAll() should receive done immediately", async () => {
 		const { batcher } = freshBatcher();
+
+		// Subscribe BEFORE the clear — this reader is bound to the old stream.
+		const reader = batcher.getEventStream().getReader();
 
 		batcher.clearAll();
 
-		const reader = batcher.getEventStream().getReader();
 		const { done, value } = await reader.read();
 
 		expect(done).toBe(true);
@@ -1584,13 +1593,17 @@ describe("AsyncResolutionBatcher — stream controller lifecycle", () => {
 		expect((batcher as any)._streamController).toBeNull();
 	});
 
-	test("should null controller after clearAll() then recover with new batcher", () => {
+	test("should recreate controller after clearAll() and recover with new batcher", () => {
 		const { batcher } = freshBatcher();
 
-		expect((batcher as any)._streamController).not.toBeNull();
+		const controllerBefore = (batcher as any)._streamController;
+		expect(controllerBefore).not.toBeNull();
 
 		batcher.clearAll();
-		expect((batcher as any)._streamController).toBeNull();
+		// clearAll() closes the old stream and creates a fresh one so the
+		// surviving batcher keeps emitting events to new subscribers.
+		expect((batcher as any)._streamController).not.toBeNull();
+		expect((batcher as any)._streamController).not.toBe(controllerBefore);
 
 		// New batcher = new stream + new controller
 		const { batcher: batcher2 } = freshBatcher();

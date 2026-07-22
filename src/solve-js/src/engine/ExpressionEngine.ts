@@ -170,8 +170,22 @@ export class ExpressionEngine {
     private normalizer: TokenNormalizer;
     /** TanStack Query client — injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
-    // Bytecode cache — avoids re-parsing identical expressions
+    // Bytecode cache — avoids re-parsing identical expressions.
+    // Bounded: when full, the oldest entry (Map insertion order) is evicted
+    // so unique expressions across a long session can't grow memory unboundedly.
+    private static readonly BYTECODE_CACHE_MAX_ENTRIES = 2000;
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
+
+    /** Insert into the bytecode cache, evicting the oldest entry when full. */
+    private cacheBytecode(expression: string, program: BytecodeProgram): void {
+        if (this.bytecodeCache.size >= ExpressionEngine.BYTECODE_CACHE_MAX_ENTRIES) {
+            const oldest = this.bytecodeCache.keys().next().value;
+            if (oldest !== undefined) {
+                this.bytecodeCache.delete(oldest);
+            }
+        }
+        this.bytecodeCache.set(expression, program);
+    }
     // Pre-allocated BytecodeBuilder pool
     private builderPool: BytecodeBuilder[] = [
         new BytecodeBuilder(),
@@ -445,7 +459,9 @@ export class ExpressionEngine {
         }
 
         if (result.type === 'pending') {
-            // Fire-and-forget async resolution
+            // Fire-and-forget async resolution.
+            // The keystroke listener stays attached while the async work is
+            // in flight so a new keystroke can still cancel it.
             void this.resolveAsync(result);
 
             // Register data source dependency in DAG for re-evaluation tracking
@@ -460,7 +476,11 @@ export class ExpressionEngine {
             return pending;
         }
 
-        // Success path
+        // Success path — execution finished synchronously, so unhook the
+        // keystroke listener now. Without this, one listener per evaluated
+        // line accumulates on the keystroke signal for large documents.
+        this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+
         this.dag.registerLine(lineNumber, reads, writes);
         this.storeLineResult(lineNumber, result.value, program, reads, writes, expression);
         return result.value;
@@ -497,6 +517,13 @@ export class ExpressionEngine {
         // Stack cleanup
         while (this.vm.getStack().length > stackBefore) {
             this.vm.pop();
+        }
+
+        // Sync completion — unhook the keystroke listener to prevent
+        // per-evaluation listener accumulation. Pending results keep the
+        // listener so in-flight async work stays cancellable.
+        if (result.type !== 'pending') {
+            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
         }
 
         return result;
@@ -840,7 +867,7 @@ export class ExpressionEngine {
             // This is a single copy (builder → TypedArray) instead of the old
             // double copy (builder → pool buffer → TypedArray for cache).
             program = builder.build();
-            this.bytecodeCache.set(expression, program);
+            this.cacheBytecode(expression, program);
         }
 
         // ══ PRE-FLIGHT ASYNC CHECK ══
@@ -890,6 +917,9 @@ export class ExpressionEngine {
             this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
             return pending;
         }
+        // Sync path — no async resolution started, so the preflight
+        // controller is inert. Unhook its keystroke listener.
+        this.keystrokeSignal?.removeEventListener('abort', abortPreflight);
         } // end preflight guard
 
         // Execute and handle result — no try/catch needed.
@@ -1499,7 +1529,7 @@ export class ExpressionEngine {
                 });
             }
 
-            this.bytecodeCache.set(expression, program);
+            this.cacheBytecode(expression, program);
 
             if (hasCollectors) {
                 this.addDiagnosticStage(stages, 'compiler', 'Compiler', '⚙️', 'compiler', 9, zeroElapsed, false, {
@@ -1589,6 +1619,9 @@ export class ExpressionEngine {
                 diagnostic: hasCollectors ? this.buildDiagnosticResult(stages, pending, normalizedTokens, program, null) : undefined,
             };
         }
+
+        // Sync path — unhook the inert preflight controller's keystroke listener.
+        this.keystrokeSignal?.removeEventListener('abort', abortPreflight);
 
         // Structured: async preflight - sync path
         if (hasCollectors) {
@@ -1699,6 +1732,9 @@ export class ExpressionEngine {
                 diagnostic: hasCollectors ? this.buildDiagnosticResult(stages, pending, normalizedTokens, program, null) : undefined,
             };
         }
+
+        // Sync completion — unhook the keystroke listener (see executeAndStore).
+        this.keystrokeSignal?.removeEventListener('abort', abortLocal);
 
         const result = evalResult.value;
 
@@ -1868,9 +1904,13 @@ export class ExpressionEngine {
             });
             return pendingValue(asyncCheck.queryKey);
         }
+        // Sync path — unhook the inert preflight controller's keystroke listener.
+        this.keystrokeSignal?.removeEventListener('abort', abortPreflight);
         } // end hasAsync guard
 
-        this.vm.reset();
+        // No vm.reset() here: reset() clears the variable table, which would
+        // wipe variables defined by other lines that this line's bytecode may
+        // read. executeRaw() already snapshots and restores the stack depth.
         const evalResult = this.executeRaw(program);
 
         if (evalResult.type === 'pending') {
@@ -2168,7 +2208,7 @@ export class ExpressionEngine {
 		// This is a single copy (builder → TypedArray) instead of the old
 		// double copy (builder → pool buffer → TypedArray for cache).
 		const program = builder.build();
-		this.bytecodeCache.set(expression, program);
+		this.cacheBytecode(expression, program);
 
 		return { program, tokens, reads, writes };
 	}
@@ -2252,68 +2292,7 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Parallel evaluation
-
-    /**
-     * Evaluate independent expressions using a worker pool (Web Workers).
-     * Falls back to sequential for single-threaded envs (Node.js, SSR).
-     */
-    async evaluateParallel(expressions: string[]): Promise<(number | undefined)[]> {
-        const results: (number | undefined)[] = new Array(expressions.length);
-        const workers: Worker[] = [];
-
-        if (typeof Worker === "undefined") {
-            for (let i = 0; i < expressions.length; i++) {
-                try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
-            }
-            return results;
-        }
-
-        // Dynamic import to avoid circular dependency:
-        // eval.worker.ts imports ExpressionEngine, so we can't statically import it here.
-        let createEvalWorker: () => Worker;
-        try {
-            ({ default: createEvalWorker } = await import("@solve-js/workers/eval.worker"));
-        } catch {
-            // Fallback: evaluate on main thread if worker can't be created
-            for (let i = 0; i < expressions.length; i++) {
-                try { results[i] = this.evaluateNumber(expressions[i]); } catch { results[i] = undefined; }
-            }
-            return results;
-        }
-
-        const maxWorkers = Math.min(expressions.length, 4);
-        const chunkSize = Math.ceil(expressions.length / maxWorkers);
-        const promises: Promise<void>[] = [];
-
-        for (let w = 0; w < maxWorkers; w++) {
-            const worker = createEvalWorker();
-            workers.push(worker);
-            const start = w * chunkSize;
-            const end = Math.min(start + chunkSize, expressions.length);
-
-            const promise = new Promise<void>((resolve) => {
-                worker.onmessage = (e: MessageEvent) => {
-                    const msg = e.data;
-                    if (msg.type === "RESULT" && typeof msg.id === "number" && msg.id >= start && msg.id < end) {
-                        results[msg.id] = msg.value?.value ?? undefined;
-                    }
-                };
-                worker.onerror = () => resolve();
-
-                for (let i = start; i < end; i++) {
-                    worker.postMessage({ type: "EVAL", id: i, expression: expressions[i], locale: this.localeCode });
-                }
-
-                setTimeout(resolve, 100);
-            });
-            promises.push(promise);
-        }
-
-        await Promise.all(promises);
-        workers.forEach((w) => w.terminate());
-        return results;
-    }
+    //#region Public API — Incremental evaluation
 
     /**
      * Incrementally re-evaluate lines affected by a variable change.

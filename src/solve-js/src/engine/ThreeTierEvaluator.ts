@@ -582,7 +582,8 @@ export class ThreeTierEvaluator {
 		expressions: string[],
 		inlineSolveCount: number,
 		baseResult: Omit<EvalLineResult, "tier" | "result" | "error">
-	): EvalLineResult {        const allResults: Value[][] = [];
+	): EvalLineResult {
+		const allResults: Value[][] = [];
 		const allBytecodes: BytecodeProgram[] = [];
 		const allReads = new Set<string>();
 		const allWrites = new Set<string>();
@@ -599,7 +600,9 @@ export class ThreeTierEvaluator {
 		// the third expression throws because 'b' references cross a VM state
 		// boundary or the engine encounters a transient error.
 		for (const expression of expressions) {
-			if (!expression.trim()) continue;		let value: EvalResults | null = null;
+			if (!expression.trim()) continue;
+
+			let value: EvalResults | null = null;
 			let entry: { bytecode: BytecodeProgram; readVariables: string[]; writeVariable: string | null } | undefined;
 
 			try {
@@ -608,18 +611,22 @@ export class ThreeTierEvaluator {
 				// Sync the DocumentModel from the LineCache.
 				// Use get(lineNumber, expression) instead of getEntryForLine(lineNumber)
 				// because multiple expressions on the same line share the same lineNumber
-				// and getEntryForLine always returns the FIRST entry (Map insertion order).            entry = this.engine.getLineCache().get(lineNumber, expression) as typeof entry;
-            } catch (e) {
-                const errorMessage = e instanceof Error ? e.message : String(e);
-                if (!firstError) firstError = errorMessage;
-                anyFailed = true;
-                value = null;
-            }            if (value) {
-                allResults.push(value);
-            } else {
+				// and getEntryForLine always returns the FIRST entry (Map insertion order).
+				entry = this.engine.getLineCache().get(lineNumber, expression) as typeof entry;
+			} catch (e) {
+				const errorMessage = e instanceof Error ? e.message : String(e);
+				if (!firstError) firstError = errorMessage;
+				anyFailed = true;
+				value = null;
+			}
+
+			if (value) {
+				allResults.push(value);
+			} else {
 				// Expression failed — push an ErrorValue sentinel so results[] stays
 				// aligned with expressions[] and bytecodes[] indices. Downstream code
-				// checking result.type === Error will find it, vs a raw null that NPEs.            allResults.push([errorValue("eval_failed", firstError ?? "unknown error")]);
+				// checking result.type === Error will find it, vs a raw null that NPEs.
+				allResults.push([errorValue("eval_failed", firstError ?? "unknown error")]);
 			}
 
 			if (entry) {
@@ -719,7 +726,9 @@ export class ThreeTierEvaluator {
 	): EvalLineResult {
 		if (state.bytecodes.length === 0) {
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
-		}        const results: Value[][] = [];
+		}
+
+		const results: Value[][] = [];
 		let lastValue: Value | null = null;
 		let firstError: string | null = null;
 		let anyFailed = false;
@@ -732,12 +741,14 @@ export class ThreeTierEvaluator {
 			if (bytecode.opcodes.length === 0) continue;
 			try {
 				const value = this.engine.executeCached(bytecode);
-				lastValue = value;                results.push([value]);
+				lastValue = value;
+				results.push([value]);
 			} catch (e) {
 				const errorMessage = e instanceof Error ? e.message : String(e);
 				if (!firstError) firstError = errorMessage;
 				anyFailed = true;
-				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment                results.push([errorValue("exec_failed", errorMessage)]);
+				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment
+				results.push([errorValue("exec_failed", errorMessage)]);
 			}
 		}
 
@@ -826,7 +837,8 @@ export class ThreeTierEvaluator {
 		// Always register — even empty reads/writes for DAG line-presence queries.
 		this.dag.registerLine(lineNumber, reads, writes);
 
-		if (hasVariableDef && lastResult && !anyFailed) {            state.results = [[lastResult]];
+		if (hasVariableDef && lastResult && !anyFailed) {
+			state.results = [[lastResult]];
 			state.result = lastResult;
 			state.dirty = false;
 
