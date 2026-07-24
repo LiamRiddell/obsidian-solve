@@ -1,7 +1,8 @@
 import { ExpressionLexer, LineClassification, LexerPlugin, type ScanLineResult } from "./ExpressionLexer";
 import { Token } from "@solve-js/lexer/Token";
 import { LexerState } from "@solve-js/lexer/LexerState";
-import { getTokenHighlightClass } from "@solve-js/lexer/TokenHighlightMap";
+import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import type { SolveTokenCategory } from "@solve-js/language/SolveTokenCategory";
 import type { TokenLookup } from "@solve-js/lexer/TokenClassRegistry";
 
 export class Lexer {
@@ -146,7 +147,7 @@ export class Lexer {
     this.currentState = state;
   }
 
-  getHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] {
+  getHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; category: SolveTokenCategory | undefined}[] {
     const classification = this.expressionLexer.classifyLine(lineText);
 
     // For blockquote lines, strip the "> " prefix and tokenize the expression content.
@@ -163,9 +164,9 @@ export class Lexer {
     return this.collectHighlightTokens(lineText);
   }
 
-  private collectHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] {
+  private collectHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; category: SolveTokenCategory | undefined}[] {
     this.resetExpression(lineText);
-    const result: {type: string; value: string; offset: number; col: number; length: number; className: string | undefined}[] = [];
+    const result: {type: string; value: string; offset: number; col: number; length: number; category: SolveTokenCategory | undefined}[] = [];
     for (const token of this) {
       if (token.type === "WS" || token.type === "NEWLINE") continue;
       if (token.type.startsWith("MD_")) continue;
@@ -176,7 +177,7 @@ export class Lexer {
         offset: token.offset,
         col: token.col,
         length: token.value.length,
-        className: getTokenHighlightClass(token.type),
+        category: getTokenCategory(token.type),
       });
     }
     return result;

@@ -1,19 +1,12 @@
 import { Value } from "@solve-js/vm/Value";
 import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 
-export interface HighlightRange {
-  from: number;
-  to: number;
-  className: string;
-}
-
 export class LineCacheEntry {
   constructor(
     public result: Value,
     public bytecode: BytecodeProgram,
     public readVariables: string[],
-    public writeVariable: string | null,
-    public highlights: HighlightRange[] = []
+    public writeVariable: string | null
   ) {}
 }
 

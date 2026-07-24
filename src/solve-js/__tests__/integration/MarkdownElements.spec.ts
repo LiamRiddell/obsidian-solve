@@ -3,7 +3,7 @@ import { describe, expect, test, beforeEach } from "@jest/globals";
 import { ExpressionLexer } from "@solve-js/lexer/ExpressionLexer";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { SolveHighlightProvider } from "@app/codemirror/SolveHighlightProvider";
+import { SolveLanguageService } from "@solve-js/language/SolveLanguageService";
 
 describe("Markdown Elements and Multi-line Documents", () => {
   describe("Single-line Markdown Elements", () => {
@@ -230,58 +230,58 @@ describe("Markdown Elements and Multi-line Documents", () => {
     });
   });
 
-  describe("SolveHighlightProvider with Markdown", () => {
+  describe("SolveLanguageService with Markdown", () => {
     let engine: ExpressionEngine;
-    let provider: SolveHighlightProvider;
+    let service: SolveLanguageService;
 
     beforeEach(() => {
       engine = new ExpressionEngine("en", false);
-      provider = new SolveHighlightProvider(engine);
+      service = new SolveLanguageService(engine);
     });
 
     test("highlights expression in list item", () => {
-      const ranges = provider.getLineHighlights("- 1 + 2");
-      expect(ranges.length).toBeGreaterThanOrEqual(3);
-      const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
-      const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
-      expect(numberRanges.length).toBeGreaterThanOrEqual(2);
-      expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
+      const tokens = service.getSemanticTokens("- 1 + 2", 1);
+      expect(tokens.length).toBeGreaterThanOrEqual(3);
+      const numberTokens = tokens.filter(r => r.category === "number");
+      const operatorTokens = tokens.filter(r => r.category === "operator");
+      expect(numberTokens.length).toBeGreaterThanOrEqual(2);
+      expect(operatorTokens.length).toBeGreaterThanOrEqual(1);
     });
 
     test("highlights expression inside blockquote (strips > prefix)", () => {
-      const ranges = provider.getLineHighlights("> 1 + 2");
+      const tokens = service.getSemanticTokens("> 1 + 2", 1);
       // The lexer now strips the "> " prefix and highlights the expression content.
-      expect(ranges.length).toBeGreaterThanOrEqual(3);
-      const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
-      const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
-      expect(numberRanges.length).toBeGreaterThanOrEqual(2);
-      expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
+      expect(tokens.length).toBeGreaterThanOrEqual(3);
+      const numberTokens = tokens.filter(r => r.category === "number");
+      const operatorTokens = tokens.filter(r => r.category === "operator");
+      expect(numberTokens.length).toBeGreaterThanOrEqual(2);
+      expect(operatorTokens.length).toBeGreaterThanOrEqual(1);
     });
 
     test("does not highlight heading content", () => {
-      const ranges = provider.getLineHighlights("# Heading");
-      expect(ranges).toHaveLength(0);
+      const tokens = service.getSemanticTokens("# Heading", 1);
+      expect(tokens).toHaveLength(0);
     });
 
     test("highlights inline solve expression", () => {
-      const ranges = provider.getLineHighlights("s`1 + 2`");
-      expect(ranges.length).toBeGreaterThanOrEqual(3);
-      const numberRanges = ranges.filter(r => r.className === "cm-solve-number");
-      const operatorRanges = ranges.filter(r => r.className === "cm-solve-operator");
-      expect(numberRanges.length).toBeGreaterThanOrEqual(2);
-      expect(operatorRanges.length).toBeGreaterThanOrEqual(1);
+      const tokens = service.getSemanticTokens("s`1 + 2`", 1);
+      expect(tokens.length).toBeGreaterThanOrEqual(3);
+      const numberTokens = tokens.filter(r => r.category === "number");
+      const operatorTokens = tokens.filter(r => r.category === "operator");
+      expect(numberTokens.length).toBeGreaterThanOrEqual(2);
+      expect(operatorTokens.length).toBeGreaterThanOrEqual(1);
     });
 
     test("handles multiple expressions in same line", () => {
-      const ranges = provider.getLineHighlights("1 + 2 and 3 * 4");
-      expect(ranges.length).toBeGreaterThanOrEqual(6);
+      const tokens = service.getSemanticTokens("1 + 2 and 3 * 4", 1);
+      expect(tokens.length).toBeGreaterThanOrEqual(6);
     });
 
     test("handles complex expression with functions", () => {
-      const ranges = provider.getLineHighlights("sqrt(16) + sin(0.5)");
-      expect(ranges.length).toBeGreaterThanOrEqual(5);
-      const funcRanges = ranges.filter(r => r.className === "cm-solve-function");
-      expect(funcRanges.length).toBeGreaterThanOrEqual(2);
+      const tokens = service.getSemanticTokens("sqrt(16) + sin(0.5)", 1);
+      expect(tokens.length).toBeGreaterThanOrEqual(5);
+      const funcTokens = tokens.filter(r => r.category === "function");
+      expect(funcTokens.length).toBeGreaterThanOrEqual(2);
     });
   });
 });

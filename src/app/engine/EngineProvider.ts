@@ -7,7 +7,7 @@ import { logger } from "@app/utilities/Logger";
  * is used across all frontend components (CodeMirror plugin, highlights, workers).
  *
  * This fixes the double-instantiation problem where MarkdownEditorViewPlugin
- * and SolveHighlightProvider each created their own engine, causing:
+ * and the syntax-highlighting language service each created their own engine, causing:
  *  - Double memory usage
  *  - Variable/dynamic source isolation between components
  *  - Plugin registrations only affecting one engine
