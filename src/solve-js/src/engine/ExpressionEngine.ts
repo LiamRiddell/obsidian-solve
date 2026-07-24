@@ -15,6 +15,8 @@ import { Value, numberValue, pendingValue, freezeIfDev } from "@solve-js/vm/Valu
 import { PackageManager } from "@solve-js/packages/PackageSystem";
 import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
 import type { ISolvePackage } from "@solve-js/api/SolveAPI";
+import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import type { LexerPlugin } from "@solve-js/lexer/ExpressionLexer";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient } from "@solve-js/services/DataQueryService";
@@ -140,6 +142,8 @@ export class ExpressionEngine {
         opcodes: number[];
         variableSources: import("@solve-js/variables/IVariableSource").IVariableSource[];
         resolverNamespaces: string[];
+        tokenCategories: string[];
+        lexerPlugin: LexerPlugin | undefined;
     }>();
 
     /**
@@ -316,12 +320,19 @@ export class ExpressionEngine {
      */
     registerPackage(pkg: ISolvePackage): void {
         // Track shared-registry contributions so unregisterPackage() can
-        // reverse them. Isolated per-engine registrations (parselets, lexer
-        // plugins, phrases) die with the engine and don't need tracking.
+        // reverse them. Isolated per-engine registrations (parselets,
+        // phrases) die with the engine and don't need tracking. lexerPlugin
+        // IS tracked (unlike before) so its custom keyword/operator token
+        // types can be reverted via ExpressionLexer.unregisterPlugin() —
+        // previously that method existed and worked correctly but was never
+        // called from here, leaving a package's lexer contribution live
+        // after "unregistering" it. tokenCategories is tracked the same way.
         const contribution = {
             opcodes: [] as number[],
             variableSources: [] as import("@solve-js/variables/IVariableSource").IVariableSource[],
             resolverNamespaces: [] as string[],
+            tokenCategories: [] as string[],
+            lexerPlugin: pkg.lexerPlugin,
         };
 
         if (pkg.lexerPlugin) {
@@ -365,6 +376,12 @@ export class ExpressionEngine {
                 this.normalizer.register(rule);
             }
         }
+        if (pkg.tokenCategories) {
+            for (const [tokenType, category] of Object.entries(pkg.tokenCategories)) {
+                registerTokenCategory(tokenType, category);
+                contribution.tokenCategories.push(tokenType);
+            }
+        }
 
         this.packageContributions.set(pkg.name, contribution);
     }
@@ -374,10 +391,16 @@ export class ExpressionEngine {
      *
      * Reverses the package's contributions to the SHARED registries — opcode
      * handlers (sharedOpRegistry), variable sources (sharedVariableResolver),
-     * and async resolvers — which registerPackage wrote into process-wide
-     * state. Per-engine registrations (parselets, lexer plugins, phrases)
-     * are left in place: they live in this engine's isolated registries and
-     * are discarded with the engine instance.
+     * async resolvers, and now token highlight categories (TokenCategoryMap)
+     * — which registerPackage wrote into process-wide state. Also reverts
+     * the package's lexer plugin (custom keyword/operator token types
+     * revert to generic IDENT/ERROR, matching ExpressionLexer.unregisterPlugin()'s
+     * own contract) — this engine-instance-local registration is reversed
+     * here too, even though it isn't a "shared" registry, so a package's
+     * lexer and highlighting contributions clean up together rather than
+     * only half-reversing on unregister. Per-engine parselets/phrases are
+     * still left in place: they live in this engine's isolated registries
+     * and are discarded with the engine instance.
      *
      * Clears the bytecode cache — removing handlers changes what compiled
      * bytecode is valid.
@@ -397,6 +420,12 @@ export class ExpressionEngine {
         }
         for (const namespace of contribution.resolverNamespaces) {
             this.resolverRegistry.unregister(namespace);
+        }
+        for (const tokenType of contribution.tokenCategories) {
+            unregisterTokenCategory(tokenType);
+        }
+        if (contribution.lexerPlugin) {
+            this.lexer.unregisterPlugin(contribution.lexerPlugin);
         }
 
         this.packageContributions.delete(packageName);

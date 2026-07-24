@@ -25,4 +25,14 @@ export const OSRS_PACKAGE: ISolvePackage = {
   asyncResolvers: [
     new OsrsAsyncResolver(),
   ],
+
+  // "osrs-item" is a plugin-defined category (not one of the built-in
+  // SolveTokenCategory values) — proves categories are genuinely
+  // open-ended, and gets a matching `cm-solve-osrs-item` CSS class "for
+  // free" from the CodeMirror adapter's `cm-solve-${category}` convention,
+  // no adapter changes required.
+  tokenCategories: {
+    OSRS_KEYWORD: "keyword",
+    GAME_ITEM: "osrs-item",
+  },
 };

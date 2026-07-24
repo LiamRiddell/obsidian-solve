@@ -9,6 +9,7 @@ import { sharedLexer } from "@solve-js/lexer/Lexer";
 import type { LexerPlugin } from "@solve-js/lexer/ExpressionLexer";
 import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
 import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
+import type { SolveTokenCategory } from "@solve-js/language/SolveTokenCategory";
 
 /**
  * Public API for registering plugins with the solve-js engine.
@@ -112,6 +113,21 @@ export interface ISolvePackage {
    * like implicit operator insertion.
    */
   normalizerRules?: NormalizerRule[];
+  /**
+   * Semantic highlight categories for this package's custom token types
+   * (introduced via {@link lexerPlugin} or {@link normalizerRules}) — the
+   * plugin-facing half of solve-js's editor-agnostic language service (see
+   * `language/TokenCategoryMap.ts`). Without an entry here, a package's
+   * custom tokens (e.g. a game-item name fused from several identifiers)
+   * are still lexed and parsed correctly, but render with no highlight
+   * category in any editor integration.
+   *
+   * @example
+   * ```ts
+   * tokenCategories: { MY_KEYWORD: "keyword", MY_ITEM: "my-plugin-item" }
+   * ```
+   */
+  tokenCategories?: Record<string, SolveTokenCategory>;
 }
 
 /**

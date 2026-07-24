@@ -11,6 +11,8 @@ import { describe, expect, test, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
+import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { OSRS_PACKAGE } from "@solve-js/packages/osrs/OsrsPackage";
 import type { ISolvePackage } from "@solve-js/api/SolveAPI";
 import type { IVariableSource } from "@solve-js/variables/IVariableSource";
 
@@ -102,5 +104,70 @@ describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () =>
 
 		engine.unregisterPackage(pkg.name);
 		expect(engine.getBytecodeCache().size).toBe(0);
+	});
+});
+
+describe("ExpressionEngine.unregisterPackage — token highlight category cleanup", () => {
+	/** Token type in a range no builtin package uses. */
+	const TEST_TOKEN_TYPE = "TEST_UNREGISTRATION_TOKEN";
+
+	function makeHighlightPackage(): ISolvePackage {
+		return {
+			name: "test-highlight-unregistration-pkg",
+			tokenCategories: { [TEST_TOKEN_TYPE]: "keyword" },
+		};
+	}
+
+	afterEach(() => {
+		// Safety net: never leak the test category into other suites.
+		const engine = new ExpressionEngine("en");
+		engine.unregisterPackage("test-highlight-unregistration-pkg");
+	});
+
+	test("registerPackage makes the category resolvable via getTokenCategory", () => {
+		const engine = new ExpressionEngine("en");
+		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
+
+		engine.registerPackage(makeHighlightPackage());
+		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
+	});
+
+	test("unregisterPackage removes the category again", () => {
+		const engine = new ExpressionEngine("en");
+		engine.registerPackage(makeHighlightPackage());
+		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
+
+		expect(engine.unregisterPackage("test-highlight-unregistration-pkg")).toBe(true);
+		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
+	});
+
+	test("re-registering after unregistration works cleanly", () => {
+		const engine = new ExpressionEngine("en");
+		const pkg = makeHighlightPackage();
+
+		engine.registerPackage(pkg);
+		engine.unregisterPackage(pkg.name);
+		engine.registerPackage(pkg);
+
+		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
+		expect(engine.unregisterPackage(pkg.name)).toBe(true);
+		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
+	});
+});
+
+describe("ExpressionEngine.unregisterPackage — lexer plugin cleanup (OSRS)", () => {
+	test("OSRS-contributed keyword/item categories are registered while active, gone after unregister", () => {
+		// OSRS is a builtin-adjacent but opt-in package (not in
+		// BUILTIN_PACKAGES) — register it explicitly rather than assuming
+		// default construction includes it.
+		const engine = new ExpressionEngine("en", false, undefined, undefined, []);
+		engine.registerPackage(OSRS_PACKAGE);
+
+		expect(getTokenCategory("OSRS_KEYWORD")).toBe("keyword");
+		expect(getTokenCategory("GAME_ITEM")).toBe("osrs-item");
+
+		engine.unregisterPackage(OSRS_PACKAGE.name);
+		expect(getTokenCategory("OSRS_KEYWORD")).toBeUndefined();
+		expect(getTokenCategory("GAME_ITEM")).toBeUndefined();
 	});
 });
