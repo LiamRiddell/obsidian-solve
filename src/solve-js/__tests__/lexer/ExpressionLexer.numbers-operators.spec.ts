@@ -271,6 +271,47 @@ describe("ExpressionLexer — numbers", () => {
     const t = tokenPairs(".1,234");
     expect(t).toEqual([["NUMBER", ".1"], ["COMMA", ","], ["NUMBER", "234"]]);
   });
+
+  /**
+   * Bug (found via a full playground-examples audit): a decimal fraction
+   * with 4+ digits after the point — e.g. "0.0001" — had its first 3
+   * fractional digits misread by the thousands-separator heuristic above
+   * as a "." group (like the "234" in "1.234.567"), silently truncating
+   * the number to "0.000" and leaving the remaining digit(s) to lex as a
+   * SEPARATE, unrelated NUMBER token right after. "0.0001 BTC to USD"
+   * tokenized as five tokens — NUMBER "0.000", NUMBER "1", UNIT "BTC",
+   * TO, UNIT "USD" — instead of four, and the parser silently dropped
+   * everything after the first stray token, evaluating to a bare 0
+   * instead of a real 6 USD quantity.
+   *
+   * Fix: a genuine thousands group is always exactly 3 digits, followed
+   * by a non-digit (another separator, or the end of the number) — never
+   * a 4th consecutive digit. That's the one case a real thousands-group
+   * can never produce, so it's a safe, unambiguous signal to prefer the
+   * decimal-fraction reading instead.
+   */
+  test("decimal fraction with exactly 4 digits after the point is NOT split by the thousands-separator heuristic", () => {
+    expect(tokenPairs("0.0001")).toEqual([["NUMBER", "0.0001"]]);
+  });
+
+  test("decimal fraction with many digits after the point tokenizes as one NUMBER", () => {
+    expect(tokenPairs("0.00015")).toEqual([["NUMBER", "0.00015"]]);
+    expect(tokenPairs("3.14159")).toEqual([["NUMBER", "3.14159"]]);
+    expect(tokenPairs("1.23456789")).toEqual([["NUMBER", "1.23456789"]]);
+  });
+
+  test("chained dot thousands-groups still coalesce correctly (no regression)", () => {
+    expect(tokenPairs("1.234.567")).toEqual([["NUMBER", "1.234.567"]]);
+    expect(tokenPairs("12.345.678")).toEqual([["NUMBER", "12.345.678"]]);
+  });
+
+  test("a genuine standalone 3-digit dot group still coalesces (existing, unchanged ambiguous case)", () => {
+    // "1.234" alone (exactly 3 digits, nothing after) is inherently
+    // ambiguous between "1234 grouped" and "1.234 decimal" — this fix
+    // deliberately only targets the unambiguous 4+-digit case above and
+    // leaves this pre-existing heuristic's choice (thousands-group) as is.
+    expect(tokenPairs("1.234")).toEqual([["NUMBER", "1.234"]]);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

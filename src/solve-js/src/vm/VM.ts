@@ -255,7 +255,13 @@ export function executeBytecode(
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) + (r.value as number)));
           } else if (l.type === ValueType.Datetime) {
-            stack.push(datetimeValue(l.toNumber() + extractDurationMs(r)));
+            if (r.type === ValueType.Datetime) {
+              // Adding two absolute timestamps has no standard meaning
+              // (unlike subtracting them, which yields a duration).
+              stack.push(errorValue("INVALID_DATETIME_OP", "Cannot add two datetimes together"));
+            } else {
+              stack.push(datetimeValue(l.toNumber() + extractDurationMs(r)));
+            }
           } else {
             stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
           }
@@ -266,7 +272,18 @@ export function executeBytecode(
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) - (r.value as number)));
           } else if (l.type === ValueType.Datetime) {
-            stack.push(datetimeValue(l.toNumber() - extractDurationMs(r)));
+            if (r.type === ValueType.Datetime) {
+              // "now - now" used to unconditionally re-wrap the result as
+              // ANOTHER Datetime — e.g. subtracting two timestamps close
+              // together produced a near-Unix-epoch date ("01/01/1970,
+              // 01:00:00") instead of the near-zero duration a user would
+              // expect. Two datetimes subtract to a duration, not a point
+              // in time — represented as a Uom in milliseconds, consistent
+              // with how extractDurationMs() reads durations elsewhere.
+              stack.push(uomValue(l.toNumber() - r.toNumber(), "ms"));
+            } else {
+              stack.push(datetimeValue(l.toNumber() - extractDurationMs(r)));
+            }
           } else {
             stack.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
           }
@@ -288,7 +305,15 @@ export function executeBytecode(
             if (sameMeasure) {
               stack.push(numberValue(lv / rv));
             } else {
-              stack.push(uomValue(lv / rv, l.unit!));
+              // Dimension mismatch (e.g. "5kg / 3m"). This codebase has no
+              // compound/derived-unit representation (no "kg/m"), so the
+              // old behavior of silently keeping just the LEFT unit
+              // ("1.67 kg") was actively misleading — it discarded the
+              // denominator's unit entirely rather than expressing the
+              // true derived unit. Error instead, matching the
+              // INCOMPATIBLE_UNITS convention binaryOp() already applies
+              // to ADD/SUB/MUL for the same mismatch.
+              stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${l.unit} and ${r.unit}`));
             }
           } else {
             stack.push(binaryOp(l, r, (a, b) => a / b, (a, b) => a / b));

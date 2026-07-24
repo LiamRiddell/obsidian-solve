@@ -30,6 +30,24 @@ export class CurrencyExchangeService {
    */
   private static readonly RATE_FRESHNESS_MS = 15 * 60 * 1000;
 
+  /**
+   * Ticker → CoinGecko coin id, for the cryptocurrencies `isCurrency()`
+   * recognizes. Frankfurter (the fiat rate source below) is ECB reference
+   * rates only and has no concept of BTC/ETH/etc — routing a crypto code
+   * through it as `base=BTC` fails outright, which is why crypto pairs
+   * previously never resolved (see CurrencyAsyncResolver/VM.ts's ADD
+   * handling for the two bugs that let that failure pass silently instead
+   * of surfacing as a real fetch).
+   */
+  private static readonly CRYPTO_IDS: Record<string, string> = {
+    BTC: "bitcoin", ETH: "ethereum", SOL: "solana", XRP: "ripple",
+    ADA: "cardano", DOGE: "dogecoin", DOT: "polkadot",
+  };
+
+  private isCryptoCode(code: string): boolean {
+    return code.toUpperCase() in CurrencyExchangeService.CRYPTO_IDS;
+  }
+
   constructor() {}
 
   // ------------------------------------------------------------------------
@@ -46,6 +64,13 @@ export class CurrencyExchangeService {
   private static readonly FETCH_TIMEOUT_MS = 10_000;
 
   async getRate(from: string, to: string, signal?: AbortSignal): Promise<number> {
+    const fromUpper = from.toUpperCase();
+    const toUpper = to.toUpperCase();
+
+    if (this.isCryptoCode(fromUpper) || this.isCryptoCode(toUpper)) {
+      return this.getCryptoRate(fromUpper, toUpper, signal);
+    }
+
     // Combine the caller's optional abort signal with a hard timeout so a
     // hanging currency API never blocks re-evaluation indefinitely.
     const { signal: fetchSignal, cleanup } = createTimeoutSignal(
@@ -55,7 +80,7 @@ export class CurrencyExchangeService {
     );
 
     try {
-      const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${from.toUpperCase()}`, { signal: fetchSignal });
+      const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${fromUpper}`, { signal: fetchSignal });
       if (!response.ok) throw new Error(`Currency API returned ${response.status}`);
       const data = await response.json();
       // The v2 endpoint returns a flat array of { date, base, quote, rate }
@@ -73,8 +98,6 @@ export class CurrencyExchangeService {
               .map((entry: { quote: string; rate: number }) => [entry.quote.toUpperCase(), entry.rate])
           )
         : (data.rates ?? {});
-      const fromUpper = from.toUpperCase();
-      const toUpper = to.toUpperCase();
       if (rates[toUpper] === undefined) throw new Error(`Unknown currency: ${toUpper}`);
 
       // The API returns ALL rates for the base currency — cache the whole
@@ -93,6 +116,73 @@ export class CurrencyExchangeService {
   }
 
   /**
+   * Crypto rate fetch, routed through CoinGecko's no-auth simple-price
+   * endpoint instead of Frankfurter (fiat-only, has no BTC/ETH concept).
+   * Handles all three combinations — crypto→crypto, crypto→fiat,
+   * fiat→crypto — via prices denominated in USD (or the target fiat
+   * directly, which CoinGecko's `vs_currencies` also accepts), then
+   * caches the result as a same-shaped base table so getRateSync /
+   * convertSync keep working unchanged for crypto pairs too.
+   */
+  private async getCryptoRate(fromUpper: string, toUpper: string, signal?: AbortSignal): Promise<number> {
+    const { signal: fetchSignal, cleanup } = createTimeoutSignal(
+      signal,
+      CurrencyExchangeService.FETCH_TIMEOUT_MS,
+      "Crypto price API fetch",
+    );
+
+    try {
+      const fromIsCrypto = this.isCryptoCode(fromUpper);
+      const toIsCrypto = this.isCryptoCode(toUpper);
+      let rate: number;
+
+      if (fromIsCrypto && toIsCrypto) {
+        const fromId = CurrencyExchangeService.CRYPTO_IDS[fromUpper];
+        const toId = CurrencyExchangeService.CRYPTO_IDS[toUpper];
+        const data = await this.fetchCoinGeckoPrices([fromId, toId], "usd", fetchSignal);
+        const fromUsd = data[fromId]?.usd;
+        const toUsd = data[toId]?.usd;
+        if (typeof fromUsd !== "number") throw new Error(`Unknown currency: ${fromUpper}`);
+        if (typeof toUsd !== "number") throw new Error(`Unknown currency: ${toUpper}`);
+        rate = fromUsd / toUsd;
+      } else if (fromIsCrypto) {
+        const fromId = CurrencyExchangeService.CRYPTO_IDS[fromUpper];
+        const vs = toUpper.toLowerCase();
+        const data = await this.fetchCoinGeckoPrices([fromId], vs, fetchSignal);
+        const value = data[fromId]?.[vs];
+        if (typeof value !== "number") throw new Error(`Unknown currency: ${toUpper}`);
+        rate = value;
+      } else {
+        const toId = CurrencyExchangeService.CRYPTO_IDS[toUpper];
+        const vs = fromUpper.toLowerCase();
+        const data = await this.fetchCoinGeckoPrices([toId], vs, fetchSignal);
+        const priceOfToInFrom = data[toId]?.[vs];
+        if (typeof priceOfToInFrom !== "number") throw new Error(`Unknown currency: ${fromUpper}`);
+        rate = 1 / priceOfToInFrom;
+      }
+
+      // Cache as a single-pair base table, same shape Frankfurter fetches
+      // produce, so getRateSync/convertSync's triangulation logic doesn't
+      // need to know or care which source a rate came from.
+      this.baseTables.set(fromUpper, {
+        fetchedAt: Date.now(),
+        rates: { [fromUpper]: 1, [toUpper]: rate },
+      });
+
+      return rate;
+    } finally {
+      cleanup();
+    }
+  }
+
+  private async fetchCoinGeckoPrices(ids: string[], vsCurrency: string, signal: AbortSignal): Promise<Record<string, Record<string, number>>> {
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=${vsCurrency}`;
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new Error(`Crypto price API returned ${response.status}`);
+    return response.json();
+  }
+
+  /**
    * Seed a base rate table without a network fetch.
    *
    * Intended for tests and for future user-provided offline rates —
@@ -108,6 +198,19 @@ export class CurrencyExchangeService {
       fetchedAt: Date.now(),
       rates: { ...rates, [baseUpper]: 1 },
     });
+  }
+
+  /**
+   * Drop every cached/primed rate table.
+   *
+   * Mainly for test isolation: {@link sharedCurrencyExchange} is a
+   * module-level singleton, so a rate primed or fetched by one test can
+   * silently leak into a later test in the same file (no other reset
+   * existed — `destroy()` only clears subscriptions). Also usable in
+   * production if a caller ever wants to force a full re-fetch.
+   */
+  clearRates(): void {
+    this.baseTables.clear();
   }
 
   /**

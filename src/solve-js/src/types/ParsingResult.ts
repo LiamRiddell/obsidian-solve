@@ -10,8 +10,6 @@ export interface InlineSolvePosition {
     lineNumber: number;
     columnNumber: number;
     result?: Value | null;
-    /** All results for multi-target expressions (e.g., currency conversion with multiple targets). */
-    results?: Value[] | null;
     error?: string | null;
 }
 

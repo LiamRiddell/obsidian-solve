@@ -87,14 +87,32 @@ function isVarName(t: Token): boolean {
 }
 
 /**
+ * True if a UNIT token at this position is being consumed as a
+ * unit-of-measure literal rather than a variable reference — i.e. it's
+ * immediately preceded by a value (NUMBER, a closing paren) or a
+ * conversion keyword (TO, IN). This mirrors exactly where
+ * UomLiteralParselet/ConvertParselet/PercentageChangeParselet accept a
+ * UNIT token themselves: `500 EUR`, `(x + y) km`, `to JPY`, `in m`.
+ * In all of these the compiler emits PUSH_STRING for the unit name, not
+ * LOAD_VAR, so treating them as a DAG read is a false positive — the
+ * classic case being any bare currency/unit conversion like
+ * "500 EUR to JPY", which falsely reported "EUR" and "JPY" as variable
+ * dependencies even though the compiled bytecode never loads a variable.
+ */
+function isUnitLiteralContext(prev: Token): boolean {
+    return prev.type === "NUMBER" || prev.type === "TO" || prev.type === "IN" || prev.type === "RPAREN";
+}
+
+/**
  * Extract variable reads and writes from a token stream.
  *
  * Handles both IDENT and UNIT tokens as potential variable references.
  * UNIT tokens occur when the variable name collides with a known unit
  * (e.g., "b" for bits, "s" for seconds). The colon prefix unambiguously
- * signals a variable definition context (handled by VariableParselet),
- * and standalone UNIT tokens in expression position are resolved via
- * the prefix UNIT parselet (which emits LOAD_VAR).
+ * signals a variable definition context (handled by VariableParselet).
+ * A standalone UNIT token is only a real variable reference when it
+ * isn't in unit-literal position (see {@link isUnitLiteralContext}) —
+ * otherwise it's a quantity/conversion unit name, never LOAD_VAR'd.
  */
 export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; writes: string[] } {
     const reads: string[] = [];
@@ -118,6 +136,9 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
         if (isVarName(t)) {
             // Skip if already consumed by preceding COLON handler above.
             if (i > 0 && tokens[i - 1].type === "COLON") continue;
+            // Skip UNIT tokens acting as a quantity/conversion unit name
+            // rather than a variable (see isUnitLiteralContext above).
+            if (t.type === "UNIT" && i > 0 && isUnitLiteralContext(tokens[i - 1])) continue;
             reads.push(t.value);
             // Check if next token is EQUALS -> this is a write
             if (i + 1 < tokens.length && tokens[i + 1].type === "EQUALS") {
@@ -150,47 +171,6 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
 export function isEmptyLine(lineText: string): boolean {
     const classification = sharedLexer.classifyLine(lineText);
     return classification.skip;
-}
-
-// ── Multi-target expression splitting ────────────────────────────────────
-
-/**
- * Split a multi-target expression on commas after the "in" keyword.
- *
- * Used for expressions like "10 USD in EUR, GBP, JPY" which should produce
- * three sub-expressions: "10 USD in EUR", "10 USD in GBP", "10 USD in JPY".
- *
- * Guards:
- * - "in" must be a standalone word (word-boundary check prevents splitting
- *   within words like "inside", "inner", "pinned").
- * - Colon-prefixed expressions (variable definitions) are never split.
- * - Single-target expressions (no commas after "in") return null.
- *
- * @returns Array of sub-expression strings, or null if not multi-target.
- */
-export function splitMultiTargetExpression(expression: string): string[] | null {
-    // Guard: colon-prefixed variable definitions are never multi-target.
-    if (expression.trim().startsWith(':')) return null;
-
-    // Match "in" as a standalone keyword (word boundaries).
-    // Captures: prefix before "in", targets after "in".
-    const inMatch = expression.match(/^(.*?)\bin\b\s+(.+)$/i);
-    if (!inMatch) return null;
-
-    const prefix = inMatch[1].trimEnd();
-    const targetsPart = inMatch[2];
-
-    // Split targets on commas, trim whitespace, filter empties.
-    const targets = targetsPart
-        .split(',')
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
-
-    // Single target (no commas) — not multi-target.
-    if (targets.length <= 1) return null;
-
-    // Build sub-expressions: "<prefix> in <target>" for each target.
-    return targets.map(target => `${prefix} in ${target}`);
 }
 
 /**

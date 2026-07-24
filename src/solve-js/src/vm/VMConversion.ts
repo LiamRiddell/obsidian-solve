@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, bigIntValue, uomValue, arrayValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, bigIntValue, uomValue, arrayValue, errorValue } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 
@@ -69,17 +69,36 @@ export function binaryOp(
     }
 
     if (l.type === ValueType.Uom || r.type === ValueType.Uom) {
-        const { lv, rv, unit } = unifyUom(l, r);
+        const { lv, rv, unit, sameMeasure } = unifyUom(l, r);
         if (isNaN(lv) || isNaN(rv)) return numberValue(0);
+        if (!sameMeasure) {
+            // unifyUom couldn't reconcile the two units — either they're
+            // genuinely incompatible measures (meters + kilograms), or
+            // they're both currencies but no rate was available yet.
+            // Silently combining the raw magnitudes here used to produce a
+            // confidently-wrong, unitless number (e.g. "0.01 BTC + 1 ETH"
+            // → a bare "1.01", the naive 0.01+1 sum with the currency
+            // context just dropped) instead of surfacing the failure —
+            // mirrors the existing UOM_CONVERT_TO/_IN error path in VM.ts.
+            const lUnit = l.type === ValueType.Uom ? l.unit : undefined;
+            const rUnit = r.type === ValueType.Uom ? r.unit : undefined;
+            return errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
+        }
         return uomValue(op(lv, rv), unit!);
     }
 
     if (l.type === ValueType.Array && r.type === ValueType.Array) {
         const lv = l.value as number[];
         const rv = r.value as number[];
-        const len = Math.min(lv.length, rv.length);
+        if (lv.length !== rv.length) {
+            // Silently truncating to the shorter vector via Math.min() used
+            // to drop components with no indication — "vec2(1,2) +
+            // vec3(1,2,3)" produced "[2,4]", quietly discarding the third
+            // component instead of surfacing the dimension mismatch.
+            return errorValue("DIMENSION_MISMATCH", `Cannot combine vectors of different dimensions: ${lv.length} and ${rv.length}`);
+        }
         const result: number[] = [];
-        for (let i = 0; i < len; i++) result.push(op(lv[i], rv[i]));
+        for (let i = 0; i < lv.length; i++) result.push(op(lv[i], rv[i]));
         return arrayValue(result);
     }
 

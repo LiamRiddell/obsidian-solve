@@ -119,3 +119,82 @@ describe("CurrencyExchange with TanStack Query", () => {
 		await expect(fx.getRate("USD", "EUR", controller.signal)).rejects.toThrow();
 	});
 });
+
+/**
+ * Bug: BTC/ETH/etc. were accepted by isCurrency() and tokenized as UNIT
+ * (see units.ts) but had no actual price source — getRate() routed every
+ * request through Frankfurter, a fiat-only ECB rate API with no concept
+ * of "base=BTC". Every crypto conversion failed at the network layer no
+ * matter what, which (combined with two separate VM/preflight bugs fixed
+ * alongside this) surfaced as "0.01 BTC + 1 ETH" silently evaluating to
+ * a bare unitless "1.01" instead of doing anything crypto-aware.
+ *
+ * Fix: crypto codes now route through CoinGecko's no-auth simple-price
+ * endpoint instead, covering all three directions (crypto→crypto,
+ * crypto→fiat, fiat→crypto) via a common "price in one currency" call.
+ */
+describe("CurrencyExchange crypto support", () => {
+	let fx: CurrencyExchangeService;
+	let originalFetch: typeof global.fetch;
+
+	beforeEach(() => {
+		fx = new CurrencyExchangeService();
+		originalFetch = global.fetch;
+	});
+
+	afterEach(() => {
+		fx.destroy();
+		global.fetch = originalFetch;
+	});
+
+	test("isCurrency recognizes crypto codes", () => {
+		expect(fx.isCurrency("btc")).toBe(true);
+		expect(fx.isCurrency("ETH")).toBe(true);
+		expect(fx.isCurrency("DOGE")).toBe(true);
+	});
+
+	test("getRate for crypto->crypto calls CoinGecko, not Frankfurter, and computes a USD cross rate", async () => {
+		const fetchMock = jest.fn((url: string) =>
+			mockFetch({ bitcoin: { usd: 60000 }, ethereum: { usd: 3000 } }),
+		);
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		const rate = await fx.getRate("BTC", "ETH");
+
+		expect(rate).toBeCloseTo(60000 / 3000, 10);
+		const calledUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
+		expect(calledUrl).toContain("coingecko.com");
+		expect(calledUrl).not.toContain("frankfurter");
+		expect(calledUrl).toContain("ids=bitcoin,ethereum");
+	});
+
+	test("getRate for crypto->fiat fetches the coin's price directly in that fiat currency", async () => {
+		global.fetch = jest.fn(() => mockFetch({ bitcoin: { eur: 55000 } })) as unknown as typeof fetch;
+
+		const rate = await fx.getRate("BTC", "EUR");
+
+		expect(rate).toBe(55000);
+	});
+
+	test("getRate for fiat->crypto inverts the coin's price in that fiat currency", async () => {
+		global.fetch = jest.fn(() => mockFetch({ ethereum: { usd: 2500 } })) as unknown as typeof fetch;
+
+		const rate = await fx.getRate("USD", "ETH");
+
+		expect(rate).toBeCloseTo(1 / 2500, 10);
+	});
+
+	test("a fetched crypto rate is served synchronously afterward, same as fiat", async () => {
+		global.fetch = jest.fn(() => mockFetch({ bitcoin: { usd: 60000 }, ethereum: { usd: 3000 } })) as unknown as typeof fetch;
+
+		expect(fx.getRateSync("BTC", "ETH")).toBeNull();
+		await fx.getRate("BTC", "ETH");
+		expect(fx.getRateSync("BTC", "ETH")).toBeCloseTo(20, 5);
+		expect(fx.convertSync(2, "BTC", "ETH")).toBeCloseTo(40, 5);
+	});
+
+	test("unknown coin id surfaces a clear error rather than a silent bad rate", async () => {
+		global.fetch = jest.fn(() => mockFetch({})) as unknown as typeof fetch; // API returned nothing for either coin
+		await expect(fx.getRate("BTC", "ETH")).rejects.toThrow(/Unknown currency/);
+	});
+});

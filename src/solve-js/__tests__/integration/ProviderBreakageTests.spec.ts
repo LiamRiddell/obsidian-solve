@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
+import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 
 describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
   let engine: ExpressionEngine;
@@ -162,15 +163,22 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
     });
 
     test("£100 + $50 should return approximate value", () => {
+      // Needs a cached GBP rate to actually convert — without one this
+      // used to silently sum the raw magnitudes (100 + 50 = 150) and
+      // still pass the loose 100–200 range below purely by coincidence,
+      // masking the fact no real conversion had happened. Priming here
+      // makes the test verify genuine converted math instead.
+      sharedCurrencyExchange.primeRates("GBP", { USD: 1.25 });
       const result = engine.parseDocument("s`£100 + $50`", { inputType: 'markdown' });
-      
+
       expect(result.errors).toHaveLength(0);
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
-      
+
       const value = result.lines[0].inlineSolves[0].result!;
       expect(value.type).toBe(ValueType.Uom);
-      expect(value.toNumber()).toBeGreaterThan(100);
-      expect(value.toNumber()).toBeLessThan(200);
+      // £100 + $50 -> $50 converted to GBP at 1.25 USD/GBP = £40, total £140.
+      expect(value.toNumber()).toBeCloseTo(140, 5);
+      expect(value.unit).toBe("GBP");
     });
 
     test("$5 * 3 should return 15", () => {

@@ -43,7 +43,18 @@ export class CurrencyAsyncResolver implements IAsyncResolver {
 				lastStrIdx = opcodes[i + 1];
 			}
 
-			if (op === OpCode.UOM_CONVERT_IN || op === OpCode.UOM_CONVERT_TO) {
+			// Explicit "X to Y"/"X in Y" conversions (UOM_CONVERT_IN/_TO) are
+			// the obvious case, but arithmetic directly on two differently-
+			// denominated currency literals — "0.01 BTC + 1 ETH" — needs the
+			// exact same preflight fetch and previously never got it: this
+			// scanner only looked for the CONVERT opcodes, so ADD/SUB/MUL/DIV
+			// between two currency UOMs skipped preflight entirely, ran with
+			// no cached rate, and fell through to the VM's silent-wrong-math
+			// fallback instead of ever reaching a network fetch.
+			const isCurrencyCombiningOp =
+				op === OpCode.UOM_CONVERT_IN || op === OpCode.UOM_CONVERT_TO ||
+				op === OpCode.ADD || op === OpCode.SUB || op === OpCode.MUL || op === OpCode.DIV;
+			if (isCurrencyCombiningOp) {
 				if (prevStrIdx >= 0 && lastStrIdx >= 0) {
 					const fromUnit = strings[prevStrIdx];
 					const toUnit = strings[lastStrIdx];

@@ -13,6 +13,7 @@ import { sharedLexer } from "@solve-js/lexer/Lexer";
 import { CompilationWorkerManager, type CompileRequestItem } from "@solve-js/engine/CompilationWorkerManager";
 import { PageManager } from "@solve-js/engine/PageManager";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
+import { SolveError } from "@solve-js/errors/UnifiedErrorFramework";
 
 // ── EvalTier (diagnostic enum) ──────────────────────────────────────────
 
@@ -609,12 +610,6 @@ export class ThreeTierEvaluator {
 				const evaluation = this.engine.evaluateLineDetailed(lineNumber, expression);
 				value = evaluation.values;
 				lastValue = value[0];
-				// Partial multi-target failures don't throw — surface the first
-				// message in the line's error field without marking the line
-				// failed (the successful values are stored and rendered).
-				if (evaluation.errors.length > 0 && !firstError) {
-					firstError = evaluation.errors[0];
-				}
 				// Sync the DocumentModel from the LineCache.
 				// Use get(lineNumber, expression) instead of getEntryForLine(lineNumber)
 				// because multiple expressions on the same line share the same lineNumber
@@ -651,9 +646,21 @@ export class ThreeTierEvaluator {
 					for (const r of reads) allReads.add(r);
 					for (const w of writes) allWrites.add(w);
 					if (writes.length > 0) hasVariableDef = true;
-				} catch (_compileErr) {
-					// Push empty bytecode — expression will recompile on next pass
+				} catch (compileErr) {
+					// Push empty bytecode — expression will recompile on next pass.
+					// The expression still failed to compile, but reads/writes were
+					// already extracted from its tokens before the parse attempt —
+					// compileExpression() surfaces them via the thrown error's
+					// context. Register them anyway so the DAG knows this line
+					// depends on those variables and re-evaluates it once they
+					// become defined, instead of losing the dependency entirely.
 					allBytecodes.push({ opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false });
+					if (compileErr instanceof SolveError && compileErr.context) {
+						const errReads = compileErr.context.reads;
+						const errWrites = compileErr.context.writes;
+						if (Array.isArray(errReads)) for (const r of errReads) allReads.add(r);
+						if (Array.isArray(errWrites)) for (const w of errWrites) allWrites.add(w);
+					}
 				}
 			}
 		}

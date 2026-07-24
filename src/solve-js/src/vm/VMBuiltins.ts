@@ -1,4 +1,4 @@
-import { Value, numberValue } from "@solve-js/vm/Value";
+import { Value, numberValue, errorValue } from "@solve-js/vm/Value";
 
 /**
  * Registry of 37 built-in mathematical functions.
@@ -43,8 +43,19 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     34: (args) => numberValue(Math.trunc(args[0].toNumber())),
     35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),
     36: (args) => numberValue(args[0].toNumber() * 180 / Math.PI),
-    // 37: diceRoll(from, to) — random integer in range [from, to] inclusive
-    37: (args) => numberValue(Math.floor(Math.random() * (args[1].toNumber() - args[0].toNumber() + 1)) + args[0].toNumber()),
+    // 37: diceRoll(from, to) — random integer in range [from, to] inclusive.
+    // A reversed range (from > to) used to silently produce values outside
+    // [to, from] via a negative-length Math.random() spread (e.g.
+    // "roll(6, 1)" returning values like 2-5, never 1 or 6) instead of
+    // erroring on the invalid input.
+    37: (args) => {
+        const from = args[0].toNumber();
+        const to = args[1].toNumber();
+        if (from > to) {
+            return errorValue("INVALID_RANGE", `roll: invalid range, ${from} is greater than ${to}`);
+        }
+        return numberValue(Math.floor(Math.random() * (to - from + 1)) + from);
+    },
 };
 
 /**

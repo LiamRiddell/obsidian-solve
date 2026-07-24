@@ -8,6 +8,17 @@ import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPo
 import { getLocale } from "@solve-js/constants/locales";
 
 /**
+ * Matches a CHAINED thousands-grouped integer using "." as the group
+ * separator (e.g. "1.234.567"), independent of locale. Kept in sync with
+ * the identical constant in NumberParselet.ts (not imported from there —
+ * that file transitively re-imports PrecedenceParser via Parser.ts's
+ * `export { PrecedenceParser as Parser }`, so importing the other
+ * direction would create a circular dependency for the sake of one
+ * regex literal). See NumberParselet.ts's copy for the full explanation.
+ */
+const CHAINED_DOT_THOUSANDS_GROUPS = /^\d{1,3}(\.\d{3}){2,}$/;
+
+/**
  * ── Hybrid Precedence Climbing Parser ─────────────────────────────────────────
  *
  * Two-tier dispatch strategy:
@@ -311,8 +322,33 @@ export class PrecedenceParser {
         const raw = token.value;
         if (raw.startsWith("0x") || raw.startsWith("0X")) {
           v = parseInt(raw, 16);
+          // A prefix with no digits after it ("0x" alone) makes parseInt
+          // return NaN — this used to push straight through as a silent
+          // NaN Number value instead of a visible error.
+          if (Number.isNaN(v)) {
+            throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid hex literal: "${raw}"`, { raw });
+          }
         } else if (raw.startsWith("0b") || raw.startsWith("0B")) {
           v = parseInt(raw.slice(2), 2);
+          if (Number.isNaN(v)) {
+            throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid binary literal: "${raw}"`, { raw });
+          }
+        } else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
+          // The lexer accepts "." as a thousands-group separator
+          // independent of locale (ExpressionLexer's number-scanning
+          // "Thousands separators" block), but the locale-based
+          // normalization below only strips the ACTIVE locale's own
+          // configured thousandsSeparator character — for "en" that's
+          // ",", not ".", so a chained dot-grouped literal like
+          // "1.234.567" fell through to parseFloat() untouched, which
+          // stops at the second "." and silently truncated it to 1.234
+          // (over 99% of the digits dropped, with no error). This is the
+          // REAL number-parsing path for actual evaluation — Tier 1 of
+          // the two-tier dispatch above always returns for NUMBER_ID, so
+          // NumberParselet.parse() (which has the identical fix) never
+          // actually runs except via direct unit tests / the "matched
+          // parselets" diagnostic display.
+          v = parseFloat(raw.split(".").join(""));
         } else {
           const locale = getLocale(this.localeCode);
           const decimalSep = locale.display.decimalSeparator;

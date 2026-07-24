@@ -34,14 +34,16 @@ function primeAllRates(): void {
 }
 
 /**
- * Examples that are intentionally NOT self-contained: they demonstrate a
- * concept assuming state from a DIFFERENT example (e.g. "Variable in
- * expression" reads :myVar, defined by the separate "Simple variable"
- * example). Clicking either individually replaces the whole editor, so
- * this one throws in isolation by design — it's meant to be read as a
- * two-step tutorial pair, not run standalone.
+ * Examples that are intentionally NOT self-contained. Empty for now: the
+ * one entry that used to live here ("Variable in expression", which read
+ * :myVar without defining it — clicking it standalone threw "Undefined
+ * variable: myVar" since insertExample() replaces the whole editor) was
+ * fixed by making the example content itself self-contained
+ * (":myVar = 10\n:myVar + 5") instead of documenting the gap here.
+ * Left as an escape hatch for any future example that's genuinely meant
+ * to be read as part of a multi-example tutorial sequence.
  */
-const KNOWN_STATEFUL_SNIPPETS = new Set(["Variable in expression"]);
+const KNOWN_STATEFUL_SNIPPETS = new Set<string>([]);
 
 describe("Playground example content is valid against the real engine", () => {
   test("every single-line example evaluates without throwing", () => {
@@ -51,14 +53,25 @@ describe("Playground example content is valid against the real engine", () => {
       for (const ex of category.examples) {
         if (KNOWN_STATEFUL_SNIPPETS.has(ex.name)) continue;
         const engine = new ExpressionEngine("en", false);
-        try {
-          const [result] = engine.evaluateLine(1, ex.expression);
-          if (result.type === ValueType.Error) {
-            failures.push(`[${category.name} / ${ex.name}] "${ex.expression}" -> Error value`);
+        // Example content may itself be multi-line (e.g. a variable defined
+        // on one line and used on the next, to stay self-contained when
+        // insertExample() replaces the whole editor) — evaluate line by
+        // line like the full-document examples below, instead of passing
+        // the whole string (with embedded newlines) to a single
+        // evaluateLine() call.
+        const exampleLines = ex.expression.split("\n");
+        for (const rawLine of exampleLines) {
+          const trimmed = rawLine.trim();
+          if (!trimmed) continue;
+          try {
+            const [result] = engine.evaluateLine(1, trimmed);
+            if (result.type === ValueType.Error) {
+              failures.push(`[${category.name} / ${ex.name}] "${trimmed}" -> Error value`);
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            failures.push(`[${category.name} / ${ex.name}] "${trimmed}" THREW: ${msg}`);
           }
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          failures.push(`[${category.name} / ${ex.name}] "${ex.expression}" THREW: ${msg}`);
         }
       }
     }

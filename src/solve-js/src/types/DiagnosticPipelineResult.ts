@@ -405,13 +405,6 @@ export interface ResultOutput {
   unit?: string;
   /** Error message if evaluation failed (null on success) */
   error?: string;
-  /**
-   * All sub-expression results for multi-target expressions.
-   * Populated by the playground when splitMultiTargetExpression produces
-   * multiple sub-expressions (e.g., "10 USD in EUR, GBP, JPY" → 3 values).
-   * The PipelineTab renders these as a multi-value chip display.
-   */
-  allValues?: Array<{ value: string; formatted: string; unit?: string }>;
 }
 
 //#endregion

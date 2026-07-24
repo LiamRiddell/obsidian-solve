@@ -103,6 +103,12 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       return formatPercentage(value.value as number, locale, us);
     case ValueType.Unit:
       return formatUnit(value.value as number, value.unit);
+    case ValueType.Error:
+      // errorValue(code, message) stores the human-readable message in
+      // `.unit` (code goes in `.value`) — falling through to the default
+      // case here previously displayed the raw code (e.g.
+      // "CURRENCY_RATE_UNAVAILABLE") instead of the actual message.
+      return value.unit ?? String(value.value);
     default:
       return `= ${String(value.value)}`;
   }

@@ -992,10 +992,24 @@ export class ExpressionLexer {
         const d1 = input.charCodeAt(pos + 1);
         const d2 = input.charCodeAt(pos + 2);
         const d3 = input.charCodeAt(pos + 3);
+        // A genuine thousands group is always exactly 3 digits, followed
+        // by either another separator, or a non-digit (end of number,
+        // operator, unit, EOF) — never a 4th consecutive digit. Without
+        // this check, a plain decimal fraction with 4+ digits after the
+        // point — e.g. "0.0001" — had its first 3 fractional digits
+        // misread as a "." thousands-group, silently truncating the
+        // number to "0.000" and leaving the remaining digit(s) as a
+        // separate, unrelated NUMBER token right after it (so
+        // "0.0001 BTC to USD" tokenized as "0.000", "1", "BTC", "to",
+        // "USD" — two number literals instead of one — and evaluated to
+        // a bare 0 instead of a real BTC quantity).
+        const d4 = pos + 4 < len ? input.charCodeAt(pos + 4) : -1;
+        const isGroupOfExactlyThree = !(d4 >= 48 && d4 <= 57);
         if (
           d1 >= 48 && d1 <= 57 &&
           d2 >= 48 && d2 <= 57 &&
-          d3 >= 48 && d3 <= 57
+          d3 >= 48 && d3 <= 57 &&
+          isGroupOfExactlyThree
         ) {
           pos += 4;
           hasIntPart = true;

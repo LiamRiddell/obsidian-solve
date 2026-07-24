@@ -47,7 +47,6 @@ import {
     checkExpressionLength,
     checkExpressionComplexity,
     extractReadsAndWrites,
-    splitMultiTargetExpression,
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
 import { abortLogger } from "@app/utilities/AbortControllerLogger";
@@ -70,49 +69,18 @@ import {
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
 export type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
 
-// ── EvalResults: typed wrapper for partial-failure detection ──────────────
-
 /**
  * Return type of {@link evaluateLine} and {@link evaluateExpression}.
  *
- * Extends `Value[]` with an optional, non-enumerable `errors` property.
- * When a multi-target expression (e.g., "10 USD in EUR, GBP, JPY") has
- * some sub-expressions fail, the successful results are returned in the
- * array and the failure messages are attached as `errors`.
- *
- * Callers can detect partial failures without `any` casts:
- * ```typescript
- * const results = engine.evaluateLine(1, expr);
- * if (results.errors) {
- *   console.warn("Partial failure:", results.errors);
- * }
- * ```
- *
- * The `errors` property is **non-enumerable**: it does not appear in
- * `for...in`, `Object.keys()`, `JSON.stringify()`, or spread copies.
+ * A single-element `Value[]` — kept as an array (rather than a bare
+ * `Value`) for API stability.
  */
-export interface EvalResults extends Array<Value> {
-    /**
-     * Error messages from failed sub-expressions (multi-target only).
-     * `undefined` when all sub-expressions succeeded.
-     * Non-enumerable — invisible to JSON and iteration.
-     *
-     * @deprecated Prefer {@link ExpressionEngine.evaluateLineDetailed},
-     * whose explicit `{ values, errors }` shape survives spread/map/JSON.
-     */
-    errors?: string[];
-}
+export interface EvalResults extends Array<Value> {}
 
-/**
- * Explicit result of {@link ExpressionEngine.evaluateLineDetailed}.
- * `errors` is always present (empty when everything succeeded), so callers
- * never need existence checks or non-enumerable-property tricks.
- */
+/** Explicit result of {@link ExpressionEngine.evaluateLineDetailed}. */
 export interface LineEvaluation {
-    /** Successfully evaluated values, one per succeeded (sub-)expression. */
+    /** The evaluated value, wrapped in a single-element array. */
     values: Value[];
-    /** Failure messages from failed sub-expressions; empty on full success. */
-    errors: string[];
 }
 
 //#endregion
@@ -787,7 +755,6 @@ export class ExpressionEngine {
                         try {
                             const values = this.evaluateLine(lineNumber, solve.expression);
                             solve.result = values[0];
-                            solve.results = values;
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             solve.error = errorMessage;
@@ -868,6 +835,24 @@ export class ExpressionEngine {
         // parens instead of silently inserting missing closing/opening tokens.
         this.parser.load(tokens, this.config.validation.autoBalanceParens ? hasParens : false);
         this.parser.parseExpression(0);
+
+        // parseExpression() stops as soon as it has one complete top-level
+        // expression — it never checked whether that consumed the WHOLE
+        // token list. Any leftover tokens (a stray trailing number, an
+        // unconsumed comma-and-digits from a malformed "thousands"-looking
+        // literal, a typo'd second operand with a missing operator, ...)
+        // were silently discarded rather than surfaced: "5 3" evaluated to
+        // a confident "5", "1,2345" to a confident "1", with no indication
+        // anything was wrong. Requiring full consumption turns every one
+        // of those into a real, visible parse error instead.
+        const leftover = this.parser.peek();
+        if (leftover) {
+            throw ErrorFactory.parsing(
+                "UNEXPECTED_TRAILING_TOKEN",
+                `Unexpected token after expression: "${leftover.value}"`,
+                { tokenType: leftover.type, tokenValue: leftover.value }
+            );
+        }
     }
 
     /**
@@ -888,7 +873,7 @@ export class ExpressionEngine {
         hasParens: boolean | undefined,
     ):
         | { kind: 'empty' }
-        | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; message: string }
+        | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; message: string; reads?: string[]; writes?: string[] }
         | { kind: 'ready'; normalizedTokens: Token[]; reads: string[]; writes: string[]; program: BytecodeProgram; cached: boolean } {
         // ══ SAFETY CHECK 1: Expression length limit ══
         const lengthCheck = checkExpressionLength(expression, this.config.validation);
@@ -926,7 +911,12 @@ export class ExpressionEngine {
         try {
             this.parseExpression(builder, normalizedTokens, hasParens);
         } catch (e) {
-            return { kind: 'error', stage: 'parse', message: e instanceof Error ? e.message : String(e) };
+            // reads/writes were already extracted above from the full token
+            // list (independent of whether parsing succeeds) — surface them
+            // even on failure so callers that track dependencies (DAG
+            // registration) still learn what this line references, and can
+            // re-evaluate it once those variables become defined.
+            return { kind: 'error', stage: 'parse', message: e instanceof Error ? e.message : String(e), reads, writes };
         }
 
         // build() allocates TypedArrays directly from builder arrays —
@@ -1031,101 +1021,34 @@ export class ExpressionEngine {
 	/**
 	 * Evaluate a single expression line with full DAG and LineCache integration.
 	 *
-	 * Supports multi-target expressions like "10 USD in EUR, GBP, JPY" which
-	 * are split on commas after the "in" keyword into multiple sub-expressions.
-	 * Each sub-expression is evaluated independently and all results are returned.
-	 *
-	 * **Partial failure resilience:** When one sub-expression fails, the error
-	 * is recorded but evaluation continues for remaining sub-expressions. Successful
-	 * results are still returned alongside the aggregated error. Only throws when
-	 * ALL sub-expressions fail or the single-expression path fails.
-	 *
 	 * @param lineNumber - 1-based line position in the document.
-	 * @param lineText - The raw line text (may contain multi-target syntax).
-	 * @returns Array of evaluated Values (length 1 for single expressions).
-	 * @throws {SolveError} On total failure (all sub-expressions failed, or
-	 *         single-expression evaluation error).
+	 * @param lineText - The raw line text.
+	 * @returns The evaluated Value, wrapped in a single-element array.
+	 * @throws {SolveError} On evaluation failure.
 	 */
 	evaluateLine(
         lineNumber: number,
         lineText: string
     ): EvalResults {
         const detailed = this.evaluateLineDetailed(lineNumber, lineText);
-        const results = detailed.values.slice() as EvalResults;
-        if (detailed.errors.length > 0) {
-            Object.defineProperty(results, 'errors', {
-                value: detailed.errors,
-                writable: false,
-                enumerable: false,
-                configurable: false,
-            });
-        }
-        return results;
+        return detailed.values.slice() as EvalResults;
     }
 
     /**
-     * Evaluate a line and return an explicit `{ values, errors }` object.
+     * Evaluate a line and return an explicit `{ values }` object.
      *
-     * This is the preferred API over {@link evaluateLine}: the legacy shape
-     * smuggles partial-failure messages through a non-enumerable `errors`
-     * property on the returned array, which is silently dropped by spread,
-     * `.map()`, `structuredClone`, and JSON — several consumers lost it.
-     *
-     * Semantics are identical to evaluateLine:
-     * - Single expression: throws on failure, otherwise one value, no errors.
-     * - Multi-target ("10 USD in EUR, GBP"): throws only when ALL
-     *   sub-expressions fail; otherwise returns the successful values plus
-     *   the failure messages in `errors`.
-     *
-     * @throws {SolveError} On total failure.
+     * @throws {SolveError} On evaluation failure.
      */
     evaluateLineDetailed(lineNumber: number, lineText: string): LineEvaluation {
-        const subExpressions = splitMultiTargetExpression(lineText);
-        if (!subExpressions) {
-            const result = this.evaluateLineWithDebug(lineNumber, lineText);
-            if (result.error) {
-                throw ErrorFactory.execution(
-                    'EVALUATION_ERROR',
-                    result.error,
-                    { lineNumber }
-                );
-            }
-            return { values: [freezeIfDev(result.value)], errors: [] };
-        }
-
-        const values: Value[] = [];
-        const errors: string[] = [];
-        for (const subExpr of subExpressions) {
-            const result = this.evaluateLineWithDebug(lineNumber, subExpr);
-            if (result.error) {
-                errors.push(result.error);
-            } else {
-                values.push(freezeIfDev(result.value));
-            }
-        }
-
-        // Only throw if ALL sub-expressions failed — otherwise return
-        // partial results alongside the failure messages.
-        if (values.length === 0) {
+        const result = this.evaluateLineWithDebug(lineNumber, lineText);
+        if (result.error) {
             throw ErrorFactory.execution(
                 'EVALUATION_ERROR',
-                errors.join('; '),
+                result.error,
                 { lineNumber }
             );
         }
-        return { values, errors };
-    }
-
-    /**
-     * Expose the multi-target expression splitter for playground consumption.
-     *
-     * The playground uses this directly instead of duplicating the regex,
-     * ensuring consistent splitting behavior between engine and UI.
-     *
-     * @see splitMultiTargetExpression in ExpressionEngineSafety.ts
-     */
-    splitMultiTargetExpression(expression: string): string[] | null {
-        return splitMultiTargetExpression(expression);
+        return { values: [freezeIfDev(result.value)] };
     }
 
     /**
@@ -1785,16 +1708,48 @@ export class ExpressionEngine {
         setActiveQueryClient(this.queryClient);
 
         let evalResult: EvalResult;
-        const vmResult = AllocationTracker.track('vm', () => {
-            return executeBytecode(
+        try {
+            const vmResult = AllocationTracker.track('vm', () => {
+                return executeBytecode(
+                    program,
+                    this.vm,
+                    emitVmTrace ? pipeline : undefined,
+                    expression
+                );
+            }, { cacheHit: !!cachedProgram });
+            evalResult = vmResult.result;
+            if (trackEnabled && vmResult.alloc) stageAllocs.push(vmResult.alloc);
+        } catch (e) {
+            // A VM runtime error (e.g. an undefined variable reference)
+            // previously propagated straight out of evaluateExpressionWithDiagnostic
+            // uncaught — for a caller evaluating a whole multi-line document
+            // one line at a time (the playground), that abandoned every
+            // subsequent line's evaluation instead of just failing this one
+            // line, matching how the parser stage above already handles its
+            // own failures (catch, return a soft `error` instead of throwing).
+            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+            const errorMessage = e instanceof Error ? e.message : String(e);
+
+            if (hasCollectors) {
+                pipeline.firePipelineEnd({
+                    type: DiagnosticEventType.PipelineEnd,
+                    elapsedNs: 0,
+                    expression,
+                    success: false,
+                    totalTokens: tokens.length,
+                    totalOpcodes: program.opcodes.length,
+                });
+            }
+
+            return {
+                value: numberValue(0),
+                tokens: normalizedTokens,
                 program,
-                this.vm,
-                emitVmTrace ? pipeline : undefined,
-                expression
-            );
-        }, { cacheHit: !!cachedProgram });
-        evalResult = vmResult.result;
-        if (trackEnabled && vmResult.alloc) stageAllocs.push(vmResult.alloc);
+                error: errorMessage,
+                debug: undefined,
+                diagnostic: undefined,
+            };
+        }
 
         // Stack cleanup
         while (this.vm.getStack().length > stackBefore) {
@@ -2289,7 +2244,11 @@ export class ExpressionEngine {
 				case 'complexity':
 					throw ErrorFactory.validation("EXPRESSION_TOO_COMPLEX", prep.message);
 				case 'parse':
-					throw ErrorFactory.parsing("PARSE_ERROR", prep.message);
+					// Attach the already-extracted reads/writes as error context so
+					// DAG-registering callers (e.g. ThreeTierEvaluator's compile
+					// fallback) can still track this line's dependencies even though
+					// it failed to compile.
+					throw ErrorFactory.parsing("PARSE_ERROR", prep.message, { reads: prep.reads ?? [], writes: prep.writes ?? [] });
 			}
 		}
 
