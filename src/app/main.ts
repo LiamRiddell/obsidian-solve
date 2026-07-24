@@ -128,6 +128,8 @@ export default class SolvePlugin extends Plugin {
 				FeatureFlagClass.RenderEndOfLineResult
 			);
 		}
+
+		this.settings.syntaxHighlight.applyCssVariables();
 	}
 
 	private async addStatusBarCompanion() {

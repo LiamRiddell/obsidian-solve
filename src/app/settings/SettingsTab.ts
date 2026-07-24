@@ -4,6 +4,12 @@ import { FeatureFlagClass } from "@app/constants/EFeatureFlagClass";
 import { SUPPORTED_SEPARATOR_LOCALES } from "@app/constants/SupportedSeparators";
 import SolvePlugin from "@app/main";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
+import type { SyntaxHighlightPresetName } from "@app/settings/definition/ISyntaxHighlightSettings";
+import {
+	CATEGORY_LABELS,
+	SOLVE_HIGHLIGHT_CATEGORIES,
+	SYNTAX_HIGHLIGHT_PRESET_LABELS,
+} from "@app/settings/presets/SyntaxHighlightPresets";
 import { App, PluginSettingTab, Setting } from "obsidian";
 
 /**
@@ -27,6 +33,7 @@ export class SettingTab extends PluginSettingTab {
 		this.displayIntroduction();
 		this.displayEngineSettings();
 		this.displayInterfaceSettings();
+		this.displaySyntaxHighlightSettings();
 		this.displayInlineSolveSettings();
 		this.displayVariablesSettings();
 
@@ -818,6 +825,72 @@ export class SettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+	}
+
+	displaySyntaxHighlightSettings() {
+		new Setting(this.containerEl).setName("Syntax highlighting").setHeading();
+		new Setting(this.containerEl).setDesc(
+			"Colors solve expressions in the editor by token type (numbers, operators, keywords, ...). These colors are also exposed as CSS variables (--solve-hl-*) if you use the Style Settings plugin for finer control."
+		);
+
+		new Setting(this.containerEl)
+			.setName("Enable syntax highlighting")
+			.setDesc(
+				`Default is ${DEFAULT_SETTINGS.syntaxHighlight.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.syntaxHighlight.enabled)
+					.onChange(async (value) => {
+						this.plugin.settings.syntaxHighlight.enabled = value;
+						this.plugin.settings.syntaxHighlight.applyCssVariables();
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Color preset")
+			.setDesc(
+				"Sets the base color for every category below. Switching presets does not discard any individual colors you've already customized."
+			)
+			.addDropdown((dropdown) => {
+				for (const [value, label] of Object.entries(SYNTAX_HIGHLIGHT_PRESET_LABELS)) {
+					dropdown.addOption(value, label);
+				}
+				dropdown
+					.setValue(this.plugin.settings.syntaxHighlight.preset)
+					.onChange(async (value) => {
+						this.plugin.settings.syntaxHighlight.preset = value as SyntaxHighlightPresetName;
+						this.plugin.settings.syntaxHighlight.applyCssVariables();
+						await this.plugin.saveSettings();
+						this.display(); // re-render so color pickers reflect the new preset
+					});
+			});
+
+		for (const category of SOLVE_HIGHLIGHT_CATEGORIES) {
+			new Setting(this.containerEl)
+				.setName(CATEGORY_LABELS[category] ?? category)
+				.addColorPicker((picker) =>
+					picker
+						.setValue(this.plugin.settings.syntaxHighlight.resolvedColor(category))
+						.onChange(async (value) => {
+							this.plugin.settings.syntaxHighlight.setOverride(category, value);
+							this.plugin.settings.syntaxHighlight.applyCssVariables();
+							await this.plugin.saveSettings();
+						})
+				)
+				.addExtraButton((button) =>
+					button
+						.setIcon("rotate-ccw")
+						.setTooltip("Reset to preset color")
+						.onClick(async () => {
+							this.plugin.settings.syntaxHighlight.setOverride(category, undefined);
+							this.plugin.settings.syntaxHighlight.applyCssVariables();
+							await this.plugin.saveSettings();
+							this.display();
+						})
+				);
+		}
 	}
 
 	displayStyleSettings() {

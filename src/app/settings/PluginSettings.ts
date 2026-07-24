@@ -35,6 +35,12 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		animationDuration: "200ms",
 	},
 
+	syntaxHighlight: {
+		enabled: true,
+		preset: "one-dark",
+		overrides: {},
+	},
+
 	inlineSolve: {
 		includeExpressionOnCommit: false,
 		includeBackticksOnCommit: true,

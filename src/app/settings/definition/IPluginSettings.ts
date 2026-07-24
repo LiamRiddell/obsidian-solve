@@ -10,6 +10,7 @@ import { IHexResultSettings } from "@app/settings/definition/IHexResultSettings"
 import { IInlineSolveSettings } from "@app/settings/definition/IInlineSolveSettings";
 import { IIntegerResultSettings } from "@app/settings/definition/IIntegerResultSettings";
 import { IInterfaceSettings } from "@app/settings/definition/IInterfaceSettings";
+import { ISyntaxHighlightSettings } from "@app/settings/definition/ISyntaxHighlightSettings";
 import { INumberResultSettings } from "@app/settings/definition/INumberResultSettings";
 import { IPercentageProviderSettings } from "@app/settings/definition/IPercentageArithmeticProviderSettings";
 import { IPercentageResultSettings } from "@app/settings/definition/IPercentageResultSettings";
@@ -21,6 +22,7 @@ import { IVectorArithmeticProviderSettings } from "@app/settings/definition/IVec
 export interface IPluginSettings {
 	engine: IEngineSettings;
 	interface: IInterfaceSettings;
+	syntaxHighlight: ISyntaxHighlightSettings;
 	inlineSolve: IInlineSolveSettings;
 	variable: IVariableSettings;
 

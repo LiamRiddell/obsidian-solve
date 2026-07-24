@@ -434,6 +434,11 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	buildDecorations(view: EditorView): DecorationSet {
 		const builder = new RangeSetBuilder<Decoration>();
 
+		// Read once per rebuild rather than per line — cheap field access,
+		// and users who disable highlighting pay zero cost for the
+		// mark-decoration pass below.
+		const highlightingEnabled = this.userSettings.syntaxHighlight.enabled;
+
 		const visibleRanges = view.visibleRanges;
 		const seenLines = new Set<number>();
 
@@ -467,7 +472,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				// lines and already tokenizes the inner expression of any
 				// inline solve on the line, so no special-casing is needed
 				// here for the different branches that follow.
-				for (const token of this.languageService.getSemanticTokens(line.text, line.number)) {
+				const highlightTokens = highlightingEnabled
+					? this.languageService.getSemanticTokens(line.text, line.number)
+					: [];
+				for (const token of highlightTokens) {
 					entries.push({
 						from: line.from + token.from,
 						to: line.from + token.to,
