@@ -12,9 +12,10 @@ import type {
   PageHeatmapEntry,
   ArenaStats,
   QueryCacheEntry,
+  DagSnapshot,
 } from '../engine.js';
 import type { PipelineStageResult } from '@/solve-js/src/types/DiagnosticPipelineResult';
-import type { BatcherMetrics, CheckpointSnapshot } from '@/solve-js/src/engine/ExpressionEngine';
+import type { BatcherMetrics, CheckpointSnapshot, CacheSnapshot } from '@/solve-js/src/engine/ExpressionEngine';
 import type { PipelineTelemetry } from '@/solve-js/src/telemetry/AllocationTracker';
 
 /** Maximum number of performance history entries to keep. */

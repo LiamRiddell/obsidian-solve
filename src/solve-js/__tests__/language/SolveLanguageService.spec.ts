@@ -86,14 +86,45 @@ describe("SolveLanguageService", () => {
     expect(tokens).toHaveLength(0);
   });
 
-  test("a single bare word still highlights as a variable reference", () => {
-    // Gating on whole-line parse validity must not regress the
-    // already-intentional "keyword-only lines like pi, single identifiers
-    // like hello" case — one bare word alone IS a valid expression (a
-    // variable reference), even though it's undefined.
+  test("a lone bare word with no other appearance in the document produces no tokens", () => {
+    // Regression: a single stray word ("hello") technically parses as a
+    // bare-identifier-reference expression, same as any real variable
+    // would — but it's exactly as ambiguous as a five-word sentence, just
+    // one token instead of five. Only highlight it once it's an actual
+    // variable used elsewhere in the document (see the next two tests).
     const tokens = service.getSemanticTokens("hello", 1);
+    expect(tokens).toHaveLength(0);
+  });
+
+  test("a lone bare word's cached result stays live across a DAG change on ANOTHER line, without invalidateLines", () => {
+    // Regression: caught live in the playground. Line 7 ("hello") got
+    // cached as "not a known variable" (empty tokens) BEFORE line 5
+    // defined ":hello = 1" — and because line 7's own text never changed,
+    // nothing ever called invalidateLines(7), so the stale "unknown"
+    // result stuck around even after "hello" became a real variable.
+    // The fix must re-check DAG membership on every call, cache hit or
+    // not — never bake the DAG-dependent verdict into the cached entry.
+    expect(service.getSemanticTokens("hello", 7)).toHaveLength(0); // cached as empty here
+    engine.evaluateLine(5, ":hello = 1"); // DAG changes; line 7's own text/cache entry is untouched
+    expect(service.getSemanticTokens("hello", 7)).toHaveLength(1); // must reflect the new DAG state anyway
+  });
+
+  test("a lone bare word DOES highlight once it's a known variable elsewhere in the document", () => {
+    engine.evaluateLine(1, ":revenue = 100");
+    const tokens = service.getSemanticTokens("revenue", 2);
     expect(tokens).toHaveLength(1);
     expect(tokens[0].category).toBe("variable");
+  });
+
+  test("sigil-marked variables (:x, $x) highlight regardless of DAG state — unaffected by the bare-word gate", () => {
+    expect(service.getSemanticTokens(":x", 1).length).toBeGreaterThanOrEqual(1);
+    expect(service.getSemanticTokens("$x", 1).length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("a custom variableNameSource is used instead of the engine's own DAG for the bare-word gate", () => {
+    const custom = new SolveLanguageService(engine, { variableNameSource: () => ["totallyMadeUp"] });
+    expect(custom.getSemanticTokens("totallyMadeUp", 1)).toHaveLength(1);
+    expect(custom.getSemanticTokens("somethingElse", 2)).toHaveLength(0);
   });
 
   test("inline solve embedded in prose only highlights the expression, not the surrounding text", () => {

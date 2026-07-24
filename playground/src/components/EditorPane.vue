@@ -40,7 +40,21 @@ const ui = useUiStore();
 // since a mismatch would mean plugin-contributed tokens silently render
 // unstyled here even though they're correctly recognized during evaluation.
 const highlightEngine = new ExpressionEngine('en', false);
-const languageService = new SolveLanguageService(highlightEngine);
+// highlightEngine never evaluates anything, so its own DAG is always empty —
+// without this override, a lone bare word (e.g. "hello") would never be
+// recognized as a real variable reference here even when it genuinely is
+// one elsewhere in the document (":hello = 1"), since SolveLanguageService's
+// default variable-name source reads from the SAME engine it lexes with.
+// Read from the real evaluation engine's already-computed DAG snapshot
+// instead (dr.dagSnapshot, populated from the worker-backed engine's own
+// DependencyGraph — see DagTab.vue for the same access pattern).
+const languageService = new SolveLanguageService(highlightEngine, {
+  variableNameSource: () => {
+    const snap = dr.dagSnapshot;
+    if (!snap) return [];
+    return [...Object.keys(snap.consumers), ...Object.values(snap.writes).flat()];
+  },
+});
 
 /* ── Inline Result Widget ─────────────────────────────────────── */
 class ResultWidget extends WidgetType {

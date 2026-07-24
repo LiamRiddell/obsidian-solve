@@ -14,6 +14,17 @@ const MAX_CACHED_LINES = 2000;
 interface CacheEntry {
 	text: string;
 	tokens: SemanticToken[];
+	// When set, `tokens` is a single bare-identifier token whose validity
+	// depends on document-wide DAG state (see the bare-word gate in
+	// getSemanticTokens), not just this line's own text — so it can't be
+	// cached as a plain pass/fail result the way every other line can. The
+	// lex+parse work that produced `tokens` is still cached normally; only
+	// the DAG membership check is re-run on every lookup (cache hit or
+	// miss alike), since it's cheap (a Set lookup) and the alternative —
+	// caching the gated result — would go stale the moment some OTHER
+	// line's edit changes what variables exist, with nothing to trigger a
+	// re-check of this untouched line.
+	bareWordCandidate?: string;
 }
 
 /**
@@ -61,8 +72,27 @@ interface CacheEntry {
  * recognize plugin-contributed tokens (e.g. a package's custom keywords)
  * unless it happened to have the identical packages registered.
  */
+export interface SolveLanguageServiceOptions {
+	/**
+	 * Overrides how the service discovers "variable names known in this
+	 * document" — used to legitimize a lone bare identifier line (see
+	 * `getSemanticTokens`'s single-token gate) and, later, variable-name
+	 * completions. Defaults to reading `engine.getDag().getSnapshot()`,
+	 * which works for any consumer sharing one `ExpressionEngine` between
+	 * evaluation and the language service (the real Obsidian editor).
+	 *
+	 * Required for consumers whose language service is backed by a
+	 * *different*, non-evaluating engine than the one that actually runs
+	 * the document (the playground's dedicated lexing-only engine, whose
+	 * own DAG is always empty) — pass a function reading the real
+	 * evaluation engine's DAG snapshot instead.
+	 */
+	variableNameSource?: () => Iterable<string>;
+}
+
 export class SolveLanguageService {
 	private engine: ExpressionEngine | null;
+	private variableNameSource: () => Iterable<string>;
 
 	// Bounded cache keyed by line number ALONE — not `${lineNumber}:${lineText}`
 	// as an earlier version of this class did. A line's previous text state is
@@ -81,8 +111,19 @@ export class SolveLanguageService {
 	// visible" cache should prioritize.
 	private cache = new Map<number, CacheEntry>();
 
-	constructor(engine?: ExpressionEngine | null) {
+	constructor(engine?: ExpressionEngine | null, options?: SolveLanguageServiceOptions) {
 		this.engine = engine ?? null;
+		this.variableNameSource = options?.variableNameSource ?? (() => this.defaultVariableNames());
+	}
+
+	private defaultVariableNames(): Iterable<string> {
+		if (!this.engine) return [];
+		const snapshot = this.engine.getDag().getSnapshot();
+		const names = new Set<string>(Object.keys(snapshot.consumers));
+		for (const written of Object.values(snapshot.writes)) {
+			for (const name of written) names.add(name);
+		}
+		return names;
 	}
 
 	/**
@@ -96,6 +137,9 @@ export class SolveLanguageService {
 	getSemanticTokens(lineText: string, lineNumber: number): SemanticToken[] {
 		const cached = this.cache.get(lineNumber);
 		if (cached && cached.text === lineText) {
+			if (cached.bareWordCandidate !== undefined) {
+				return this.isKnownVariable(cached.bareWordCandidate) ? cached.tokens : [];
+			}
 			return cached.tokens;
 		}
 
@@ -150,8 +194,33 @@ export class SolveLanguageService {
 			}
 		}
 
+		// A lone bare word ("hello") is exactly as ambiguous as a run of
+		// prose ("My name is dave") — it happens to parse as a
+		// single-identifier variable-reference expression, but that's true
+		// of literally any English word, so on its own it isn't "recognized"
+		// in any meaningful sense. Sigil-marked variables (":x", "$x") are
+		// unaffected — those lex to TWO tokens (sigil + ident), never
+		// hitting this single-token check. Keywords ("pi") are unaffected
+		// too — their category is "keyword", not "variable". Only surface
+		// it once it's an actual known variable elsewhere in the document —
+		// checked live (see the `bareWordCandidate` cache field), not baked
+		// into the cached result, since another line's edit can make this
+		// check flip without this line's own text ever changing.
+		if (tokens.length === 1 && tokens[0].category === "variable") {
+			const name = lineText.slice(tokens[0].from, tokens[0].to);
+			this.putCache(lineNumber, lineText, tokens, name);
+			return this.isKnownVariable(name) ? tokens : [];
+		}
+
 		this.putCache(lineNumber, lineText, tokens);
 		return tokens;
+	}
+
+	private isKnownVariable(name: string): boolean {
+		for (const known of this.variableNameSource()) {
+			if (known === name) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -172,12 +241,12 @@ export class SolveLanguageService {
 		}
 	}
 
-	private putCache(lineNumber: number, text: string, tokens: SemanticToken[]): void {
+	private putCache(lineNumber: number, text: string, tokens: SemanticToken[], bareWordCandidate?: string): void {
 		if (!this.cache.has(lineNumber) && this.cache.size >= MAX_CACHED_LINES) {
 			const oldestKey = this.cache.keys().next().value;
 			if (oldestKey !== undefined) this.cache.delete(oldestKey);
 		}
-		this.cache.set(lineNumber, { text, tokens });
+		this.cache.set(lineNumber, { text, tokens, bareWordCandidate });
 	}
 
 	/**
