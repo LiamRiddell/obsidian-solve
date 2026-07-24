@@ -2,6 +2,7 @@
   <main class="editor-pane" id="editor-pane" :class="{ collapsed: ui.editorCollapsed }">
     <div class="editor-pane-header">
       <span class="pane-title">Editor</span>
+      <ExamplesMenu />
     </div>
     <div class="editor-wrapper" ref="editorRef"></div>
   </main>
@@ -21,6 +22,7 @@ import { useEditorStore } from '../stores/editor.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 import { useUiStore } from '../stores/ui.js';
 import type { LineResult } from '../engine.js';
+import ExamplesMenu from './ExamplesMenu.vue';
 
 const engine = useEngineStore();
 const dr = useDiagnosticReportStore();
@@ -269,13 +271,13 @@ watch(() => dr.result, (result) => {
 
 <style scoped>
 :deep(.cm-inline-solve) {
-  background: rgba(155, 123, 236, 0.12);
+  background: rgba(199, 169, 255, 0.12);
   border-radius: 3px;
-  border: 1px solid rgba(155, 123, 236, 0.25);
-  box-shadow: inset 0 0 0 1px rgba(155, 123, 236, 0.08);
+  border: 1px solid rgba(199, 169, 255, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(199, 169, 255, 0.08);
   transition: background 0.2s;
 }
 :deep(.cm-inline-solve:hover) {
-  background: rgba(155, 123, 236, 0.2);
+  background: rgba(199, 169, 255, 0.2);
 }
 </style>

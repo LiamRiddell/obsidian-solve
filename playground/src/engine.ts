@@ -19,6 +19,7 @@ import {
 	buildDiagnosticEvents,
 	buildQueryCacheState,
 	formatLineResultValue,
+	isUnrecognizedBareWord,
 } from "./engineShared.js";
 
 export interface DebugResult {
@@ -40,8 +41,10 @@ export interface DebugResult {
 
 	cacheSnapshot: CacheSnapshot;
 	diagnosticEvents: DiagnosticEventInfo[];
-	/** Structured pipeline stages from engine's DiagnosticPipelineResult (available in diagnostic mode) */
+	/** Structured pipeline stages from engine's DiagnosticPipelineResult (available in diagnostic mode) — last evaluated line only */
 	pipelineStages: PipelineStageResult[];
+	/** Structured pipeline stages per line number — lets the Pipeline tab show the real stages for whichever line is selected, not just the last one evaluated */
+	pipelineStagesByLine: Record<number, PipelineStageResult[]>;
 	/** DAG dependency graph snapshot */
 	dagSnapshot: DagSnapshot;
 	/** VM checkpoints snapshot */
@@ -165,6 +168,15 @@ export interface DiagnosticEventInfo {
 		result: string;
 		type: string;
 		timedOut?: boolean;
+		/**
+		 * The line's fresh pipeline stages from the re-evaluation that
+		 * resolved this async value — without this, the Pipeline tab kept
+		 * showing the original "pending" Async Preflight/VM Execute stages
+		 * for this line forever, even after the real value arrived, because
+		 * only `lineResults` (the Output tab) was patched, never the
+		 * per-line stage data the Pipeline tab reads.
+		 */
+		stages?: PipelineStageResult[];
 	};
 }
 export interface MarkdownNode {
@@ -213,6 +225,20 @@ function formatType(val: Value): string {
 	};
 	const t = typeNames[val.type] ?? "Value";
 	return val.unit ? `${t} (${val.unit})` : t;
+}
+
+/**
+ * A VM-level soft error (e.g. errorValue("INCOMPATIBLE_UNITS", ...) from
+ * an ADD/SUB between two currencies with no fetched rate, or the existing
+ * CURRENCY_RATE_UNAVAILABLE from UOM_CONVERT_TO/_IN) returns normally as
+ * the line's final Value — it never throws, so it never reaches the
+ * `result.error` (caught-exception) path below. Without this check, such
+ * a line looked like a successful result and displayed the raw error
+ * CODE via formatValue()'s fallback (e.g. "= CURRENCY_RATE_UNAVAILABLE")
+ * instead of getting real error styling.
+ */
+function softErrorMessage(val: Value): string | undefined {
+	return val.type === ValueType.Error ? (val.unit ?? String(val.value)) : undefined;
 }
 
 function generateMarkdownOutline(text: string): MarkdownNode[] {
@@ -446,6 +472,7 @@ export function runEngineWithStreaming(
 		asyncCache: [],
 	};
 	let lastPipelineStages: PipelineStageResult[] = [];
+	const pipelineStagesByLine: Record<number, PipelineStageResult[]> = {};
 	let lastDiagnostic: DiagnosticPipelineResult | undefined;
 
 	let abortHandler: (() => void) | null = null;
@@ -534,8 +561,13 @@ export function runEngineWithStreaming(
 												result: resultValue,
 												type: formatType(reResult.value),
 												timedOut: (reResult.value as any).timedOut ?? false,
+												stages: reResult.diagnostic?.stages,
 										  },
 								});
+								// Also update the closure-level map so the initial synchronous result snapshot (if read again) and any later logic sees the fresh stages.
+								if (reResult.diagnostic) {
+									pipelineStagesByLine[ln] = reResult.diagnostic.stages;
+								}
 							} catch {
 								transformController.enqueue({
 									type: "async_resolved",
@@ -595,6 +627,12 @@ export function runEngineWithStreaming(
 						lineNum,
 						trimmed
 					);
+
+					// An unrecognized bare word (e.g. a stray "hello") is
+					// ambiguous prose, not a broken expression — ignore it
+					// rather than surfacing "Undefined variable: hello".
+					if (isUnrecognizedBareWord(trimmed, result.error)) continue;
+
 					const parselet =
 						(result.debug?.parselets?.[0] as any)?.parseletType ??
 						"Expression";
@@ -602,10 +640,11 @@ export function runEngineWithStreaming(
 					// Record LRU access sequence for page heatmap
 					lineAccessSeq.set(lineNum, ++nextAccessSeq);
 
-				// Collect structured pipeline stages from the last line
+				// Collect structured pipeline stages, keyed by line so any line can be inspected, not just whichever ran last.
 				if (result.diagnostic) {
 					lastDiagnostic = result.diagnostic;
 					lastPipelineStages = result.diagnostic.stages;
+					pipelineStagesByLine[lineNum] = result.diagnostic.stages;
 				}
 
 					// Emit async_pending if the result is Pending
@@ -714,18 +753,19 @@ export function runEngineWithStreaming(
 						result.tokens &&
 						result.tokens.length > 0;
 
-					if (result.error) {
+					const softError = softErrorMessage(result.value);
+					if (result.error || softError) {
 						lineResults.push({
 							lineNumber: lineNum,
 							expression: trimmed,
 							result: "",
 							type: "Error",
 							parselet,
-							error: result.error,
+							error: result.error ?? softError,
 							opcodeCount: perLineOpCount,
 							wasCached,
 						});
-						errors.push(result.error);
+						errors.push((result.error ?? softError)!);
 					} else {
 						lineResults.push({
 							lineNumber: lineNum,
@@ -844,6 +884,7 @@ export function runEngineWithStreaming(
 		diagnosticEvents,
 		pipelineTelemetry,
 		pipelineStages: lastPipelineStages,
+		pipelineStagesByLine,
 		dagSnapshot,
 		checkpoints,
 		batcherMetrics,
@@ -871,6 +912,7 @@ export function runEngine(expression: string): DebugResult {
 	let lineResults: LineResult[] = [];
 	let parselets: ParseletInfo[] = [];
 	let lastPipelineStages: PipelineStageResult[] = [];
+	const pipelineStagesByLine: Record<number, PipelineStageResult[]> = {};
 	let lastDiagnostic: DiagnosticPipelineResult | undefined;
 
 	// The TimelineDiagnosticCollector accumulates events across ALL
@@ -921,6 +963,12 @@ export function runEngine(expression: string): DebugResult {
 			if (!shouldEvaluateLine(engine, trimmed)) return;
 
 			const result = engine.evaluateLineWithDebug(lineNum, trimmed);
+
+			// An unrecognized bare word (e.g. a stray "hello") is ambiguous
+			// prose, not a broken expression — ignore it rather than
+			// surfacing "Undefined variable: hello" as an error.
+			if (isUnrecognizedBareWord(trimmed, result.error)) return;
+
 			const parselet =
 				(result.debug?.parselets?.[0] as any)?.parseletType ??
 				"Expression";
@@ -928,10 +976,11 @@ export function runEngine(expression: string): DebugResult {
 			// Record LRU access sequence for page heatmap
 			lineAccessSeq.set(lineNum, ++nextAccessSeq);
 
-			// Collect structured pipeline stages from the last line (most complete diagnostic data)
+			// Collect structured pipeline stages, keyed by line so any line can be inspected, not just whichever ran last.
 			if (result.diagnostic) {
 				lastDiagnostic = result.diagnostic;
 				lastPipelineStages = result.diagnostic.stages;
+				pipelineStagesByLine[lineNum] = result.diagnostic.stages;
 			}
 
 			// Capture per-line event snapshot + last valid set (accumulated across all lines)
@@ -1015,18 +1064,19 @@ export function runEngine(expression: string): DebugResult {
 				result.tokens &&
 				result.tokens.length > 0;
 
-			if (result.error) {
+			const softError = softErrorMessage(result.value);
+			if (result.error || softError) {
 				lineResults.push({
 					lineNumber: lineNum,
 					expression: trimmed,
 					result: "",
 					type: "Error",
 					parselet,
-					error: result.error,
+					error: result.error ?? softError,
 					opcodeCount: perLineOpCount,
 					wasCached,
 				});
-				errors.push(result.error);
+				errors.push((result.error ?? softError)!);
 			} else {
 				lineResults.push({
 					lineNumber: lineNum,
@@ -1120,6 +1170,7 @@ export function runEngine(expression: string): DebugResult {
 			diagnosticEvents,
 			pipelineTelemetry: engine.getLastTelemetry(),
 			pipelineStages: lastPipelineStages,
+			pipelineStagesByLine,
 			dagSnapshot: dagSnap,
 			checkpoints: ckpts,
 			batcherMetrics: bm,
@@ -1176,6 +1227,7 @@ export function runEngine(expression: string): DebugResult {
 		diagnosticEvents,
 		pipelineTelemetry: null,
 		pipelineStages: lastPipelineStages,
+		pipelineStagesByLine,
 			dagSnapshot,
 			checkpoints,
 			batcherMetrics,

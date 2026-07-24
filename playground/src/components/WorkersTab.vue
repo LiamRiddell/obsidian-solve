@@ -4,7 +4,7 @@
       <!-- Engine Worker Card -->
       <div class="worker-card">
         <div class="worker-card-header">
-          <span class="worker-card-icon">⚙️</span>
+          <span class="msi worker-card-icon">settings</span>
           <span class="worker-card-name">Engine Worker</span>
           <span class="worker-card-status" :class="{ 'status-busy': ws.engineStatus === 'busy' }">{{ ws.engineStatus }}</span>
         </div>
@@ -25,7 +25,10 @@
             <div class="worker-latency-fill" :class="ws.engineLatencyBarClass" :style="{ width: ws.engineLatencyBarPct + '%' }"></div>
           </div>
           <div class="worker-latency-scale">
-            <span>0</span><span>10ms</span><span>50ms</span><span>100ms+</span>
+            <span style="left: 0%">0</span>
+            <span style="left: 10%">10ms</span>
+            <span style="left: 50%">50ms</span>
+            <span style="left: 100%">100ms+</span>
           </div>
         </div>
         <div class="worker-card-footer">
@@ -34,32 +37,12 @@
         </div>
       </div>
 
-      <!-- QueryClient Config Card -->
+      <!-- Query Cache Card (TanStack Query) — QueryClient config folded in
+           as a footnote rather than its own equally-weighted card, since
+           it's static configuration, not a live metric. -->
       <div class="worker-card">
         <div class="worker-card-header">
-          <span class="worker-card-icon">⚙️</span>
-          <span class="worker-card-name">QueryClient Config</span>
-        </div>
-        <div class="worker-card-body">
-          <div class="worker-metric">
-            <span class="worker-metric-label">Default staleTime</span>
-            <span class="worker-metric-value">{{ formatDuration(ws.queryClientConfig.staleTime) }}</span>
-          </div>
-          <div class="worker-metric">
-            <span class="worker-metric-label">Default gcTime</span>
-            <span class="worker-metric-value">{{ formatDuration(ws.queryClientConfig.gcTime) }}</span>
-          </div>
-        </div>
-        <div class="worker-card-footer">
-          <span class="worker-metric-label">Provider</span>
-          <span class="worker-metric-value">@tanstack/query-core</span>
-        </div>
-      </div>
-
-      <!-- Query Cache Card (TanStack Query) -->
-      <div class="worker-card">
-        <div class="worker-card-header">
-          <span class="worker-card-icon">🗄️</span>
+          <span class="msi worker-card-icon">cloud_sync</span>
           <span class="worker-card-name">Query Cache</span>
           <span class="worker-card-status" :class="{ 'status-offline': !ws.qcHasData }">{{ ws.qcStatus }}</span>
         </div>
@@ -70,7 +53,7 @@
           </div>
           <div class="worker-metric">
             <span class="worker-metric-label">Fresh</span>
-            <span class="worker-metric-value" style="color:var(--accent)">{{ ws.queryCache.freshQueries }}</span>
+            <span class="worker-metric-value" style="color:var(--success)">{{ ws.queryCache.freshQueries }}</span>
           </div>
           <div class="worker-metric">
             <span class="worker-metric-label">Stale</span>
@@ -88,41 +71,50 @@
             <span class="worker-metric-label">Last activity</span>
             <span class="worker-metric-value">{{ ws.qcLastActivityAgo }}</span>
           </div>
+          <div class="worker-metric">
+            <span class="worker-metric-label">Default staleTime / gcTime</span>
+            <span class="worker-metric-value">{{ formatDuration(ws.queryClientConfig.staleTime) }} / {{ formatDuration(ws.queryClientConfig.gcTime) }}</span>
+          </div>
         </div>
         <div class="worker-card-footer">
-          <span class="worker-metric-label">Cache provider</span>
-          <span class="worker-metric-value">TanStack Query</span>
+          <span class="worker-metric-label">Provider</span>
+          <span class="worker-metric-value">@tanstack/query-core</span>
         </div>
       </div>
 
-      <!-- Compilation Worker Card -->
+      <!-- Compiled Bytecode Card — real data from the engine's bytecode
+           cache (dr.cacheSnapshot.bytecode), replacing a previous
+           "Compilation Worker" card whose fields were permanently
+           hardcoded to zero/idle with no code anywhere that ever set
+           them, despite looking identical to the real Engine Worker
+           card above it. -->
       <div class="worker-card">
         <div class="worker-card-header">
-          <span class="worker-card-icon">📦</span>
-          <span class="worker-card-name">Compilation Worker</span>
-          <span class="worker-card-status" :class="{ 'status-busy': ws.compilationWorker.isActive }">{{ ws.compilationWorker.isActive ? 'active' : 'idle' }}</span>
+          <span class="msi worker-card-icon">inventory_2</span>
+          <span class="worker-card-name">Compiled Bytecode</span>
+          <span class="worker-card-status" :class="{ 'status-busy': bytecodeEntries.length > 0 }">{{ bytecodeEntries.length > 0 ? 'populated' : 'empty' }}</span>
         </div>
         <div class="worker-card-body">
           <div class="worker-metric">
-            <span class="worker-metric-label">Active compilations</span>
-            <span class="worker-metric-value">{{ ws.compilationWorker.activeCompilations }}</span>
+            <span class="worker-metric-label">Cached programs</span>
+            <span class="worker-metric-value">{{ bytecodeEntries.length }}</span>
           </div>
           <div class="worker-metric">
-            <span class="worker-metric-label">Bytecode stored</span>
-            <span class="worker-metric-value">{{ ws.compilationWorker.bytecodeStored }}</span>
+            <span class="worker-metric-label">Total opcodes</span>
+            <span class="worker-metric-value">{{ bytecodeTotals.opcodes }}</span>
           </div>
           <div class="worker-metric">
-            <span class="worker-metric-label">Bytecode discarded</span>
-            <span class="worker-metric-value">{{ ws.compilationWorker.bytecodeDiscarded }}</span>
+            <span class="worker-metric-label">Total constants</span>
+            <span class="worker-metric-value">{{ bytecodeTotals.constants }}</span>
           </div>
           <div class="worker-metric">
-            <span class="worker-metric-label">Transfer size</span>
-            <span class="worker-metric-value">{{ ws.compilationWorker.transferSize }}</span>
+            <span class="worker-metric-label">Async-aware programs</span>
+            <span class="worker-metric-value">{{ bytecodeTotals.asyncCount }}</span>
           </div>
         </div>
         <div class="worker-card-footer">
-          <span class="worker-metric-label">Status</span>
-          <span class="worker-metric-value">{{ ws.compilationWorker.bytecodeStored > 0 ? 'Ready' : 'Awaiting work' }}</span>
+          <span class="worker-metric-label">Source</span>
+          <span class="worker-metric-value">ExpressionEngine bytecode cache</span>
         </div>
       </div>
 
@@ -145,10 +137,23 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useWorkersStore } from '../stores/workers.js';
+import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
+import { formatDuration } from '../utils.js';
 
 const ws = useWorkersStore();
+const dr = useDiagnosticReportStore();
 
 const recentLog = computed(() => ws.activityLog.slice(-30));
+
+const bytecodeEntries = computed(() => dr.cacheSnapshot?.bytecode ?? []);
+const bytecodeTotals = computed(() => {
+  const entries = bytecodeEntries.value;
+  return {
+    opcodes: entries.reduce((sum, e) => sum + e.opcodesLength, 0),
+    constants: entries.reduce((sum, e) => sum + e.numbersLength + e.stringsLength, 0),
+    asyncCount: entries.filter(e => e.hasAsync).length,
+  };
+});
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
@@ -156,16 +161,5 @@ function formatTime(ts: number): string {
     d.getMinutes().toString().padStart(2, '0') + ':' +
     d.getSeconds().toString().padStart(2, '0') + '.' +
     d.getMilliseconds().toString().padStart(3, '0');
-}
-
-function formatDuration(ms: number): string {
-  if (ms === Infinity) return '∞';
-  if (ms <= 0) return '0s';
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m`;
-  const hrs = Math.floor(min / 60);
-  return `${hrs}h`;
 }
 </script>

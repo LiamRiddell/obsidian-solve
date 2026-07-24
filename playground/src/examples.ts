@@ -72,7 +72,7 @@ export const exampleData: ExampleCategory[] = [
     description: "Variable usage and assignments",
     examples: [
       { name: "Simple variable", expression: ":myVar = 10", description: "Assign variable with colon prefix" },
-      { name: "Variable in expression", expression: ":myVar + 5", description: "Use variable in calculation" },
+      { name: "Variable in expression", expression: ":myVar = 10\n:myVar + 5", description: "Use variable in calculation" },
     ]
   },
   {

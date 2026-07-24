@@ -6,54 +6,35 @@
         class="stream-event-count"
         :class="{ 'stream-live': stream.streamingActive }"
       >
-        {{ stream.events.length }} events<span v-if="stream.streamingActive"> · ⟳ live</span>
+        {{ stream.events.length }} events<span v-if="stream.streamingActive"> · <span class="msi msi-dense msi-spin">progress_activity</span> live</span>
       </span>
-      <span class="toggle-label" style="font-size:10px;color:var(--text-muted)">Diagnostic event stream</span>
+      <input type="text" class="token-filter-input" placeholder="Filter by event type…" spellcheck="false" v-model="typeFilter" />
+      <button class="copy-all-btn" @click="collapseAll"><span class="msi msi-dense">{{ allCollapsed ? 'expand_more' : 'expand_less' }}</span> {{ allCollapsed ? 'Expand all' : 'Collapse all' }}</button>
     </div>
 
-    <!-- Batcher Panel -->
+    <!-- Batcher Panel — stats shown once in an always-visible compact row
+         (previously: the same 4 numbers appeared both collapsed AND
+         expanded, with only a static description paragraph actually new
+         on expand — moved that to a tooltip instead of an expand/collapse
+         that just repeated data). -->
     <div v-if="batcherData" class="batcher-panel">
-      <div class="batcher-panel-header" @click="batcherExpanded = !batcherExpanded">
-        <span class="stream-group-toggle">{{ batcherExpanded ? '▼' : '▶' }}</span>
-        <span class="batcher-panel-title">Async Resolution Batcher</span>
+      <div class="batcher-panel-header">
+        <span class="batcher-panel-title" title="The batcher collapses multiple async resolutions into a single DAG walk + re-execution pass. When >50 lines are affected, execution is offloaded to a worker pool to prevent UI freezes.">Async Resolution Batcher</span>
         <div class="batcher-stats">
-          <span class="batcher-stat">⟳ {{ batcherData.pendingCount }} pending</span>
-          <span class="batcher-stat">⊜ {{ batcherData.dedupCount }} deduped</span>
-          <span class="batcher-stat">⚡ {{ batcherData.workerOffloadCount }} offloaded</span>
-          <span class="batcher-stat">👂 {{ batcherData.listenerCount }} listeners</span>
-        </div>
-      </div>
-      <div v-if="batcherExpanded" class="batcher-panel-body">
-        <div class="batcher-description">
-          The batcher collapses multiple async resolutions into a single DAG walk + re-execution pass.
-          When &gt;50 lines are affected, execution is offloaded to a worker pool to prevent UI freezes.
-        </div>
-        <div class="batcher-metrics-grid">
-          <div class="batcher-metric-card">
-            <span class="batcher-metric-value">{{ batcherData.pendingCount }}</span>
-            <span class="batcher-metric-label">Pending queue</span>
-          </div>
-          <div class="batcher-metric-card">
-            <span class="batcher-metric-value">{{ batcherData.dedupCount }}</span>
-            <span class="batcher-metric-label">Deduped entries</span>
-          </div>
-          <div class="batcher-metric-card">
-            <span class="batcher-metric-value">{{ batcherData.workerOffloadCount }}</span>
-            <span class="batcher-metric-label">Worker offloads</span>
-          </div>
-          <div class="batcher-metric-card">
-            <span class="batcher-metric-value">{{ batcherData.listenerCount }}</span>
-            <span class="batcher-metric-label">Active listeners</span>
-          </div>
+          <span class="batcher-stat" title="Pending — awaiting async resolution"><span class="msi msi-dense">schedule</span> {{ batcherData.pendingCount }} pending</span>
+          <span class="batcher-stat" title="Deduped — identical in-flight resolutions merged into one"><span class="msi msi-dense">merge</span> {{ batcherData.dedupCount }} deduped</span>
+          <span class="batcher-stat" title="Offloaded — re-execution handed to a worker pool (>50 lines affected)"><span class="msi msi-dense">bolt</span> {{ batcherData.workerOffloadCount }} offloaded</span>
+          <span class="batcher-stat" title="Listeners — components waiting on a resolution"><span class="msi msi-dense">hearing</span> {{ batcherData.listenerCount }} listeners</span>
         </div>
       </div>
     </div>
 
-    <div class="panel-scroll" id="stream-display" ref="streamContainer">
+    <div class="panel-scroll" id="stream-display" ref="streamContainer" @scroll="onScroll">
       <span v-if="stream.events.length === 0" class="empty" style="padding:12px;display:block;text-align:center">No diagnostic events</span>
+      <span v-else-if="filteredGroups.length === 0" class="empty" style="padding:12px;display:block;text-align:center">No events match &ldquo;{{ typeFilter }}&rdquo;</span>
 
       <div
-        v-for="(events, groupKey) in stream.groupedEvents"
+        v-for="[groupKey, events] in filteredGroups"
         :key="groupKey"
         class="stream-group"
         :class="{ collapsed: isCollapsed(groupKey) }"
@@ -64,18 +45,18 @@
           :class="{ expanded: !isCollapsed(groupKey) }"
           @click="toggleGroup(groupKey)"
         >
-          <span class="stream-group-toggle">{{ isCollapsed(groupKey) ? '▶' : '▼' }}</span>
+          <span class="msi msi-dense stream-group-toggle">{{ isCollapsed(groupKey) ? 'chevron_right' : 'expand_more' }}</span>
           <span
             class="stream-group-key"
             :class="events.some(e => e.type.startsWith('async_')) ? 'stream-group-badge-async' : 'stream-group-badge-event'"
           >
-            {{ events.some(e => e.type.startsWith('async_')) ? '⟳' : '#' }} {{ groupKey }}
+            <span v-if="events.some(e => e.type.startsWith('async_'))" class="msi msi-dense">schedule</span><span v-else>#</span> {{ groupKey }}
           </span>
           <span class="stream-group-count">{{ events.length }} event{{ events.length !== 1 ? 's' : '' }}</span>
         </div>
         <div class="stream-group-content">
           <div v-for="(evt, i) in events" :key="i" class="stream-event">
-            <span class="stream-event-time">{{ evt.elapsedNs > 0 ? (evt.elapsedNs / 1_000_000).toFixed(2) + 'ms' : '—' }}</span>
+            <span class="stream-event-time">{{ evt.elapsedNs > 0 ? fmt(evt.elapsedNs) : '—' }}</span>
             <span class="stream-event-clock">{{ fmtClock(evt.timestamp) }}</span>
             <span class="stream-event-type" :class="'type-' + evt.type">{{ fmtType(evt.type) }}</span>
             <span class="stream-event-expr">{{ evt.expression }}</span>
@@ -91,20 +72,56 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useStreamStore } from '../stores/stream.js';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
+import { fmt } from '../utils.js';
+import type { DiagnosticEventInfo } from '../engine.js';
 
 const stream = useStreamStore();
 const dr = useDiagnosticReportStore();
 const streamContainer = ref<HTMLElement | null>(null);
-const batcherExpanded = ref(true);
 
 // Batcher metrics from engine result
 const batcherData = computed(() => dr.batcherMetrics);
 
 // All groups start expanded per 'nothing collapsed by default' mandate.
 const collapsedGroups = ref(new Set<string>());
+const typeFilter = ref('');
 
-// Auto-scroll to bottom when events are added
+/** Groups filtered by event-type substring — the highest-volume, most
+ * log-like tab in the playground previously had zero filtering. */
+const filteredGroups = computed<[string, DiagnosticEventInfo[]][]>(() => {
+  const entries = Array.from(stream.groupedEvents.entries());
+  const q = typeFilter.value.trim().toLowerCase();
+  if (!q) return entries;
+  return entries
+    .map(([key, events]) => [key, events.filter(e => e.type.toLowerCase().includes(q))] as [string, DiagnosticEventInfo[]])
+    .filter(([, events]) => events.length > 0);
+});
+
+const allCollapsed = computed(() =>
+  filteredGroups.value.length > 0 && filteredGroups.value.every(([key]) => collapsedGroups.value.has(key)),
+);
+
+function collapseAll(): void {
+  if (allCollapsed.value) {
+    collapsedGroups.value.clear();
+  } else {
+    for (const [key] of filteredGroups.value) collapsedGroups.value.add(key);
+  }
+}
+
+// Auto-scroll to bottom when events are added — but only if the user
+// hasn't manually scrolled away from the bottom, so a live-updating
+// stream doesn't fight someone inspecting earlier events.
+const stickToBottom = ref(true);
+
+function onScroll(): void {
+  const el = streamContainer.value;
+  if (!el) return;
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+}
+
 watch(() => stream.events.length, () => {
+  if (!stickToBottom.value) return;
   nextTick(() => {
     if (streamContainer.value) {
       streamContainer.value.scrollTop = streamContainer.value.scrollHeight;
@@ -132,8 +149,14 @@ function fmtClock(ts: number): string {
     d.getMilliseconds().toString().padStart(3, '0');
 }
 
-/** Capitalize each word in a type label (matching vanilla). */
+/** Acronyms that should stay fully uppercase instead of naive per-word title-casing. */
+const ACRONYMS = new Set(['vm', 'dag', 'ip']);
+
+/** Humanize an event type string (e.g. "vm_halt" -> "VM Halt", "pipeline_start" -> "Pipeline Start"). */
 function fmtType(type: string): string {
-  return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return type
+    .split('_')
+    .map(word => (ACRONYMS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(' ');
 }
 </script>

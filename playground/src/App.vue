@@ -4,38 +4,27 @@
 
     <div class="main-layout">
       <div class="main-body">
-        <!-- Left Sidebar -->
-        <Sidebar />
-
-        <!-- Resize handle: sidebar / editor -->
-        <div class="resize-handle" id="resize-handle-sidebar" @mousedown="startResize('sidebar', $event)"></div>
-
-        <!-- Center: Editor -->
+        <!-- Center: Editor (examples picker now lives in its header) -->
         <EditorPane ref="editorRef" />
 
         <!-- Resize handle: editor / diagnostics -->
-        <div class="resize-handle" id="resize-handle-editor" @mousedown="startResize('editor', $event)"></div>
+        <div class="resize-handle" id="resize-handle-editor" @mousedown="startResize($event)"></div>
 
         <!-- Right: Diagnostics -->
         <DiagnosticsPane />
       </div>
-
-      <!-- Errors Bar -->
-      <ErrorsBar />
     </div>
 
-    <FooterBar />
+    <StatusBar />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import HeaderBar from './components/HeaderBar.vue';
-import FooterBar from './components/FooterBar.vue';
-import Sidebar from './components/Sidebar.vue';
+import StatusBar from './components/StatusBar.vue';
 import EditorPane from './components/EditorPane.vue';
 import DiagnosticsPane from './components/DiagnosticsPane.vue';
-import ErrorsBar from './components/ErrorsBar.vue';
 import { useEditorStore } from './stores/editor.js';
 import { usePipelineStore } from './stores/pipeline.js';
 
@@ -46,35 +35,23 @@ const pipeline = usePipelineStore();
 const editorRef = ref<InstanceType<typeof EditorPane> | null>(null);
 editorStore.setEditorRef(editorRef);
 
-/* ── Resize handles ────────────────────────────────────────────── */
+/* ── Resize handle: editor / diagnostics ─────────────────────────── */
 let resizeState: {
   handle: HTMLElement;
   prevEl: HTMLElement;
   nextEl: HTMLElement;
-  direction: 'grow-prev' | 'grow-next';
   startX: number;
-  startPrevW: number;
   startNextW: number;
 } | null = null;
 
-function startResize(which: 'sidebar' | 'editor', e: MouseEvent): void {
+function startResize(e: MouseEvent): void {
   const handle = e.target as HTMLElement;
-  let prevEl: HTMLElement, nextEl: HTMLElement, direction: 'grow-prev' | 'grow-next';
-
-  if (which === 'sidebar') {
-    prevEl = document.getElementById('sidebar')!;
-    nextEl = document.getElementById('editor-pane')!;
-    direction = 'grow-prev';
-  } else {
-    prevEl = document.getElementById('editor-pane')!;
-    nextEl = document.getElementById('diagnostics-pane')!;
-    direction = 'grow-next';
-  }
+  const prevEl = document.getElementById('editor-pane')!;
+  const nextEl = document.getElementById('diagnostics-pane')!;
 
   resizeState = {
-    handle, prevEl, nextEl, direction,
+    handle, prevEl, nextEl,
     startX: e.clientX,
-    startPrevW: prevEl.getBoundingClientRect().width,
     startNextW: nextEl.getBoundingClientRect().width,
   };
 
@@ -88,16 +65,9 @@ function startResize(which: 'sidebar' | 'editor', e: MouseEvent): void {
 function onResizeMove(e: MouseEvent): void {
   if (!resizeState) return;
   const dx = e.clientX - resizeState.startX;
-  if (resizeState.direction === 'grow-prev') {
-    const newPrev = Math.max(80, resizeState.startPrevW + dx);
-    resizeState.prevEl.style.width = newPrev + 'px';
-    resizeState.prevEl.style.flexShrink = '0';
-    resizeState.nextEl.style.flex = '1';
-  } else {
-    const newNext = Math.max(80, resizeState.startNextW - dx);
-    resizeState.nextEl.style.flex = '0 0 ' + newNext + 'px';
-    resizeState.prevEl.style.flex = '1';
-  }
+  const newNext = Math.max(80, resizeState.startNextW - dx);
+  resizeState.nextEl.style.flex = '0 0 ' + newNext + 'px';
+  resizeState.prevEl.style.flex = '1';
 }
 
 function onResizeEnd(): void {

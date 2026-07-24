@@ -46,8 +46,11 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
   /** The full DebugResult from the engine worker. */
   const result = ref<DebugResult | null>(null);
 
-  /** Structured pipeline stages from the engine's DiagnosticPipelineResult. */
+  /** Structured pipeline stages from the engine's DiagnosticPipelineResult — last evaluated line only. */
   const stages = ref<PipelineStageResult[]>([]);
+
+  /** Structured pipeline stages per line number, so the Pipeline tab can show any selected line's real stages. */
+  const stagesByLine = ref<Record<number, PipelineStageResult[]>>({});
 
   /** Per-line evaluation results. */
   const lineResults = ref<LineResult[]>([]);
@@ -200,6 +203,28 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
   }
 
   /**
+   * Patch a single line's pipeline stages after an async resolution
+   * (an OSRS price, a currency rate, ...) re-evaluates it — called
+   * alongside `patchLineResult` when the stream event carries fresh
+   * stage data.
+   *
+   * Without this, the Pipeline tab kept showing the original line's
+   * "pending" Async Preflight stage (and no VM Execute/Result stages)
+   * forever, even after the value had actually resolved, because
+   * `patchLineResult` only ever updated `lineResults` — never the
+   * per-line stage map this store exposes.
+   *
+   * Replaces `stagesByLine` with a new object (rather than mutating the
+   * existing one in place) so Vue's reactivity — which tracks the
+   * object reference, not deep mutation of a plain object handed back
+   * from a worker message — actually notices the change.
+   */
+  function patchLineStages(lineNumber: number, newStages: PipelineStageResult[] | undefined): void {
+    if (!newStages) return;
+    stagesByLine.value = { ...stagesByLine.value, [lineNumber]: newStages };
+  }
+
+  /**
    * Populate ALL diagnostic data from a DebugResult.
    * This is the single entry point — called by the engine store's
    * onmessage handler. Every UI component reads from this store.
@@ -207,6 +232,7 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
   function setResult(r: DebugResult): void {
     result.value = r;
     stages.value = r.pipelineStages ?? [];
+    stagesByLine.value = r.pipelineStagesByLine ?? {};
     lineResults.value = r.lineResults ?? [];
     rawTokens.value = r.rawTokens ?? [];
     opcodes.value = r.opcodes ?? [];
@@ -286,6 +312,7 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
     runId,
     result,
     stages,
+    stagesByLine,
     lineResults,
     rawTokens,
     opcodes,
@@ -320,6 +347,7 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
     // Actions
     setResult,
     patchLineResult,
+    patchLineStages,
     setStatus,
     incrementRunId,
   };

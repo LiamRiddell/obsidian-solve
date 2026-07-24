@@ -15,10 +15,13 @@
           @input="tokens.setFilterQuery(($event.target as HTMLInputElement).value)"
         />
       </div>
+      <button v-if="hasAnyResults" class="copy-all-btn" title="Copy all line results" @click="copyAllResults"><span class="msi msi-dense">content_copy</span> Copy all</button>
       <span class="token-count">{{ countLabel }}</span>
     </div>
 
-    <!-- Three-tier summary bar -->
+    <!-- Three-tier summary bar — each pill's hover tooltip explains what
+         the tier means AND which lines are in it, so there's no separate
+         legend to open just to learn what "T1"/"T2"/"T3" stand for. -->
     <div v-if="dr.result && tierSummary.total > 0" class="tier-summary-bar">
       <span class="tier-summary-label">Evaluation Tiers</span>
       <span
@@ -32,7 +35,7 @@
       <span
         class="tier-summary-pill tier-pill-3"
         :title="tierTooltips.t3"
-      ><span v-if="tierSummary.t3 > 0" class="microstat-pending-spinner">⟳</span>T3: {{ tierSummary.t3 }} pending</span>
+      ><span v-if="tierSummary.t3 > 0" class="msi msi-dense msi-spin microstat-pending-spinner">progress_activity</span>T3: {{ tierSummary.t3 }} pending</span>
       <span
         v-if="tierSummary.skip > 0"
         class="tier-summary-pill tier-pill-skip"
@@ -50,22 +53,25 @@
           v-for="entry in groupEntries"
           :key="entry.line"
           class="token-line-group"
-          :class="{ selected: pipeline.selectedLine === entry.line }"
+          :class="[{ selected: pipeline.selectedLine === entry.line }, entry.result ? 'status-' + getTierClass(entry.result) : '']"
         >
           <div class="token-line-header">
             <div class="token-line-header-left">
               <span class="token-line-header-label">Line {{ entry.line }}</span>
-              <!-- Three-tier badge -->
-              <span v-if="entry.result" class="tier-badge" :class="getTierClass(entry.result)" :title="getTierReason(entry.result)">{{ getTierLabel(entry.result) }}</span>
-              <span v-if="entry.result" class="token-line-microstats">
-                <span
-                  class="microstat-badge"
-                  :class="entry.result.wasCached ? 'microstat-cache-hit' : 'microstat-cache-miss'"
-                >{{ entry.result.wasCached ? 'HIT' : 'MISS' }}</span>
-                <span class="microstat-badge" :class="entry.result.error ? 'microstat-status-error' : entry.result.type === 'Pending' ? 'microstat-status-pending' : 'microstat-status-ok'">
-                  <span v-if="entry.result.type === 'Pending' && !entry.result.error" class="microstat-pending-spinner">⟳</span>{{ entry.result.error ? 'ERROR' : entry.result.type === 'Pending' ? 'PENDING' : 'OK' }}
-                </span>
+              <!-- Single primary status chip (was: 3 separate badges —
+                   tier, cache HIT/MISS, and OK/ERROR/PENDING — competing
+                   for attention with no clear hierarchy). Full detail
+                   (cache hit/miss, exact reason) stays in the tooltip. -->
+              <span
+                v-if="entry.result"
+                class="status-chip"
+                :class="'status-chip-' + getTierClass(entry.result)"
+                :title="getTierReason(entry.result) + (entry.result.wasCached ? ' · cache HIT' : ' · cache MISS')"
+              >
+                <span v-if="entry.result.type === 'Pending' && !entry.result.error" class="msi msi-dense msi-spin microstat-pending-spinner">progress_activity</span>
+                {{ getTierStatusLabel(entry.result) }}
               </span>
+              <span v-if="entry.result?.parselet" class="parselet-chip" :title="'Matched parselet: ' + entry.result.parselet">{{ entry.result.parselet }}</span>
             </div>
             <div class="token-line-counts">
               <span class="token-count-badge">{{ entry.tokens.length }} token{{ entry.tokens.length !== 1 ? 's' : '' }}</span>
@@ -90,17 +96,17 @@
             </span>
             <span class="token-line-result-arrow">→</span>
             <span class="token-line-result-value" :style="{ color: entry.result.error ? 'var(--error)' : 'var(--accent)' }">
-              <span v-if="entry.result.type === 'Pending' && !entry.result.error" class="microstat-pending-spinner">⟳</span>{{ entry.result.error || entry.result.result || (entry.result.type === 'Pending' ? 'awaiting resolution…' : '') }}
+              <span v-if="entry.result.type === 'Pending' && !entry.result.error" class="msi msi-dense msi-spin microstat-pending-spinner">progress_activity</span>{{ entry.result.error || entry.result.result || (entry.result.type === 'Pending' ? 'awaiting resolution…' : '') }}
             </span>
             <span v-if="entry.result.timedOut" class="token-line-result-timeout" title="API fetch timed out — result is a 0 gp fallback, not real data">
-              ⚠ timed out
+              <span class="msi msi-dense">warning</span> timed out
             </span>
             <button
               class="token-line-result-copy"
               :data-copy="entry.result.error || entry.result.result"
               title="Copy result"
               @click="copyResult($event)"
-            >📋</button>
+            ><span class="msi msi-dense">content_copy</span></button>
           </div>
         </div>
       </template>
@@ -266,16 +272,18 @@ const tierBreakdown = computed<{ t1: number[]; t2: number[]; t3: number[]; skip:
   return b;
 });
 
-/** Pre-formatted tooltip strings for each tier pill, computed to avoid complex template expressions. */
+/** Pre-formatted tooltip strings for each tier pill — leads with what the
+ * tier means, so hovering the pill is enough to learn it without a
+ * separate legend to open. */
 const tierTooltips = computed(() => {
   const b = tierBreakdown.value;
-  const fmtLines = (nums: number[]) => nums.length > 0 ? 'Lines: ' + nums.join(', ') : '';
-  const fmtSkip = b.skip.length > 0 ? 'Lines:\n' + b.skip.map(s => 'L' + s.line + ' "' + s.expr + '": ' + s.error).join('\n') : '';
+  const fmtLines = (nums: number[]) => nums.length > 0 ? '\nLines: ' + nums.join(', ') : '';
+  const fmtSkip = b.skip.length > 0 ? '\n' + b.skip.map(s => 'L' + s.line + ' "' + s.expr + '": ' + s.error).join('\n') : '';
   return {
-    t1: fmtLines(b.t1),
-    t2: fmtLines(b.t2),
-    t3: fmtLines(b.t3),
-    skip: fmtSkip,
+    t1: 'Fresh — full evaluation (lexer → parser → compiler → VM), nothing reused.' + fmtLines(b.t1),
+    t2: 'Cached — bytecode reused from an earlier evaluation of the same expression.' + fmtLines(b.t2),
+    t3: 'Pending — async data (e.g. a currency/price lookup) hasn\'t resolved yet.' + fmtLines(b.t3),
+    skip: 'A parse or evaluation error.' + fmtSkip,
   };
 });
 
@@ -294,11 +302,38 @@ function getTierLabel(result: LineResult): string {
   return 'T1';
 }
 
+/** Combined "tier + status" label for the single primary status chip. */
+function getTierStatusLabel(result: LineResult): string {
+  if (result.error) return 'Error';
+  if (result.wasCached) return 'T2 Cached';
+  if (result.type === 'Pending') return 'T3 Pending';
+  return 'T1 Fresh';
+}
+
 function getTierReason(result: LineResult): string {
   if (result.error) return `Error: ${result.error}`;
   if (result.wasCached) return 'Tier 2 (Cache hit) — bytecode reused from earlier evaluation';
   if (result.type === 'Pending') return 'Tier 3 (Async pending) — awaiting external data resolution';
   return 'Tier 1 (Fresh) — full eval: lexer → parser → compiler → VM';
+}
+
+/* ── Copy all results ────────────────────────────────────────────── */
+const hasAnyResults = computed(() => dr.lineResults.some(r => r.result || r.error));
+
+function copyAllResults(): void {
+  const text = dr.lineResults
+    .map(r => `L${r.lineNumber ?? 1}: ${r.expression} = ${r.error ?? r.result ?? ''}`)
+    .join('\n');
+  if (!text) return;
+  navigator.clipboard.writeText(text).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
 }
 
 /* ── Copy result ──────────────────────────────────────────────── */
@@ -308,10 +343,10 @@ function copyResult(e: MouseEvent): void {
   const text = btn.dataset.copy ?? '';
   if (!text) return;
   navigator.clipboard.writeText(text).then(() => {
-    const orig = btn.textContent;
-    btn.textContent = '✓';
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="msi msi-dense">check</span>';
     btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1000);
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1000);
   }).catch(() => {
     const ta = document.createElement('textarea');
     ta.value = text;

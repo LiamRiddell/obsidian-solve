@@ -37,7 +37,7 @@
           :class="{ expanded: expandedVars.has(entry.variable) }"
         >
           <div class="dag-var-header" @click="toggleVar(entry.variable)">
-            <span class="dag-var-toggle">{{ expandedVars.has(entry.variable) ? '▼' : '▶' }}</span>
+            <span class="msi msi-dense dag-var-toggle">{{ expandedVars.has(entry.variable) ? 'expand_more' : 'chevron_right' }}</span>
             <span
               class="dag-var-line"
               :class="{ 'dag-var-line-ext': !entry.producerLine }"
@@ -48,7 +48,10 @@
             </span>
             <span class="dag-var-name">{{ entry.variable }}</span>
             <span class="dag-var-counts">
-              <span class="dag-badge dag-badge-read" :title="'Read by ' + entry.consumers.length + ' lines'">
+              <span v-if="entry.producerLine && entry.consumers.length === 0" class="dag-badge dag-badge-write" title="Defined but never read anywhere in this document">
+                unused
+              </span>
+              <span v-else class="dag-badge dag-badge-read" :title="'Read by ' + entry.consumers.length + ' lines'">
                 {{ entry.consumers.length }} read{{ entry.consumers.length !== 1 ? 's' : '' }}
               </span>
             </span>
@@ -71,6 +74,28 @@
           </div>
         </div>
 
+        <!-- Per-line data source dependencies: "what does THIS line depend
+             on", complementing the section below ("what depends on THIS
+             source") — uses dataSourceDeps, populated by the engine but
+             previously never read anywhere in the playground. -->
+        <div v-if="perLineDeps.length > 0" class="dag-section-header">
+          Per-Line Dependencies
+        </div>
+        <div v-for="entry in perLineDeps" :key="entry.lineNumber" class="dag-var-group">
+          <div class="dag-var-header" style="cursor: default;" @click.stop>
+            <span
+              class="dag-var-line"
+              title="Go to this line"
+              style="cursor: pointer;"
+              @click="selectLine(entry.lineNumber)"
+            >L{{ entry.lineNumber }}</span>
+            <span class="dag-var-name">depends on</span>
+            <span class="dag-consumer-chips">
+              <span v-for="src in entry.sources" :key="src" class="dag-consumer-chip" style="cursor: default; color: var(--stage-async);"><span class="msi">sensors</span> {{ src }}</span>
+            </span>
+          </div>
+        </div>
+
         <!-- Data source dependencies -->
         <div v-if="dataSourceEntries.length > 0" class="dag-section-header">
           Data Source Dependencies
@@ -83,7 +108,7 @@
         >
           <div class="dag-var-header" @click="toggleSource(entry.key)">
             <span class="dag-var-toggle">{{ expandedSources.has(entry.key) ? '▼' : '▶' }}</span>
-            <span class="dag-var-name" style="color:var(--stage-async)">📡 {{ entry.key }}</span>
+            <span class="dag-var-name" style="color:var(--stage-async); display:inline-flex; align-items:center; gap:4px;"><span class="msi msi-dense">sensors</span> {{ entry.key }}</span>
             <span class="dag-var-counts">
               <span class="dag-badge dag-badge-async">{{ entry.consumers.length }} line{{ entry.consumers.length !== 1 ? 's' : '' }}</span>
             </span>
@@ -192,6 +217,21 @@ interface DataSourceEntry {
   consumers: number[];
 }
 
+interface PerLineDepsEntry {
+  lineNumber: number;
+  sources: string[];
+}
+
+/** Per-line "what data sources does this line depend on" — the inverse of dataSourceEntries below. */
+const perLineDeps = computed<PerLineDepsEntry[]>(() => {
+  const snap = dr.dagSnapshot;
+  if (!snap?.dataSourceDeps) return [];
+  return Object.entries(snap.dataSourceDeps)
+    .map(([lnStr, sources]) => ({ lineNumber: Number(lnStr), sources }))
+    .filter(e => e.sources.length > 0)
+    .sort((a, b) => a.lineNumber - b.lineNumber);
+});
+
 const dataSourceEntries = computed<DataSourceEntry[]>(() => {
   const snap = dr.dagSnapshot;
   if (!snap) return [];
@@ -227,10 +267,10 @@ const dataSourceEntries = computed<DataSourceEntry[]>(() => {
   background: rgba(255,255,255,0.04);
 }
 .dag-var-toggle {
-  font-size: 9px;
   color: var(--text-muted);
-  width: 12px;
+  width: 20px;
   flex-shrink: 0;
+  justify-content: center;
 }
 .dag-var-line {
   display: inline-flex;
@@ -242,15 +282,15 @@ const dataSourceEntries = computed<DataSourceEntry[]>(() => {
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(78, 201, 176, 0.12);
-  color: #4ec9b0;
-  border: 1px solid rgba(78, 201, 176, 0.2);
+  background: rgba(144, 224, 239, 0.12);
+  color: #90e0ef;
+  border: 1px solid rgba(144, 224, 239, 0.2);
   flex-shrink: 0;
   cursor: pointer;
   transition: background 0.15s;
 }
 .dag-var-line:hover {
-  background: rgba(78, 201, 176, 0.2);
+  background: rgba(144, 224, 239, 0.2);
 }
 .dag-var-line-ext {
   background: rgba(107, 107, 117, 0.1);
@@ -287,16 +327,16 @@ const dataSourceEntries = computed<DataSourceEntry[]>(() => {
   letter-spacing: 0.3px;
 }
 .dag-badge-read {
-  background: rgba(90, 200, 250, 0.15);
-  color: #5ac8fa;
+  background: rgba(123, 223, 242, 0.15);
+  color: #7bdff2;
 }
 .dag-badge-write {
-  background: rgba(78, 201, 176, 0.15);
-  color: #4ec9b0;
+  background: rgba(144, 224, 239, 0.15);
+  color: #90e0ef;
 }
 .dag-badge-async {
-  background: rgba(255, 216, 102, 0.15);
-  color: #ffd866;
+  background: rgba(250, 255, 105, 0.15);
+  color: #faff69;
 }
 .dag-var-body {
   padding: 0 12px 8px 28px;
@@ -323,6 +363,7 @@ const dataSourceEntries = computed<DataSourceEntry[]>(() => {
 .dag-producer-chip {
   display: inline-flex;
   align-items: center;
+  gap: 3px;
   padding: 2px 8px;
   font-size: 10px;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
@@ -332,6 +373,7 @@ const dataSourceEntries = computed<DataSourceEntry[]>(() => {
   cursor: pointer;
   transition: background 0.15s;
 }
+.dag-consumer-chip .msi { font-size: 13px; }
 .dag-consumer-chip:hover,
 .dag-producer-chip:hover {
   background: rgba(255,255,255,0.12);

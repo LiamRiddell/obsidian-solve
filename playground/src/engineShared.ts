@@ -24,6 +24,22 @@ import type {
 /** Minimal diagnostic event shape consumed by the extractors. */
 export type TimedEvent = { type: string; elapsedNs: number };
 
+/**
+ * Whether a line's evaluation error was just an unrecognized bare word
+ * (e.g. a stray "hello" used as ordinary prose) rather than a genuine
+ * mistake in an intended expression.
+ *
+ * Bare single-identifier lines — no `:` prefix, no operators, no other
+ * expression markers — are inherently ambiguous: they could be prose, or
+ * a typo'd variable reference. Colon-prefixed references (`:foo`) are an
+ * explicit, deliberate expression marker and still error normally when
+ * undefined; only the unprefixed bare-word case is treated as ignorable.
+ */
+export function isUnrecognizedBareWord(trimmed: string, error: string | undefined): boolean {
+	if (!error || !error.startsWith('Undefined variable:')) return false;
+	return /^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed);
+}
+
 const ZERO_STATS: PerformanceStats = {
 	lexerTime: 0,
 	parserTime: 0,
@@ -36,9 +52,11 @@ const ZERO_STATS: PerformanceStats = {
  * Extract per-stage wall-clock timings from the diagnostic event timeline.
  *
  * Each event carries a real `elapsedNs` stamp (set by TimelineDiagnosticCollector)
- * relative to `pipeline_start`. We derive:
- *   - lexerTime:  first `token_emitted` → last `token_emitted`
- *   - parserTime: last `token_emitted` → `bytecode_built`
+ * relative to `pipeline_start`. We derive four back-to-back, non-overlapping
+ * spans (each stage's time is real wall-clock time nobody else also claims,
+ * so the four sum to the true elapsed time between lexing and VM halt):
+ *   - lexerTime:    first `token_emitted` → last `token_emitted`
+ *   - parserTime:   last `token_emitted` → last `parselet_matched`
  *   - bytecodeTime: last `parselet_matched` → `bytecode_built` (compilation tail)
  *   - executionTime: first `vm_step` (or `bytecode_built`) → `vm_halt`
  *   - totalTime: `pipeline_start` → `pipeline_end`
@@ -87,18 +105,26 @@ export function extractStageTimings(
 		byType.tokenEmitted[byType.tokenEmitted.length - 1]?.elapsedNs ??
 		lexStart;
 
-	// Parser: last token → bytecode built
-	const parseStart = lexEnd;
-	const parseEnd = byType.bytecodeBuilt?.elapsedNs ?? parseStart;
-
-	// Compiler tail: last parselet matched → bytecode built
+	// Compiler tail: last parselet matched → bytecode built. Computed
+	// first so parserTime (below) can stop exactly where it starts —
+	// previously parserTime ran all the way to bytecodeBuilt too, so the
+	// [lastParselet, bytecodeBuilt] span was counted in BOTH parserTime
+	// and bytecodeTime. That inflated their sum past totalTime, which
+	// silently zeroed out "Overhead" (computeOverhead clamps negative
+	// results to 0) and made the flamegraph/heatmap show a breakdown
+	// that couldn't actually add up to the real end-to-end time.
 	const lastParselet =
 		byType.parseletMatched[byType.parseletMatched.length - 1];
-	const compileStart = lastParselet?.elapsedNs ?? parseEnd;
-	const compileEnd = parseEnd;
+	const compileStart = lastParselet?.elapsedNs ?? byType.bytecodeBuilt?.elapsedNs ?? lexEnd;
+	const compileEnd = byType.bytecodeBuilt?.elapsedNs ?? compileStart;
+
+	// Parser: last token → last parselet matched (pure parsing, ending
+	// exactly where the compiler tail above begins — no overlap).
+	const parseStart = lexEnd;
+	const parseEnd = compileStart;
 
 	// VM: first vm_step (or bytecode built) → vm_halt
-	const vmStart = byType.vmStep[0]?.elapsedNs ?? parseEnd;
+	const vmStart = byType.vmStep[0]?.elapsedNs ?? compileEnd;
 	const vmEnd =
 		byType.vmHalt?.elapsedNs ?? byType.pipelineEnd?.elapsedNs ?? vmStart;
 
@@ -144,13 +170,16 @@ export function extractLineTimings(
 
 	const lexStart = firstToken?.elapsedNs ?? firstEvent.elapsedNs;
 	const lexEnd = lastToken?.elapsedNs ?? lexStart;
+	// Same non-overlapping split as extractStageTimings above: the
+	// compiler tail [lastParselet, bytecodeBuilt] must not also be
+	// counted inside parserTime, or the four stage times sum to more
+	// than the line's real total span.
+	const compileStart = lastParselet?.elapsedNs ?? bytecodeBuilt?.elapsedNs ?? lexEnd;
+	const compileEnd = bytecodeBuilt?.elapsedNs ?? compileStart;
 	const parseStart = lexEnd;
-	const parseEnd =
-		bytecodeBuilt?.elapsedNs ?? lastParselet?.elapsedNs ?? parseStart;
-	const compileStart = lastParselet?.elapsedNs ?? parseEnd;
-	const compileEnd = parseEnd;
+	const parseEnd = compileStart;
 	const vmStart =
-		firstVmStep?.elapsedNs ?? bytecodeBuilt?.elapsedNs ?? parseEnd;
+		firstVmStep?.elapsedNs ?? compileEnd;
 	const vmEnd = lastVmHalt?.elapsedNs ?? lastEvent.elapsedNs;
 
 	return {

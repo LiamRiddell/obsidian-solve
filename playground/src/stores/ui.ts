@@ -3,6 +3,8 @@ import { ref } from 'vue';
 
 export type ActiveTab =
   | 'tokens'
+  | 'summary'
+  | 'qa'
   | 'flow'
   | 'bytecode'
   | 'vmtrace'
@@ -17,7 +19,6 @@ export type ActiveTab =
 export const useUiStore = defineStore('ui', () => {
   /* ── State ──────────────────────────────────────────────── */
   const activeTab = ref<ActiveTab>('tokens');
-  const sidebarCollapsed = ref(false);
   const editorCollapsed = ref(false);
   const diagnosticsCollapsed = ref(false);
 
@@ -35,10 +36,6 @@ export const useUiStore = defineStore('ui', () => {
     activeTab.value = 'parselets';
   }
 
-  function toggleSidebar(): void {
-    sidebarCollapsed.value = !sidebarCollapsed.value;
-  }
-
   function toggleEditor(): void {
     editorCollapsed.value = !editorCollapsed.value;
   }
@@ -50,12 +47,10 @@ export const useUiStore = defineStore('ui', () => {
   return {
     activeTab,
     parseletFilterQuery,
-    sidebarCollapsed,
     editorCollapsed,
     diagnosticsCollapsed,
     setActiveTab,
     focusParselet,
-    toggleSidebar,
     toggleEditor,
     toggleDiagnostics,
   };

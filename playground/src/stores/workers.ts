@@ -57,15 +57,6 @@ export const useWorkersStore = defineStore('workers', () => {
     gcTime: 0,
   });
 
-  /* ── Compilation Worker Metrics (placeholder — real data from engine) ── */
-  const compilationWorker = reactive({
-    isActive: false,
-    activeCompilations: 0,
-    bytecodeStored: 0,
-    bytecodeDiscarded: 0,
-    transferSize: '0 B',
-  });
-
   /* ── Activity Log ───────────────────────────────────────── */
   const activityLog = ref<WorkerLogEntry[]>([]);
 
@@ -154,7 +145,6 @@ export const useWorkersStore = defineStore('workers', () => {
     engine,
     queryCache,
     queryClientConfig,
-    compilationWorker,
     activityLog,
     // Derived
     engineStatus,

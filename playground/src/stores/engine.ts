@@ -33,6 +33,7 @@ export const useEngineStore = defineStore('engine', () => {
       // underlying data had successfully arrived.
       if (streamEvent.lineUpdate) {
         dr.patchLineResult(streamEvent.lineUpdate);
+        dr.patchLineStages(streamEvent.lineUpdate.lineNumber, streamEvent.lineUpdate.stages);
       }
       return;
     }
