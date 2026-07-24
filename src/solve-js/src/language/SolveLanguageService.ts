@@ -24,6 +24,23 @@ interface CacheEntry {
  * knowledge of CSS, CodeMirror, VS Code, or any other rendering concept
  * lives here — see `language/adapters/` for that.
  *
+ * Classification happens at the LEXER stage, before the normalizer runs
+ * (normalization — phrase fusion, implicit multiply, and package-specific
+ * rules — happens later, only on the real evaluation path). A package's
+ * lexer-level custom token types (e.g. a custom keyword) are recognized
+ * here exactly as evaluation would see them. A package's *normalizer*-fused
+ * synthetic tokens (e.g. OSRS's GAME_ITEM, built by fusing several
+ * consecutive IDENT tokens against an item-name trie) are NOT — this
+ * service still shows the pre-fusion IDENT tokens individually for those.
+ * `ISolvePackage.tokenCategories` entries for normalizer-only token types
+ * are still valid, correct registrations (queryable via getTokenCategory)
+ * — they just won't currently be reachable through this lexer-only
+ * classification path. Folding normalization in would require running it
+ * per keystroke on the highlighting path too, which needs its own careful
+ * design (span recomputation for fused multi-token ranges, in particular)
+ * rather than a quick addition here.
+ *
+
  * Must be constructed with an already-configured `ExpressionEngine` (one
  * with all currently-relevant packages registered) rather than a bare
  * lexer — reusing an existing engine is both the fast path (no throwaway

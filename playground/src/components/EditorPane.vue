@@ -10,12 +10,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { EditorView, keymap, placeholder, Decoration, WidgetType } from '@codemirror/view';
+import { EditorView, keymap, placeholder, Decoration, WidgetType, ViewPlugin, type ViewUpdate, type DecorationSet } from '@codemirror/view';
 import { EditorState, StateField, RangeSetBuilder, RangeSet, StateEffect } from '@codemirror/state';
 import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { SolveHighlightProvider } from '@/app/codemirror/SolveHighlightProvider';
+import { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
+import { SolveLanguageService } from '@solve-js/language/SolveLanguageService';
+import { categoryClassName } from '@solve-js/language/adapters/codemirror';
 import { useEngineStore } from '../stores/engine.js';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { useEditorStore } from '../stores/editor.js';
@@ -30,7 +32,15 @@ const editorStore = useEditorStore();
 const pipeline = usePipelineStore();
 const ui = useUiStore();
 
-const highlightProvider = new SolveHighlightProvider();
+// Dedicated main-thread engine purely for lexing/highlighting — the actual
+// evaluation path (useEngineStore) runs through a Web Worker, the wrong
+// tool for a synchronous per-keystroke operation. BUILTIN_PACKAGES-only
+// today (the playground doesn't register OSRS or any other opt-in package
+// anywhere — confirmed via grep); keep this in sync if that ever changes,
+// since a mismatch would mean plugin-contributed tokens silently render
+// unstyled here even though they're correctly recognized during evaluation.
+const highlightEngine = new ExpressionEngine('en', false);
+const languageService = new SolveLanguageService(highlightEngine);
 
 /* ── Inline Result Widget ─────────────────────────────────────── */
 class ResultWidget extends WidgetType {
@@ -81,37 +91,67 @@ const resultField = StateField.define<RangeSet<Decoration>>({
 });
 
 /**
- * StateField for syntax highlighting of solve expressions via the
- * SolveHighlightProvider. Wraps recognized token sequences (numbers,
- * operators, identifiers, etc.) with CSS class decorations.
+ * Syntax highlighting for solve expressions, driven by the engine-agnostic
+ * SolveLanguageService + CodeMirror adapter. Wraps every semantically
+ * classified token (numbers, operators, keywords, variables, punctuation,
+ * ...) with a `cm-solve-{category}` decoration.
  *
- * Recomputes on every document change via `tr.docChanged`.
+ * A ViewPlugin rather than a StateField specifically so it can read
+ * `view.visibleRanges` — only the lines actually on screen are lexed on
+ * every rebuild, matching the real Obsidian editor's viewport-only
+ * approach. An earlier version iterated the WHOLE document on every
+ * rebuild regardless of scroll position, which meant every keystroke in a
+ * large document re-lexed lines nobody could even see.
+ *
+ * Invalidation is surgical: only the lines actually touched by a change
+ * are evicted from the language service's cache (via `invalidateLines`),
+ * so editing one line doesn't force every other visible line's decorations
+ * to be recomputed from scratch on the next render.
  */
-const solveHighlightPlugin = StateField.define<RangeSet<Decoration>>({
-  create(state) {
+class SolveHighlightPluginValue {
+  decorations: DecorationSet;
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view);
+  }
+
+  update(update: ViewUpdate): void {
+    if (update.docChanged) {
+      const changedLines = new Set<number>();
+      update.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+        const startLine = update.state.doc.lineAt(fromB).number;
+        const endLine = update.state.doc.lineAt(toB).number;
+        for (let line = startLine; line <= endLine; line++) changedLines.add(line);
+      });
+      languageService.invalidateLines(changedLines);
+      this.decorations = this.buildDecorations(update.view);
+    } else if (update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view);
+    }
+  }
+
+  private buildDecorations(view: EditorView): DecorationSet {
     const builder = new RangeSetBuilder<Decoration>();
-    const doc = state.doc;
-    for (let i = 1; i <= doc.lines; i++) {
-      const line = doc.line(i);
-      for (const range of highlightProvider.getLineHighlights(line.text, i)) {
-        builder.add(line.from + range.from, line.from + range.to, Decoration.mark({ class: range.className }));
+    for (const { from, to } of view.visibleRanges) {
+      let pos = from;
+      while (pos <= to) {
+        const line = view.state.doc.lineAt(pos);
+        for (const token of languageService.getSemanticTokens(line.text, line.number)) {
+          builder.add(
+            line.from + token.from,
+            line.from + token.to,
+            Decoration.mark({ class: categoryClassName(token.category) }),
+          );
+        }
+        pos = line.to + 1;
       }
     }
     return builder.finish();
-  },
-  update(decorations, tr) {
-    if (!tr.docChanged) return decorations;
-    const builder = new RangeSetBuilder<Decoration>();
-    const doc = tr.state.doc;
-    for (let i = 1; i <= doc.lines; i++) {
-      const line = doc.line(i);
-      for (const range of highlightProvider.getLineHighlights(line.text, i)) {
-        builder.add(line.from + range.from, line.from + range.to, Decoration.mark({ class: range.className }));
-      }
-    }
-    return builder.finish();
-  },
-  provide: f => EditorView.decorations.from(f),
+  }
+}
+
+const solveHighlightPlugin = ViewPlugin.fromClass(SolveHighlightPluginValue, {
+  decorations: v => v.decorations,
 });
 
 /**
@@ -191,7 +231,9 @@ onMounted(() => {
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const expr = update.state.doc.toString().trim();
-            highlightProvider.invalidateCache();
+            // Highlight cache invalidation is now handled surgically, per
+            // changed line, inside SolveHighlightPluginValue.update() —
+            // no blanket clear needed here.
             engine.evaluate(expr);
           }
           if (update.selectionSet) {
@@ -280,4 +322,24 @@ watch(() => dr.result, (result) => {
 :deep(.cm-inline-solve:hover) {
   background: rgba(199, 169, 255, 0.2);
 }
+
+/* Syntax highlight colors — "One Dark" palette. The playground is a
+   diagnostic tool with no settings UI, so these are hardcoded rather than
+   driven by CSS custom properties (unlike the real Obsidian plugin, where
+   the same class names resolve `--solve-hl-*` variables from user
+   settings — see src/app/styles.css). */
+:deep(.cm-solve-number) { color: #61AFEF; }
+:deep(.cm-solve-string) { color: #98C379; }
+:deep(.cm-solve-keyword) { color: #C678DD; }
+:deep(.cm-solve-operator) { color: #ABB2BF; }
+:deep(.cm-solve-comparison) { color: #56B6C2; }
+:deep(.cm-solve-bitwise) { color: #56B6C2; }
+:deep(.cm-solve-function) { color: #E5C07B; }
+:deep(.cm-solve-variable) { color: #E06C75; }
+:deep(.cm-solve-unit) { color: #56B6C2; }
+:deep(.cm-solve-datetime) { color: #D19A66; }
+:deep(.cm-solve-vector) { color: #D19A66; }
+:deep(.cm-solve-punctuation) { color: #5C6370; }
+:deep(.cm-solve-error) { color: #E06C75; text-decoration: underline wavy; }
+:deep(.cm-solve-osrs-item) { color: #A6E22E; font-weight: 600; }
 </style>
