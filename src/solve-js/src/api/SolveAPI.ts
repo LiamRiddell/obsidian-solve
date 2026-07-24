@@ -10,6 +10,7 @@ import type { LexerPlugin } from "@solve-js/lexer/ExpressionLexer";
 import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
 import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
 import type { SolveTokenCategory } from "@solve-js/language/SolveTokenCategory";
+import type { CompletionItem } from "@solve-js/language/SolveLanguageService";
 
 /**
  * Public API for registering plugins with the solve-js engine.
@@ -128,6 +129,22 @@ export interface ISolvePackage {
    * ```
    */
   tokenCategories?: Record<string, SolveTokenCategory>;
+  /**
+   * Completion candidates for this package — the plugin-facing half of
+   * solve-js's editor-agnostic completions API
+   * (`SolveLanguageService.getCompletions()`). A package's single-word
+   * keywords (via {@link lexerPlugin}) already flow into completions
+   * automatically; this field is for candidates that AREN'T lexer
+   * keywords, such as a vocabulary of item/entity names. A plain,
+   * pre-built list, not a callback — completion candidate lists are
+   * meant to be cheap and static within one engine configuration.
+   *
+   * @example
+   * ```ts
+   * completionItems: [{ label: "Abyssal whip", category: "my-plugin-item", detail: "Item" }]
+   * ```
+   */
+  completionItems?: CompletionItem[];
 }
 
 /**

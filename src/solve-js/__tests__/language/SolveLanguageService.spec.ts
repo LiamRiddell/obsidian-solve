@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { SolveLanguageService } from "@solve-js/language/SolveLanguageService";
+import { OSRS_PACKAGE } from "@solve-js/packages/osrs/OsrsPackage";
 
 describe("SolveLanguageService", () => {
   let engine: ExpressionEngine;
@@ -309,6 +310,97 @@ describe("SolveLanguageService", () => {
       const spy = jest.spyOn(lexer, "getHighlightTokens");
       service.getSemanticTokens("2499 + 1", 2499); // most recently inserted — should still be cached
       expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
+
+  describe("getCompletions", () => {
+    test("prefix 'sq' includes sqrt as a function", () => {
+      const items = service.getCompletions("sq", 2);
+      const sqrt = items.find(i => i.label === "sqrt");
+      expect(sqrt).toBeDefined();
+      expect(sqrt!.category).toBe("function");
+    });
+
+    test("prefix 'p' includes pi (keyword) and plus (operator)", () => {
+      const items = service.getCompletions("p", 1);
+      expect(items.some(i => i.label === "pi" && i.category === "keyword")).toBe(true);
+      expect(items.some(i => i.label === "plus" && i.category === "operator")).toBe(true);
+    });
+
+    test("prefix 'k' includes unit candidates", () => {
+      const items = service.getCompletions("k", 1);
+      expect(items.some(i => i.category === "unit")).toBe(true);
+    });
+
+    test("a variable written on one line appears as a completion when its prefix is typed on another", () => {
+      engine.evaluateLine(1, ":myvar = 5");
+      const items = service.getCompletions("my", 2);
+      expect(items.some(i => i.label === "myvar" && i.category === "variable")).toBe(true);
+    });
+
+    test("empty prefix (cursor right after whitespace/operator) returns no completions", () => {
+      expect(service.getCompletions("10 + ", 5)).toHaveLength(0);
+      expect(service.getCompletions("", 0)).toHaveLength(0);
+    });
+
+    test("no engine provided returns no completions, no throw", () => {
+      const bareService = new SolveLanguageService();
+      expect(bareService.getCompletions("sq", 2)).toEqual([]);
+    });
+
+    test("OSRS's keywords (osrs, ge, price) appear once the package is registered", () => {
+      // OSRS ships in BUILTIN_PACKAGES (registered by default on `engine`
+      // from beforeEach) — construct a package-free engine here so
+      // register/unregister is a clean, isolated before/after, matching
+      // PackageUnregistration.spec.ts's existing pattern for this.
+      const isolatedEngine = new ExpressionEngine("en", false, undefined, undefined, []);
+      const isolatedService = new SolveLanguageService(isolatedEngine);
+      expect(isolatedService.getCompletions("os", 2).some(i => i.label === "osrs")).toBe(false);
+
+      isolatedEngine.registerPackage(OSRS_PACKAGE);
+      isolatedService.invalidateCache();
+      expect(isolatedService.getCompletions("os", 2).some(i => i.label === "osrs")).toBe(true);
+      expect(isolatedService.getCompletions("g", 1).some(i => i.label === "ge")).toBe(true);
+    });
+
+    test("OSRS's completionItems (item names) appear once registered and vanish after unregisterPackage", () => {
+      const isolatedEngine = new ExpressionEngine("en", false, undefined, undefined, []);
+      const isolatedService = new SolveLanguageService(isolatedEngine);
+
+      isolatedEngine.registerPackage(OSRS_PACKAGE);
+      isolatedService.invalidateCache();
+      expect(isolatedService.getCompletions("iron", 1).some(i => i.label === "Iron Axe" && i.category === "osrs-item")).toBe(true);
+
+      isolatedEngine.unregisterPackage("osrs");
+      isolatedService.invalidateCache(); // static candidates are cached — must be told the package list changed
+      expect(isolatedService.getCompletions("iron", 1).some(i => i.label === "Iron Axe")).toBe(false);
+    });
+
+    test("a custom variableNameSource is used instead of the engine's own DAG", () => {
+      const custom = new SolveLanguageService(engine, { variableNameSource: () => ["customVar"] });
+      expect(custom.getCompletions("cust", 1).some(i => i.label === "customVar")).toBe(true);
+    });
+
+    test("results are capped and variables are ranked ahead of keywords/units", () => {
+      engine.evaluateLine(1, ":pizza = 1"); // shares the "pi" prefix with the keyword "pi"
+      const items = service.getCompletions("pi", 2);
+      const pizzaIndex = items.findIndex(i => i.label === "pizza");
+      const piIndex = items.findIndex(i => i.label === "pi");
+      expect(pizzaIndex).toBeGreaterThanOrEqual(0);
+      expect(piIndex).toBeGreaterThanOrEqual(0);
+      expect(pizzaIndex).toBeLessThan(piIndex);
+    });
+
+    test("static keyword/unit candidates are memoized and rebuilt only after invalidateCache", () => {
+      const lexer = engine.getLexer();
+      service.getCompletions("sq", 1);
+      const spy = jest.spyOn(lexer, "getKeywords");
+      service.getCompletions("sq", 1);
+      expect(spy).not.toHaveBeenCalled();
+      service.invalidateCache();
+      service.getCompletions("sq", 1);
+      expect(spy).toHaveBeenCalledTimes(1);
       spy.mockRestore();
     });
   });

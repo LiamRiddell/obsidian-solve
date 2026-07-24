@@ -171,3 +171,32 @@ describe("ExpressionEngine.unregisterPackage — lexer plugin cleanup (OSRS)", (
 		expect(getTokenCategory("GAME_ITEM")).toBeUndefined();
 	});
 });
+
+describe("ExpressionEngine.unregisterPackage — completionItems cleanup", () => {
+	function makeCompletionPackage(): ISolvePackage {
+		return {
+			name: "test-completion-unregistration-pkg",
+			completionItems: [{ label: "TestCandidate", category: "keyword" }],
+		};
+	}
+
+	test("registerPackage makes the item queryable via getPackageCompletionItems, gone after unregister", () => {
+		const engine = new ExpressionEngine("en", false, undefined, undefined, []);
+		expect(engine.getPackageCompletionItems()).toEqual([]);
+
+		engine.registerPackage(makeCompletionPackage());
+		expect(engine.getPackageCompletionItems()).toEqual([{ label: "TestCandidate", category: "keyword" }]);
+
+		expect(engine.unregisterPackage("test-completion-unregistration-pkg")).toBe(true);
+		expect(engine.getPackageCompletionItems()).toEqual([]);
+	});
+
+	test("OSRS's real completionItems (item names) are queryable while active, gone after unregister", () => {
+		const engine = new ExpressionEngine("en", false, undefined, undefined, []);
+		engine.registerPackage(OSRS_PACKAGE);
+		expect(engine.getPackageCompletionItems().some(i => i.label === "Iron Axe" && i.category === "osrs-item")).toBe(true);
+
+		engine.unregisterPackage(OSRS_PACKAGE.name);
+		expect(engine.getPackageCompletionItems()).toEqual([]);
+	});
+});

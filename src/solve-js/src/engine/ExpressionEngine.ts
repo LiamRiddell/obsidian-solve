@@ -16,6 +16,7 @@ import { PackageManager } from "@solve-js/packages/PackageSystem";
 import { BUILTIN_PACKAGES } from "@solve-js/providers/builtins";
 import type { ISolvePackage } from "@solve-js/api/SolveAPI";
 import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import type { CompletionItem } from "@solve-js/language/SolveLanguageService";
 import type { LexerPlugin } from "@solve-js/lexer/ExpressionLexer";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { QueryClient } from "@tanstack/query-core";
@@ -145,6 +146,15 @@ export class ExpressionEngine {
         tokenCategories: string[];
         lexerPlugin: LexerPlugin | undefined;
     }>();
+
+    /**
+     * Package-contributed completion candidates (`ISolvePackage.completionItems`),
+     * keyed by package name — engine-instance-local, not a shared registry
+     * (unlike tokenCategories), so no separate register/unregister module is
+     * needed: registerPackage()/unregisterPackage() just set/delete the
+     * package's own entry. {@link getPackageCompletionItems} flattens it.
+     */
+    private packageCompletionItems = new Map<string, CompletionItem[]>();
 
     /**
      * Keystroke-level AbortSignal — set by the UI layer (MarkdownEditorViewPlugin)
@@ -382,6 +392,9 @@ export class ExpressionEngine {
                 contribution.tokenCategories.push(tokenType);
             }
         }
+        if (pkg.completionItems) {
+            this.packageCompletionItems.set(pkg.name, pkg.completionItems);
+        }
 
         this.packageContributions.set(pkg.name, contribution);
     }
@@ -427,6 +440,7 @@ export class ExpressionEngine {
         if (contribution.lexerPlugin) {
             this.lexer.unregisterPlugin(contribution.lexerPlugin);
         }
+        this.packageCompletionItems.delete(packageName);
 
         this.packageContributions.delete(packageName);
         this.bytecodeCache.clear();
@@ -2052,6 +2066,19 @@ export class ExpressionEngine {
 
     getLexer(): Lexer {
         return this.lexer;
+    }
+
+    /**
+     * Every completion candidate contributed by currently-registered
+     * packages (`ISolvePackage.completionItems`), flattened across all of
+     * them. Used by `SolveLanguageService.getCompletions()`.
+     */
+    getPackageCompletionItems(): CompletionItem[] {
+        const items: CompletionItem[] = [];
+        for (const pkgItems of this.packageCompletionItems.values()) {
+            items.push(...pkgItems);
+        }
+        return items;
     }
 
     getParseletRegistry(): { prefix: Array<{ tokenType: string; bindingPower: number; category?: string }>; infix: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> } {

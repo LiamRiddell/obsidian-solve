@@ -1,5 +1,8 @@
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { SolveTokenCategory } from "@solve-js/language/SolveTokenCategory";
+import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { knownUnits } from "@solve-js/lexer/units";
+import { getMeasure } from "@solve-js/uom/UomConverter";
 
 /** A single classified span within a line — the entire output contract of the language service. */
 export interface SemanticToken {
@@ -7,6 +10,31 @@ export interface SemanticToken {
 	to: number;
 	category: SolveTokenCategory;
 }
+
+/** A single completion candidate — the entire output contract of `getCompletions()`. */
+export interface CompletionItem {
+	label: string;
+	/** Reuses the highlighting taxonomy — one adapter can serve both features. */
+	category: SolveTokenCategory;
+	/** e.g. a unit's measure ("length"), or the category name for keywords/functions. */
+	detail?: string;
+}
+
+/** Completion results are capped — a document-wide candidate pool has no reason to return more than this. */
+const MAX_COMPLETIONS = 50;
+
+/** Tier ordering for completion results: user-authored variables first, then grammar, then units. */
+const CATEGORY_TIER: Partial<Record<SolveTokenCategory, number>> = {
+	variable: 0,
+	function: 1,
+	keyword: 1,
+	operator: 1,
+	comparison: 1,
+	bitwise: 1,
+	datetime: 1,
+	vector: 1,
+	unit: 2,
+};
 
 /** Bounded cache size — see the eviction-policy note on `SolveLanguageService.cache`. */
 const MAX_CACHED_LINES = 2000;
@@ -25,6 +53,25 @@ interface CacheEntry {
 	// line's edit changes what variables exist, with nothing to trigger a
 	// re-check of this untouched line.
 	bareWordCandidate?: string;
+}
+
+export interface SolveLanguageServiceOptions {
+	/**
+	 * Overrides how the service discovers "variable names known in this
+	 * document" — used to legitimize a lone bare identifier line (see
+	 * `getSemanticTokens`'s single-token gate) and variable-name
+	 * completions (`getCompletions`). Defaults to reading
+	 * `engine.getDag().getSnapshot()`, which works for any consumer
+	 * sharing one `ExpressionEngine` between evaluation and the language
+	 * service (the real Obsidian editor).
+	 *
+	 * Required for consumers whose language service is backed by a
+	 * *different*, non-evaluating engine than the one that actually runs
+	 * the document (the playground's dedicated lexing-only engine, whose
+	 * own DAG is always empty) — pass a function reading the real
+	 * evaluation engine's DAG snapshot instead.
+	 */
+	variableNameSource?: () => Iterable<string>;
 }
 
 /**
@@ -62,7 +109,13 @@ interface CacheEntry {
  * parse pipeline, and the same bytecode cache, real evaluation uses; no
  * separate/duplicated grammar check). A single bare word ("hello", a valid
  * variable reference) or a keyword-only line ("pi") still parses and still
- * highlights — only genuinely ungrammatical text is suppressed.
+ * highlights — only genuinely ungrammatical text is suppressed, unless it's
+ * a known variable elsewhere in the document (see `variableNameSource`).
+ *
+ * `getCompletions()` is the other half of this "language server": unlike
+ * `getSemanticTokens()`, it's explicitly for *incomplete*, mid-typing text
+ * — it deliberately does NOT gate on parse validity (a half-typed
+ * expression almost never parses), using simple prefix matching instead.
  *
  * Must be constructed with an already-configured `ExpressionEngine` (one
  * with all currently-relevant packages registered) rather than a bare
@@ -72,24 +125,6 @@ interface CacheEntry {
  * recognize plugin-contributed tokens (e.g. a package's custom keywords)
  * unless it happened to have the identical packages registered.
  */
-export interface SolveLanguageServiceOptions {
-	/**
-	 * Overrides how the service discovers "variable names known in this
-	 * document" — used to legitimize a lone bare identifier line (see
-	 * `getSemanticTokens`'s single-token gate) and, later, variable-name
-	 * completions. Defaults to reading `engine.getDag().getSnapshot()`,
-	 * which works for any consumer sharing one `ExpressionEngine` between
-	 * evaluation and the language service (the real Obsidian editor).
-	 *
-	 * Required for consumers whose language service is backed by a
-	 * *different*, non-evaluating engine than the one that actually runs
-	 * the document (the playground's dedicated lexing-only engine, whose
-	 * own DAG is always empty) — pass a function reading the real
-	 * evaluation engine's DAG snapshot instead.
-	 */
-	variableNameSource?: () => Iterable<string>;
-}
-
 export class SolveLanguageService {
 	private engine: ExpressionEngine | null;
 	private variableNameSource: () => Iterable<string>;
@@ -110,6 +145,15 @@ export class SolveLanguageService {
 	// scrolled into view (frequency 1) — the opposite of what a "currently
 	// visible" cache should prioritize.
 	private cache = new Map<number, CacheEntry>();
+
+	// Keyword/unit/package-contributed completion candidates don't depend
+	// on any particular line — built lazily on first getCompletions() call
+	// and reused after that, since a package registration is the only thing
+	// that could ever change this list mid-session (see invalidateCache()).
+	// Variable-name candidates are NOT part of this — they're read fresh on
+	// every call from variableNameSource(), since those genuinely change on
+	// every edit.
+	private staticCompletionCandidates: CompletionItem[] | null = null;
 
 	constructor(engine?: ExpressionEngine | null, options?: SolveLanguageServiceOptions) {
 		this.engine = engine ?? null;
@@ -216,6 +260,71 @@ export class SolveLanguageService {
 		return tokens;
 	}
 
+	/**
+	 * Completion candidates for the identifier prefix immediately before
+	 * `cursorOffset` on `lineText`. Deliberately simple prefix matching, not
+	 * parser-driven "what's grammatically valid here" prediction — a
+	 * half-typed expression almost never parses, so gating on parse
+	 * validity (the way `getSemanticTokens` does) would suppress
+	 * completions almost always. This is the safest, fastest option that
+	 * still delivers real value.
+	 *
+	 * Candidates come from three sources: keywords (which already include
+	 * function names — see `ExpressionLexer.getKeywords()`'s doc comment)
+	 * and units, both static per engine configuration and cached lazily;
+	 * package-contributed items (`ISolvePackage.completionItems`), same
+	 * cache; and variable names, read fresh from `variableNameSource()` on
+	 * every call since those change on every edit.
+	 */
+	getCompletions(lineText: string, cursorOffset: number): CompletionItem[] {
+		const prefixMatch = /[A-Za-z0-9_]+$/.exec(lineText.slice(0, cursorOffset));
+		if (!prefixMatch) return [];
+		const prefix = prefixMatch[0].toLowerCase();
+
+		if (!this.engine) return [];
+
+		const candidates = this.getStaticCompletionCandidates();
+		const variableCandidates: CompletionItem[] = [];
+		for (const name of this.variableNameSource()) {
+			variableCandidates.push({ label: name, category: "variable" });
+		}
+
+		const matches: CompletionItem[] = [];
+		for (const item of variableCandidates) {
+			if (item.label.toLowerCase().startsWith(prefix)) matches.push(item);
+		}
+		for (const item of candidates) {
+			if (item.label.toLowerCase().startsWith(prefix)) matches.push(item);
+		}
+
+		matches.sort((a, b) => {
+			const tierDiff = (CATEGORY_TIER[a.category] ?? 3) - (CATEGORY_TIER[b.category] ?? 3);
+			if (tierDiff !== 0) return tierDiff;
+			return a.label.localeCompare(b.label);
+		});
+
+		return matches.slice(0, MAX_COMPLETIONS);
+	}
+
+	/** Lazily builds and caches the keyword/unit/package-item candidate list — see `staticCompletionCandidates`. */
+	private getStaticCompletionCandidates(): CompletionItem[] {
+		if (this.staticCompletionCandidates) return this.staticCompletionCandidates;
+
+		const items: CompletionItem[] = [];
+		for (const [word, tokenType] of Object.entries(this.engine!.getLexer().getKeywords())) {
+			const category = getTokenCategory(tokenType);
+			if (!category) continue;
+			items.push({ label: word, category });
+		}
+		for (const unit of knownUnits) {
+			items.push({ label: unit, category: "unit", detail: getMeasure(unit) });
+		}
+		items.push(...this.engine!.getPackageCompletionItems());
+
+		this.staticCompletionCandidates = items;
+		return items;
+	}
+
 	private isKnownVariable(name: string): boolean {
 		for (const known of this.variableNameSource()) {
 			if (known === name) return true;
@@ -266,9 +375,12 @@ export class SolveLanguageService {
 	 * Full cache clear. Reserved for cases with no meaningful "which lines
 	 * changed" (e.g. the document was swapped wholesale, or a package was
 	 * registered/unregistered mid-session, changing what categories exist).
-	 * Prefer {@link invalidateLines} for ordinary edits.
+	 * Prefer {@link invalidateLines} for ordinary edits. Also rebuilds the
+	 * lazily-cached keyword/unit/package-item completion candidates on next
+	 * use — the only thing that can change that list mid-session.
 	 */
 	invalidateCache(): void {
 		this.cache.clear();
+		this.staticCompletionCandidates = null;
 	}
 }

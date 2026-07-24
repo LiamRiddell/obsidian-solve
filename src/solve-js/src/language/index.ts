@@ -1,4 +1,9 @@
-export { SolveLanguageService, type SemanticToken, type SolveLanguageServiceOptions } from "./SolveLanguageService";
+export {
+	SolveLanguageService,
+	type SemanticToken,
+	type SolveLanguageServiceOptions,
+	type CompletionItem,
+} from "./SolveLanguageService";
 export type { SolveTokenCategory } from "./SolveTokenCategory";
 export {
 	getTokenCategory,
