@@ -51,12 +51,12 @@
 
       <div v-if="hasResults" class="diag-stat-grid">
         <div class="diag-stat-card">
-          <span class="diag-stat-label">Ok</span>
-          <span class="diag-stat-value" style="color: var(--success)">{{ counts.ok }}</span>
+          <span class="diag-stat-label">Passed</span>
+          <span class="diag-stat-value" style="color: var(--success)">{{ counts.passed }}</span>
         </div>
         <div class="diag-stat-card">
-          <span class="diag-stat-label">Errored</span>
-          <span class="diag-stat-value" :class="counts.error > 0 ? 'error' : ''">{{ counts.error }}</span>
+          <span class="diag-stat-label">Failed</span>
+          <span class="diag-stat-value" :class="counts.failed > 0 ? 'error' : ''">{{ counts.failed }}</span>
         </div>
         <div class="diag-stat-card">
           <span class="diag-stat-label">Pending</span>
@@ -81,16 +81,19 @@
           <span class="diag-section-tag">{{ visibleResults.length }}</span>
         </div>
         <div class="diag-section-body qa-results-body">
-          <div v-if="visibleResults.length === 0" class="empty">No failures — everything in the batch evaluated cleanly.</div>
+          <div v-if="visibleResults.length === 0" class="empty">No failures — every line did what it was expected to do.</div>
           <div
             v-for="r in visibleResults"
             :key="r.lineNumber"
             class="qa-result-row"
-            :class="'qa-status-' + r.status"
+            :class="'qa-result-' + resultClass(r)"
           >
             <span class="qa-result-line">L{{ r.lineNumber }}</span>
-            <span class="qa-result-status-icon msi msi-dense">{{ statusIcon(r.status) }}</span>
-            <span class="qa-result-expr" :title="r.expression">{{ r.expression }}</span>
+            <span class="qa-result-status-icon msi msi-dense">{{ resultIcon(r) }}</span>
+            <span class="qa-result-expr" :title="r.expression">
+              {{ r.expression }}
+              <span v-if="r.expected === 'error'" class="qa-expected-tag">expects error</span>
+            </span>
             <span class="qa-result-value" :title="r.detail">{{ r.detail }}</span>
             <span class="qa-result-time">{{ r.elapsedMs.toFixed(2) }} ms</span>
           </div>
@@ -107,7 +110,7 @@ import { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
 import { formatValue } from '@solve-js/format/FormatEngine';
 import { ValueType } from '@solve-js/vm/Value';
 import { exampleData } from '../examples.js';
-import { useQaStore, type QaResult, type QaStatus } from '../stores/qa.js';
+import { useQaStore, detectExpectation, type QaResult } from '../stores/qa.js';
 
 const qa = useQaStore();
 const source = computed({
@@ -130,24 +133,34 @@ const lineCount = computed(() =>
 const hasResults = computed(() => results.value.length > 0);
 
 const counts = computed(() => {
-  let ok = 0, error = 0, pending = 0;
+  let passed = 0, failed = 0, pending = 0;
   for (const r of results.value) {
-    if (r.status === 'ok') ok++;
-    else if (r.status === 'error') error++;
-    else pending++;
+    if (r.status === 'pending') pending++;
+    else if (r.passed) passed++;
+    else failed++;
   }
-  return { ok, error, pending };
+  return { passed, failed, pending };
 });
 
 const totalMs = computed(() => results.value.reduce((sum, r) => sum + r.elapsedMs, 0));
 
+// "Failures" means actually broken — a line that correctly rejected invalid
+// input (status: 'error', expected: 'error') is a pass and stays hidden
+// under this filter, matching r.passed rather than raw status.
 const visibleResults = computed(() =>
-  onlyFailures.value ? results.value.filter((r) => r.status === 'error') : results.value
+  onlyFailures.value ? results.value.filter((r) => r.status !== 'pending' && !r.passed) : results.value
 );
 
-function statusIcon(status: QaStatus): string {
-  if (status === 'ok') return 'check_circle';
-  if (status === 'error') return 'cancel';
+/** Visual bucket for a result row: 'passed' | 'failed' | 'pending' — never raw status, so an expected error reads as a pass. */
+function resultClass(r: QaResult): 'passed' | 'failed' | 'pending' {
+  if (r.status === 'pending') return 'pending';
+  return r.passed ? 'passed' : 'failed';
+}
+
+function resultIcon(r: QaResult): string {
+  const cls = resultClass(r);
+  if (cls === 'passed') return 'check_circle';
+  if (cls === 'failed') return 'cancel';
   return 'hourglass_top';
 }
 
@@ -167,22 +180,27 @@ function runAll(): void {
     const trimmed = lines[i].trim();
     if (isSkippable(trimmed)) continue;
 
+    // Detected from the raw line (marker included) — evaluation below still
+    // runs the FULL trimmed text; the engine already strips `//...` comments
+    // before parsing, so the marker never changes what's actually evaluated.
+    const expected = detectExpectation(trimmed);
+
     const start = performance.now();
     try {
       const values = engine.evaluateLine(i + 1, trimmed);
       const elapsedMs = performance.now() - start;
       const first = values[0];
       if (first.type === ValueType.Pending) {
-        out.push({ lineNumber: i + 1, expression: trimmed, status: 'pending', detail: String(first.value), elapsedMs });
+        out.push({ lineNumber: i + 1, expression: trimmed, status: 'pending', expected, passed: false, detail: String(first.value), elapsedMs });
       } else if (first.type === ValueType.Error) {
-        out.push({ lineNumber: i + 1, expression: trimmed, status: 'error', detail: first.unit ?? String(first.value), elapsedMs });
+        out.push({ lineNumber: i + 1, expression: trimmed, status: 'error', expected, passed: expected === 'error', detail: first.unit ?? String(first.value), elapsedMs });
       } else {
-        out.push({ lineNumber: i + 1, expression: trimmed, status: 'ok', detail: formatValue(first), elapsedMs });
+        out.push({ lineNumber: i + 1, expression: trimmed, status: 'ok', expected, passed: expected === 'ok', detail: formatValue(first), elapsedMs });
       }
     } catch (e) {
       const elapsedMs = performance.now() - start;
       const message = e instanceof Error ? e.message : String(e);
-      out.push({ lineNumber: i + 1, expression: trimmed, status: 'error', detail: message, elapsedMs });
+      out.push({ lineNumber: i + 1, expression: trimmed, status: 'error', expected, passed: expected === 'error', detail: message, elapsedMs });
     }
   }
 
@@ -207,7 +225,7 @@ function loadShippedExamples(): void {
 }
 
 function copyFailures(): void {
-  const failures = results.value.filter((r) => r.status === 'error');
+  const failures = results.value.filter((r) => r.status !== 'pending' && !r.passed);
   const text = failures.map((r) => `L${r.lineNumber}: "${r.expression}" -> ${r.detail}`).join('\n');
   navigator.clipboard.writeText(text || '(no failures)');
 }
@@ -252,9 +270,9 @@ function copyFailures(): void {
 .qa-result-line { color: var(--text-muted); font-size: 10px; }
 
 .qa-result-status-icon { font-size: 16px; }
-.qa-status-ok .qa-result-status-icon { color: var(--success); }
-.qa-status-error .qa-result-status-icon { color: var(--error); }
-.qa-status-pending .qa-result-status-icon { color: var(--warning); }
+.qa-result-passed .qa-result-status-icon { color: var(--success); }
+.qa-result-failed .qa-result-status-icon { color: var(--error); }
+.qa-result-pending .qa-result-status-icon { color: var(--warning); }
 
 .qa-result-expr {
   color: var(--text-primary);
@@ -262,7 +280,14 @@ function copyFailures(): void {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.qa-status-error .qa-result-expr { color: var(--text-secondary); }
+
+.qa-expected-tag {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-style: italic;
+  margin-left: var(--space-1);
+}
+.qa-result-failed .qa-result-expr { color: var(--text-secondary); }
 
 .qa-result-value {
   white-space: nowrap;
@@ -270,8 +295,8 @@ function copyFailures(): void {
   text-overflow: ellipsis;
   color: var(--text-secondary);
 }
-.qa-status-error .qa-result-value { color: var(--error); }
-.qa-status-pending .qa-result-value { color: var(--warning); }
+.qa-result-failed .qa-result-value { color: var(--error); }
+.qa-result-pending .qa-result-value { color: var(--warning); }
 
 .qa-result-time { color: var(--text-muted); font-size: 10px; text-align: right; }
 </style>
