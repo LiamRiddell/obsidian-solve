@@ -35,6 +35,13 @@ export const useEngineStore = defineStore('engine', () => {
         dr.patchLineResult(streamEvent.lineUpdate);
         dr.patchLineStages(streamEvent.lineUpdate.lineNumber, streamEvent.lineUpdate.stages);
       }
+      // Fold async settle time (a currency/OSRS price fetch resolving or
+      // failing) into the Perf tab's "Total" as it actually happens — see
+      // recordAsyncElapsed()'s doc comment for why there's no single
+      // "stream settled" moment to wait for instead.
+      if (streamEvent.type === 'async_resolved' || streamEvent.type === 'async_error') {
+        dr.recordAsyncElapsed(streamEvent.elapsedNs);
+      }
       return;
     }
 

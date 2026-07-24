@@ -226,6 +226,28 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
   }
 
   /**
+   * Folds async resolution wall-time (a currency rate fetch, an OSRS price
+   * lookup, ...) into `stats.totalTime` as it actually happens.
+   *
+   * `stats` is populated once from the synchronous portion of evaluation
+   * (setResult()) and never otherwise updated — so before this, "Total" on
+   * the Perf tab only ever reflected lex/parse/compile/VM-until-first-
+   * Pending, never how long the user actually waited to see a settled
+   * result. There's no clean single "the stream is now fully settled"
+   * signal to wait for (the underlying stream can legitimately stay open
+   * for further edits), so this takes the simpler, always-eventually-
+   * correct approach: called with each async_resolved/async_error event's
+   * own `elapsedNs` (relative to the same evaluation pass's start) as it
+   * arrives, and only ever grows `totalTime` — never shrinks it — so the
+   * displayed figure converges to the true settle time as async work
+   * actually completes, with no explicit "done" detection needed.
+   */
+  function recordAsyncElapsed(elapsedNs: number): void {
+    if (!stats.value || elapsedNs <= stats.value.totalTime) return;
+    stats.value = { ...stats.value, totalTime: elapsedNs };
+  }
+
+  /**
    * Populate ALL diagnostic data from a DebugResult.
    * This is the single entry point — called by the engine store's
    * onmessage handler. Every UI component reads from this store.
@@ -349,6 +371,7 @@ export const useDiagnosticReportStore = defineStore('diagnosticReport', () => {
     setResult,
     patchLineResult,
     patchLineStages,
+    recordAsyncElapsed,
     setStatus,
     incrementRunId,
   };
