@@ -12,12 +12,13 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { EditorView, keymap, placeholder, Decoration, WidgetType, ViewPlugin, type ViewUpdate, type DecorationSet } from '@codemirror/view';
 import { EditorState, StateField, RangeSetBuilder, RangeSet, StateEffect } from '@codemirror/state';
+import { autocompletion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
 import { SolveLanguageService } from '@solve-js/language/SolveLanguageService';
-import { categoryClassName } from '@solve-js/language/adapters/codemirror';
+import { categoryClassName, completionItemToOption } from '@solve-js/language/adapters/codemirror';
 import { useEngineStore } from '../stores/engine.js';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { useEditorStore } from '../stores/editor.js';
@@ -55,6 +56,24 @@ const languageService = new SolveLanguageService(highlightEngine, {
     return [...Object.keys(snap.consumers), ...Object.values(snap.writes).flat()];
   },
 });
+
+/**
+ * CM6 CompletionSource for the playground's editor, delegating to the same
+ * languageService.getCompletions() the real Obsidian editor uses (see
+ * MarkdownEditorViewPlugin.completionSource for the equivalent there). No
+ * enabled/disabled setting here — the playground is a diagnostic tool with
+ * no settings UI, matching the same precedent as syntax highlighting.
+ */
+function solveCompletionSource(context: CompletionContext): CompletionResult | null {
+  const word = context.matchBefore(/[\w]+/);
+  if (!word || (word.from === word.to && !context.explicit)) return null;
+
+  const line = context.state.doc.lineAt(context.pos);
+  const items = languageService.getCompletions(line.text, context.pos - line.from);
+  if (items.length === 0) return null;
+
+  return { from: word.from, options: items.map(completionItemToOption) };
+}
 
 /* ── Inline Result Widget ─────────────────────────────────────── */
 class ResultWidget extends WidgetType {
@@ -241,6 +260,7 @@ onMounted(() => {
       doc: initialDoc,
       extensions: [
         basicSetup, markdown(), oneDark, solveHighlightPlugin, inlineSolveField, resultField,
+        autocompletion({ override: [solveCompletionSource] }),
         placeholder('Enter an expression…  e.g. 10 + 5 * 2'),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
