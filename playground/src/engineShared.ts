@@ -214,6 +214,54 @@ export function buildStats(
 }
 
 /**
+ * Sums per-line PerformanceStats into one document-wide total — the correct
+ * way to get a multi-line "Total" figure.
+ *
+ * `extractStageTimings()` (used by `buildStats()`) finds `pipeline_start`/
+ * `pipeline_end` via `.find()` — the FIRST match in whatever event array
+ * it's given. Within one evaluation pass, every line's diagnostic events
+ * are appended to ONE growing array (see engine.ts's per-line loop), so
+ * handing that combined array to `buildStats()` doesn't compute a
+ * document-wide total at all — it silently returns line 1's OWN (typically
+ * tiny) span, mislabeled as "Total". A five-line document where line 1 is a
+ * cached, trivial expression reports a "Total" of a few hundred
+ * nanoseconds regardless of how long the other four lines (or an async
+ * settle) actually took.
+ *
+ * Each entry in `lineStats` (from `buildLineStats()`) is already correctly
+ * isolated — its events were sliced to that line alone via cumulative
+ * snapshot-length diffing, not `.find()` — so summing them gives the real
+ * cross-line total. For a single-line document this is equivalent to
+ * calling `buildStats()` directly (one line's total, summed with nothing).
+ */
+export function sumLineStats(lineStats: readonly LineStats[]): PerformanceStats {
+	const total: PerformanceStats = { ...ZERO_STATS };
+	for (const { stats } of lineStats) {
+		total.lexerTime += stats.lexerTime;
+		total.parserTime += stats.parserTime;
+		total.bytecodeTime += stats.bytecodeTime;
+		total.executionTime += stats.executionTime;
+		total.totalTime += stats.totalTime;
+	}
+	return total;
+}
+
+/**
+ * Document-wide stats, correctly summed across every evaluated line.
+ * Prefer this over `buildStats(lastDebugEvents)` for a multi-line
+ * "Total" figure — see `sumLineStats()`'s doc comment for why the naive
+ * version silently reports only the first line's span. Falls back to
+ * `buildStats()` when there's no per-line breakdown available at all
+ * (e.g. zero evaluable lines).
+ */
+export function buildDocumentStats(
+	lastDebugEvents: readonly TimedEvent[] | null,
+	lineStats: readonly LineStats[]
+): PerformanceStats {
+	return lineStats.length > 0 ? sumLineStats(lineStats) : buildStats(lastDebugEvents);
+}
+
+/**
  * Per-line timings from cumulative event snapshots. Each snapshot holds
  * ALL events accumulated so far; the delta between consecutive snapshots
  * yields the events belonging to that line.

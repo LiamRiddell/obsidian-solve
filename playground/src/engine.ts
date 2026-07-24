@@ -13,7 +13,7 @@ import { AllocationTracker } from "@/solve-js/src/telemetry/AllocationTracker";
 import type { PipelineTelemetry } from "@/solve-js/src/telemetry/AllocationTracker";
 export type { ParseletInfo, Token };
 import {
-	buildStats,
+	buildDocumentStats,
 	buildLineStats,
 	buildVmTrace,
 	buildDiagnosticEvents,
@@ -824,8 +824,8 @@ export function runEngineWithStreaming(
 		},
 	});
 
-	const stats: PerformanceStats = buildStats(lastDebugEvents);
 	const lineStats: LineStats[] = buildLineStats(lineEventSnapshots);
+	const stats: PerformanceStats = buildDocumentStats(lastDebugEvents, lineStats);
 	const vmTrace: VmTraceStep[] = buildVmTrace(lastDebugEvents);
 
 	// TanStack Query cache entries for Workers tab display
@@ -1139,8 +1139,8 @@ export function runEngine(expression: string): DebugResult {
 		disableValueArena();
 
 		// ── Compute stats before returning from try block ──
-		stats = buildStats(lastDebugEvents);
 		lineStats = buildLineStats(lineEventSnapshots);
+		stats = buildDocumentStats(lastDebugEvents, lineStats);
 		vmTrace = buildVmTrace(lastDebugEvents);
 
 		const qcState = buildQueryCacheState(engine);
@@ -1183,8 +1183,8 @@ export function runEngine(expression: string): DebugResult {
 	}
 
 	// Error path — assemble what we can from the last accumulated events.
-	stats = buildStats(lastDebugEvents);
 	lineStats = buildLineStats(lineEventSnapshots);
+	stats = buildDocumentStats(lastDebugEvents, lineStats);
 	vmTrace = buildVmTrace(lastDebugEvents);
 	diagnosticEvents = buildDiagnosticEvents(lastDebugEvents);
 
