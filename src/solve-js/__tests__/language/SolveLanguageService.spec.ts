@@ -44,16 +44,13 @@ describe("SolveLanguageService", () => {
     expect(funcRange!.to).toBe(4);
   });
 
-  test("unbalanced braces {{{ still highlights as punctuation (lexed, not parsed)", () => {
-    // Highlighting is a lexical concern, not a parse-success one: three
-    // LBRACE characters are three perfectly valid tokens at the lexer
-    // level, even though they'd never form parseable syntax. This is the
-    // "only highlight things recognized by the grammar" contract in
-    // practice — recognized by the lexer's grammar, not by a successful
-    // parse or evaluation.
+  test("unbalanced braces {{{ produce no tokens — lexes fine, never parses", () => {
+    // Three LBRACE characters are three perfectly valid tokens at the
+    // lexer level, but never form parseable syntax. Highlighting requires
+    // the line to actually parse (see the class doc comment) — lexing
+    // alone is not "recognized".
     const tokens = service.getSemanticTokens("{{{", 1);
-    expect(tokens).toHaveLength(3);
-    expect(tokens.every(t => t.category === "punctuation")).toBe(true);
+    expect(tokens).toHaveLength(0);
   });
 
   test("variable :x highlights COLON as variable", () => {
@@ -73,15 +70,47 @@ describe("SolveLanguageService", () => {
     expect(tokens[0].to).toBe(1);
   });
 
-  test("unparseable text still classifies each recognized lexical token", () => {
-    // "invalid" lexes as a bare IDENT (variable category — recognized
-    // grammar, undefined-ness is an eval-time concern) followed by 6
-    // punctuation tokens. Never parses successfully, but every character
-    // here is still individually recognized by the lexer.
+  test("unparseable text produces no tokens even though every word individually lexes", () => {
+    // "invalid" lexes as a bare IDENT and each brace lexes as valid
+    // punctuation, but the line as a whole never parses — so nothing
+    // highlights. This is the regression case for a real bug: plain
+    // English prose ("My name is ron weasily") lexes into a stream of
+    // individually-valid IDENT tokens with no grammar tying them together,
+    // and used to get colored as if it were code.
     const tokens = service.getSemanticTokens("invalid {{{ }}}", 1);
-    expect(tokens).toHaveLength(7);
+    expect(tokens).toHaveLength(0);
+  });
+
+  test("plain English prose produces no tokens (regression: was highlighted as code)", () => {
+    const tokens = service.getSemanticTokens("My name is ron weasily", 1);
+    expect(tokens).toHaveLength(0);
+  });
+
+  test("a single bare word still highlights as a variable reference", () => {
+    // Gating on whole-line parse validity must not regress the
+    // already-intentional "keyword-only lines like pi, single identifiers
+    // like hello" case — one bare word alone IS a valid expression (a
+    // variable reference), even though it's undefined.
+    const tokens = service.getSemanticTokens("hello", 1);
+    expect(tokens).toHaveLength(1);
     expect(tokens[0].category).toBe("variable");
-    expect(tokens.slice(1).every(t => t.category === "punctuation")).toBe(true);
+  });
+
+  test("inline solve embedded in prose only highlights the expression, not the surrounding text", () => {
+    const tokens = service.getSemanticTokens("The total is s`1 + 2` today", 1);
+    expect(tokens.length).toBeGreaterThanOrEqual(3);
+    const numberTokens = tokens.filter(r => r.category === "number");
+    const operatorTokens = tokens.filter(r => r.category === "operator");
+    expect(numberTokens.length).toBeGreaterThanOrEqual(2);
+    expect(operatorTokens.length).toBeGreaterThanOrEqual(1);
+    // "The", "total", "is", "today" are prose IDENTs outside the marker —
+    // none should be classified as a variable.
+    expect(tokens.some(r => r.category === "variable")).toBe(false);
+  });
+
+  test("an inline solve with unparseable content highlights nothing", () => {
+    const tokens = service.getSemanticTokens("Notes: s`not an expr` end", 1);
+    expect(tokens).toHaveLength(0);
   });
 
   test("padding/whitespace: '  1 + 2' has correct offset mapping", () => {

@@ -40,7 +40,19 @@ interface CacheEntry {
  * design (span recomputation for fused multi-token ranges, in particular)
  * rather than a quick addition here.
  *
-
+ * Lexing alone is NOT sufficient to decide "recognized", though: a run of
+ * plain-English words ("My name is ron") lexes into a sequence of
+ * individually-valid IDENT tokens with no grammar tying them together —
+ * every word "recognized" at the token level, but the line as a whole is
+ * not something the engine would ever accept as an expression. Surfacing
+ * per-token colors for that case looks like the editor mistook prose for
+ * code. So a line's tokens are only surfaced once the line as a whole
+ * parses successfully (via `ExpressionEngine.compileExpression` — the same
+ * parse pipeline, and the same bytecode cache, real evaluation uses; no
+ * separate/duplicated grammar check). A single bare word ("hello", a valid
+ * variable reference) or a keyword-only line ("pi") still parses and still
+ * highlights — only genuinely ungrammatical text is suppressed.
+ *
  * Must be constructed with an already-configured `ExpressionEngine` (one
  * with all currently-relevant packages registered) rather than a bare
  * lexer — reusing an existing engine is both the fast path (no throwaway
@@ -93,15 +105,71 @@ export class SolveLanguageService {
 			return [];
 		}
 
-		const lexed = this.engine.getLexer().getHighlightTokens(lineText);
+		const lexer = this.engine.getLexer();
+		const lexed = lexer.getHighlightTokens(lineText);
+		if (lexed.length === 0) {
+			this.putCache(lineNumber, lineText, []);
+			return [];
+		}
+
+		const classification = lexer.classifyLine(lineText);
 		const tokens: SemanticToken[] = [];
-		for (const token of lexed) {
-			if (!token.category) continue;
-			tokens.push({ from: token.offset, to: token.offset + token.length, category: token.category });
+
+		if (classification.hasInlineSolve) {
+			// A line can mix markdown prose with one or more embedded
+			// `s`...`` expressions. Only the text actually inside a
+			// well-formed marker is a recognized expression — surrounding
+			// prose lexes into individually-valid tokens too (see the class
+			// doc comment) but is never something the engine would parse,
+			// so it's excluded token-by-token via span membership rather
+			// than gating the whole line pass/fail.
+			const validSpans = lexer
+				.findInlineSolves(lineText)
+				.filter(span => this.parsesAsExpression(span.expression))
+				.map(span => ({ from: span.start, to: span.end }));
+			for (const token of lexed) {
+				if (!token.category) continue;
+				const from = token.offset;
+				const to = token.offset + token.length;
+				if (!validSpans.some(s => from >= s.from && to <= s.to)) continue;
+				tokens.push({ from, to, category: token.category });
+			}
+		} else {
+			// Blockquote content is stripped of its "> " prefix before being
+			// tokenized (see Lexer.getHighlightTokens) — token offsets are
+			// already relative to the stripped text, so the parse check must
+			// run against that same substring to match.
+			const text = lineText.startsWith("> ") && classification.skip
+				? lineText.slice(2)
+				: lineText;
+			if (this.parsesAsExpression(text)) {
+				for (const token of lexed) {
+					if (!token.category) continue;
+					tokens.push({ from: token.offset, to: token.offset + token.length, category: token.category });
+				}
+			}
 		}
 
 		this.putCache(lineNumber, lineText, tokens);
 		return tokens;
+	}
+
+	/**
+	 * Whether the engine's parser actually accepts a piece of text as a
+	 * well-formed expression, not merely whether it lexes into individually
+	 * recognized token types — see the class doc comment's prose example.
+	 * `compileExpression` is compile-only (lex → normalize → parse → cache
+	 * bytecode, no VM execution, no network/async side effects) and reuses
+	 * the engine's existing bytecode cache, so text that's already been
+	 * evaluated (or previously highlight-checked) is a cache hit here too.
+	 */
+	private parsesAsExpression(text: string): boolean {
+		try {
+			this.engine!.compileExpression(text);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	private putCache(lineNumber: number, text: string, tokens: SemanticToken[]): void {
