@@ -1485,6 +1485,17 @@ export class ExpressionLexer {
   }
 
   /**
+   * Every keyword this lexer currently recognizes — locale keywords
+   * (`pi`, `sqrt`, `convert`, ...) merged with any plugin-contributed ones
+   * from `registerPlugin()` (e.g. a package's custom keywords), mapped to
+   * the token type they lex to. A snapshot copy, not a live reference —
+   * mutating the return value has no effect on the lexer.
+   */
+  getKeywords(): Record<string, string> {
+    return Object.fromEntries(this.mergedKeywords);
+  }
+
+  /**
    * Find all inline solve markers in a line with precise coordinate mapping.
    */
   findInlineSolves(lineText: string): InlineSolveSpan[] {

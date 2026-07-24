@@ -74,6 +74,14 @@ export class Lexer {
     return this.expressionLexer.findInlineSolves(lineText);
   }
 
+  /**
+   * Every keyword this lexer currently recognizes (locale + plugin-contributed),
+   * mapped to the token type it lexes to. Delegates to the ExpressionLexer.
+   */
+  getKeywords(): Record<string, string> {
+    return this.expressionLexer.getKeywords();
+  }
+
   next(): Token | undefined {
     if (this.hasPeeked) {
       this.hasPeeked = false;
