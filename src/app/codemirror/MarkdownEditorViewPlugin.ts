@@ -13,6 +13,8 @@ import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
 import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
+import { SolveLanguageService } from "@solve-js/language/SolveLanguageService";
+import { categoryClassName } from "@solve-js/language/adapters/codemirror";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -21,6 +23,13 @@ import {
 	PluginValue,
 	ViewUpdate,
 } from "@codemirror/view";
+
+/** One pending decoration entry, sorted by position before being fed into the shared RangeSetBuilder. */
+interface DecorationEntry {
+	from: number;
+	to: number;
+	deco: Decoration;
+}
 
 export class MarkdownEditorViewPlugin implements PluginValue {
 	/**
@@ -52,6 +61,15 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	 */
 	private engine: ExpressionEngine;
 
+	/**
+	 * Syntax-highlighting language service, sharing this pane's engine so it
+	 * recognizes exactly the same tokens (including any registered
+	 * package's custom ones) that real evaluation does — see
+	 * SolveLanguageService's own doc comment for why reusing the engine
+	 * matters for correctness, not just performance.
+	 */
+	private languageService: SolveLanguageService;
+
 	// ── Three-tier evaluator (Phase 5.2 integration) ─────────────────
 	private docModel: DocumentModel;
 	private evaluator: ThreeTierEvaluator;
@@ -77,6 +95,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			EngineConfigMapper.toEngineConfig(this.userSettings)
 		);
 		this.engine = engine;
+		this.languageService = new SolveLanguageService(engine);
 
 		// ── Initialize DocumentModel + ThreeTierEvaluator ────────────
 		this.docModel = new DocumentModel();
@@ -155,6 +174,12 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			// one. Other panes own their own engines and are unaffected.
 			this.engine.clear();
 
+			// New document means every line number now refers to unrelated
+			// content — the language service's own text-match guard would
+			// eventually self-correct without this, but clearing proactively
+			// avoids carrying stale, irrelevant entries in a bounded cache.
+			this.languageService.invalidateCache();
+
 			// Terminate old evaluator's worker before recreating
 			this.evaluator.terminateWorker();
 
@@ -201,6 +226,24 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			if (lineChanges.length > 0) {
 				this.evaluator.applyTransaction(lineChanges);
 			}
+
+			// Surgical highlight-cache invalidation: evict only the lines the
+			// edit actually touched (derived from the same lineChanges just
+			// computed above, rather than a second changes-walk), so
+			// unaffected visible lines still hit the language service's
+			// cache on the decoration rebuild below. Any lines beyond this
+			// range that shifted position are self-correcting: the cache's
+			// own text-match guard naturally misses (and re-lexes) once a
+			// line number's cached text no longer matches, so this doesn't
+			// need to be exhaustive to stay correct — only to stay fast.
+			const changedLines = new Set<number>();
+			for (const change of lineChanges) {
+				const span = Math.max(change.deleteCount, change.insertLines.length, 1);
+				for (let line = change.startLine; line < change.startLine + span; line++) {
+					changedLines.add(line);
+				}
+			}
+			this.languageService.invalidateLines(changedLines);
 		}
 
 		if (update.docChanged || update.viewportChanged) {
@@ -410,6 +453,28 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 				const lineState = this.docModel.getLineAt(line.number);
 
+				// This line's decorations (syntax-highlight marks + whatever
+				// result widget(s) follow below) are collected here and sorted
+				// before being fed into the shared builder — RangeSetBuilder
+				// requires strictly ascending position order across ALL
+				// entries, and highlight marks can fall either side of a
+				// mid-line inline-solve widget position.
+				const entries: DecorationEntry[] = [];
+
+				// Syntax highlighting — attempted for every line regardless of
+				// which widget branch below applies. getSemanticTokens()
+				// naturally returns nothing for blank/markdown-structural
+				// lines and already tokenizes the inner expression of any
+				// inline solve on the line, so no special-casing is needed
+				// here for the different branches that follow.
+				for (const token of this.languageService.getSemanticTokens(line.text, line.number)) {
+					entries.push({
+						from: line.from + token.from,
+						to: line.from + token.to,
+						deco: Decoration.mark({ class: categoryClassName(token.category) }),
+					});
+				}
+
 				// Check for inline solves (embedded s`...` in markdown text)
 				// After the multi-result refactor, inline solve results are stored
 				// in lineState.results[] by the ThreeTierEvaluator. The UI reads
@@ -418,38 +483,35 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				if (inlineSolves.length > 0 && lineState) {
 					if (lineState.inlineSolveCount > 0) {
 						// Normal path: results already populated by evaluator
-						this.buildInlineSolveDecorations(line, inlineSolves, lineState, builder);
+						this.buildInlineSolveDecorations(line, inlineSolves, lineState, entries);
 					} else {
 						// Fallback: evaluator hasn't populated results yet (e.g., pre-
 						// evaluation render). Call engine directly as a one-off.
-						this.buildInlineSolveDecorationsFallback(line, inlineSolves, builder);
+						this.buildInlineSolveDecorationsFallback(line, inlineSolves, entries);
 					}
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
+				} else if (lineState && !lineState.isEmpty && lineState.results.length > 0) {
+					// Full-line expression result from evaluator
+					const resultGroup = lineState.results[0];
+					const result = resultGroup[0];
+					const isPending = result.type === ValueType.Pending;
+					const formattedResult = isPending ? "" : formatValue(result);
+					const expression = lineState.expressions[0] ?? line.text.trim();
+					const queryKey = isPending ? (result.value as string) : null;
+
+					entries.push({
+						from: line.to,
+						to: line.to,
+						deco: Decoration.widget({
+							widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey),
+							side: 1,
+						}),
+					});
 				}
+				// (Empty/markdown-only lines with no inline solves and no
+				// result fall through with only their highlight marks, if any.)
 
-				// Skip empty/markdown-only lines (no expression)
-				if (!lineState || lineState.isEmpty || lineState.results.length === 0) {
-					nextLineTextOffset += lineTextRaw.length;
-					continue;
-				}
-
-				// Full-line expression result from evaluator
-				const resultGroup = lineState.results[0];
-				const result = resultGroup[0];
-				const isPending = result.type === ValueType.Pending;
-				const formattedResult = isPending ? "" : formatValue(result);
-				const expression = lineState.expressions[0] ?? line.text.trim();
-				const queryKey = isPending ? (result.value as string) : null;
-
-				builder.add(
-					line.to,
-					line.to,
-					Decoration.widget({
-						widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey),
-						side: 1,
-					}),
-				);
+				entries.sort((a, b) => a.from - b.from || a.to - b.to);
+				for (const entry of entries) builder.add(entry.from, entry.to, entry.deco);
 
 				nextLineTextOffset += lineTextRaw.length;
 			}
@@ -467,7 +529,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		line: ReturnType<typeof EditorView.prototype.state.doc.lineAt>,
 		inlineSolves: ReturnType<typeof findInlineSolvesInLine>,
 		lineState: ReturnType<typeof DocumentModel.prototype.getLineAt>,
-		builder: RangeSetBuilder<Decoration>
+		entries: DecorationEntry[]
 	): void {
 		if (!lineState) return;
 
@@ -485,14 +547,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			const queryKey = isPending ? (result.value as string) : null;
 			const widgetPos = line.from + solve.start + solve.expression.length + 3;
 
-			builder.add(
-				widgetPos,
-				widgetPos,
-				Decoration.widget({
+			entries.push({
+				from: widgetPos,
+				to: widgetPos,
+				deco: Decoration.widget({
 					widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult, isPending, queryKey),
 					side: 1,
 				}),
-			);
+			});
 		}
 	}
 
@@ -505,7 +567,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private buildInlineSolveDecorationsFallback(
 		line: ReturnType<typeof EditorView.prototype.state.doc.lineAt>,
 		inlineSolves: ReturnType<typeof findInlineSolvesInLine>,
-		builder: RangeSetBuilder<Decoration>
+		entries: DecorationEntry[]
 	): void {
 		const engine = this.engine;
 
@@ -520,14 +582,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					const queryKey = isPending ? (result.value as string) : null;
 					const widgetPos = line.from + solve.start + solve.expression.length + 3;
 
-					builder.add(
-						widgetPos,
-						widgetPos,
-						Decoration.widget({
+					entries.push({
+						from: widgetPos,
+						to: widgetPos,
+						deco: Decoration.widget({
 							widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult, isPending, queryKey),
 							side: 1,
 						}),
-					);
+					});
 				}
 			} catch {
 				// Inline solve parse error — skip silently

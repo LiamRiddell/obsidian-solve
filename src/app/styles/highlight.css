@@ -1,0 +1,34 @@
+/* Syntax highlight colors for solve expressions in the editor.
+ * Class names (cm-solve-{category}) come from
+ * @solve-js/language/adapters/codemirror's categoryClassName() — one class
+ * per SolveTokenCategory, always following that exact naming convention,
+ * including for categories contributed by solve-js packages at runtime
+ * (e.g. cm-solve-osrs-item).
+ *
+ * Colors are CSS custom properties so plugin settings (Settings tab ->
+ * Syntax Highlighting) can override them live without any editor rebuild —
+ * see UserSettings' SyntaxHighlightSettings and the applySyntaxHighlightColors
+ * call in main.ts. Defaults below are the "One Dark" preset, so highlighting
+ * looks correct even before settings apply anything (progressive
+ * enhancement). Also exposed to the Style Settings community plugin — see
+ * style-settings-config.css.
+ */
+
+.cm-solve-number      { color: var(--solve-hl-number, #61AFEF); }
+.cm-solve-string      { color: var(--solve-hl-string, #98C379); }
+.cm-solve-keyword     { color: var(--solve-hl-keyword, #C678DD); }
+.cm-solve-operator    { color: var(--solve-hl-operator, #ABB2BF); }
+.cm-solve-comparison  { color: var(--solve-hl-comparison, #56B6C2); }
+.cm-solve-bitwise     { color: var(--solve-hl-bitwise, #56B6C2); }
+.cm-solve-function    { color: var(--solve-hl-function, #E5C07B); }
+.cm-solve-variable    { color: var(--solve-hl-variable, #E06C75); }
+.cm-solve-unit        { color: var(--solve-hl-unit, #56B6C2); }
+.cm-solve-datetime    { color: var(--solve-hl-datetime, #D19A66); }
+.cm-solve-vector      { color: var(--solve-hl-vector, #D19A66); }
+.cm-solve-punctuation { color: var(--solve-hl-punctuation, #5C6370); }
+.cm-solve-error       { color: var(--solve-hl-error, #E06C75); text-decoration: underline wavy; }
+
+/* Plugin-contributed (OSRS) — not a core category, no settings-tab color
+ * picker of its own, but still gets a real default via the same CSS
+ * variable convention. */
+.cm-solve-osrs-item   { color: var(--solve-hl-osrs-item, #A6E22E); font-weight: 600; }
