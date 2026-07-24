@@ -31,7 +31,19 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
   }
 
   onPipelineStart(event: DiagnosticEvent & { type: "pipeline_start" }): void {
-    this.startNs = performance.now() * 1e6;
+    // Set once per collector lifetime (until an explicit reset()), not on
+    // every pipeline — a multi-line evaluation pass fires pipeline_start
+    // once per line, all appending to the SAME `events` array (see
+    // buildLineStats() in the playground, which relies on that shared,
+    // ever-growing array to slice out each line's own events via
+    // cumulative-length diffing). Resetting the origin on every line meant
+    // every individual line's own timestamps were self-consistent, but
+    // nothing tied one line's clock to another's — any code trying to
+    // compare or span timestamps ACROSS lines (e.g. "how far into this
+    // pass are we") had no stable reference point to do it with.
+    if (this.startNs === 0) {
+      this.startNs = performance.now() * 1e6;
+    }
     this.events.push(this.stamp(event));
   }
 
