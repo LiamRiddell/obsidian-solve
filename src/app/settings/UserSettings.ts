@@ -13,6 +13,7 @@ import { InlineSolveSettings } from "@app/settings/properties/InlineSolveSetting
 import { IntegerResultSettings } from "@app/settings/properties/IntegerResultSettings";
 import { InterfaceSettings } from "@app/settings/properties/InterfaceSettings";
 import { SyntaxHighlightSettings } from "@app/settings/properties/SyntaxHighlightSettings";
+import { CompletionSettings } from "@app/settings/properties/CompletionSettings";
 import { NumberResultSettings } from "@app/settings/properties/NumberResultSettings";
 import { PercentageArithmeticProviderSettings } from "@app/settings/properties/PercentageArithmeticProviderSettings";
 import { PercentageResultSettings } from "@app/settings/properties/PercentageResultSettings";
@@ -35,6 +36,7 @@ export default class UserSettings {
 	public readonly engine: EngineSettings;
 	public readonly interface: InterfaceSettings;
 	public readonly syntaxHighlight: SyntaxHighlightSettings;
+	public readonly completions: CompletionSettings;
 	public readonly inlineSolve: InlineSolveSettings;
 	public readonly variable: VariableSettings;
 
@@ -64,6 +66,7 @@ export default class UserSettings {
 		this.engine = new EngineSettings(this);
 		this.interface = new InterfaceSettings(this);
 		this.syntaxHighlight = new SyntaxHighlightSettings(this);
+		this.completions = new CompletionSettings(this);
 		this.inlineSolve = new InlineSolveSettings(this);
 		this.variable = new VariableSettings(this);
 

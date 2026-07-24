@@ -14,7 +14,7 @@ import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
 import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
 import { SolveLanguageService } from "@solve-js/language/SolveLanguageService";
-import { categoryClassName } from "@solve-js/language/adapters/codemirror";
+import { categoryClassName, completionItemToOption } from "@solve-js/language/adapters/codemirror";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -23,6 +23,7 @@ import {
 	PluginValue,
 	ViewUpdate,
 } from "@codemirror/view";
+import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 
 /** One pending decoration entry, sorted by position before being fed into the shared RangeSetBuilder. */
 interface DecorationEntry {
@@ -627,6 +628,41 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		}
 	}
 
+	// ── Autocomplete ──────────────────────────────────────────────────
+
+	/**
+	 * CM6 `CompletionSource` for this pane, delegating to the shared
+	 * `languageService.getCompletions()` — independent of the syntax
+	 * highlighting toggle (see settings), and checked before any engine
+	 * call so a disabled user pays zero cost, not just hidden output.
+	 */
+	completionSource(context: CompletionContext): CompletionResult | null {
+		if (!this.userSettings.completions.enabled) return null;
+
+		const word = context.matchBefore(/[\w]+/);
+		if (!word || (word.from === word.to && !context.explicit)) return null;
+
+		const line = context.state.doc.lineAt(context.pos);
+		const items = this.languageService.getCompletions(line.text, context.pos - line.from);
+		if (items.length === 0) return null;
+
+		return { from: word.from, options: items.map(completionItemToOption) };
+	}
+}
+
+/**
+ * Module-level `CompletionSource` registered once with CM6's `autocompletion()`
+ * (see main.ts) — resolves the relevant pane's `MarkdownEditorViewPlugin`
+ * instance via the same `forView` registry command handlers already use,
+ * then delegates to its `completionSource()`. `CompletionContext.view` is
+ * only present for interactively-triggered completions, which is the only
+ * case this editor cares about.
+ */
+export function solveCompletionSource(context: CompletionContext): CompletionResult | null {
+	const view = context.view;
+	if (!view) return null;
+	const plugin = MarkdownEditorViewPlugin.forView(view);
+	return plugin ? plugin.completionSource(context) : null;
 }
 
 // ── Change conversion helper ──────────────────────────────────────────────

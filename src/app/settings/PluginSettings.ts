@@ -41,6 +41,10 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		overrides: {},
 	},
 
+	completions: {
+		enabled: true,
+	},
+
 	inlineSolve: {
 		includeExpressionOnCommit: false,
 		includeBackticksOnCommit: true,

@@ -1,4 +1,4 @@
-import { describe, expect, test, afterEach } from "@jest/globals";
+import { describe, expect, test, afterEach, jest } from "@jest/globals";
 import { MarkdownEditorViewPlugin } from "@app/codemirror/MarkdownEditorViewPlugin";
 import { EngineProvider } from "@app/engine/EngineProvider";
 
@@ -242,5 +242,98 @@ describe("MarkdownEditorViewPlugin — abortKeystroke Lifecycle", () => {
 		}
 		// Last controller should NOT be aborted (current keystroke)
 		expect(controllers[controllers.length - 1].signal.aborted).toBe(false);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Autocomplete: completionSource + independent highlighting/completions toggles
+// ═══════════════════════════════════════════════════════════════════════════
+
+function createMockCompletionContext(view: any, pos: number, matchText: string, explicit = false): any {
+	return {
+		pos,
+		explicit,
+		state: view.state,
+		matchBefore: () => (matchText ? { from: pos - matchText.length, to: pos } : null),
+	};
+}
+
+describe("MarkdownEditorViewPlugin — completionSource", () => {
+	afterEach(() => {
+		EngineProvider.reset();
+	});
+
+	test("returns completions for a matched prefix when enabled", () => {
+		// A second (empty) line avoids the mock lineAt() helper's boundary
+		// quirk on the LAST line of a document (see below).
+		const view = createMockView(["sq", ""]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		(plugin as any).userSettings.completions.enabled = true;
+
+		const context = createMockCompletionContext(view, 2, "sq");
+		const result = plugin.completionSource(context);
+
+		expect(result).not.toBeNull();
+		expect(result!.from).toBe(0);
+		expect(result!.options.some((o: any) => o.label === "sqrt")).toBe(true);
+	});
+
+	test("returns null when there's no word match and the trigger wasn't explicit", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		(plugin as any).userSettings.completions.enabled = true;
+
+		const context = createMockCompletionContext(view, 5, "");
+		expect(plugin.completionSource(context)).toBeNull();
+	});
+
+	test("returns null and never calls the language service when completions are disabled — zero cost when off", () => {
+		const view = createMockView(["sq"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		(plugin as any).userSettings.completions.enabled = false;
+
+		const spy = jest.spyOn((plugin as any).languageService, "getCompletions");
+		const context = createMockCompletionContext(view, 2, "sq");
+		expect(plugin.completionSource(context)).toBeNull();
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+});
+
+describe("MarkdownEditorViewPlugin — highlighting and completions toggle independently", () => {
+	afterEach(() => {
+		EngineProvider.reset();
+	});
+
+	test("completions work normally while highlighting is disabled (no highlight-token calls)", () => {
+		const view = createMockView(["sq", ""]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		(plugin as any).userSettings.syntaxHighlight.enabled = false;
+		(plugin as any).userSettings.completions.enabled = true;
+
+		const tokenSpy = jest.spyOn((plugin as any).languageService, "getSemanticTokens");
+		plugin.buildDecorations(view as any);
+		expect(tokenSpy).not.toHaveBeenCalled();
+		tokenSpy.mockRestore();
+
+		const context = createMockCompletionContext(view, 2, "sq");
+		const result = plugin.completionSource(context);
+		expect(result).not.toBeNull();
+		expect(result!.options.some((o: any) => o.label === "sqrt")).toBe(true);
+	});
+
+	test("highlighting works normally while completions are disabled (no getCompletions calls)", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		(plugin as any).userSettings.syntaxHighlight.enabled = true;
+		(plugin as any).userSettings.completions.enabled = false;
+
+		const completionSpy = jest.spyOn((plugin as any).languageService, "getCompletions");
+		const context = createMockCompletionContext(view, 5, "");
+		expect(plugin.completionSource(context)).toBeNull();
+		expect(completionSpy).not.toHaveBeenCalled();
+		completionSpy.mockRestore();
+
+		expect(() => plugin.buildDecorations(view as any)).not.toThrow();
 	});
 });

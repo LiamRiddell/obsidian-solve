@@ -34,6 +34,7 @@ export class SettingTab extends PluginSettingTab {
 		this.displayEngineSettings();
 		this.displayInterfaceSettings();
 		this.displaySyntaxHighlightSettings();
+		this.displayCompletionSettings();
 		this.displayInlineSolveSettings();
 		this.displayVariablesSettings();
 
@@ -891,6 +892,27 @@ export class SettingTab extends PluginSettingTab {
 						})
 				);
 		}
+	}
+
+	displayCompletionSettings() {
+		new Setting(this.containerEl).setName("Autocomplete").setHeading();
+		new Setting(this.containerEl).setDesc(
+			"Suggests keywords, functions, units, and variable names already used in the document as you type. Independent of syntax highlighting — either can be disabled without affecting the other."
+		);
+
+		new Setting(this.containerEl)
+			.setName("Enable autocomplete")
+			.setDesc(
+				`Default is ${DEFAULT_SETTINGS.completions.enabled}`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.completions.enabled)
+					.onChange(async (value) => {
+						this.plugin.settings.completions.enabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	displayStyleSettings() {

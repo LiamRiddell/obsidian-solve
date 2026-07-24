@@ -11,6 +11,7 @@ import { IInlineSolveSettings } from "@app/settings/definition/IInlineSolveSetti
 import { IIntegerResultSettings } from "@app/settings/definition/IIntegerResultSettings";
 import { IInterfaceSettings } from "@app/settings/definition/IInterfaceSettings";
 import { ISyntaxHighlightSettings } from "@app/settings/definition/ISyntaxHighlightSettings";
+import { ICompletionSettings } from "@app/settings/definition/ICompletionSettings";
 import { INumberResultSettings } from "@app/settings/definition/INumberResultSettings";
 import { IPercentageProviderSettings } from "@app/settings/definition/IPercentageArithmeticProviderSettings";
 import { IPercentageResultSettings } from "@app/settings/definition/IPercentageResultSettings";
@@ -23,6 +24,7 @@ export interface IPluginSettings {
 	engine: IEngineSettings;
 	interface: IInterfaceSettings;
 	syntaxHighlight: ISyntaxHighlightSettings;
+	completions: ICompletionSettings;
 	inlineSolve: IInlineSolveSettings;
 	variable: IVariableSettings;
 

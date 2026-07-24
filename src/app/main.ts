@@ -1,4 +1,4 @@
-import { MarkdownEditorViewPlugin } from "@app/codemirror/MarkdownEditorViewPlugin";
+import { MarkdownEditorViewPlugin, solveCompletionSource } from "@app/codemirror/MarkdownEditorViewPlugin";
 import { FeatureFlagClass } from "@app/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { EPluginStatus } from "@app/constants/EPluginStatus";
@@ -13,6 +13,7 @@ import { deepMerge } from "@app/utilities/DeepMerge";
 import { logger } from "@app/utilities/Logger";
 import { insertAtIndex } from "@app/utilities/String";
 import { EditorView, ViewPlugin } from "@codemirror/view";
+import { autocompletion } from "@codemirror/autocomplete";
 import { Editor, Notice, Plugin } from "obsidian";
 
 /**
@@ -111,7 +112,10 @@ export default class SolvePlugin extends Plugin {
 		const markdownEditorViewPlugin =
 			await this.buildMarkdownEditorViewPlugin();
 
-		this.registerEditorExtension(markdownEditorViewPlugin);
+		this.registerEditorExtension([
+			markdownEditorViewPlugin,
+			autocompletion({ override: [solveCompletionSource] }),
+		]);
 	}
 
 	private async buildMarkdownEditorViewPlugin() {

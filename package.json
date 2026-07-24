@@ -21,6 +21,7 @@
 	"author": "Liam Riddell",
 	"license": "MIT",
 	"devDependencies": {
+		"@codemirror/autocomplete": "6.20.3",
 		"@jest/globals": "^29.6.2",
 		"@lezer/common": "^1.0.3",
 		"@types/node": "16.18.39",
