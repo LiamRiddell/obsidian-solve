@@ -671,30 +671,42 @@ export function solveCompletionSource(context: CompletionContext): CompletionRes
  * Convert CodeMirror's byte-offset changes to line-level {@link LineChange}[]
  * suitable for {@link DocumentModel.applyChanges}.
  *
- * CodeMirror's `iterChanges` provides byte offsets (fromA, toA, fromB, toB)
- * relative to the old document. This function maps those to 1-based line
- * numbers and extracts the inserted text split by newlines.
+ * `DocumentModel.applyChanges` treats each `insertLines[i]` as the COMPLETE
+ * new text of a line — it never merges partial line content itself, and
+ * `deleteCount` old lines are wholesale discarded (their entire `LineState`,
+ * not just the touched substring). CodeMirror's `iterChanges`, by contrast,
+ * only reports the byte range that actually changed — for a normal keystroke
+ * inside a line, `fromA`/`toA` cover just the edited character(s), not the
+ * rest of the line's untouched text either side of it.
+ *
+ * So every touched line's untouched PREFIX (before `fromA`) and untouched
+ * SUFFIX (after `toA`) must be stitched onto the first/last inserted segment
+ * here, or that surrounding text silently disappears once `applyChanges`
+ * replaces the line wholesale. This also means a line is always "structurally
+ * replaced" (`deleteCount` >= 1) even for a zero-width pure insertion, since
+ * inserting text at a position strictly inside a line conceptually splits
+ * that line into new one(s) — e.g. pressing Enter contributes zero deleted
+ * *characters* but still fully replaces the one old line it lands in with
+ * two new lines (`fromA === toA`, yet the surrounding text must still be
+ * repartitioned around the inserted "\n").
  */
-function codeMirrorChangesToLineChanges(update: ViewUpdate): LineChange[] {
+export function codeMirrorChangesToLineChanges(update: ViewUpdate): LineChange[] {
 	const result: LineChange[] = [];
+	const oldDoc = update.startState.doc;
 
 	update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
-		const oldDoc = update.startState.doc;
+		const startLineInfo = oldDoc.lineAt(fromA);
+		const endLineInfo = oldDoc.lineAt(toA);
 
-		// Determine the starting line (1-based) in the old document
-		const startLine = oldDoc.lineAt(fromA).number;
+		const startLine = startLineInfo.number;
+		const deleteCount = endLineInfo.number - startLine + 1;
 
-		// Determine how many lines were deleted.
-		// toA is exclusive; find the line containing byte toA-1.
-		let deleteCount = 0;
-		if (toA > fromA) {
-			const lastDeletedLine = oldDoc.lineAt(toA - 1).number;
-			deleteCount = lastDeletedLine - startLine + 1;
-		}
+		const prefix = startLineInfo.text.slice(0, fromA - startLineInfo.from);
+		const suffix = endLineInfo.text.slice(toA - endLineInfo.from);
 
-		// Split inserted text into lines
-		const insertedText = inserted.toString();
-		const insertLines = insertedText ? insertedText.split('\n') : [];
+		const insertLines = inserted.toString().split('\n');
+		insertLines[0] = prefix + insertLines[0];
+		insertLines[insertLines.length - 1] += suffix;
 
 		result.push({
 			startLine,

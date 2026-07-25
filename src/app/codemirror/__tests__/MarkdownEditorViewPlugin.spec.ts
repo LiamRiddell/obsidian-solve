@@ -90,6 +90,67 @@ describe("MarkdownEditorViewPlugin with ThreeTierEvaluator", () => {
 
 		// Plugin should still have valid decorations after re-evaluation
 		expect(plugin.decorations).toBeDefined();
+
+		// The rest of the line ("+ 2"/" 2") must survive a mid-line edit —
+		// a previous bug in codeMirrorChangesToLineChanges dropped every
+		// character outside the exact edited byte range.
+		const docModel = (plugin as any).docModel;
+		expect(docModel.getLineAt(1).text).toBe("2 + 2");
+	});
+
+	test("a single-character mid-line edit preserves the rest of the line and re-evaluates it correctly", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		// Replace the "1" with "9": "1 + 2" -> "9 + 2"
+		const update = {
+			docChanged: true,
+			viewportChanged: true,
+			view,
+			startState: { doc: view.state.doc },
+			changes: {
+				iterChanges: (cb: (fromA: number, toA: number, fromB: number, toB: number, inserted: { toString: () => string }) => void) => {
+					cb(0, 1, 0, 1, { toString: () => "9" });
+				},
+			},
+		};
+		plugin.update(update as any);
+
+		const docModel = (plugin as any).docModel;
+		expect(docModel.getLineAt(1).text).toBe("9 + 2");
+		expect(docModel.getLineAt(1).results[0][0].toNumber()).toBe(11);
+	});
+
+	test("pressing Enter at the start of an expression's line shifts it to line 2 without losing any of its text", () => {
+		const view = createMockView(["10 + 5 * 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		// Insert a bare newline at position 0 (Enter at the start of the line).
+		const update = {
+			docChanged: true,
+			viewportChanged: true,
+			view,
+			startState: { doc: view.state.doc },
+			changes: {
+				iterChanges: (cb: (fromA: number, toA: number, fromB: number, toB: number, inserted: { toString: () => string }) => void) => {
+					cb(0, 0, 0, 1, { toString: () => "\n" });
+				},
+			},
+		};
+		plugin.update(update as any);
+
+		// Note: the mock view's `state.doc`/`visibleRanges` are fixed at
+		// createMockView() time and don't grow with the document the way a
+		// real CodeMirror EditorView does, so the post-edit viewport here
+		// still only covers the original (now line 1) span — evaluation of
+		// the shifted line 2 is already covered end-to-end at the engine
+		// level by StructuralEditLineTracking.spec.ts. What this test proves
+		// is specifically that the DocumentModel's line TEXT survived the
+		// shift intact through the real CM6-diff conversion path.
+		const docModel = (plugin as any).docModel;
+		expect(docModel.lineCount).toBe(2);
+		expect(docModel.getLineAt(1).text).toBe("");
+		expect(docModel.getLineAt(2).text).toBe("10 + 5 * 2");
 	});
 
 	test("re-evaluates correctly across viewport changes with no doc changes", () => {
