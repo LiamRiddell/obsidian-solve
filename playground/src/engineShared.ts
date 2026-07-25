@@ -168,6 +168,19 @@ export function extractStageTimings(
 }
 
 /**
+ * Find the last event of a given type without allocating a reversed copy
+ * of the array — `extractLineTimings` used to call `[...events].reverse().find(...)`
+ * three times per line, each spreading + reversing the whole events array
+ * just to find one element from the end.
+ */
+function findLast(events: readonly TimedEvent[], type: TimedEvent["type"]): TimedEvent | undefined {
+	for (let i = events.length - 1; i >= 0; i--) {
+		if (events[i].type === type) return events[i];
+	}
+	return undefined;
+}
+
+/**
  * Extract per-stage timings from a single line's diagnostic events.
  * This is a simpler version of extractStageTimings that doesn't depend
  * on pipeline_start/pipeline_end events (which only appear once globally).
@@ -184,15 +197,11 @@ export function extractLineTimings(
 	const lastEvent = events[events.length - 1];
 
 	const firstToken = events.find((e) => e.type === "token_emitted");
-	const lastToken = [...events]
-		.reverse()
-		.find((e) => e.type === "token_emitted");
-	const lastParselet = [...events]
-		.reverse()
-		.find((e) => e.type === "parselet_matched");
+	const lastToken = findLast(events, "token_emitted");
+	const lastParselet = findLast(events, "parselet_matched");
 	const bytecodeBuilt = events.find((e) => e.type === "bytecode_built");
 	const firstVmStep = events.find((e) => e.type === "vm_step");
-	const lastVmHalt = [...events].reverse().find((e) => e.type === "vm_halt");
+	const lastVmHalt = findLast(events, "vm_halt");
 
 	const lexStart = firstToken?.elapsedNs ?? firstEvent.elapsedNs;
 	const lexEnd = lastToken?.elapsedNs ?? lexStart;

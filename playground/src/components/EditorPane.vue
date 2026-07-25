@@ -188,8 +188,14 @@ const solveHighlightPlugin = ViewPlugin.fromClass(SolveHighlightPluginValue, {
   decorations: v => v.decorations,
 });
 
+// Built once — a fresh RegExp literal was allocated on every create()/update()
+// call. `g`-flagged regexes are stateful (lastIndex), which is exactly why
+// every loop below resets `.lastIndex = 0` before reusing it; sharing one
+// instance across calls is safe as long as that reset happens first.
+const INLINE_SOLVE_RE = /s`[^`]*`/g;
+
 /**
- * StateField for highlighting inline solve regions (`s`...``) within the editor.
+ * Highlights inline solve regions (`s`...``) within the editor.
  *
  * Inline solves are expressions embedded in markdown lines using the syntax
  * `s`2 + 3``. These regions get a distinct background decoration so users
@@ -199,47 +205,50 @@ const solveHighlightPlugin = ViewPlugin.fromClass(SolveHighlightPluginValue, {
  * closing backtick. Highlights are applied as a background tint with rounded
  * corners, similar to a code-fence inline visual.
  *
- * Recomputes on every document change.
+ * A ViewPlugin rather than a StateField, mirroring SolveHighlightPluginValue
+ * above — for the same reason: only `view.visibleRanges` is scanned on every
+ * rebuild, not the whole document. An earlier version was a StateField that
+ * re-scanned every line in the document on every single keystroke regardless
+ * of scroll position, the same whole-document antipattern that class's own
+ * doc comment already describes fixing for syntax highlighting.
  */
-const inlineSolveField = StateField.define<RangeSet<Decoration>>({
-  create(state) {
+class InlineSolvePluginValue {
+  decorations: DecorationSet;
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view);
+  }
+
+  update(update: ViewUpdate): void {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view);
+    }
+  }
+
+  private buildDecorations(view: EditorView): DecorationSet {
     const builder = new RangeSetBuilder<Decoration>();
-    const doc = state.doc;
-    const re = /s`[^`]*`/g;
-    for (let i = 1; i <= doc.lines; i++) {
-      const line = doc.line(i);
-      re.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(line.text)) !== null) {
-        builder.add(
-          line.from + m.index,
-          line.from + m.index + m[0].length,
-          Decoration.mark({ class: 'cm-inline-solve' }),
-        );
+    for (const { from, to } of view.visibleRanges) {
+      let pos = from;
+      while (pos <= to) {
+        const line = view.state.doc.lineAt(pos);
+        INLINE_SOLVE_RE.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = INLINE_SOLVE_RE.exec(line.text)) !== null) {
+          builder.add(
+            line.from + m.index,
+            line.from + m.index + m[0].length,
+            Decoration.mark({ class: 'cm-inline-solve' }),
+          );
+        }
+        pos = line.to + 1;
       }
     }
     return builder.finish();
-  },
-  update(decorations, tr) {
-    if (!tr.docChanged) return decorations;
-    const builder = new RangeSetBuilder<Decoration>();
-    const doc = tr.state.doc;
-    const re = /s`[^`]*`/g;
-    for (let i = 1; i <= doc.lines; i++) {
-      const line = doc.line(i);
-      re.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(line.text)) !== null) {
-        builder.add(
-          line.from + m.index,
-          line.from + m.index + m[0].length,
-          Decoration.mark({ class: 'cm-inline-solve' }),
-        );
-      }
-    }
-    return builder.finish();
-  },
-  provide: f => EditorView.decorations.from(f),
+  }
+}
+
+const inlineSolveField = ViewPlugin.fromClass(InlineSolvePluginValue, {
+  decorations: v => v.decorations,
 });
 
 /* ── Editor Setup ─────────────────────────────────────────────── */

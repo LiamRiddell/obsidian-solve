@@ -208,22 +208,26 @@ export interface PageHeatmapEntry {
 	hasResults: boolean;
 }
 
+// Built once — formatType() runs once per evaluated line, per evaluation
+// pass, so rebuilding this object on every call was a real, avoidable
+// allocation on a per-keystroke (debounced) path.
+const VALUE_TYPE_NAMES: Record<number, string> = {
+	[ValueType.Number]: "Number",
+	[ValueType.Hex]: "Hex",
+	[ValueType.BigInt]: "BigInt",
+	[ValueType.String]: "String",
+	[ValueType.Datetime]: "Datetime",
+	[ValueType.Percentage]: "Percentage",
+	[ValueType.Uom]: "Uom",
+	[ValueType.Array]: "Array",
+	[ValueType.Boolean]: "Boolean",
+	[ValueType.Unit]: "Unit",
+	[ValueType.Pending]: "Pending",
+	[ValueType.Error]: "Error",
+};
+
 function formatType(val: Value): string {
-	const typeNames: Record<number, string> = {
-		[ValueType.Number]: "Number",
-		[ValueType.Hex]: "Hex",
-		[ValueType.BigInt]: "BigInt",
-		[ValueType.String]: "String",
-		[ValueType.Datetime]: "Datetime",
-		[ValueType.Percentage]: "Percentage",
-		[ValueType.Uom]: "Uom",
-		[ValueType.Array]: "Array",
-		[ValueType.Boolean]: "Boolean",
-		[ValueType.Unit]: "Unit",
-		[ValueType.Pending]: "Pending",
-		[ValueType.Error]: "Error",
-	};
-	const t = typeNames[val.type] ?? "Value";
+	const t = VALUE_TYPE_NAMES[val.type] ?? "Value";
 	return val.unit ? `${t} (${val.unit})` : t;
 }
 
@@ -390,9 +394,13 @@ function extractPageHeatmap(
 		const startLine = p * linesPerPage + 1;
 		const endLine = Math.min((p + 1) * linesPerPage, lineCount);
 		const pageLines = Math.min(linesPerPage, endLine - startLine + 1);
-		const cachedCount = Array.from(cachedLines).filter(
-			(ln) => ln >= startLine && ln <= endLine
-		).length;
+		// Direct membership check per line, mirroring the pageMaxSeq loop just
+		// below — avoids reallocating the whole cachedLines set into an array
+		// (and re-filtering it) once per page.
+		let cachedCount = 0;
+		for (let ln = startLine; ln <= endLine; ln++) {
+			if (cachedLines.has(ln)) cachedCount++;
+		}
 		const ratio = cachedCount / pageLines;
 		const temperature: "hot" | "warm" | "cold" =
 			ratio > 0.5 ? "hot" : ratio > 0.1 ? "warm" : "cold";
@@ -786,16 +794,20 @@ export function runEngineWithStreaming(
 					outputType = last.error ? "Error" : last.type;
 				}
 
-				markdownOutline = markdownOutline.map((node, idx) => {
-					const lr = lineResults.find(
-						(r) => r.lineNumber === idx + 1
-					);
-					return {
-						...node,
-						hasRun: !!lr && !lr.error,
-						result: lr ? lr.result : undefined,
-					};
-				});
+				{
+					// Built once instead of calling lineResults.find() per
+					// outline node — that was an O(lines²) pattern (a linear
+					// scan of lineResults for every single outline node).
+					const lineResultByNumber = new Map(lineResults.map((r) => [r.lineNumber, r]));
+					markdownOutline = markdownOutline.map((node, idx) => {
+						const lr = lineResultByNumber.get(idx + 1);
+						return {
+							...node,
+							hasRun: !!lr && !lr.error,
+							result: lr ? lr.result : undefined,
+						};
+					});
+				}
 
 				const varTokens = rawTokens.filter((t) => t.type === "IDENT");
 				variables = [...new Set(varTokens.map((t) => t.value))];
@@ -1097,14 +1109,20 @@ export function runEngine(expression: string): DebugResult {
 			outputType = last.error ? "Error" : last.type;
 		}
 
-		markdownOutline = markdownOutline.map((node, idx) => {
-			const lr = lineResults.find((r) => r.lineNumber === idx + 1);
-			return {
-				...node,
-				hasRun: !!lr && !lr.error,
-				result: lr ? lr.result : undefined,
-			};
-		});
+		{
+			// Built once instead of calling lineResults.find() per outline
+			// node — that was an O(lines²) pattern (a linear scan of
+			// lineResults for every single outline node).
+			const lineResultByNumber = new Map(lineResults.map((r) => [r.lineNumber, r]));
+			markdownOutline = markdownOutline.map((node, idx) => {
+				const lr = lineResultByNumber.get(idx + 1);
+				return {
+					...node,
+					hasRun: !!lr && !lr.error,
+					result: lr ? lr.result : undefined,
+				};
+			});
+		}
 
 		// Collect variables from tokens
 		const varTokens = rawTokens.filter((t) => t.type === "IDENT");
