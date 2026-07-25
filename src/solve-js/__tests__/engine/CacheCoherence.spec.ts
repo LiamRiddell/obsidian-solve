@@ -426,5 +426,56 @@ describe("Cache Coherence", () => {
 			// before the assignment. Either [] or ["foo"] is acceptable.
 			expect(reads.length).toBeGreaterThanOrEqual(0);
 		});
+
+		describe("tryCompileExpression — non-throwing compile check", () => {
+			test("returns true for a well-formed expression, without throwing", () => {
+				const engine = new ExpressionEngine();
+				expect(() => engine.tryCompileExpression("3 * 7")).not.toThrow();
+				expect(engine.tryCompileExpression("3 * 7")).toBe(true);
+			});
+
+			test("returns false for text that doesn't parse as an expression, without throwing", () => {
+				const engine = new ExpressionEngine();
+				expect(() => engine.tryCompileExpression("My name is dave")).not.toThrow();
+				expect(engine.tryCompileExpression("My name is dave")).toBe(false);
+			});
+
+			test("returns false (not throw) for an expression that's too long", () => {
+				const engine = new ExpressionEngine();
+				const longExpr = Array(2000).fill("1").join("+");
+				expect(() => engine.tryCompileExpression(longExpr)).not.toThrow();
+				expect(engine.tryCompileExpression(longExpr)).toBe(false);
+			});
+
+			test("returns false (not throw) for an expression that's too complex", () => {
+				const engine = new ExpressionEngine();
+				const complexExpr = Array(600).fill("1 + 1").join(" + ");
+				expect(() => engine.tryCompileExpression(complexExpr)).not.toThrow();
+				expect(engine.tryCompileExpression(complexExpr)).toBe(false);
+			});
+
+			test("agrees with compileExpression: true iff compileExpression doesn't throw", () => {
+				const engine = new ExpressionEngine();
+				const cases = ["3 * 7", ":foo = 42", "My name is dave", "sqrt(144)", "1 2 3", ""];
+				for (const expr of cases) {
+					let compileSucceeded = true;
+					try {
+						engine.compileExpression(expr);
+					} catch {
+						compileSucceeded = false;
+					}
+					expect(engine.tryCompileExpression(expr)).toBe(compileSucceeded);
+				}
+			});
+
+			test("a successful tryCompileExpression populates the bytecode cache, so a subsequent compileExpression is a cache hit", () => {
+				const engine = new ExpressionEngine();
+				expect(engine.tryCompileExpression("9 * 9")).toBe(true);
+
+				const { program } = engine.compileExpression("9 * 9");
+				const result = engine.executeCached(program);
+				expect(result.toNumber()).toBe(81);
+			});
+		});
 	});
 });

@@ -336,18 +336,21 @@ export class SolveLanguageService {
 	 * Whether the engine's parser actually accepts a piece of text as a
 	 * well-formed expression, not merely whether it lexes into individually
 	 * recognized token types — see the class doc comment's prose example.
-	 * `compileExpression` is compile-only (lex → normalize → parse → cache
-	 * bytecode, no VM execution, no network/async side effects) and reuses
-	 * the engine's existing bytecode cache, so text that's already been
-	 * evaluated (or previously highlight-checked) is a cache hit here too.
+	 * `tryCompileExpression` is compile-only (lex → normalize → parse →
+	 * cache bytecode, no VM execution, no network/async side effects) and
+	 * reuses the engine's existing bytecode cache, so text that's already
+	 * been evaluated (or previously highlight-checked) is a cache hit here
+	 * too.
+	 *
+	 * Deliberately calls the non-throwing `tryCompileExpression` rather than
+	 * try/catching `compileExpression` — this runs on every visible line on
+	 * every keystroke, and the common case for a real markdown document is
+	 * lines that DON'T parse (prose), not lines that do. Throwing there would
+	 * mean constructing a SolveError (with V8 stack-trace capture) for the
+	 * common case instead of the rare one.
 	 */
 	private parsesAsExpression(text: string): boolean {
-		try {
-			this.engine!.compileExpression(text);
-			return true;
-		} catch {
-			return false;
-		}
+		return this.engine!.tryCompileExpression(text);
 	}
 
 	private putCache(lineNumber: number, text: string, tokens: SemanticToken[], bareWordCandidate?: string): void {

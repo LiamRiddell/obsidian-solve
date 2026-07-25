@@ -2312,6 +2312,46 @@ export class ExpressionEngine {
 	}
 
 	/**
+	 * Non-throwing "does this compile" check — same lex → prepare pipeline as
+	 * {@link compileExpression}, but returns a boolean instead of throwing on
+	 * failure.
+	 *
+	 * compileExpression()'s failure path constructs a SolveError via
+	 * ErrorFactory, which calls Error.captureStackTrace() — one of V8's more
+	 * expensive operations. That's fine for genuine execution/compile errors
+	 * (rare, and the caller needs the message), but SolveLanguageService's
+	 * syntax-highlighting gate calls compileExpression() purely to ask "does
+	 * this parse", on every visible line, every keystroke — and the common
+	 * case for a real markdown document is prose lines that DON'T parse, not
+	 * the rare case. Benchmarked: constructing-and-throwing that exception on
+	 * every non-matching line was responsible for highlighting an
+	 * unrecognized-prose line costing roughly an order of magnitude more than
+	 * a recognized expression. This skips that construction entirely — still
+	 * reuses the bytecode cache and prepareExpression()'s normal work, just
+	 * never builds an Error object for the "no" answer.
+	 *
+	 * Note: this only avoids the outer exception compileExpression() itself
+	 * would construct. A genuinely deep parse failure (an unmatched token
+	 * mid-expression, not just "stopped early with leftover tokens") still
+	 * goes through the parser's own throw/catch inside prepareExpression() —
+	 * unavoidable without restructuring the parser's failure signaling, which
+	 * is out of scope here.
+	 */
+	tryCompileExpression(expression: string): boolean {
+		const tokens: Token[] = [];
+		let hasParens = false;
+		this.lexer.resetExpression(expression);
+		for (const t of this.lexer) {
+			if (t.type === 'COMMENT') continue;
+			if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
+			tokens.push(t);
+		}
+
+		const prep = this.prepareExpression(expression, tokens, hasParens);
+		return prep.kind !== 'error';
+	}
+
+	/**
 	 * Execute pre-compiled bytecode against the engine's shared VM.
 	 * Used by Tier 2 (scroll into view) to re-execute cached bytecode
 	 * without re-lexing, re-parsing, or re-compiling.
