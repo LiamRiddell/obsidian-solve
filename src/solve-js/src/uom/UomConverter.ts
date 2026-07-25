@@ -40,32 +40,38 @@ export function resolveUnit(unit: string): string {
   }
 }
 
+// Built once at module load rather than inside getMeasure() — this is a pure
+// lookup table with no per-call state, but it was previously reallocated
+// (16 computed-key entries) on every single call. getMeasure() runs at least
+// twice per unit conversion (VM.ts's UOM_CONVERT_TO checks it for both the
+// source and target unit) plus again inside convertUnit()'s temperature
+// branch, so this was a real, avoidable allocation on a hot path.
+const MEASURE_KIND_NAMES: Record<number, string> = {
+  [MeasureKind.Angle]: "angle",
+  [MeasureKind.Area]: "area",
+  [MeasureKind.Data]: "data",
+  [MeasureKind.Energy]: "energy",
+  [MeasureKind.Force]: "force",
+  [MeasureKind.Frequency]: "frequency",
+  [MeasureKind.Illuminance]: "illuminance",
+  [MeasureKind.Length]: "length",
+  [MeasureKind.Luminance]: "luminance",
+  [MeasureKind.LuminousIntensity]: "luminousIntensity",
+  [MeasureKind.Mass]: "mass",
+  [MeasureKind.Power]: "power",
+  [MeasureKind.Pressure]: "pressure",
+  [MeasureKind.Temperature]: "temperature",
+  [MeasureKind.Time]: "time",
+  [MeasureKind.Volume]: "volume",
+};
+
 export function getMeasure(unit: string): string | undefined {
   try {
     const resolved = resolveUnit(unit);
     const kindId = getMeasureKind(resolved as any);
     if (kindId === undefined) return undefined;
-    
-    const measureKinds: Record<number, string> = {
-      [MeasureKind.Angle]: "angle",
-      [MeasureKind.Area]: "area",
-      [MeasureKind.Data]: "data",
-      [MeasureKind.Energy]: "energy",
-      [MeasureKind.Force]: "force",
-      [MeasureKind.Frequency]: "frequency",
-      [MeasureKind.Illuminance]: "illuminance",
-      [MeasureKind.Length]: "length",
-      [MeasureKind.Luminance]: "luminance",
-      [MeasureKind.LuminousIntensity]: "luminousIntensity",
-      [MeasureKind.Mass]: "mass",
-      [MeasureKind.Power]: "power",
-      [MeasureKind.Pressure]: "pressure",
-      [MeasureKind.Temperature]: "temperature",
-      [MeasureKind.Time]: "time",
-      [MeasureKind.Volume]: "volume",
-    };
-    
-    return measureKinds[kindId];
+
+    return MEASURE_KIND_NAMES[kindId];
   } catch {
     return undefined;
   }
