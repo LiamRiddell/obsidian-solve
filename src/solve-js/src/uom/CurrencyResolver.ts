@@ -95,6 +95,7 @@ export class CurrencyAsyncResolver implements IAsyncResolver {
 				case OpCode.PUSH_NUMBER: case OpCode.PUSH_BIGINT: case OpCode.PUSH_HEX:
 				case OpCode.PUSH_STRING: case OpCode.PUSH_BOOLEAN:
 				case OpCode.LOAD_VAR: case OpCode.STORE_VAR:
+				case OpCode.LOAD_GLOBAL_VAR: case OpCode.STORE_GLOBAL_VAR:
 					i += 2; break;
 				case OpCode.CALL_PLUGIN: case OpCode.CALL_BUILTIN:
 					i += 3; break;

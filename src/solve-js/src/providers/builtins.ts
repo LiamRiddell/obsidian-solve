@@ -105,9 +105,15 @@ export const DICE_PACKAGE: ISolvePackage = {
 import { VariableParselet } from "./variables/parselets/VariableParselet";
 import { IdentifierParselet } from "./variables/parselets/IdentifierParselet";
 import { GlobalVariableParselet } from "./variables/parselets/GlobalVariableParselet";
+import { GlobalVariableAsyncResolver } from "@solve-js/vm/GlobalVariableAsyncResolver";
 
 export const VARIABLES_PACKAGE: ISolvePackage = {
   name: "solve-variables",
+  // Resolves `global :name` reads that aren't yet known to any currently-
+  // loaded document — shows Pending and re-resolves automatically the
+  // instant some document declares it, via the same async pipeline
+  // CURRENCY_PACKAGE below uses for currency rates.
+  asyncResolvers: [new GlobalVariableAsyncResolver()],
   prefixParselets: [
     { tokenType: "COLON", parselet: new VariableParselet() },
     { tokenType: "IDENT", parselet: new IdentifierParselet() },
