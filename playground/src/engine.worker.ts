@@ -39,6 +39,10 @@
  *   refreshed silently because some OTHER tab wrote a global variable this
  *   tab's last-evaluated text depends on. Not tied to any `id` the main
  *   thread sent — the main thread should always accept and cache these.
+ * - `{ tabId, streamEvent, unsolicited: true }` — an async resolution (an
+ *   OSRS price, a currency rate) settling AFTER one of the refreshes above
+ *   already ran. Also untied to any `id` — patch the tab's cached line the
+ *   same way an interactive stream's `lineUpdate` is patched.
  *
  * @module engine.worker
  */
@@ -105,6 +109,15 @@ const abortControllers = new Map<string, AbortController>();
  * diagnostic data stays current even while that tab isn't focused.
  */
 const tabDocuments = new Map<string, string>();
+
+/**
+ * AbortController for the current cross-tab BACKGROUND refresh, keyed by
+ * tabId — separate from `abortControllers` above (which track interactive,
+ * keystroke-driven sessions). If several global writes fire in quick
+ * succession, each new refresh for a tab cancels that SAME tab's own
+ * previous (now-superseded) refresh.
+ */
+const refreshAbortControllers = new Map<string, AbortController>();
 //#endregion
 
 //#region Cross-tab global-variable propagation
@@ -116,19 +129,50 @@ const tabDocuments = new Map<string, string>();
  * tab happens to be the currently-focused one — matching the "multiple
  * documents alive, only the focused tab's diagnostics shown" design.
  *
- * Deliberately re-runs via the simple one-shot `runEngine()`, not
- * `runEngineWithStreaming()` — this is a background refresh, not a fresh
- * interactive keystroke, so there is no live event stream to forward for
- * it. If the refreshed text itself contains an unresolved async value
- * (a currency rate, another still-undeclared global), that surfaces the
- * next time that tab is actually focused and re-evaluated interactively.
+ * Uses `runEngineWithStreaming()`, not the simpler one-shot `runEngine()`.
+ * A one-shot run's fresh, empty-cache engine can't wait for an OSRS price
+ * or currency rate to resolve — it just returns "Pending" and is discarded.
+ * If the refreshed tab's line had ALREADY resolved before this refresh
+ * fired, that one-shot re-run would regress it back to "Pending" with NO
+ * way to ever complete it again (nothing keeps that discarded engine's
+ * fetch alive, and no future event patches the cache). Streaming instead
+ * means this refresh's own async resolutions eventually arrive as
+ * `lines-updated` events, forwarded below and patched into the tab's cache
+ * — the same lineUpdate mechanism the interactive path already uses.
  */
 sharedGlobalVariableStore.subscribe((_name, _value) => {
     for (const [tabId, text] of tabDocuments) {
+        const previousRefresh = refreshAbortControllers.get(tabId);
+        if (previousRefresh) previousRefresh.abort();
+
+        const refreshController = new AbortController();
+        refreshAbortControllers.set(tabId, refreshController);
+
         try {
-            const result = runEngine(text);
+            const { result, stream } = runEngineWithStreaming(text, refreshController.signal);
             const serialized = serializeResult(result);
             self.postMessage({ tabId, result: serialized, unsolicited: true });
+
+            const reader = stream.getReader();
+            (async () => {
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        if (value.lineUpdate) {
+                            self.postMessage({ tabId, streamEvent: value, unsolicited: true });
+                        }
+                    }
+                } catch {
+                    // Aborted by a newer write to the same tab, or the
+                    // stream's own natural cancellation — expected.
+                } finally {
+                    reader.releaseLock();
+                    if (refreshAbortControllers.get(tabId) === refreshController) {
+                        refreshAbortControllers.delete(tabId);
+                    }
+                }
+            })();
         } catch (error) {
             self.postMessage({ tabId, error: error instanceof Error ? error.message : String(error), unsolicited: true });
         }

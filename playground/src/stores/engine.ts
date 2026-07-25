@@ -48,6 +48,22 @@ export const useEngineStore = defineStore('engine', () => {
         useWorkersStore().logActivity('engine', `[${tabId}] ${error}`, true);
         return;
       }
+      // A background refresh's OWN async resolution (an OSRS price, a
+      // currency rate) settling after the refresh itself already returned
+      // — patch just that line into the tab's cache, same as an
+      // interactive stream's lineUpdate. Without this, a refresh that
+      // caught a line mid-fetch (or regressed an already-resolved line
+      // back to Pending, since the refresh's own re-run starts from an
+      // empty query cache) had no way to ever resolve it: a background
+      // refresh has no interactive keystroke to eventually re-run it.
+      if (streamEvent?.lineUpdate) {
+        tabs.patchCachedLineResult(tabId, streamEvent.lineUpdate);
+        if (isActiveTab) {
+          dr.patchLineResult(streamEvent.lineUpdate);
+          dr.patchLineStages(streamEvent.lineUpdate.lineNumber, streamEvent.lineUpdate.stages);
+        }
+        return;
+      }
       if (!result) return;
       tabs.cacheResult(tabId, result);
       if (isActiveTab) dr.setResult(result);
