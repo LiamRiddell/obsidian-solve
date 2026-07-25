@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-05-31T13:56:08.466Z",
+  "timestamp": "2026-07-25T11:10:31.732Z",
   "results": {
     "literal": {
-      "meanNs": 1211.3935,
+      "meanNs": 1020.268,
       "p95Ns": 1200,
-      "meanUs": 1.2113935,
-      "opsPerUs": 0.8254955966001138,
+      "meanUs": 1.020268,
+      "opsPerUs": 0.9801346312929544,
       "opcodeCount": 2,
       "numbersCount": 1,
       "stringsCount": 0,
@@ -13,10 +13,10 @@
       "iterations": 200000
     },
     "simple_add": {
-      "meanNs": 1577.641,
-      "p95Ns": 1600,
-      "meanUs": 1.577641,
-      "opsPerUs": 0.6338577661204291,
+      "meanNs": 1312.064,
+      "p95Ns": 1500,
+      "meanUs": 1.3120640000000001,
+      "opsPerUs": 0.7621579435149505,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -24,10 +24,10 @@
       "iterations": 100000
     },
     "simple_mul": {
-      "meanNs": 1500.864,
-      "p95Ns": 1500,
-      "meanUs": 1.500864,
-      "opsPerUs": 0.666282887723338,
+      "meanNs": 1314.246,
+      "p95Ns": 1800,
+      "meanUs": 1.314246,
+      "opsPerUs": 0.760892557405539,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -35,10 +35,10 @@
       "iterations": 100000
     },
     "three_ops": {
-      "meanNs": 2100.09875,
-      "p95Ns": 2000,
-      "meanUs": 2.10009875,
-      "opsPerUs": 0.47616808495314805,
+      "meanNs": 1563.04625,
+      "p95Ns": 2100,
+      "meanUs": 1.5630462500000002,
+      "opsPerUs": 0.6397763341935658,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -46,10 +46,10 @@
       "iterations": 80000
     },
     "four_ops": {
-      "meanNs": 2685.7483333333334,
-      "p95Ns": 2600,
-      "meanUs": 2.6857483333333336,
-      "opsPerUs": 0.37233570531862936,
+      "meanNs": 2037.1016666666667,
+      "p95Ns": 2400,
+      "meanUs": 2.0371016666666666,
+      "opsPerUs": 0.4908935161966225,
       "opcodeCount": 14,
       "numbersCount": 5,
       "stringsCount": 0,
@@ -57,10 +57,10 @@
       "iterations": 60000
     },
     "nested_parens": {
-      "meanNs": 2530.028333333333,
-      "p95Ns": 2500,
-      "meanUs": 2.530028333333333,
-      "opsPerUs": 0.3952524905847563,
+      "meanNs": 1932.595,
+      "p95Ns": 2600,
+      "meanUs": 1.932595,
+      "opsPerUs": 0.5174389874753893,
       "opcodeCount": 11,
       "numbersCount": 4,
       "stringsCount": 0,
@@ -68,10 +68,10 @@
       "iterations": 60000
     },
     "negation": {
-      "meanNs": 1610.56375,
-      "p95Ns": 1600,
-      "meanUs": 1.61056375,
-      "opsPerUs": 0.6209006007989438,
+      "meanNs": 1414.895,
+      "p95Ns": 1900,
+      "meanUs": 1.414895,
+      "opsPerUs": 0.7067662264691019,
       "opcodeCount": 6,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -79,10 +79,10 @@
       "iterations": 80000
     },
     "function_call": {
-      "meanNs": 1469.8783333333333,
-      "p95Ns": 1500,
-      "meanUs": 1.4698783333333334,
-      "opsPerUs": 0.6803284172045986,
+      "meanNs": 1227.6066666666666,
+      "p95Ns": 1400,
+      "meanUs": 1.2276066666666665,
+      "opsPerUs": 0.8145931650202834,
       "opcodeCount": 5,
       "numbersCount": 1,
       "stringsCount": 0,
@@ -90,10 +90,10 @@
       "iterations": 60000
     },
     "function_two_args": {
-      "meanNs": 1668.164,
-      "p95Ns": 1700,
-      "meanUs": 1.668164,
-      "opsPerUs": 0.5994614438388551,
+      "meanNs": 1437.17,
+      "p95Ns": 1600,
+      "meanUs": 1.43717,
+      "opsPerUs": 0.6958119081249956,
       "opcodeCount": 7,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -101,10 +101,10 @@
       "iterations": 50000
     },
     "percentage": {
-      "meanNs": 1744.698,
-      "p95Ns": 1700,
-      "meanUs": 1.744698,
-      "opsPerUs": 0.5731650979137937,
+      "meanNs": 1492.564,
+      "p95Ns": 2000,
+      "meanUs": 1.492564,
+      "opsPerUs": 0.6699880206141914,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -112,10 +112,10 @@
       "iterations": 50000
     },
     "percentage_change": {
-      "meanNs": 1853.6525,
-      "p95Ns": 1800,
-      "meanUs": 1.8536525,
-      "opsPerUs": 0.5394754410548903,
+      "meanNs": 1558.46,
+      "p95Ns": 2100,
+      "meanUs": 1.55846,
+      "opsPerUs": 0.6416590737009612,
       "opcodeCount": 11,
       "numbersCount": 4,
       "stringsCount": 0,
@@ -123,10 +123,10 @@
       "iterations": 40000
     },
     "unit_conversion": {
-      "meanNs": 1465.3175,
-      "p95Ns": 1500,
-      "meanUs": 1.4653175,
-      "opsPerUs": 0.6824459545456871,
+      "meanNs": 1238.745,
+      "p95Ns": 1600,
+      "meanUs": 1.238745,
+      "opsPerUs": 0.8072686468966576,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 2,
@@ -134,10 +134,10 @@
       "iterations": 40000
     },
     "unit_in": {
-      "meanNs": 1344.5825,
-      "p95Ns": 1400,
-      "meanUs": 1.3445825,
-      "opsPerUs": 0.7437252827550559,
+      "meanNs": 1701.96,
+      "p95Ns": 1300,
+      "meanUs": 1.7019600000000001,
+      "opsPerUs": 0.5875578744506333,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 2,
@@ -145,10 +145,10 @@
       "iterations": 40000
     },
     "datetime": {
-      "meanNs": 1396.1633333333334,
-      "p95Ns": 1400,
-      "meanUs": 1.3961633333333334,
-      "opsPerUs": 0.7162485764559543,
+      "meanNs": 1205.5266666666666,
+      "p95Ns": 1600,
+      "meanUs": 1.2055266666666666,
+      "opsPerUs": 0.8295129652876475,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -156,21 +156,21 @@
       "iterations": 30000
     },
     "dice": {
-      "meanNs": 1815.26,
+      "meanNs": 1489.36,
       "p95Ns": 1800,
-      "meanUs": 1.81526,
-      "opsPerUs": 0.5508852726331214,
-      "opcodeCount": 5,
+      "meanUs": 1.4893599999999998,
+      "opsPerUs": 0.6714293387763872,
+      "opcodeCount": 7,
       "numbersCount": 2,
       "stringsCount": 0,
       "tokenCount": 6,
       "iterations": 30000
     },
     "vector": {
-      "meanNs": 2162.1266666666666,
-      "p95Ns": 2100,
-      "meanUs": 2.1621266666666665,
-      "opsPerUs": 0.4625075928329824,
+      "meanNs": 1700.1233333333332,
+      "p95Ns": 2300,
+      "meanUs": 1.7001233333333332,
+      "opsPerUs": 0.5881926213196298,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -178,10 +178,10 @@
       "iterations": 30000
     },
     "variable_assign": {
-      "meanNs": 1907.52,
-      "p95Ns": 1400,
-      "meanUs": 1.9075199999999999,
-      "opsPerUs": 0.5242408991779903,
+      "meanNs": 1238.6166666666666,
+      "p95Ns": 1600,
+      "meanUs": 1.2386166666666665,
+      "opsPerUs": 0.8073522881709435,
       "opcodeCount": 4,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -189,10 +189,10 @@
       "iterations": 60000
     },
     "variable_ref": {
-      "meanNs": 1489.9766666666667,
-      "p95Ns": 1500,
-      "meanUs": 1.4899766666666667,
-      "opsPerUs": 0.6711514497989901,
+      "meanNs": 1242.4983333333332,
+      "p95Ns": 1700,
+      "meanUs": 1.2424983333333333,
+      "opsPerUs": 0.8048300534273017,
       "opcodeCount": 5,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -200,10 +200,10 @@
       "iterations": 60000
     },
     "mixed_complex": {
-      "meanNs": 3904.33,
-      "p95Ns": 3500,
-      "meanUs": 3.90433,
-      "opsPerUs": 0.2561258909979433,
+      "meanNs": 2860.395,
+      "p95Ns": 3900,
+      "meanUs": 2.860395,
+      "opsPerUs": 0.3496020654490027,
       "opcodeCount": 23,
       "numbersCount": 7,
       "stringsCount": 0,
@@ -211,10 +211,10 @@
       "iterations": 20000
     },
     "bigint_hex": {
-      "meanNs": 1478.306,
-      "p95Ns": 1400,
-      "meanUs": 1.4783060000000001,
-      "opsPerUs": 0.6764499366166409,
+      "meanNs": 1411.888,
+      "p95Ns": 1900,
+      "meanUs": 1.4118879999999998,
+      "opsPerUs": 0.7082714776242875,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -223,13 +223,13 @@
     }
   },
   "summary": {
-    "meanUs": 1.8458156583333334,
-    "minUs": 1.2113935,
-    "maxUs": 3.90433,
-    "meanOpcodesPerExpr": 7.65
+    "meanUs": 1.5199564791666669,
+    "minUs": 1.020268,
+    "maxUs": 2.860395,
+    "meanOpcodesPerExpr": 7.75
   },
   "metadata": {
-    "nodeVersion": "v23.11.0",
+    "nodeVersion": "v24.16.0",
     "platform": "win32",
     "totalExpressions": 20,
     "description": "Isolated parse+compile phase (Parser + BytecodeBuilder). Lexing is done once before measurement. No VM execution. Uses pooled BytecodeBuilder (4 instances) and pre-allocated buffer pool (1024 opcodes, 256 numbers) — mirrors ExpressionEngine hot path exactly."

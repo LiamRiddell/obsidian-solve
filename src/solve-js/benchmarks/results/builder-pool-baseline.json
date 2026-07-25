@@ -1,174 +1,174 @@
 {
-  "timestamp": "2026-05-31T13:56:07.232Z",
+  "timestamp": "2026-07-25T11:10:29.565Z",
   "summary": {
-    "meanDeltaNs": -54.625900000000044,
-    "meanPercentImprovement": -2.0176403221925754,
-    "estimatedAllocCostNs": -54.625900000000044
+    "meanDeltaNs": -39.79130000000009,
+    "meanPercentImprovement": -1.3933944583306095,
+    "estimatedAllocCostNs": -39.79130000000009
   },
   "details": [
     {
       "name": "simple_literal",
       "withoutPool": {
-        "meanNs": 2328.279,
-        "p95Ns": 2200,
-        "medianNs": 1800
+        "meanNs": 2242.686,
+        "p95Ns": 2500,
+        "medianNs": 1700
       },
       "withPool": {
-        "meanNs": 2423.465,
-        "p95Ns": 2300,
-        "medianNs": 1900
+        "meanNs": 2323.429,
+        "p95Ns": 2600,
+        "medianNs": 1800
       },
-      "deltaNs": -95.18600000000015,
-      "speedupRatio": 1.0408825574598235,
-      "percentImprovement": -4.088255745982339
+      "deltaNs": -80.74299999999994,
+      "speedupRatio": 1.0360028109151258,
+      "percentImprovement": -3.6002810915125854
     },
     {
       "name": "simple_add",
       "withoutPool": {
-        "meanNs": 2642.53,
-        "p95Ns": 2600,
-        "medianNs": 2100
+        "meanNs": 2438.432,
+        "p95Ns": 2900,
+        "medianNs": 2000
       },
       "withPool": {
-        "meanNs": 2895.068,
-        "p95Ns": 3900,
-        "medianNs": 2300
+        "meanNs": 2587.982,
+        "p95Ns": 2900,
+        "medianNs": 2000
       },
-      "deltaNs": -252.538,
-      "speedupRatio": 1.0955667485326561,
-      "percentImprovement": -9.556674853265621
+      "deltaNs": -149.55000000000018,
+      "speedupRatio": 1.0613303959265628,
+      "percentImprovement": -6.133039592656273
     },
     {
       "name": "arithmetic",
       "withoutPool": {
-        "meanNs": 3754.1266666666666,
-        "p95Ns": 3800,
-        "medianNs": 3200
+        "meanNs": 3200.95,
+        "p95Ns": 3900,
+        "medianNs": 2700
       },
       "withPool": {
-        "meanNs": 3743.33,
-        "p95Ns": 4600,
-        "medianNs": 3300
+        "meanNs": 3241.8,
+        "p95Ns": 4100,
+        "medianNs": 2700
       },
-      "deltaNs": 10.796666666666624,
-      "speedupRatio": 0.9971240537080085,
-      "percentImprovement": 0.28759462919915574
+      "deltaNs": -40.850000000000364,
+      "speedupRatio": 1.0127618363298396,
+      "percentImprovement": -1.2761836329839693
     },
     {
       "name": "nested_parens",
       "withoutPool": {
-        "meanNs": 3576.9466666666667,
-        "p95Ns": 4200,
-        "medianNs": 3000
+        "meanNs": 3021.27,
+        "p95Ns": 3800,
+        "medianNs": 2600
       },
       "withPool": {
-        "meanNs": 3545.786666666667,
-        "p95Ns": 3600,
-        "medianNs": 3100
+        "meanNs": 3080.3233333333333,
+        "p95Ns": 3700,
+        "medianNs": 2600
       },
-      "deltaNs": 31.159999999999854,
-      "speedupRatio": 0.9912886596016715,
-      "percentImprovement": 0.8711340398328515
+      "deltaNs": -59.053333333333285,
+      "speedupRatio": 1.019545864266793,
+      "percentImprovement": -1.954586426679287
     },
     {
       "name": "function_call",
       "withoutPool": {
-        "meanNs": 2452.36,
-        "p95Ns": 2600,
-        "medianNs": 2100
+        "meanNs": 2375.9966666666664,
+        "p95Ns": 2800,
+        "medianNs": 1900
       },
       "withPool": {
-        "meanNs": 2510.67,
-        "p95Ns": 2600,
-        "medianNs": 2200
+        "meanNs": 2346.9166666666665,
+        "p95Ns": 2300,
+        "medianNs": 2000
       },
-      "deltaNs": -58.309999999999945,
-      "speedupRatio": 1.0237770963480075,
-      "percentImprovement": -2.377709634800761
+      "deltaNs": 29.079999999999927,
+      "speedupRatio": 0.9877609255905242,
+      "percentImprovement": 1.2239074409475854
     },
     {
       "name": "percentage",
       "withoutPool": {
-        "meanNs": 2856.805,
-        "p95Ns": 3400,
-        "medianNs": 2400
+        "meanNs": 2948.045,
+        "p95Ns": 3200,
+        "medianNs": 2200
       },
       "withPool": {
-        "meanNs": 2877.225,
-        "p95Ns": 3100,
-        "medianNs": 2500
+        "meanNs": 2846.425,
+        "p95Ns": 3400,
+        "medianNs": 2300
       },
-      "deltaNs": -20.420000000000073,
-      "speedupRatio": 1.0071478452326987,
-      "percentImprovement": -0.7147845232698793
+      "deltaNs": 101.61999999999989,
+      "speedupRatio": 0.9655296984951044,
+      "percentImprovement": 3.447030150489558
     },
     {
       "name": "unit_conversion",
       "withoutPool": {
-        "meanNs": 2586.265,
-        "p95Ns": 2700,
-        "medianNs": 2100
+        "meanNs": 2358.7,
+        "p95Ns": 2900,
+        "medianNs": 2000
       },
       "withPool": {
-        "meanNs": 2572.81,
-        "p95Ns": 2900,
-        "medianNs": 2200
+        "meanNs": 2401.92,
+        "p95Ns": 2500,
+        "medianNs": 1900
       },
-      "deltaNs": 13.454999999999927,
-      "speedupRatio": 0.9947975168824541,
-      "percentImprovement": 0.5202483117545931
+      "deltaNs": -43.220000000000255,
+      "speedupRatio": 1.0183236528596262,
+      "percentImprovement": -1.8323652859626176
     },
     {
       "name": "datetime",
       "withoutPool": {
-        "meanNs": 2413.2466666666664,
-        "p95Ns": 2700,
+        "meanNs": 2308.0466666666666,
+        "p95Ns": 2800,
         "medianNs": 2000
       },
       "withPool": {
-        "meanNs": 2384.846666666667,
-        "p95Ns": 2400,
-        "medianNs": 2100
+        "meanNs": 2275.1133333333332,
+        "p95Ns": 2200,
+        "medianNs": 1900
       },
-      "deltaNs": 28.399999999999636,
-      "speedupRatio": 0.9882316215775706,
-      "percentImprovement": 1.1768378422429384
+      "deltaNs": 32.933333333333394,
+      "speedupRatio": 0.9857310799608326,
+      "percentImprovement": 1.4268920039167345
     },
     {
       "name": "variable_assign",
       "withoutPool": {
-        "meanNs": 2530.7566666666667,
-        "p95Ns": 2600,
-        "medianNs": 2100
+        "meanNs": 2333.52,
+        "p95Ns": 2800,
+        "medianNs": 2000
       },
       "withPool": {
-        "meanNs": 2632.4333333333334,
-        "p95Ns": 2500,
-        "medianNs": 2200
+        "meanNs": 2361.27,
+        "p95Ns": 2900,
+        "medianNs": 2000
       },
-      "deltaNs": -101.67666666666673,
-      "speedupRatio": 1.0401763899334455,
-      "percentImprovement": -4.0176389933445495
+      "deltaNs": -27.75,
+      "speedupRatio": 1.011891905790394,
+      "percentImprovement": -1.189190579039391
     },
     {
       "name": "mixed_complex",
       "withoutPool": {
-        "meanNs": 4476.64,
+        "meanNs": 3963.79,
         "p95Ns": 5000,
-        "medianNs": 3800
+        "medianNs": 3400
       },
       "withPool": {
-        "meanNs": 4578.58,
-        "p95Ns": 5000,
-        "medianNs": 3900
+        "meanNs": 4124.17,
+        "p95Ns": 5100,
+        "medianNs": 3400
       },
-      "deltaNs": -101.9399999999996,
-      "speedupRatio": 1.0227715429429214,
-      "percentImprovement": -2.2771542942921386
+      "deltaNs": -160.3800000000001,
+      "speedupRatio": 1.0404612756982585,
+      "percentImprovement": -4.046127569825851
     }
   ],
   "metadata": {
-    "nodeVersion": "v23.11.0",
+    "nodeVersion": "v24.16.0",
     "platform": "win32",
     "poolSize": 4,
     "description": "Measures parse+compile phase comparing 'new BytecodeBuilder()' (before) vs pooled builder reuse (after). Eliminates 4 heap allocations per expression: opcode[], numbers[], strings[], stringIndex Map."
