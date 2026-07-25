@@ -80,7 +80,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		const fs = require("fs");
 		const path = require("path");
 		const dir = path.join(
-			__dirname, "..", "..", "..", "benchmarks", "results",
+			__dirname, "..", "..", "benchmarks", "results",
 		);
 		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 		fs.writeFileSync(
