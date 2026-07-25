@@ -4,6 +4,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { numberValue, Value } from "@solve-js/vm/Value";
 import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { sharedLexer } from "@solve-js/lexer/Lexer";
+import { globalDagKey } from "@solve-js/vm/GlobalVariableStore";
 
 // ── Validation config ────────────────────────────────────────────────────
 
@@ -120,7 +121,27 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
 
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
+        if (t.type === "GLOBAL") {
+            // global :name [= expr] — GLOBAL, COLON, IDENT/UNIT are three
+            // separate tokens (matching GlobalVariableParselet). Emit a
+            // "global:"-prefixed synthetic name into THIS document's own
+            // DAG (via globalDagKey) so a local :hello and global :hello
+            // never collide in this document's own reads/writes tracking —
+            // the bare-COLON branch below explicitly skips the colon that
+            // follows GLOBAL, since it's handled here instead.
+            if (i + 2 < tokens.length && tokens[i + 1].type === "COLON" && isVarName(tokens[i + 2])) {
+                const key = globalDagKey(tokens[i + 2].value);
+                reads.push(key);
+                if (i + 3 < tokens.length && tokens[i + 3].type === "EQUALS") {
+                    writes.push(key);
+                }
+            }
+            continue;
+        }
         if (t.type === "COLON") {
+            // Skip — this colon belongs to a `global :name` sequence,
+            // already handled by the GLOBAL branch above.
+            if (i > 0 && tokens[i - 1].type === "GLOBAL") continue;
             // The moo lexer produces COLON as a bare ":" token. The variable
             // name follows as a separate IDENT or UNIT token (matching VariableParselet).
             if (i + 1 < tokens.length && isVarName(tokens[i + 1])) {
