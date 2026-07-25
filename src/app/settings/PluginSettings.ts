@@ -42,7 +42,10 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	},
 
 	completions: {
-		enabled: true,
+		// Off by default — measurably affects typing latency (prefix
+		// matching + candidate list construction on every keystroke).
+		// Users who want it can opt in from settings.
+		enabled: false,
 	},
 
 	inlineSolve: {
