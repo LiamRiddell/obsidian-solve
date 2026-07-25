@@ -397,4 +397,51 @@ describe("MarkdownEditorViewPlugin — highlighting and completions toggle indep
 
 		expect(() => plugin.buildDecorations(view as any)).not.toThrow();
 	});
+
+	test("a doc change never touches the highlight cache when highlighting is disabled — zero cost, not just hidden output", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		(plugin as any).userSettings.syntaxHighlight.enabled = false;
+
+		const invalidateSpy = jest.spyOn((plugin as any).languageService, "invalidateLines");
+		const update = {
+			docChanged: true,
+			viewportChanged: true,
+			view,
+			startState: { doc: view.state.doc },
+			changes: {
+				iterChanges: (cb: (fromA: number, toA: number, fromB: number, toB: number, inserted: { toString: () => string }) => void) => {
+					cb(0, 1, 0, 1, { toString: () => "9" });
+				},
+			},
+		};
+		plugin.update(update as any);
+
+		expect(invalidateSpy).not.toHaveBeenCalled();
+		invalidateSpy.mockRestore();
+	});
+
+	test("a doc change DOES invalidate the touched line's highlight cache when highlighting is enabled", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		(plugin as any).userSettings.syntaxHighlight.enabled = true;
+
+		const invalidateSpy = jest.spyOn((plugin as any).languageService, "invalidateLines");
+		const update = {
+			docChanged: true,
+			viewportChanged: true,
+			view,
+			startState: { doc: view.state.doc },
+			changes: {
+				iterChanges: (cb: (fromA: number, toA: number, fromB: number, toB: number, inserted: { toString: () => string }) => void) => {
+					cb(0, 1, 0, 1, { toString: () => "9" });
+				},
+			},
+		};
+		plugin.update(update as any);
+
+		expect(invalidateSpy).toHaveBeenCalledTimes(1);
+		expect(invalidateSpy.mock.calls[0][0]).toEqual(new Set([1]));
+		invalidateSpy.mockRestore();
+	});
 });

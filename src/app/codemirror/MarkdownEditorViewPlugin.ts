@@ -237,14 +237,24 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			// own text-match guard naturally misses (and re-lexes) once a
 			// line number's cached text no longer matches, so this doesn't
 			// need to be exhaustive to stay correct — only to stay fast.
-			const changedLines = new Set<number>();
-			for (const change of lineChanges) {
-				const span = Math.max(change.deleteCount, change.insertLines.length, 1);
-				for (let line = change.startLine; line < change.startLine + span; line++) {
-					changedLines.add(line);
+			//
+			// This cache only ever holds anything when highlighting is on
+			// (it's populated exclusively by getSemanticTokens() calls in
+			// buildDecorations(), which are themselves skipped when
+			// disabled — see highlightingEnabled there). Gate the whole
+			// Set-allocation-and-walk here too, not just the eventual
+			// no-op deletes, so a disabled user pays literally nothing on
+			// every keystroke, not just "nothing visible."
+			if (this.userSettings.syntaxHighlight.enabled) {
+				const changedLines = new Set<number>();
+				for (const change of lineChanges) {
+					const span = Math.max(change.deleteCount, change.insertLines.length, 1);
+					for (let line = change.startLine; line < change.startLine + span; line++) {
+						changedLines.add(line);
+					}
 				}
+				this.languageService.invalidateLines(changedLines);
 			}
-			this.languageService.invalidateLines(changedLines);
 		}
 
 		if (update.docChanged || update.viewportChanged) {
