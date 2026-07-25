@@ -78,14 +78,27 @@ export enum OpCode {
 
 }
 
+// Reverse lookup built once at module load — getOpCodeName() is called once
+// per VM instruction whenever a diagnostic collector is attached (VM.ts's
+// trace path), so a per-call linear scan of every enum entry (TS numeric
+// enums are bidirectional at runtime, so Object.entries(OpCode) yields both
+// "NOP" -> 0 and "0" -> "NOP" style entries) would otherwise redo the same
+// scan every single traced instruction. Only the numeric-valued entries are
+// kept — the string-valued reverse entries TS also generates aren't needed
+// here.
+const OP_CODE_NAMES: ReadonlyMap<number, string> = (() => {
+	const map = new Map<number, string>();
+	for (const [key, value] of Object.entries(OpCode)) {
+		if (typeof value === "number") map.set(value, key);
+	}
+	return map;
+})();
+
 /**
  * Gets the name of an OpCode as a string.
  * @param op The OpCode value
  * @returns The enum name as a string, or "UNKNOWN_<value>" if not found
  */
 export function getOpCodeName(op: number): string {
-	for (const [key, value] of Object.entries(OpCode)) {
-		if (value === op) return key;
-	}
-	return `UNKNOWN_${op}`;
+	return OP_CODE_NAMES.get(op) ?? `UNKNOWN_${op}`;
 }

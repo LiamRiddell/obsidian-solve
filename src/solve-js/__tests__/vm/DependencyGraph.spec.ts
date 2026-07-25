@@ -44,6 +44,70 @@ describe("DependencyGraph", () => {
     expect(affected.has(20)).toBe(true);
   });
 
+  describe("data-source dependency tracking", () => {
+    test("registerLineDataSourceDependency makes a line findable via getAffectedLinesByDataSource", () => {
+      const dag = new DependencyGraph();
+      dag.registerLineDataSourceDependency(10, "currency", ["USD", "EUR"]);
+      const affected = dag.getAffectedLinesByDataSource("currency", ["USD", "EUR"]);
+      expect(affected.has(10)).toBe(true);
+    });
+
+    test("removeLine cleans up this line's data-source consumer entries", () => {
+      const dag = new DependencyGraph();
+      dag.registerLineDataSourceDependency(10, "currency", ["USD", "EUR"]);
+      dag.removeLine(10);
+      const affected = dag.getAffectedLinesByDataSource("currency", ["USD", "EUR"]);
+      expect(affected.has(10)).toBe(false);
+      expect(affected.size).toBe(0);
+    });
+
+    test("removeLine only touches the removed line's OWN data-source keys — other lines on the same key survive", () => {
+      const dag = new DependencyGraph();
+      dag.registerLineDataSourceDependency(10, "currency", ["USD", "EUR"]);
+      dag.registerLineDataSourceDependency(20, "currency", ["USD", "EUR"]);
+      dag.removeLine(10);
+      const affected = dag.getAffectedLinesByDataSource("currency", ["USD", "EUR"]);
+      expect(affected.has(10)).toBe(false);
+      expect(affected.has(20)).toBe(true);
+    });
+
+    test("removeLine only touches the removed line's OWN data-source keys — unrelated keys elsewhere in the document survive", () => {
+      const dag = new DependencyGraph();
+      dag.registerLineDataSourceDependency(10, "currency", ["USD", "EUR"]);
+      dag.registerLineDataSourceDependency(20, "osrs-ge", ["Iron Axe"]);
+      dag.removeLine(10);
+      expect(dag.getAffectedLinesByDataSource("osrs-ge", ["Iron Axe"]).has(20)).toBe(true);
+    });
+
+    test("removeLine on a line with multiple data-source dependencies cleans up all of them", () => {
+      const dag = new DependencyGraph();
+      dag.registerLineDataSourceDependency(10, "currency", ["USD", "EUR"]);
+      dag.registerLineDataSourceDependency(10, "osrs-ge", ["Iron Axe"]);
+      dag.removeLine(10);
+      expect(dag.getAffectedLinesByDataSource("currency", ["USD", "EUR"]).has(10)).toBe(false);
+      expect(dag.getAffectedLinesByDataSource("osrs-ge", ["Iron Axe"]).has(10)).toBe(false);
+    });
+
+    test("removeLine on a line with no data-source dependencies is a safe no-op for this cleanup", () => {
+      const dag = new DependencyGraph();
+      dag.registerLine(10, ["x"], []);
+      expect(() => dag.removeLine(10)).not.toThrow();
+    });
+
+    test("getSnapshot reflects data-source state and removeLine's cleanup of it", () => {
+      const dag = new DependencyGraph();
+      dag.registerLineDataSourceDependency(10, "currency", ["USD", "EUR"]);
+      const before = dag.getSnapshot();
+      expect(before.dataSourceDeps[10]).toEqual(["currency:[\"USD\",\"EUR\"]"]);
+      expect(before.dataSourceConsumers["currency:[\"USD\",\"EUR\"]"]).toEqual([10]);
+
+      dag.removeLine(10);
+      const after = dag.getSnapshot();
+      expect(after.dataSourceDeps[10]).toBeUndefined();
+      expect(after.dataSourceConsumers["currency:[\"USD\",\"EUR\"]"]).toEqual([]);
+    });
+  });
+
   test("getDependencies returns read variables for a line", () => {
     const dag = new DependencyGraph();
     dag.registerLine(10, ["a", "b"], ["c"]);

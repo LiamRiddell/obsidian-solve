@@ -196,8 +196,21 @@ export const NON_WORD_TABLE: Uint8Array = (() => {
  * ```
  */
 export class TokenNormalizer {
-  /** Registered rules, unsorted. Sorted on each normalize() call. */
+  /** Registered rules, unsorted — the source of truth. */
   private rules: NormalizerRule[] = [];
+
+  /**
+   * Priority-sorted copy of {@link rules}, rebuilt lazily on the next
+   * {@link normalize} call after a mutation. Rules are registered once at
+   * engine/package-registration time and essentially never change during a
+   * session, but normalize() runs on every keystroke-driven evaluation — an
+   * earlier version re-sorted a fresh copy of `rules` on every single call,
+   * which meant every keystroke paid for an allocation + sort of a list that
+   * had usually not changed since the last one. `null` means "stale, rebuild
+   * on next use"; {@link register}/{@link unregister}/{@link clear} all
+   * invalidate it.
+   */
+  private sortedRulesCache: NormalizerRule[] | null = null;
 
   /**
    * Phrase trie for single-pass multi-word phrase fusion.
@@ -231,6 +244,7 @@ export class TokenNormalizer {
    */
   register(rule: NormalizerRule): void {
     this.rules.push(rule);
+    this.sortedRulesCache = null;
   }
 
   /**
@@ -243,6 +257,7 @@ export class TokenNormalizer {
    */
   unregister(ruleName: string): void {
     this.rules = this.rules.filter(r => r.name !== ruleName);
+    this.sortedRulesCache = null;
   }
 
   /**
@@ -251,7 +266,20 @@ export class TokenNormalizer {
    */
   clear(): void {
     this.rules = [];
+    this.sortedRulesCache = null;
     this.phraseTrie = new PhraseTrie();
+  }
+
+  /**
+   * Priority-sorted view of {@link rules} (descending priority; registration
+   * order preserved for ties, since {@link Array.prototype.sort} is stable).
+   * Cached until the next mutation — see {@link sortedRulesCache}.
+   */
+  private getSortedRules(): NormalizerRule[] {
+    if (this.sortedRulesCache === null) {
+      this.sortedRulesCache = [...this.rules].sort((a, b) => b.priority - a.priority);
+    }
+    return this.sortedRulesCache;
   }
 
   /**
@@ -331,8 +359,8 @@ export class TokenNormalizer {
     // ── Early exit: nothing to normalize ──
     if (tokens.length === 0) return tokens;
 
-    // ── Sort rules once per normalize call ──
-    const sorted = [...this.rules].sort((a, b) => b.priority - a.priority);
+    // ── Priority-sorted rules — cached across calls, see getSortedRules() ──
+    const sorted = this.getSortedRules();
     const fusionHandler = onFusion ?? this.options.onFusion;
     const maxPasses = this.options.maxPasses;
     const maxTokens = this.options.maxTokens;

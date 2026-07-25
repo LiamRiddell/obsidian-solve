@@ -15,8 +15,29 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     6: (args) => numberValue(Math.ceil(args[0].toNumber())),
     7: (args) => numberValue(Math.floor(args[0].toNumber())),
     8: (args) => numberValue(Math.round(args[0].toNumber())),
-    9: (args) => numberValue(Math.min(...args.map(a => a.toNumber()))),
-    10: (args) => numberValue(Math.max(...args.map(a => a.toNumber()))),
+    // min/max: a plain loop replicating Math.min/Math.max's exact semantics
+    // (NaN poisons the result regardless of position; empty args -> ±Infinity)
+    // avoids the intermediate array .map()+spread allocates on every call.
+    9: (args) => {
+        let result = Infinity;
+        let hasNaN = false;
+        for (const a of args) {
+            const n = a.toNumber();
+            if (Number.isNaN(n)) hasNaN = true;
+            else if (n < result) result = n;
+        }
+        return numberValue(hasNaN ? NaN : result);
+    },
+    10: (args) => {
+        let result = -Infinity;
+        let hasNaN = false;
+        for (const a of args) {
+            const n = a.toNumber();
+            if (Number.isNaN(n)) hasNaN = true;
+            else if (n > result) result = n;
+        }
+        return numberValue(hasNaN ? NaN : result);
+    },
     11: (args) => numberValue(Math.asin(args[0].toNumber())),
     12: (args) => numberValue(Math.acos(args[0].toNumber())),
     13: (args) => numberValue(Math.atan(args[0].toNumber())),
@@ -32,6 +53,11 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     23: (args) => numberValue(Math.expm1(args[0].toNumber())),
     24: (args) => numberValue(Math.exp(args[0].toNumber())),
     25: (args) => numberValue(Math.fround(args[0].toNumber())),
+    // hypot: left as .map()+spread (unlike min/max above) — Math.hypot uses
+    // a numerically-stable scaling algorithm internally to avoid overflow
+    // for very large/small inputs; a naive manual reimplementation risks
+    // silently changing results at the extremes, so the tiny array
+    // allocation here is the safer trade.
     26: (args) => numberValue(Math.hypot(...args.map(a => a.toNumber()))),
     27: (args) => numberValue(Math.imul(args[0].toNumber(), args[1].toNumber())),
     28: (args) => numberValue(Math.log10(args[0].toNumber())),

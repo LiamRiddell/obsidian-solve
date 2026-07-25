@@ -203,8 +203,9 @@ export class DependencyGraph {
     // Append any remaining lines that couldn't be topologically sorted
     // (cycles or external-only dependencies) in ascending order.
     if (ordered.length < affected.size) {
+      const orderedSet = new Set(ordered);
       const remaining = Array.from(affected)
-        .filter((l) => !ordered.includes(l))
+        .filter((l) => !orderedSet.has(l))
         .sort((a, b) => a - b);
       ordered.push(...remaining);
     }
@@ -249,10 +250,16 @@ export class DependencyGraph {
 
      this.dependencies.delete(lineNumber);
      this.writes.delete(lineNumber);
-     this.dataSourceDependencies.delete(lineNumber);
 
-     for (const [, consumers] of this.dataSourceConsumers) {
-       consumers.delete(lineNumber);
+     // Remove from consumers of the data-source keys THIS line depends on —
+     // O(k) via the line's own dependency set, not O(total unique keys in
+     // the document). Must read dataSourceDependencies before deleting it.
+     const dataSourceKeys = this.dataSourceDependencies.get(lineNumber);
+     if (dataSourceKeys) {
+       for (const key of dataSourceKeys) {
+         this.dataSourceConsumers.get(key)?.delete(lineNumber);
+       }
+       this.dataSourceDependencies.delete(lineNumber);
      }
    }
 
