@@ -25,6 +25,7 @@ import { useEditorStore } from '../stores/editor.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 import { useUiStore } from '../stores/ui.js';
 import type { LineResult } from '../engine.js';
+import { prepareEvaluationInput } from '../engineShared.js';
 import ExamplesMenu from './ExamplesMenu.vue';
 
 const engine = useEngineStore();
@@ -264,7 +265,11 @@ onMounted(() => {
         placeholder('Enter an expression…  e.g. 10 + 5 * 2'),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
-            const expr = update.state.doc.toString().trim();
+            // See prepareEvaluationInput()'s doc comment — the document
+            // text must reach the engine unmodified (never .trim()'d) so
+            // every line's reported lineNumber stays aligned with its
+            // actual position in the document.
+            const expr = prepareEvaluationInput(update.state.doc.toString());
             // Highlight cache invalidation is now handled surgically, per
             // changed line, inside SolveHighlightPluginValue.update() —
             // no blanket clear needed here.
@@ -295,7 +300,7 @@ onUnmounted(() => {
 /* ── Public methods ───────────────────────────────────────────── */
 function run(): void {
   if (!editorView) return;
-  engine.evaluate(editorView.state.doc.toString().trim());
+  engine.evaluate(prepareEvaluationInput(editorView.state.doc.toString()));
 }
 
 function insertExample(expression: string): void {

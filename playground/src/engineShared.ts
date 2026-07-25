@@ -25,6 +25,32 @@ import type {
 export type TimedEvent = { type: string; elapsedNs: number };
 
 /**
+ * Decide what text to actually send to the engine for a whole-document
+ * evaluation pass (runEngine/runEngineWithStreaming). Returns the
+ * document's text completely UNCHANGED unless it's entirely blank
+ * (whitespace-only), in which case it returns "" to signal "nothing to
+ * evaluate" (the caller's abort-on-empty path).
+ *
+ * Deliberately does NOT trim leading/trailing whitespace from a non-blank
+ * document. Every line number reported anywhere in the evaluation
+ * pipeline comes from splitting this exact string on "\n" and using the
+ * 1-based index directly (see runEngine's/runEngineWithStreaming's
+ * per-line loop) — trimming leading blank lines here would silently
+ * renumber every real line after them, decoupling the reported
+ * lineNumber from the actual position the expression sits at in the
+ * document the user is looking at. This was a real, reported bug: typing
+ * blank lines above an expression left its result widget stuck on the
+ * (now blank) original line, because the engine was never told those
+ * blank lines existed. Blank lines are already handled correctly at the
+ * per-line level regardless (the loop skips them via `if (!trimmed)
+ * continue` while still counting them for subsequent lines' numbering),
+ * so no document-level trim was ever necessary.
+ */
+export function prepareEvaluationInput(docText: string): string {
+	return docText.trim().length === 0 ? '' : docText;
+}
+
+/**
  * Whether a line's evaluation error was just an unrecognized bare word
  * (e.g. a stray "hello" used as ordinary prose) rather than a genuine
  * mistake in an intended expression.
