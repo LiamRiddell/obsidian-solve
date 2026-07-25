@@ -636,6 +636,37 @@ describe("DocumentModel", () => {
 			expect(model.hasAnyDirtyLineBefore(1)).toBe(false); // nothing before line 1
 		});
 
+		// hasAnyDirtyVariableDefLineBefore is the narrower check ThreeTierEvaluator
+		// uses to decide whether setViewport()'s checkpoint state might be stale.
+		// Unlike hasAnyDirtyLineBefore, a dirty plain-expression line must NOT
+		// count — only a dirty variable-def line can invalidate a checkpoint
+		// (VMCheckpointer only snapshots state at variable-def lines).
+		test("hasAnyDirtyVariableDefLineBefore ignores dirty non-variable-def lines", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc\nd\ne");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+
+			// Re-dirty line 4, but it's a plain expression (isVariableDef stays false).
+			model.markDirtyByLineNumber(4);
+
+			expect(model.hasAnyDirtyLineBefore(5)).toBe(true); // broad check sees it
+			expect(model.hasAnyDirtyVariableDefLineBefore(5)).toBe(false); // narrow check ignores it
+		});
+
+		test("hasAnyDirtyVariableDefLineBefore is true only for a dirty variable-def line", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc\nd\ne");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+
+			// Mark line 2 as a variable-def line (e.g. ":x = 1"), then re-dirty it.
+			const line2 = model.getAllLines()[1];
+			model.updateLineResult(line2.lineId, [], [], [], [], ["x"], true, 0);
+			model.markDirty(line2.lineId);
+
+			expect(model.hasAnyDirtyVariableDefLineBefore(3)).toBe(true);  // line 2 is before position 3
+			expect(model.hasAnyDirtyVariableDefLineBefore(2)).toBe(false); // line 2 itself is not "before" position 2
+		});
+
 		test("editLine marks the edited line dirty and updates dirtyCount", () => {
 			const model = new DocumentModel();
 			model.setDocument("a\nb\nc");

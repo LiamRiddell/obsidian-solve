@@ -434,6 +434,39 @@ export class DocumentModel {
 		return false;
 	}
 
+	/**
+	 * Whether any **variable-definition** line before `position` (1-based,
+	 * exclusive) is dirty.
+	 *
+	 * Narrower than {@link hasAnyDirtyLineBefore}: `VMCheckpointer.snapshot()`
+	 * only ever records state for lines with `writes.length > 0` (see
+	 * VMCheckpoints.ts), so a dirty plain-expression line before the viewport
+	 * cannot have invalidated any checkpoint — there's no checkpoint entry
+	 * for it to invalidate. Only a dirty variable-def line can mean the VM
+	 * state a checkpoint would restore is stale.
+	 *
+	 * This distinction matters because `PageManager.evictPageBytecode()`
+	 * marks evicted non-variable-def lines dirty (so they get Tier 1 if
+	 * scrolled back into view), and Tier 3's compile-only path never clears
+	 * `dirty` for non-variable-def lines by design. Using the broader
+	 * `hasAnyDirtyLineBefore` here meant scrolling far into a large,
+	 * variable-def-free document would trip `setViewport()`'s fallback to
+	 * `evaluate()` on every single call — evaluate() reprocesses the evicted
+	 * lines via Tier 3, which recompiles their bytecode without clearing
+	 * dirty, so the very next `maintainAfterEval()` re-evicts and re-dirties
+	 * the same lines, forever re-triggering the fallback on an otherwise
+	 * unchanged viewport.
+	 */
+	hasAnyDirtyVariableDefLineBefore(position: number): boolean {
+		for (const lineId of this.dirtyLineIds) {
+			const state = this.lines.get(lineId);
+			if (!state || !state.isVariableDef) continue;
+			const pos = this.getLinePosition(lineId);
+			if (pos >= 1 && pos < position) return true;
+		}
+		return false;
+	}
+
 	/** Number of lines currently marked dirty. For diagnostics/tests. */
 	get dirtyCount(): number {
 		return this.dirtyLineIds.size;

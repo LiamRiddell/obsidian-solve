@@ -554,6 +554,47 @@ describe("ThreeTierEvaluator — Preload Integration", () => {
 		expect(coldLine.bytecodes.length).toBe(0);
 	});
 
+	// Regression test: cold-page eviction (which marks evicted non-variable-def
+	// lines dirty) used to trip setViewport()'s checkpoint-invalidation guard on
+	// EVERY call once the eviction window stabilized — the guard couldn't tell
+	// the difference between "a variable def before the viewport is stale" and
+	// "some plain expression line was evicted for memory". A document with no
+	// variable definitions at all is the sharpest case: every setViewport() call
+	// far from line 1 evicted the same pages, re-marked them dirty, and forced a
+	// full evaluate() from line 1 forever, even though nothing had changed.
+	test("repeated identical setViewport() far from line 1 stabilizes (no perpetual full-evaluate fallback)", () => {
+		const doc = createLargeDoc(20000); // no variable definitions
+		const engine = createEngine();
+		const checkpointer = new VMCheckpointer(engine.getVM());
+		const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
+
+		evaluator.evaluateAll();
+
+		const viewport = { startLine: 19900, endLine: 19930 };
+
+		// First call may legitimately do real work (first-time eviction at this
+		// position). Subsequent identical calls should NOT re-trigger a full
+		// evaluate() — that would mean tier1/tier3 counts stay large and
+		// dirtyCount never settles, exactly the reported symptom.
+		evaluator.setViewport(viewport);
+		const dirtyAfterFirst = doc.dirtyCount;
+
+		const tier1Counts: number[] = [];
+		for (let i = 0; i < 5; i++) {
+			const result = evaluator.setViewport(viewport);
+			tier1Counts.push(result.tierCounts.tier1);
+		}
+
+		// dirtyCount must stabilize, not grow or oscillate across repeated calls.
+		expect(doc.dirtyCount).toBe(dirtyAfterFirst);
+
+		// A stable viewport should settle into the cheap Tier 2 path — the full
+		// evaluate() fallback (which reprocesses from line 1 and reports tier1
+		// hits for every dirty line up to the viewport) must NOT keep firing.
+		expect(tier1Counts[tier1Counts.length - 1]).toBe(0);
+		expect(tier1Counts.every((c) => c === 0)).toBe(true);
+	});
+
 	test("setViewport on new evaluator works (PageManager starts fresh)", () => {
 		const doc = createLargeDoc(PAGE_SIZE * 5);
 		const engine = createEngine();
