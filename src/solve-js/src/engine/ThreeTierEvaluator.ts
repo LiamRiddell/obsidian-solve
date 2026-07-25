@@ -490,17 +490,14 @@ export class ThreeTierEvaluator {
 	 * if there are dirty lines before the viewport, checkpoint state may be
 	 * stale and we need to reprocess from line 1.
 	 *
-	 * Scans from line 1 to position-1. For typical Obsidian documents
-	 * (< 5000 lines), this linear scan is negligible. The method returns
-	 * early on first dirty line found.
+	 * Delegates to DocumentModel.hasAnyDirtyLineBefore(), which tracks dirty
+	 * lineIds incrementally instead of scanning every line up to `position`
+	 * on every call — this used to be a real per-scroll cost (benchmarked at
+	 * ~10ms scrolled near the bottom of a 20k-line document) since it fired
+	 * on every viewport change, not just edits.
 	 */
 	private hasDirtyLinesBefore(position: number): boolean {
-		const end = Math.min(position - 1, this.doc.lineCount);
-		for (let pos = 1; pos <= end; pos++) {
-			const state = this.doc.getLineAt(pos);
-			if (state?.dirty) return true;
-		}
-		return false;
+		return this.doc.hasAnyDirtyLineBefore(position);
 	}
 
 	/**
@@ -526,7 +523,7 @@ export class ThreeTierEvaluator {
 		// Skip empty/markdown-only lines
 		if (state.isEmpty || isEmptyLine(state.text)) {
 			state.isEmpty = true;
-			state.dirty = false;
+			this.doc.markClean(state.lineId);
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
 		}
 
@@ -534,7 +531,7 @@ export class ThreeTierEvaluator {
 		const { expressions, inlineSolveCount } = this.extractExpressions(state);
 		if (expressions.length === 0) {
 			state.isEmpty = true;
-			state.dirty = false;
+			this.doc.markClean(state.lineId);
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
 		}
 
@@ -774,7 +771,7 @@ export class ThreeTierEvaluator {
 		state.result = results[0]?.[0] ?? null;
 		if (anyFailed) {
 			// Mark dirty so failed bytecodes are re-compiled (Tier 1) next pass
-			state.dirty = true;
+			this.doc.markDirty(state.lineId);
 		}
 
 		return { ...baseResult, tier: EvalTier.Tier2, result: lastValue, results, error: firstError };
@@ -854,7 +851,7 @@ export class ThreeTierEvaluator {
 		if (hasVariableDef && lastResult && !anyFailed) {
 			state.results = [[lastResult]];
 			state.result = lastResult;
-			state.dirty = false;
+			this.doc.markClean(state.lineId);
 
 			// ── Checkpoint after variable definition ────────────
 			if (this.checkpointer) {

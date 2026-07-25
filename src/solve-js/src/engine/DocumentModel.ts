@@ -153,6 +153,20 @@ export class DocumentModel {
 	 */
 	private _positionCache: Map<number, number> | null = null;
 
+	/**
+	 * Line IDs currently marked dirty — maintained alongside every
+	 * `state.dirty` mutation (in this class and in every other module that
+	 * holds a direct `LineState` reference: ThreeTierEvaluator, PageManager).
+	 * Lets {@link hasAnyDirtyLineBefore} answer "is anything before position
+	 * X dirty" in O(d log N) — d = current dirty count, typically tiny once
+	 * a document has settled after its initial evaluation — instead of
+	 * O(N log N), which used to mean every scroll event re-walked the WHOLE
+	 * document via `getLineAt()` regardless of how little of it was actually
+	 * dirty. Benchmarked: ~10.6ms per setViewport() call scrolled near the
+	 * bottom of a 20k-line document before this fix.
+	 */
+	private dirtyLineIds: Set<number> = new Set();
+
 	// ── Initialization ──────────────────────────────────────────────────
 
 	/**
@@ -163,6 +177,7 @@ export class DocumentModel {
 		this.lines.clear();
 		this.orderTree.clear();
 		this._positionCache = null;
+		this.dirtyLineIds.clear();
 		this.nextLineId = 1;
 
 		const rawLines = text.split("\n");
@@ -190,6 +205,11 @@ export class DocumentModel {
 
 		// O(N) balanced treap build from flat array
 		this.orderTree.replaceAll(lineIds);
+
+		// Every line starts dirty (see the object literal above) — seed the
+		// tracking set to match. This is the one place the set is legitimately
+		// O(N): a fresh document needs full evaluation anyway.
+		for (const id of lineIds) this.dirtyLineIds.add(id);
 	}
 
 	// ── Structural edits ────────────────────────────────────────────────
@@ -243,6 +263,9 @@ export class DocumentModel {
 				});
 			}
 
+			// New lines start dirty (see the object literal above) — track them.
+			for (const id of newIds) this.dirtyLineIds.add(id);
+
 			// O(log N) splice: delete old IDs, insert new IDs
 			const removedIds = this.orderTree.spliceAt(
 				startIdx,
@@ -252,6 +275,7 @@ export class DocumentModel {
 			for (const id of removedIds) {
 				removed.push(id);
 				this.lines.delete(id);
+				this.dirtyLineIds.delete(id);
 			}
 		}
 
@@ -311,6 +335,7 @@ export class DocumentModel {
 		state.result = null;
 		state.inlineSolveCount = 0;
 		state.dirty = true;
+		this.dirtyLineIds.add(state.lineId);
 		state.isEmpty = newText.trim().length === 0;
 		return true;
 	}
@@ -389,6 +414,31 @@ export class DocumentModel {
 		return result;
 	}
 
+	/**
+	 * Whether any line before `position` (1-based, exclusive) is dirty.
+	 *
+	 * Used by ThreeTierEvaluator.setViewport() to decide whether cached
+	 * checkpoint state might be stale and a full evaluate() (from line 1) is
+	 * needed instead of the cheap viewport-only path.
+	 *
+	 * O(d log N) where d = current dirty line count via {@link dirtyLineIds},
+	 * not O(N log N) — a document that's mostly clean (the steady state after
+	 * initial load) answers this in the cost of resolving a handful of
+	 * lineIds to positions, not walking every line up to `position`.
+	 */
+	hasAnyDirtyLineBefore(position: number): boolean {
+		for (const lineId of this.dirtyLineIds) {
+			const pos = this.getLinePosition(lineId);
+			if (pos >= 1 && pos < position) return true;
+		}
+		return false;
+	}
+
+	/** Number of lines currently marked dirty. For diagnostics/tests. */
+	get dirtyCount(): number {
+		return this.dirtyLineIds.size;
+	}
+
 	// ── Thread-safety validation ────────────────────────────────────────
 
 	/**
@@ -413,7 +463,10 @@ export class DocumentModel {
 	 */
 	markClean(lineId: number): void {
 		const state = this.lines.get(lineId);
-		if (state) state.dirty = false;
+		if (state) {
+			state.dirty = false;
+			this.dirtyLineIds.delete(lineId);
+		}
 	}
 
 	/**
@@ -422,7 +475,10 @@ export class DocumentModel {
 	 */
 	markDirtyByLineNumber(lineNumber: number): void {
 		const state = this.getLineAt(lineNumber);
-		if (state) state.dirty = true;
+		if (state) {
+			state.dirty = true;
+			this.dirtyLineIds.add(state.lineId);
+		}
 	}
 
 	/**
@@ -430,7 +486,10 @@ export class DocumentModel {
 	 */
 	markDirty(lineId: number): void {
 		const state = this.lines.get(lineId);
-		if (state) state.dirty = true;
+		if (state) {
+			state.dirty = true;
+			this.dirtyLineIds.add(lineId);
+		}
 	}
 
 	/**
@@ -440,6 +499,7 @@ export class DocumentModel {
 		for (const state of this.lines.values()) {
 			state.dirty = true;
 		}
+		this.dirtyLineIds = new Set(this.lines.keys());
 	}
 
 	/**
@@ -478,6 +538,7 @@ export class DocumentModel {
 		state.isVariableDef = isVariableDef;
 		state.inlineSolveCount = inlineSolveCount;
 		state.dirty = false;
+		this.dirtyLineIds.delete(lineId);
 	}
 
 	/**

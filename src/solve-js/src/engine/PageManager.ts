@@ -311,7 +311,7 @@ export class PageManager {
 				state.bytecodes = [];
 				state.results = [];
 				state.result = null;
-				state.dirty = true;
+				doc.markDirty(state.lineId);
 			}
 		}
 	}

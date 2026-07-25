@@ -559,4 +559,190 @@ describe("DocumentModel", () => {
 			expect(model.getLineAt(5)!.text).toBe("d");
 		});
 	});
+
+	// ── dirtyCount / hasAnyDirtyLineBefore ──────────────────────────────
+	//
+	// The dirty-tracking Set backing these must stay exactly in sync with
+	// every LineState.dirty mutation across DocumentModel, ThreeTierEvaluator,
+	// and PageManager — this used to be a per-line-number scan on every
+	// setViewport() call (a real, benchmarked ~10ms cost scrolled near the
+	// bottom of a 20k-line document). Any drift here would either return
+	// stale ("clean") results (a correctness bug) or just be slower (safe
+	// but pointless) — these tests exercise every mutation path.
+	describe("dirtyCount / hasAnyDirtyLineBefore", () => {
+		test("every line starts dirty after setDocument, and dirtyCount matches", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			expect(model.dirtyCount).toBe(3);
+		});
+
+		test("hasAnyDirtyLineBefore is true for a freshly-loaded document", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			expect(model.hasAnyDirtyLineBefore(3)).toBe(true);
+		});
+
+		test("markClean removes a line from the dirty set", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			const line2 = model.getAllLines()[1];
+			model.markClean(line2.lineId);
+			expect(model.dirtyCount).toBe(2);
+			expect(line2.dirty).toBe(false);
+		});
+
+		test("markDirty adds a line back to the dirty set", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			const line2 = model.getAllLines()[1];
+			model.markClean(line2.lineId);
+			model.markDirty(line2.lineId);
+			expect(model.dirtyCount).toBe(3);
+			expect(line2.dirty).toBe(true);
+		});
+
+		test("markDirtyByLineNumber adds the correct line to the dirty set", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			model.markClean(model.getAllLines()[0].lineId);
+			model.markClean(model.getAllLines()[1].lineId);
+			model.markClean(model.getAllLines()[2].lineId);
+			expect(model.dirtyCount).toBe(0);
+
+			model.markDirtyByLineNumber(2);
+			expect(model.dirtyCount).toBe(1);
+			expect(model.getLineAt(2)!.dirty).toBe(true);
+			expect(model.getLineAt(1)!.dirty).toBe(false);
+		});
+
+		test("once every line is clean, hasAnyDirtyLineBefore is false everywhere", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc\nd\ne");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			expect(model.dirtyCount).toBe(0);
+			expect(model.hasAnyDirtyLineBefore(5)).toBe(false);
+			expect(model.hasAnyDirtyLineBefore(1)).toBe(false);
+		});
+
+		test("hasAnyDirtyLineBefore only counts lines strictly before the given position", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc\nd\ne");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			// Re-dirty only line 4 (by position).
+			model.markDirtyByLineNumber(4);
+
+			expect(model.hasAnyDirtyLineBefore(4)).toBe(false); // line 4 itself is not "before" position 4
+			expect(model.hasAnyDirtyLineBefore(5)).toBe(true);  // position 4 IS before position 5
+			expect(model.hasAnyDirtyLineBefore(1)).toBe(false); // nothing before line 1
+		});
+
+		test("editLine marks the edited line dirty and updates dirtyCount", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			expect(model.dirtyCount).toBe(0);
+
+			model.editLine(2, "B");
+			expect(model.dirtyCount).toBe(1);
+			expect(model.getLineAt(2)!.dirty).toBe(true);
+		});
+
+		test("editLine with unchanged text does not affect dirtyCount", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			model.editLine(2, "b"); // same text — no-op per editLine's hash check
+			expect(model.dirtyCount).toBe(0);
+		});
+
+		test("invalidateAll marks every line dirty and dirtyCount matches lineCount", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc\nd");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			expect(model.dirtyCount).toBe(0);
+
+			model.invalidateAll();
+			expect(model.dirtyCount).toBe(4);
+		});
+
+		test("updateLineResult marks the line clean and updates dirtyCount", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			const line = model.getAllLines()[0];
+			expect(model.dirtyCount).toBe(3);
+
+			model.updateLineResult(line.lineId, [], [], [], [], [], false, 0);
+			expect(model.dirtyCount).toBe(2);
+			expect(line.dirty).toBe(false);
+		});
+
+		test("applyChanges: newly inserted lines are tracked as dirty", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			expect(model.dirtyCount).toBe(0);
+
+			model.applyChanges([{ startLine: 2, deleteCount: 0, insertLines: ["X", "Y"] }]);
+			expect(model.dirtyCount).toBe(2); // only the 2 new lines
+			expect(model.lineCount).toBe(5);
+		});
+
+		test("applyChanges: removed lines are dropped from the dirty set (no leak)", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc\nd\ne");
+			// Leave everything dirty (fresh document) — delete a dirty line.
+			expect(model.dirtyCount).toBe(5);
+
+			model.applyChanges([{ startLine: 2, deleteCount: 2, insertLines: [] }]); // delete b, c
+			expect(model.dirtyCount).toBe(3); // a, d, e remain — b/c's dirty entries removed, not leaked
+			expect(model.lineCount).toBe(3);
+		});
+
+		test("applyChanges: removing a CLEAN line doesn't corrupt dirtyCount for surviving lines", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc\nd\ne");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			model.markDirtyByLineNumber(4); // only "d" is dirty
+			expect(model.dirtyCount).toBe(1);
+
+			// Delete "b" (clean) — "d" should still be tracked correctly at its new position.
+			model.applyChanges([{ startLine: 2, deleteCount: 1, insertLines: [] }]);
+			expect(model.dirtyCount).toBe(1);
+			expect(model.getLineAt(3)!.text).toBe("d"); // shifted up by one
+			expect(model.getLineAt(3)!.dirty).toBe(true);
+			expect(model.hasAnyDirtyLineBefore(4)).toBe(true); // "d" is now at position 3, before 4
+			expect(model.hasAnyDirtyLineBefore(3)).toBe(false); // "d" itself is not before position 3
+		});
+
+		test("markClean/markDirty/markDirtyByLineNumber on a nonexistent lineId/lineNumber are safe no-ops", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb");
+			expect(() => model.markClean(9999)).not.toThrow();
+			expect(() => model.markDirty(9999)).not.toThrow();
+			expect(() => model.markDirtyByLineNumber(9999)).not.toThrow();
+			expect(model.dirtyCount).toBe(2); // unaffected
+		});
+
+		test("dirtyCount stays accurate across a long sequence of mixed mutations", () => {
+			const model = new DocumentModel();
+			model.setDocument("a\nb\nc\nd\ne\nf\ng\nh");
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			expect(model.dirtyCount).toBe(0);
+
+			model.markDirtyByLineNumber(1);
+			model.markDirtyByLineNumber(3);
+			model.editLine(5, "E");
+			expect(model.dirtyCount).toBe(3);
+
+			model.applyChanges([{ startLine: 2, deleteCount: 1, insertLines: [] }]); // delete "b"
+			// dirty lines were 1("a"),3("c"→now pos2),5("E"→now pos4). "b" wasn't dirty, so count unchanged.
+			expect(model.dirtyCount).toBe(3);
+
+			for (const line of model.getAllLines()) model.markClean(line.lineId);
+			expect(model.dirtyCount).toBe(0);
+
+			model.invalidateAll();
+			expect(model.dirtyCount).toBe(7); // 8 lines - 1 deleted
+		});
+	});
 });
