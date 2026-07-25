@@ -14,6 +14,7 @@ import { CompilationWorkerManager, type CompileRequestItem } from "@solve-js/eng
 import { PageManager } from "@solve-js/engine/PageManager";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { SolveError } from "@solve-js/errors/UnifiedErrorFramework";
+import { sharedGlobalVariableStore, globalDagKey } from "@solve-js/vm/GlobalVariableStore";
 
 // ── EvalTier (diagnostic enum) ──────────────────────────────────────────
 
@@ -92,6 +93,13 @@ export class ThreeTierEvaluator {
 	private pageManager: PageManager;
 
 	/**
+	 * Unsubscribe from sharedGlobalVariableStore — set in the constructor,
+	 * called from terminateWorker(). See the subscription itself below for
+	 * why this only marks lines dirty and never re-evaluates synchronously.
+	 */
+	private globalUnsubscribe: (() => void) | null = null;
+
+	/**
 	 * @param doc The persistent document model.
 	 * @param engine The expression engine (shared VM is accessed via engine.getVM()).
 	 * @param checkpointer Optional VM state checkpointer. If provided, the evaluator
@@ -108,6 +116,30 @@ export class ThreeTierEvaluator {
 		this.dag = engine.getDag();
 		this.checkpointer = checkpointer ?? null;
 		this.pageManager = new PageManager();
+
+		// ── Cross-document global-variable propagation ──────────────────
+		// GlobalVariableAsyncResolver (via preflight) handles a line's FIRST
+		// resolution when a global it reads wasn't known yet. This handles
+		// the ONGOING case: a line that already has a real (non-pending)
+		// value for `global :x` needs to go dirty again when some OTHER
+		// document writes a NEW value to x, so this document's next
+		// evaluate() picks up the change — "dealing with the DAG across
+		// pages", not just first-resolution.
+		this.globalUnsubscribe = sharedGlobalVariableStore.subscribe((name) => {
+			// Mark-dirty ONLY — never synchronously re-evaluate here.
+			// enableValueArena/disableValueArena (Value.ts) is a single
+			// non-reentrant module-level flag; evaluate()/setViewport() both
+			// wrap their body in it, so a re-entrant evaluate() call from
+			// inside this callback (itself possibly firing from INSIDE
+			// another evaluate() call, via a STORE_GLOBAL_VAR opcode in some
+			// other document being evaluated concurrently) would disable the
+			// arena out from under the still-running outer call. This
+			// mirrors applyTransaction()'s existing contract exactly: mark
+			// dirty, let the caller's own evaluate() cadence pick it up.
+			for (const lineNumber of this.dag.getAffectedLines(globalDagKey(name))) {
+				this.doc.markDirtyByLineNumber(lineNumber);
+			}
+		});
 	}
 
 	/**
@@ -258,13 +290,21 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
-	 * Terminate the compilation worker if active.
-	 * Call this when the evaluator is no longer needed to clean up resources.
+	 * Terminate the compilation worker if active, and unsubscribe from
+	 * sharedGlobalVariableStore. Call this when the evaluator is no longer
+	 * needed to clean up resources — every call site that retires a
+	 * ThreeTierEvaluator (document switch, pane destroy()) already calls
+	 * this unconditionally, so folding the global-store unsubscribe in here
+	 * needs no new call sites anywhere.
 	 */
 	terminateWorker(): void {
 		if (this.compilationWorker) {
 			this.compilationWorker.terminate();
 			this.compilationWorker = null;
+		}
+		if (this.globalUnsubscribe) {
+			this.globalUnsubscribe();
+			this.globalUnsubscribe = null;
 		}
 	}
 
@@ -297,11 +337,15 @@ export class ThreeTierEvaluator {
 	 * 3. Lines before the viewport are completely skipped — their state lives in
 	 *    the VM checkpointer's prototypal chain.
 	 *
-	 * **Correctness guard:** If any line before the viewport is dirty (e.g., the
-	 * user edited a variable def that hasn't been re-evaluated yet), we clear
-	 * stale checkpoints and fall back to `evaluate()` which processes from line 1
-	 * and rebuilds fresh checkpoints. This guarantees that stale checkpoints are
-	 * never used as restoration targets.
+	 * **Correctness guard:** If any variable-definition line before the viewport
+	 * is dirty (e.g., the user edited a variable def that hasn't been
+	 * re-evaluated yet), we clear stale checkpoints and fall back to `evaluate()`
+	 * which processes from line 1 and rebuilds fresh checkpoints. This
+	 * guarantees that stale checkpoints are never used as restoration targets.
+	 * Only variable-def lines matter here — `VMCheckpointer.snapshot()` only
+	 * records state for lines that write a variable, so a dirty plain-expression
+	 * line before the viewport has no checkpoint to invalidate (see
+	 * `DocumentModel.hasAnyDirtyVariableDefLineBefore()`).
 	 *
 	 * **Performance:** O(visible lines) instead of O(document length). Target:
 	 * < 1ms for a typical ~30-line viewport, independent of document size.
@@ -484,20 +528,35 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
-	 * Check whether any line before `position` (1-based, exclusive) is dirty.
+	 * Check whether any **variable-definition** line before `position`
+	 * (1-based, exclusive) is dirty.
 	 *
 	 * Used by `setViewport()` to decide whether to fall back to `evaluate()`:
-	 * if there are dirty lines before the viewport, checkpoint state may be
-	 * stale and we need to reprocess from line 1.
+	 * if a variable-def before the viewport is dirty, the checkpoint state
+	 * `restoreTo()` would use may be stale and we need to reprocess from
+	 * line 1 to rebuild checkpoints correctly.
 	 *
-	 * Delegates to DocumentModel.hasAnyDirtyLineBefore(), which tracks dirty
-	 * lineIds incrementally instead of scanning every line up to `position`
-	 * on every call — this used to be a real per-scroll cost (benchmarked at
-	 * ~10ms scrolled near the bottom of a 20k-line document) since it fired
-	 * on every viewport change, not just edits.
+	 * Deliberately narrower than `DocumentModel.hasAnyDirtyLineBefore()`:
+	 * checkpoints only snapshot variable-def lines (see VMCheckpointer), so a
+	 * dirty plain-expression line before the viewport can't have invalidated
+	 * one — there's nothing checkpointed for it to invalidate. Using the
+	 * broader check here previously caused a real perf bug: `PageManager`'s
+	 * cold-page eviction marks evicted non-variable-def lines dirty, so
+	 * scrolling far into a large, variable-def-free document would trip this
+	 * guard, fall back to `evaluate()`, which recompiles those lines via
+	 * Tier 3 (never clearing their dirty flag by design), causing the very
+	 * next `maintainAfterEval()` to re-evict and re-dirty them — a
+	 * self-sustaining loop that pinned every subsequent `setViewport()` call
+	 * to the cost of a full re-evaluation instead of O(visible lines).
+	 *
+	 * Delegates to DocumentModel.hasAnyDirtyVariableDefLineBefore(), which
+	 * tracks dirty lineIds incrementally instead of scanning every line up to
+	 * `position` on every call — this used to be a real per-scroll cost
+	 * (benchmarked at ~10ms scrolled near the bottom of a 20k-line document)
+	 * since it fired on every viewport change, not just edits.
 	 */
 	private hasDirtyLinesBefore(position: number): boolean {
-		return this.doc.hasAnyDirtyLineBefore(position);
+		return this.doc.hasAnyDirtyVariableDefLineBefore(position);
 	}
 
 	/**
