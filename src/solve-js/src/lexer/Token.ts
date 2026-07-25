@@ -113,6 +113,7 @@ export const TokenTypes = {
   VEC3: "VEC3",
   VEC4: "VEC4",
   FLOAT: "FLOAT",
+  GLOBAL: "GLOBAL",
 } as const;
 
 export type TokenType = (typeof TokenTypes)[keyof typeof TokenTypes];

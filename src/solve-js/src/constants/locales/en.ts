@@ -44,6 +44,7 @@ export const enLocale: ILocale = {
     by: "BY",
     vec2: "VEC2", vec3: "VEC3", vec4: "VEC4",
      float: "FLOAT",
+    global: "GLOBAL",
   },
   display: {
     resultPrefix: "= ",

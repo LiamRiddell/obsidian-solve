@@ -1,8 +1,9 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, test, afterEach } from "@jest/globals";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry, OpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, enableValueArena, disableValueArena, numberValue, bigIntValue, uomValue, arrayValue, percentageValue, datetimeValue, stringValue } from "@solve-js/vm/Value";
+import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { VM } from "@solve-js/vm/OpRegistry";
 
 function bc(
@@ -537,6 +538,95 @@ describe("VM — Variables", () => {
     expect(() => {
       executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm);
     }).toThrow(/Undefined variable: undefined_var/);
+  });
+});
+
+describe("VM — Global Variables (direct bytecode, no parser/preflight)", () => {
+  // These exercise ONLY the VM opcode handlers against sharedGlobalVariableStore
+  // directly — GlobalVariableAsyncResolver's preflight (which handles the
+  // "not yet declared" case by intercepting before the VM runs at all) is
+  // covered separately in GlobalVariablesAcrossDocuments.spec.ts. Here, the
+  // store is always pre-seeded before LOAD_GLOBAL_VAR executes, matching the
+  // VM handler's own documented precondition.
+  afterEach(() => {
+    sharedGlobalVariableStore.clear();
+  });
+
+  test("STORE_GLOBAL_VAR stores into sharedGlobalVariableStore and also pushes the value", () => {
+    const vm = freshVM();
+    const result = executeBytecode(
+      bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_GLOBAL_VAR, 0, OpCode.HALT], [42], ["x"]),
+      vm
+    );
+    expect(unwrapEvalResult(result).toNumber()).toBe(42);
+    expect(sharedGlobalVariableStore.get("x")!.toNumber()).toBe(42);
+  });
+
+  test("LOAD_GLOBAL_VAR reads a value already present in sharedGlobalVariableStore", () => {
+    sharedGlobalVariableStore.set("y", numberValue(99));
+    const vm = freshVM();
+    const result = executeBytecode(bc([OpCode.LOAD_GLOBAL_VAR, 0, OpCode.HALT], [], ["y"]), vm);
+    expect(unwrapEvalResult(result).toNumber()).toBe(99);
+  });
+
+  test("STORE_GLOBAL_VAR does NOT write into the VM's own local scope — LOAD_VAR for the same name still throws", () => {
+    const vm = freshVM();
+    executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_GLOBAL_VAR, 0, OpCode.HALT], [5], ["x"]), vm);
+    expect(() => {
+      executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["x"]), vm);
+    }).toThrow(/Undefined variable: x/);
+  });
+
+  test("STORE_VAR does NOT write into sharedGlobalVariableStore — a global of the same name is unaffected", () => {
+    const vm = freshVM();
+    executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_VAR, 0, OpCode.HALT], [5], ["x"]), vm);
+    expect(sharedGlobalVariableStore.has("x")).toBe(false);
+  });
+
+  test("a global written by one VM is visible to LOAD_GLOBAL_VAR on a completely different VM instance", () => {
+    const vmA = freshVM();
+    executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_GLOBAL_VAR, 0, OpCode.HALT], [7], ["shared"]), vmA);
+
+    const vmB = freshVM(); // fresh VM, own empty local scope
+    const result = executeBytecode(bc([OpCode.LOAD_GLOBAL_VAR, 0, OpCode.HALT], [], ["shared"]), vmB);
+    expect(unwrapEvalResult(result).toNumber()).toBe(7);
+  });
+
+  test("STORE_GLOBAL_VAR persists past this VM's own arena when active", () => {
+    enableValueArena(64);
+    try {
+      const vm = freshVM();
+      executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_GLOBAL_VAR, 0, OpCode.HALT], [77], ["x"]), vm);
+      expect(sharedGlobalVariableStore.get("x")!.toNumber()).toBe(77);
+    } finally {
+      disableValueArena();
+    }
+  });
+
+  test("a global stored while one VM's arena is active survives a LATER, unrelated arena reset from a different VM", () => {
+    enableValueArena(64);
+    try {
+      const vmA = freshVM();
+      executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_GLOBAL_VAR, 0, OpCode.HALT], [11], ["g"]), vmA);
+
+      // A second, unrelated evaluation on a DIFFERENT VM re-enables/resets
+      // the (shared, module-level) arena — if STORE_GLOBAL_VAR hadn't
+      // persisted the Value, this would silently corrupt "g"'s stored value.
+      enableValueArena(64);
+      const vmB = freshVM();
+      executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.HALT], [999]), vmB);
+
+      expect(sharedGlobalVariableStore.get("g")!.toNumber()).toBe(11);
+    } finally {
+      disableValueArena();
+    }
+  });
+
+  test("STORE_GLOBAL_VAR overwrites a previous value for the same name (last-write-wins)", () => {
+    const vm = freshVM();
+    executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_GLOBAL_VAR, 0, OpCode.HALT], [1], ["x"]), vm);
+    executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_GLOBAL_VAR, 0, OpCode.HALT], [2], ["x"]), vm);
+    expect(sharedGlobalVariableStore.get("x")!.toNumber()).toBe(2);
   });
 });
 

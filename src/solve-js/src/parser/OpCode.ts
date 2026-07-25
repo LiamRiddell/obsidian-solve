@@ -48,6 +48,8 @@ export enum OpCode {
 	// Variables
 	LOAD_VAR = 60,
 	STORE_VAR = 61,
+	LOAD_GLOBAL_VAR = 62,   // Reads from the process-wide GlobalVariableStore, not the VM's local scope
+	STORE_GLOBAL_VAR = 63,  // Writes to the process-wide GlobalVariableStore, visible to every document
 
 	// Type conversion
 	TO_NUMBER = 70,

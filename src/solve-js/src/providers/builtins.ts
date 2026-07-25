@@ -104,6 +104,7 @@ export const DICE_PACKAGE: ISolvePackage = {
 // ── Variables ─────────────────────────────────────────────────────────────
 import { VariableParselet } from "./variables/parselets/VariableParselet";
 import { IdentifierParselet } from "./variables/parselets/IdentifierParselet";
+import { GlobalVariableParselet } from "./variables/parselets/GlobalVariableParselet";
 
 export const VARIABLES_PACKAGE: ISolvePackage = {
   name: "solve-variables",
@@ -115,6 +116,10 @@ export const VARIABLES_PACKAGE: ISolvePackage = {
     // This handles cases like `a + b` where "b" is classified as UNIT
     // because it collides with a known unit (e.g., "b" = bits).
     { tokenType: "UNIT", parselet: new IdentifierParselet() },
+    // `global :name` (read) / `global :name = expr` (write) — a document-
+    // spanning variable backed by GlobalVariableStore instead of this VM's
+    // own local scope.
+    { tokenType: "GLOBAL", parselet: new GlobalVariableParselet() },
   ],
 };
 

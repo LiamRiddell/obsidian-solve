@@ -8,6 +8,7 @@ import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, pluginFunctionRegistry } from "@solve-js/vm/VMBuiltins";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
+import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -508,7 +509,7 @@ export function executeBytecode(
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // §6  Variables  (OpCode 60–62)
+        // §6  Variables  (OpCode 60–63)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.LOAD_VAR: {
           const varName = strings[opcodes[ip++]];
@@ -528,6 +529,30 @@ export function executeBytecode(
           const val = stack.pop()!;
           const varName = strings[opcodes[ip++]];
           vm.setVar(varName, hasArena ? persistentValue(val) : val);
+          stack.push(val);
+          break;
+        }
+        case OpCode.LOAD_GLOBAL_VAR: {
+          // GlobalVariableAsyncResolver's preflight() runs BEFORE the VM ever
+          // reaches this opcode and intercepts the "not yet declared by any
+          // loaded document" case (returning a Pending value up front,
+          // mirroring how currency conversion's preflight intercepts before
+          // UOM_CONVERT_TO runs) — by the time execution gets here, the value
+          // is guaranteed present, so this is an unconditional read, no
+          // undefined-check/throw needed.
+          const varName = strings[opcodes[ip++]];
+          stack.push(sharedGlobalVariableStore.get(varName)!);
+          break;
+        }
+        case OpCode.STORE_GLOBAL_VAR: {
+          const val = stack.pop()!;
+          const varName = strings[opcodes[ip++]];
+          // Persisting here matters even more than for STORE_VAR: a global
+          // outlives not just this call's own VM but every OTHER document's
+          // arena-reset cycles too. An un-persisted arena Value stored here
+          // would get silently corrupted by a later, unrelated arena
+          // allocation in ANY document, not just this one.
+          sharedGlobalVariableStore.set(varName, hasArena ? persistentValue(val) : val);
           stack.push(val);
           break;
         }

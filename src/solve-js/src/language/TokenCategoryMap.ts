@@ -25,6 +25,7 @@ const TOKEN_CATEGORY_MAP: Record<string, SolveTokenCategory> = {
 	TOMORROW: "keyword",
 	YESTERDAY: "keyword",
 	ROLL: "keyword",
+	GLOBAL: "keyword",
 	OF: "keyword",
 	DURATION_DAY: "keyword",
 	DURATION_WEEK: "keyword",
