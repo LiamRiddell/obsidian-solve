@@ -1,4 +1,6 @@
 import type { Value } from "@solve-js/vm/Value";
+import type { BytecodeProgram, UserFunctionDef } from "@solve-js/parser/BytecodeBuilder";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
  * Handler function for plugin-registered opcodes via CALL_PLUGIN (opcode 50).
@@ -66,7 +68,8 @@ export class OpRegistry {
 	 */
 	allocateOpcode(): number {
 		if (this.nextOpcode > MAX_OPCODE) {
-			throw new Error(
+			throw ErrorFactory.config(
+				"OPCODE_POOL_EXHAUSTED",
 				`OpRegistry: dynamic opcode pool exhausted (max ${MAX_OPCODE - DYNAMIC_OPCODE_START} allocations).`
 			);
 		}
@@ -89,25 +92,42 @@ export interface VM {
 	peek(): Value;
 	getStack(): Value[];
 	registry: OpRegistry;
+	/**
+	 * Read a variable by name — checks the INNERMOST active user-defined-
+	 * function call frame first (see `pushCallFrame`), then falls back to
+	 * the flat, session-scoped variable store. This is why a function
+	 * parameter needs no dedicated load opcode: an ordinary `LOAD_VAR
+	 * "x"` inside a function body resolves to the current call's bound
+	 * argument automatically, without the parser needing to know it's
+	 * compiling a function body at all.
+	 */
 	getVar(key: string): Value | undefined;
 	setVar(key: string, value: Value): void;
 	/**
-	 * User-defined-function parameter binding (Calca-parity Phase 1) — a
-	 * small stack of bound-argument arrays, PUSHED before a
-	 * `CALL_USER_FUNCTION` executes the callee's body and POPPED
-	 * immediately after, so nested/recursive calls (`double(double(5))`)
-	 * each get their own frame instead of clobbering a shared flat map —
-	 * see `vm/VM.ts`'s `CALL_USER_FUNCTION` case. Deliberately NOT the same
-	 * mechanism as `getVar`/`setVar` (the `:name`/bare-identifier variable
-	 * store): a parameter frame is call-scoped and stacked, a variable is
-	 * session-scoped and flat — conflating them risked a function call
-	 * silently shadowing (and, without careful save/restore, corrupting) an
-	 * unrelated same-named variable.
+	 * User-defined-function call frame — a name-keyed `Map` of this call's
+	 * bound arguments, PUSHED before `CALL_USER_FUNCTION` executes the
+	 * callee's body and POPPED immediately after (even if the body throws),
+	 * so nested/recursive calls (`double(double(5))`) each get their own
+	 * frame instead of clobbering a shared flat map — see `vm/VM.ts`'s
+	 * `CALL_USER_FUNCTION` case. Deliberately NOT the same store as
+	 * `setVar`'s flat `:name` variables — a call frame is call-scoped and
+	 * stacked (only the INNERMOST frame is ever consulted by `getVar`, see
+	 * its own doc comment — no lexical capture of an outer call's
+	 * parameters), a variable is session-scoped and flat.
+	 *
+	 * @throws `FUNCTION_RECURSION_LIMIT_EXCEEDED` if pushing would exceed
+	 *   the VM's configured `maxFunctionRecursionDepth` — the backstop for
+	 *   `f(x) = f(x)`, which would otherwise recurse via nested
+	 *   `executeBytecode()` calls until the native V8 stack overflows
+	 *   uncatchably (each reentrant call gets its OWN fresh
+	 *   `localInstructionCount`, so `maxInstructions` cannot catch this).
 	 */
-	pushParamFrame(values: Value[]): void;
-	popParamFrame(): void;
-	/** The Nth value (0-based) in the currently-active parameter frame, or `undefined` if no call is in progress. */
-	getParam(index: number): Value | undefined;
+	pushCallFrame(frame: Map<string, Value>): void;
+	popCallFrame(): void;
+	/** Register (or redefine — overwrites any previous definition, matching `:name = value`'s own reassignment semantics) a user-defined function. */
+	defineUserFunction(name: string, params: string[], program: BytecodeProgram): void;
+	getUserFunction(name: string): UserFunctionDef | undefined;
+	hasUserFunction(name: string): boolean;
 	reset(): void;
 	getMaxInstructions(): number;
 	getMaxStackDepth(): number;

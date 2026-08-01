@@ -129,15 +129,16 @@ export enum OpCode {
 	ARR_MAGNITUDE = 106,
 	ARR_NORMALIZE = 107,
 
-	// User-defined, parameterized, reusable functions ("Calca parity" Phase
-	// 1 — f(x) = expr, then f(5) — see packages/variables/parselets/
-	// UserFunctionParselet.ts and vm/UserFunctionRegistry.ts). A definition
-	// line emits nothing but a confirmation string via ordinary
-	// PUSH_STRING; these two opcodes back CALLS into a previously-defined
-	// function's body, which is compiled to its own independent Bytecode
-	// program and re-executed (reentrantly, via executeBytecode) per call.
-	LOAD_PARAM = 150,         // Push the current call's Nth bound parameter value (operand = index, not a string-table index)
-	CALL_USER_FUNCTION = 151, // (N arg values already on stack) -> pop N args, bind params, execute the named function's stored body, push its result
+	// User-defined, parameterized, reusable functions (f(x) = expr, then
+	// f(5) — see parser/PrecedenceParser.ts's IDENT_ID case,
+	// parser/BytecodeBuilder.ts's UserFunctionDef/emitUserFunctionBody, and
+	// vm/VM.ts's VM.userFunctions/callFrames). Parameter references inside a
+	// function body are ORDINARY LOAD_VAR opcodes, not a dedicated
+	// parameter-load opcode — CALL_USER_FUNCTION binds arguments into a
+	// name-keyed call frame at runtime, and LOAD_VAR checks the innermost
+	// call frame before the flat variable store (see VM.getVar()).
+	DEFINE_USER_FUNCTION = 150, // (operand = index into bytecode.userFunctionBodies) -> register name/params/program into vm.userFunctions. Registration happens at VM-EXECUTION time, not parse time, so a diagnostic/lookahead parse that compiles but never executes a definition line has no side effect on the shared registry.
+	CALL_USER_FUNCTION = 151,   // (N arg values already on stack) -> pop N args, bind by NAME into a new call frame, execute the named function's stored body (reentrant executeBytecode), push its result
 
 }
 

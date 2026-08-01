@@ -1,8 +1,9 @@
 /**
- * User-defined, parameterized, reusable functions — Calca-parity Phase 1
- * (`f(x) = 2*x + 1`, then `f(5)` -> `11`). See
- * `packages/core/OTHER_APPS_FEATURE_AUDIT.md`'s Calca section and
- * `parser/UserFunctionParselet.ts`'s module doc for the full design.
+ * User-defined, parameterized, reusable functions (`f(x) = 2*x + 1`, then
+ * `f(5)` -> `11`). See `packages/core/OTHER_APPS_FEATURE_AUDIT.md`'s Calca
+ * section, `parser/BytecodeBuilder.ts`'s `UserFunctionDef` doc comment, and
+ * `parser/PrecedenceParser.ts`'s `parseUserFunctionDefOrCall` for the full
+ * design.
  */
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";

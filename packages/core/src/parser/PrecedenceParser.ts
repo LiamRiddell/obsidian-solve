@@ -1,12 +1,11 @@
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { Token, tokenTypeId, TokenTypes } from "@solve-js/lexer/Token";
-import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
+import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@solve-js/diagnostics";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPower";
 import { getLocale } from "@solve-js/constants/locales";
-import { tryParseUserFunction } from "@solve-js/parser/UserFunctionParselet";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -114,52 +113,6 @@ export class PrecedenceParser {
   /** Get locale code for NumberParselet to normalize separators */
   getLocaleCode(): string {
     return this.localeCode;
-  }
-
-  /**
-   * The live `ParseletRegistry` this parser dispatches through. Exposed so
-   * a parselet can TEMPORARILY override another token type's registration
-   * for the duration of a nested `parseExpression` call — the mechanism
-   * `UserFunctionParselet.ts`'s definition-parsing path uses to make bare
-   * identifiers matching the function's own parameter names resolve to
-   * `LOAD_PARAM` instead of the normal `LOAD_VAR`, without needing to
-   * guess at already-compiled bytecode's opcode boundaries after the fact.
-   * Any caller that swaps a registration here MUST restore the previous
-   * one in a `finally` block — this registry is shared parser-wide, not
-   * scoped to one `parseExpression` call.
-   */
-  getRegistry(): ParseletRegistry {
-    return this.registry;
-  }
-
-  /**
-   * The parameter names of the user-defined function whose BODY is
-   * currently being compiled (Calca-parity Phase 1), or `undefined` when
-   * not compiling one. Checked by the `IDENT_ID` Tier-1 case below to
-   * decide `LOAD_PARAM` vs. the ordinary `LOAD_VAR` — see
-   * `UserFunctionParselet.ts`'s module doc for why this couldn't be done
-   * via the `ParseletRegistry` (IDENT is a Tier-1 fast-path token type;
-   * the registry is never consulted for it).
-   */
-  private currentFunctionParams: string[] | undefined = undefined;
-
-  /** Read the currently-active function-body parameter list (if any) — see {@link currentFunctionParams}. */
-  getCurrentFunctionParams(): string[] | undefined {
-    return this.currentFunctionParams;
-  }
-
-  /**
-   * Set (or clear, via `undefined`) the currently-active function-body
-   * parameter list, returning the PREVIOUS value so the caller can restore
-   * it in a `finally` block once done — required for correctness on a
-   * nested function definition parsed while already compiling an outer
-   * one's body (`f(x) = (g(y) = y*2)`), not just for the common
-   * non-nested case.
-   */
-  setCurrentFunctionParams(params: string[] | undefined): string[] | undefined {
-    const previous = this.currentFunctionParams;
-    this.currentFunctionParams = params;
-    return previous;
   }
 
   /**
@@ -438,29 +391,23 @@ export class PrecedenceParser {
 
       // ── Identifiers (variables) ────────────────────────────────────────────
       case PrecedenceParser.IDENT_ID: {
-        // A bare identifier matching the CURRENT function body's own
-        // parameter name (Calca-parity Phase 1 — see UserFunctionParselet.ts
-        // and this.currentFunctionParams's doc comment above) reads from
-        // the call's bound-argument frame, not the ordinary variable store.
-        if (this.currentFunctionParams) {
-          const paramIndex = this.currentFunctionParams.indexOf(token.value);
-          if (paramIndex !== -1) {
-            builder.emitOpcode(OpCode.LOAD_PARAM);
-            builder.emitByte(paramIndex);
-            return;
-          }
-        }
         // An identifier immediately followed by "(" may be a user-defined
-        // function DEFINITION or CALL — see tryParseUserFunction's doc
-        // comment for the full disambiguation. Only the (cheap) LPAREN
-        // check runs for the overwhelmingly common case of a bare
-        // identifier with nothing following it.
+        // function DEFINITION (`f(x) = ...`) or CALL (`f(5)`) — see
+        // parseUserFunctionDefOrCall's doc comment for the full
+        // disambiguation. Only the (cheap) LPAREN check runs for the
+        // overwhelmingly common case of a bare identifier with nothing
+        // following it.
         if (this.peek()?.typeId === PrecedenceParser.LPAREN_ID) {
-          if (tryParseUserFunction(this as any, token, builder)) return;
+          this.parseUserFunctionDefOrCall(token, builder);
+          return;
         }
         // IDENT tokens map to LOAD_VAR by default. The IdentifierParselet
         // and VariableParselet add STORE_VAR for assignments — those are
-        // handled via the parselet registry below.
+        // handled via the parselet registry below. Note this is also how a
+        // user-defined function's own PARAMETER references compile — see
+        // UserFunctionDef's doc comment in BytecodeBuilder.ts for why there
+        // is no separate parameter-load opcode: `LOAD_VAR` resolution
+        // dynamically checks the VM's innermost call frame first.
         builder.emitOpcode(OpCode.LOAD_VAR);
         builder.emitString(token.value);
         return;
@@ -524,6 +471,169 @@ export class PrecedenceParser {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
+  // User-defined, parameterized, reusable functions (f(x) = 2*x + 1, then f(5))
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * From an LPAREN token index, scan forward tracking paren depth and
+   * return the index of the matching RPAREN, or `null` if the parens never
+   * balance before the token stream ends. No emission, no position
+   * advance — same class of technique as {@link balanceParens}'s own
+   * pre-scan, just exposed mid-parse instead of only at `load()` time.
+   * `openIdx` must point AT the LPAREN itself.
+   */
+  private findMatchingRParen(openIdx: number): number | null {
+    let depth = 0;
+    for (let i = openIdx; i < this.tokens.length; i++) {
+      const t = this.tokens[i];
+      if (t.typeId === PrecedenceParser.LPAREN_ID) depth++;
+      else if (t.typeId === PrecedenceParser.RPAREN_ID) {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Disambiguates a bare `IDENT` immediately followed by `(` between three
+   * things, using ONLY a bracket-depth scan (no backtracking — nothing is
+   * consumed until the shape is known):
+   * - `f(x) = expr` — a DEFINITION: the matching `)` is followed by `=`.
+   * - `f(5)` — a CALL to a (possibly not-yet-defined) function: anything
+   *   else. This was never valid syntax before this feature (a bare
+   *   `IDENT` immediately before `(` has no pre-existing "plain variable
+   *   read + separately grouped `(...)`" meaning to preserve — confirmed
+   *   via `BuiltinNormalizerRules.ts`'s `implicitMultiplyRule()`, which
+   *   only inserts an implicit `*` for `NUMBER/RPAREN` immediately before
+   *   `IDENT/LPAREN`, never for a bare `IDENT` immediately before
+   *   `LPAREN`). Always commits to a CALL; an unregistered name produces a
+   *   clear `UNDEFINED_FUNCTION` error at VM-execution time — the same
+   *   forward-reference philosophy `LOAD_VAR`/`UNDEFINED_VARIABLE` already
+   *   uses, rather than any parse-time registry lookup.
+   * If the parens never balance, this falls through to the ordinary
+   * `LOAD_VAR` path (a malformed expression surfaces its own parse error
+   * shortly after, from the normal expression grammar).
+   */
+  private parseUserFunctionDefOrCall(nameToken: Token, builder: BytecodeBuilder): void {
+    const closeIdx = this.findMatchingRParen(this.current);
+    if (closeIdx === null) {
+      builder.emitOpcode(OpCode.LOAD_VAR);
+      builder.emitString(nameToken.value);
+      return;
+    }
+    const afterClose = this.tokens[closeIdx + 1];
+    if (afterClose?.type === TokenTypes.EQUALS) {
+      this.parseUserFunctionDefinition(nameToken, builder);
+    } else {
+      this.parseUserFunctionCall(nameToken, builder);
+    }
+  }
+
+  /**
+   * A parameter name, accepted as either `IDENT` or `UNIT` — matches this
+   * codebase's established `:name = value` variable-name policy
+   * (`VariableParselet.ts` explicitly accepts `UNIT`-typed tokens too, e.g.
+   * `:b = 5` for the "b" bits unit) since common short parameter names
+   * like `h`/`l`/`b`/`t`/`s`/`m` collide with real unit abbreviations
+   * (hour, liter, bits, ton, second, meter, ...) and lex as `UNIT`, not
+   * `IDENT`.
+   */
+  private consumeParamName(): string {
+    const token = this.peek();
+    if (token?.type === TokenTypes.IDENT || token?.type === TokenTypes.UNIT) {
+      this.consume();
+      return token.value;
+    }
+    throw ErrorFactory.parsing(
+      "USER_FUNCTION_INVALID_PARAM_NAME",
+      `Expected a parameter name but got "${token?.type ?? "end of input"}"${token ? ` ("${token.value}")` : ""}`,
+      { actualType: token?.type },
+    );
+  }
+
+  private parseUserFunctionDefinition(nameToken: Token, builder: BytecodeBuilder): void {
+    this.consume(TokenTypes.LPAREN);
+    const params: string[] = [];
+    if (this.peek()?.type !== TokenTypes.RPAREN) {
+      params.push(this.consumeParamName());
+      while (this.match(TokenTypes.COMMA)) {
+        params.push(this.consumeParamName());
+      }
+    }
+    this.consume(TokenTypes.RPAREN);
+    this.consume(TokenTypes.EQUALS);
+
+    if (params.length === 0) {
+      throw ErrorFactory.parsing(
+        "USER_FUNCTION_NO_PARAMS",
+        `"${nameToken.value}()" has no parameters -- user-defined functions need at least one (a zero-argument definition is indistinguishable from a plain function CALL with no args, which this grammar doesn't otherwise support)`,
+        { name: nameToken.value },
+      );
+    }
+
+    // Compile the body into its OWN independent BytecodeBuilder, reusing
+    // the SAME parser/token stream but directing emission elsewhere.
+    // `parseExpression(minBp, _builder)` sets `this.builder = _builder`
+    // with NO automatic restore — explicitly restoring via `setBuilder()`
+    // afterward (not a `finally`, since a thrown parse error here should
+    // propagate as-is; there's no further use of `this.builder` on that
+    // path before the whole parse aborts) avoids silently emitting
+    // whatever parses next (in this same expression, or — via
+    // ExpressionEngine's builder pool — a LATER, unrelated line) into a
+    // stale, already-.build()'d body builder.
+    const bodyBuilder = new BytecodeBuilder();
+    this.parseExpression(BindingPower.Lowest, bodyBuilder);
+    this.setBuilder(builder);
+
+    const bodyProgram = bodyBuilder.build();
+    if (bodyProgram.hasAsync) {
+      // v1 scope decision: a function body calling an async plugin
+      // (weather, stocks, currency, ...) isn't supported yet — propagating
+      // a 'pending' result up through a reentrant executeBytecode() call
+      // would need the OUTER expression's own bytecode position/stack
+      // state to also be resumable later, which this first pass doesn't
+      // implement. Rejecting at DEFINITION time (not call time) gives the
+      // clearest possible error, matching this codebase's "never silently
+      // pretend to support something it doesn't" convention (e.g.
+      // addBusinessDays()'s own disclosed holiday-exclusion scope-down).
+      throw ErrorFactory.parsing(
+        "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
+        `"${nameToken.value}(...)"'s body calls an async operation (weather, stocks, currency, ...) — user-defined function bodies must be synchronous`,
+        { name: nameToken.value },
+      );
+    }
+
+    const bodyIdx = builder.emitUserFunctionBody(nameToken.value, params, bodyProgram);
+    builder.emitOpcode(OpCode.DEFINE_USER_FUNCTION);
+    builder.emitIndex(bodyIdx);
+
+    // A definition line has no single input value to echo back the way an
+    // assignment does — push a plain confirmation string, matching this
+    // codebase's "never silently produce a misleading numeric 0" principle.
+    builder.emitOpcode(OpCode.PUSH_STRING);
+    builder.emitString(`${nameToken.value}(${params.join(", ")}) defined`);
+  }
+
+  private parseUserFunctionCall(nameToken: Token, builder: BytecodeBuilder): void {
+    this.consume(TokenTypes.LPAREN);
+    let argCount = 0;
+    if (this.peek()?.type !== TokenTypes.RPAREN) {
+      this.parseExpression(BindingPower.Lowest, builder);
+      argCount++;
+      while (this.match(TokenTypes.COMMA)) {
+        this.parseExpression(BindingPower.Lowest, builder);
+        argCount++;
+      }
+    }
+    this.consume(TokenTypes.RPAREN);
+
+    builder.emitOpcode(OpCode.CALL_USER_FUNCTION);
+    builder.emitString(nameToken.value);
+    builder.emitByte(argCount);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
   // Token stream navigation (identical API to Parser)
   // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -567,11 +677,7 @@ export class PrecedenceParser {
    * consuming anything — `peekAt(0)` is equivalent to {@link peek}.
    * `this.tokens` is a plain in-memory array (not a stream), so this is a
    * simple, safe index read; no rewind/checkpoint mechanism is needed since
-   * nothing is consumed. Added for the user-defined-function grammar
-   * (`f(x) = expr` vs. a plain call `f(5)`), which needs to look PAST a
-   * balanced `(...)` group to see whether `=` follows, before committing to
-   * parsing the parenthesized content as either parameter names or call
-   * arguments — see `packages/variables/parselets/UserFunctionParselet.ts`.
+   * nothing is consumed.
    */
   peekAt(offset: number): Token | undefined {
     return this.tokens[this.current + offset];

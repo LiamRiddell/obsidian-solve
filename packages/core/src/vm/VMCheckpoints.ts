@@ -1,5 +1,6 @@
 import { Value } from "@solve-js/vm/Value";
 import type { VM } from "@solve-js/vm/OpRegistry";
+import type { UserFunctionDef } from "@solve-js/parser/BytecodeBuilder";
 
 // ── VMCheckpoint ────────────────────────────────────────────────────────
 
@@ -38,6 +39,24 @@ export interface VMCheckpoint {
 	 * The prototype chain provides inherited variables from parent checkpoints.
 	 */
 	variables: Record<string, Value>;
+	/**
+	 * User-defined-function name → definition at this checkpoint. SEPARATE
+	 * from `variables` above (not prototypally chained the same way —
+	 * `restoreTo()` replays every checkpoint in the chain in order, so a
+	 * later redefinition of the same function name naturally overwrites an
+	 * earlier one during replay, without needing its own prototype walk).
+	 *
+	 * Without this field, a function definition's checkpoint entry would be
+	 * SILENTLY LOST: `snapshot()` used to call `vm.getVar(name)` for every
+	 * written name, which returns `undefined` for a function name (function
+	 * defs live in `vm.userFunctions`, not the flat variable store) — and a
+	 * `val !== undefined` guard silently skipped it. A scroll-triggered
+	 * `restoreTo()` would then reset the VM and replay only `variables`,
+	 * making a function defined above the new viewport vanish (calling it
+	 * would throw `UNDEFINED_FUNCTION`) even though the document still
+	 * shows its definition line as clean/cached.
+	 */
+	functions: Record<string, UserFunctionDef>;
 	/** Parent checkpoint (closer to document start), or null for root. */
 	parent: VMCheckpoint | null;
 }
@@ -107,9 +126,20 @@ export class VMCheckpointer {
 		const variables: Record<string, Value> = Object.create(
 			parent?.variables ?? null
 		) as Record<string, Value>;
+		const functions: Record<string, UserFunctionDef> = Object.create(
+			parent?.functions ?? null
+		) as Record<string, UserFunctionDef>;
 
-		// Record current VM values for the written variables
+		// Record current VM values for the written names — routing each into
+		// the right bag (a name is either a variable or a user-defined
+		// function, never both; see VMCheckpoint.functions's doc comment for
+		// why this dispatch is required, not optional).
 		for (const name of variableNames) {
+			if (this.vm.hasUserFunction(name)) {
+				const fn = this.vm.getUserFunction(name);
+				if (fn) functions[name] = fn;
+				continue;
+			}
 			const val = this.vm.getVar(name);
 			if (val !== undefined) {
 				variables[name] = val;
@@ -120,6 +150,7 @@ export class VMCheckpointer {
 			lineNumber,
 			lineId,
 			variables,
+			functions,
 			parent,
 		};
 		this.checkpoints.push(checkpoint);
@@ -171,6 +202,13 @@ export class VMCheckpointer {
 			// specific checkpoint, not all variables from parent checkpoints.
 			for (const key of Object.keys(cp.variables)) {
 				this.vm.setVar(key, cp.variables[key]);
+			}
+			// Replay function definitions the same way — a later checkpoint's
+			// redefinition of the same name naturally overwrites an earlier
+			// one since the chain replays in root-to-target order.
+			for (const key of Object.keys(cp.functions)) {
+				const fn = cp.functions[key];
+				this.vm.defineUserFunction(fn.name, fn.params, fn.program);
 			}
 		}
 	}

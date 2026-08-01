@@ -28,6 +28,38 @@ export interface BytecodeProgram {
 	 * synchronous expressions like `2 + 2`.
 	 */
 	hasAsync: boolean;
+	/**
+	 * User-defined-function bodies compiled alongside this program (one
+	 * entry per `name(params) = body` definition on this line) — see
+	 * {@link BytecodeBuilder.emitUserFunctionBody}. `OpCode.DEFINE_USER_FUNCTION`'s
+	 * operand is an index into this array, resolved at VM-execution time
+	 * (not parse time) so a diagnostic/lookahead parse that never actually
+	 * executes the definition line has no side effect on `vm.userFunctions`.
+	 */
+	userFunctionBodies?: UserFunctionDef[];
+}
+
+/**
+ * A user-defined, parameterized, reusable function's compiled form
+ * (`f(x) = 2*x + 1`) — see `OpCode.DEFINE_USER_FUNCTION`/`CALL_USER_FUNCTION`
+ * and `vm/VM.ts`'s `VM.defineUserFunction`/`getUserFunction`.
+ *
+ * `program` is the body compiled to its OWN independent `BytecodeProgram`,
+ * not a fragment of the definition line's own bytecode. Parameter names
+ * inside the body compile to ORDINARY `LOAD_VAR <name>` opcodes — no
+ * parse-time rewriting — because parameter resolution happens dynamically
+ * at the VM level: `CALL_USER_FUNCTION` pushes a name-keyed call frame
+ * (`Map<string, Value>`) before re-executing `program`, and `VM.getVar()`
+ * checks the innermost call frame before falling back to the flat
+ * document-variable store. This is why a `UNIT`-collision parameter name
+ * (e.g. `h` in `area(w, h) = w * h`, which lexes as the "hour" unit) needs
+ * no special handling anywhere — it's just another `LOAD_VAR "h"`, resolved
+ * the same way as any other name.
+ */
+export interface UserFunctionDef {
+	name: string;
+	params: string[];
+	program: BytecodeProgram;
 }
 
 /**
@@ -45,6 +77,7 @@ export class BytecodeBuilder {
 	private strings: string[] = [];
 	private stringIndex = new Map<string, number>();
 	private _hasAsync = false;
+	private userFunctionBodies: UserFunctionDef[] = [];
 
 	/** Emit an {@link OpCode} instruction. */
 	emitOpcode(op: OpCode): void {
@@ -127,6 +160,30 @@ export class BytecodeBuilder {
 		return this.opcodes.length;
 	}
 
+	/**
+	 * Register a compiled user-defined-function body, returning its index
+	 * into this program's `userFunctionBodies` side-table — the caller emits
+	 * that index as `DEFINE_USER_FUNCTION`'s operand via {@link emitIndex}.
+	 * Subject to the same {@link MAX_CONSTANT_POOL_INDEX} bound as
+	 * {@link emitNumber}/{@link emitString} (the index itself is a single
+	 * opcode-stream byte) — in practice a single line defines at most a
+	 * handful of functions, so this limit is never realistically reached.
+	 *
+	 * @throws If more than 256 function bodies are registered on one program.
+	 */
+	emitUserFunctionBody(name: string, params: string[], program: BytecodeProgram): number {
+		const idx = this.userFunctionBodies.length;
+		if (idx > MAX_CONSTANT_POOL_INDEX) {
+			throw ErrorFactory.parsing(
+				"TOO_MANY_FUNCTION_DEFINITIONS",
+				`More than ${MAX_CONSTANT_POOL_INDEX + 1} function definitions on one line, exceeding the bytecode constant pool's limit.`,
+				{ limit: MAX_CONSTANT_POOL_INDEX + 1 }
+			);
+		}
+		this.userFunctionBodies.push({ name, params, program });
+		return idx;
+	}
+
 	/** Overwrite a previously-emitted placeholder operand at `position` with the real jump `target`, once known. */
 	patchJump(position: number, target: number): void {
 		this.opcodes[position] = target;
@@ -146,6 +203,7 @@ export class BytecodeBuilder {
 			strings: [...this.strings],
 			constants: new Map(),
 			hasAsync: this._hasAsync,
+			userFunctionBodies: this.userFunctionBodies.length > 0 ? [...this.userFunctionBodies] : undefined,
 		};
 	}
 
@@ -187,6 +245,7 @@ export class BytecodeBuilder {
 			strings: [...this.strings],
 			constants: new Map(),
 			hasAsync: this._hasAsync,
+			userFunctionBodies: this.userFunctionBodies.length > 0 ? [...this.userFunctionBodies] : undefined,
 		};
 	}
 
@@ -199,5 +258,6 @@ export class BytecodeBuilder {
 		this.strings.length = 0;
 		this.stringIndex.clear();
 		this._hasAsync = false;
+		this.userFunctionBodies.length = 0;
 	}
 }

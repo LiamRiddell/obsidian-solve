@@ -9,7 +9,7 @@ import { builtinFunctions, pluginFunctionRegistry, asConverterRegistry } from "@
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
-import { userFunctionRegistry } from "@solve-js/vm/UserFunctionRegistry";
+import type { BytecodeProgram, UserFunctionDef } from "@solve-js/parser/BytecodeBuilder";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -23,8 +23,11 @@ import { userFunctionRegistry } from "@solve-js/vm/UserFunctionRegistry";
  * @param registry - Opcode handler registry for plugin-extensible opcodes
  * @param maxStackDepth - Maximum stack slots (default 200)
  * @param maxInstructions - Maximum opcodes per expression (default 50000)
+ * @param maxFunctionRecursionDepth - Maximum nested user-defined-function
+ *   calls (default 50) — see the VM interface's `pushCallFrame` doc for why
+ *   this exists as its own dedicated guard, separate from `maxInstructions`.
  */
-export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructions = 50000): VM {
+export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructions = 50000, maxFunctionRecursionDepth = 50): VM {
     const stack: Value[] = [];
     const variables = new Map<string, Value>();
     let instructionCount = 0;
@@ -32,11 +35,21 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
     let activeSignal: AbortSignal | undefined;
     let abortCurrent: (() => void) | undefined;
 
-    // User-defined-function parameter frames (Calca-parity Phase 1) — a
-    // real stack, not a flat map, so nested/recursive calls each get their
-    // own bound-argument array. See OpRegistry.ts's VM interface doc for
-    // why this is deliberately separate from `variables` above.
-    const paramFrameStack: Value[][] = [];
+    // User-defined-function call frames — a real stack of name-keyed Maps,
+    // not a flat map, so nested/recursive calls (double(double(5))) each
+    // get their own bound-argument scope instead of clobbering a shared
+    // one. `getVar` below only ever consults the INNERMOST frame (no
+    // lexical capture across nested calls) — see OpRegistry.ts's VM
+    // interface doc for the full reasoning.
+    const callFrames: Map<string, Value>[] = [];
+    // VM-INSTANCE-scoped (not module-global) — an intentional improvement
+    // over a shared-across-engines registry: two ExpressionEngine
+    // instances with different documents no longer risk one's `f(x)`
+    // clobbering the other's same-named function, which a module-level
+    // Map would allow (the same class of gap ARCHITECTURE.md §10's L1
+    // cross-instance-isolation item already tracks for pluginFunctionRegistry
+    // et al. — this VM-scoped design simply doesn't inherit it).
+    const userFunctions = new Map<string, UserFunctionDef>();
 
     return {
       push(v: Value) {
@@ -56,15 +69,35 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
       peek() { return stack[stack.length - 1]; },
       getStack() { return stack; },
       registry,
-      getVar(key: string) { return variables.get(key); },
+      getVar(key: string) {
+        if (callFrames.length > 0) {
+          const frameValue = callFrames[callFrames.length - 1].get(key);
+          if (frameValue !== undefined) return frameValue;
+        }
+        return variables.get(key);
+      },
       setVar(key: string, val: Value) { variables.set(key, val); },
-      pushParamFrame(values: Value[]) { paramFrameStack.push(values); },
-      popParamFrame() { paramFrameStack.pop(); },
-      getParam(index: number) { return paramFrameStack[paramFrameStack.length - 1]?.[index]; },
+      pushCallFrame(frame: Map<string, Value>) {
+        if (callFrames.length >= maxFunctionRecursionDepth) {
+          throw ErrorFactory.execution(
+            "FUNCTION_RECURSION_LIMIT_EXCEEDED",
+            `Function call nesting exceeded maximum depth of ${maxFunctionRecursionDepth} (possible infinite recursion, e.g. f(x) = f(x))`,
+            { maxFunctionRecursionDepth },
+          );
+        }
+        callFrames.push(frame);
+      },
+      popCallFrame() { callFrames.pop(); },
+      defineUserFunction(name: string, params: string[], program: BytecodeProgram) {
+        userFunctions.set(name, { name, params, program });
+      },
+      getUserFunction(name: string) { return userFunctions.get(name); },
+      hasUserFunction(name: string) { return userFunctions.has(name); },
       reset() {
         stack.length = 0;
         variables.clear();
-        paramFrameStack.length = 0;
+        callFrames.length = 0;
+        userFunctions.clear();
         instructionCount = 0;
         // Abort any in-flight async work for the previous expression
         if (abortCurrent) { abortCurrent(); abortCurrent = undefined; }
@@ -97,6 +130,8 @@ export interface Bytecode {
     opcodes: Uint8Array;
     numbers: Float64Array;
     strings: string[];
+    /** User-defined-function bodies compiled alongside this program — see `parser/BytecodeBuilder.ts`'s `BytecodeProgram.userFunctionBodies`. */
+    userFunctionBodies?: UserFunctionDef[];
 }
 
 /**
@@ -417,7 +452,7 @@ export function executeBytecode(
     expression?: string,
     context?: LineExecutionContext
 ): EvalResult {
-    const { opcodes, numbers, strings } = bytecode;
+    const { opcodes, numbers, strings, userFunctionBodies } = bytecode;
     let ip = 0;
     let localInstructionCount = 0;
     const maxInstructions = vm.getMaxInstructions();
@@ -879,24 +914,47 @@ export function executeBytecode(
           if (fn) stack.push(fn(args.reverse()));
           break;
         }
+        case OpCode.DEFINE_USER_FUNCTION: {
+          // Registration happens HERE, at execution time — not at parse
+          // time — so a diagnostic/lookahead parse of a definition line
+          // that never actually executes (syntax highlighting, autocomplete
+          // preview, ...) has no side effect on vm.userFunctions. See
+          // BytecodeBuilder.ts's UserFunctionDef doc comment.
+          const bodyIdx = opcodes[ip++];
+          const def = userFunctionBodies?.[bodyIdx];
+          if (!def) {
+            // A compiler/VM invariant violation, not user-input — a
+            // mismatched bodyIdx means the bytecode compiler and this
+            // dispatch loop disagree about userFunctionBodies' contents,
+            // never something reachable by writing a normal `f(x) = ...`
+            // expression correctly. See ErrorCode.ts's own catalog comment.
+            throw ErrorFactory.internal(
+              "INTERNAL_MISSING_FUNCTION_BODY",
+              `Internal error: DEFINE_USER_FUNCTION referenced missing body index ${bodyIdx}`,
+              { bodyIdx },
+            );
+          }
+          vm.defineUserFunction(def.name, def.params, def.program);
+          break;
+        }
         case OpCode.CALL_USER_FUNCTION: {
-          // User-defined, parameterized, reusable functions (Calca-parity
-          // Phase 1) — see UserFunctionRegistry.ts's doc comment. `name`'s
-          // body was compiled to its OWN independent BytecodeProgram at
-          // definition time (parameter references already rewritten to
-          // LOAD_PARAM, not LOAD_VAR — see UserFunctionParselet.ts), so
-          // re-executing it here is a genuinely reentrant executeBytecode()
-          // call sharing this same `vm`/stack — safe because any valid
-          // bytecode program, run to completion, leaves exactly one net
-          // value on the stack, the same invariant every other expression
-          // already relies on.
+          // User-defined, parameterized, reusable functions. `name`'s body
+          // was compiled to its OWN independent BytecodeProgram at
+          // definition time — parameter references inside it are ORDINARY
+          // LOAD_VAR opcodes (see BytecodeBuilder.ts's UserFunctionDef doc
+          // comment for why), resolved dynamically via the call frame
+          // pushed below. Re-executing the body here is a genuinely
+          // reentrant executeBytecode() call sharing this same `vm`/stack —
+          // safe because any valid bytecode program, run to completion,
+          // leaves exactly one net value on the stack, the same invariant
+          // every other expression already relies on.
           const nameIdx = opcodes[ip++];
           const argCount = opcodes[ip++];
           const name = strings[nameIdx];
           const args: Value[] = [];
           for (let i = 0; i < argCount; i++) args.push(safePop(stack));
           args.reverse();
-          const fn = userFunctionRegistry.get(name);
+          const fn = vm.getUserFunction(name);
           if (!fn) {
             throw ErrorFactory.execution("UNDEFINED_FUNCTION", `Undefined function: ${name}`, { name });
           }
@@ -907,7 +965,16 @@ export function executeBytecode(
               { name, expected: fn.params.length, actual: argCount },
             );
           }
-          vm.pushParamFrame(args);
+          const frame = new Map<string, Value>();
+          for (let i = 0; i < fn.params.length; i++) frame.set(fn.params[i], args[i]);
+          // pushCallFrame() throws FUNCTION_RECURSION_LIMIT_EXCEEDED before
+          // ever reaching the reentrant executeBytecode() call below if
+          // this would exceed maxFunctionRecursionDepth — the backstop for
+          // f(x) = f(x), which would otherwise recurse via nested
+          // executeBytecode() calls (each with its OWN fresh
+          // localInstructionCount, so maxInstructions cannot catch this)
+          // until the native V8 stack overflows uncatchably.
+          vm.pushCallFrame(frame);
           let bodyResult: EvalResult;
           try {
             bodyResult = executeBytecode(fn.program, vm, pipeline, expression, context);
@@ -915,19 +982,21 @@ export function executeBytecode(
             // Always pop, even if the body throws — an uncaught error inside
             // one call must not leave a stale frame poisoning whatever
             // (unrelated) expression runs next.
-            vm.popParamFrame();
+            vm.popCallFrame();
           }
           if (bodyResult.type === "pending") {
-            // Phase 1 scope decision: a user function's body calling an
-            // async plugin function (weather, stocks, ...) isn't supported
-            // yet — propagating a 'pending' result up through a reentrant
+            // v1 scope decision: a user function's body calling an async
+            // plugin function (weather, stocks, ...) isn't supported yet —
+            // propagating a 'pending' result up through a reentrant
             // executeBytecode() call would need the OUTER expression's own
             // bytecode position/stack state to also be resumable later,
-            // which this first pass doesn't implement. An honest error
-            // beats a silently wrong/hung result.
+            // which this first pass doesn't implement. Also rejected at
+            // DEFINITION time (see PrecedenceParser.ts's
+            // parseUserFunctionDefinition) — this is a defense-in-depth
+            // backstop, not the primary guard.
             throw ErrorFactory.execution(
               "USER_FUNCTION_ASYNC_UNSUPPORTED",
-              `${name}: user-defined functions with async bodies (weather, stocks, currency, ...) aren't supported yet`,
+              `${name}: user-defined functions with async bodies (weather, stocks, currency, ...) aren't supported`,
               { name },
             );
           }
@@ -944,15 +1013,6 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         // §6  Variables  (OpCode 60–63)
         // ═══════════════════════════════════════════════════════════════
-        case OpCode.LOAD_PARAM: {
-          // User-defined-function parameter read (Calca-parity Phase 1) —
-          // operand is a positional INDEX into the current call's bound
-          // arguments, not a strings-table index (see UserFunctionParselet.ts's
-          // definition-time LOAD_VAR -> LOAD_PARAM rewrite).
-          const index = opcodes[ip++];
-          stack.push(vm.getParam(index)!);
-          break;
-        }
         case OpCode.LOAD_VAR: {
           const varName = strings[opcodes[ip++]];
           const val = vm.getVar(varName);
@@ -993,7 +1053,12 @@ export function executeBytecode(
           const varName = strings[opcodes[ip++]];
           const globalValue = sharedGlobalVariableStore.get(varName);
           if (globalValue === undefined) {
-            throw ErrorFactory.execution({
+            // .internal(), not .execution(): this is the Tier-2/preflight-
+            // bypass invariant violation described above, not something an
+            // ordinary user expression can trigger by itself — the
+            // precondition ("preflight already ran") is the CALLER's
+            // (ThreeTierEvaluator's) responsibility, not the user's.
+            throw ErrorFactory.internal({
               code: "GLOBAL_VARIABLE_NOT_RESOLVED",
               message: `Global variable "${varName}" was read before it resolved`,
               expected: `global variable "${varName}" to already be resolved (async preflight should guarantee this)`,
