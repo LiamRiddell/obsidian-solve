@@ -117,6 +117,8 @@ export interface LineResult {
 	result: string;
 	type: string;
 	parselet: string;
+	/** Category -> count of every parselet this line's own parse matched (e.g. {arithmetic: 2, conditionals: 1}) — not just the first one `parselet` names. Empty on a cache hit (no new parse ran). */
+	parseletCategories: Record<string, number>;
 	error?: string;
 	opcodeCount: number;
 	wasCached: boolean;
@@ -691,6 +693,7 @@ export function runEngineWithStreaming(
 					const parselet =
 						(result.debug?.parselets?.[0] as any)?.parseletType ??
 						"Expression";
+					const parseletCategories = result.debug?.summary?.parseCategories ?? {};
 
 					// Record LRU access sequence for page heatmap
 					lineAccessSeq.set(lineNum, ++nextAccessSeq);
@@ -816,6 +819,7 @@ export function runEngineWithStreaming(
 							result: "",
 							type: "Error",
 							parselet,
+							parseletCategories,
 							error: result.error ?? softError,
 							opcodeCount: perLineOpCount,
 							wasCached,
@@ -828,6 +832,7 @@ export function runEngineWithStreaming(
 							result: formatLineResultValue(result.value),
 							type: formatType(result.value),
 							parselet,
+							parseletCategories,
 							opcodeCount: perLineOpCount,
 							wasCached,
 							timedOut: result.value.timedOut ?? false,
@@ -1051,6 +1056,7 @@ export function runEngine(expression: string): DebugResult {
 			const parselet =
 				(result.debug?.parselets?.[0] as any)?.parseletType ??
 				"Expression";
+			const parseletCategories = result.debug?.summary?.parseCategories ?? {};
 
 			// Record LRU access sequence for page heatmap
 			lineAccessSeq.set(lineNum, ++nextAccessSeq);
@@ -1151,6 +1157,7 @@ export function runEngine(expression: string): DebugResult {
 					result: "",
 					type: "Error",
 					parselet,
+					parseletCategories,
 					error: result.error ?? softError,
 					opcodeCount: perLineOpCount,
 					wasCached,
@@ -1163,6 +1170,7 @@ export function runEngine(expression: string): DebugResult {
 					result: formatLineResultValue(result.value),
 					type: formatType(result.value),
 					parselet,
+					parseletCategories,
 					opcodeCount: perLineOpCount,
 					wasCached,
 					timedOut: (result.value as any).timedOut ?? false,

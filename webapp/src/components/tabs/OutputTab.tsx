@@ -43,6 +43,23 @@ function getTierReason(result: LineResult): string {
   return "Tier 1 (Fresh) — full eval: lexer → parser → compiler → VM"
 }
 
+/**
+ * `parseletCategories` is the category -> count breakdown of EVERY parselet
+ * this line's own parse matched (e.g. `{ conditionals: 2, arithmetic: 1 }`),
+ * not just the single `parselet` name shown on the badge (which is only the
+ * FIRST one matched). Rendered as a tooltip addendum so a line that composes
+ * several grammars (e.g. `if 10 > 5 then 1 else 0` — conditionals AND
+ * arithmetic) shows its full parse story, not just "IfThenElseParselet."
+ */
+function formatParseletCategories(categories: Record<string, number> | undefined): string {
+  if (!categories) return ""
+  const entries = Object.entries(categories)
+  if (entries.length === 0) return ""
+  const total = entries.reduce((sum, [, count]) => sum + count, 0)
+  const breakdown = entries.map(([category, count]) => `${category}: ${count}`).join(", ")
+  return `\n\n${total} parselet${total !== 1 ? "s" : ""} matched — ${breakdown}`
+}
+
 async function copyText(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text)
@@ -245,8 +262,15 @@ export function OutputTab() {
                     </span>
                   )}
                   {entry.result?.parselet && (
-                    <span title={`Matched parselet: ${entry.result.parselet}`} className="bg-muted rounded px-1.5 py-0.5 font-mono text-[10px]">
+                    <span
+                      title={`First parselet matched: ${entry.result.parselet}${formatParseletCategories(entry.result.parseletCategories)}`}
+                      className="bg-muted rounded px-1.5 py-0.5 font-mono text-[10px]"
+                    >
                       {entry.result.parselet}
+                      {(() => {
+                        const total = Object.values(entry.result.parseletCategories ?? {}).reduce((sum, n) => sum + n, 0)
+                        return total > 1 ? ` +${total - 1}` : ""
+                      })()}
                     </span>
                   )}
                   <span className="text-muted-foreground ml-auto flex gap-2 font-mono text-[10px]">

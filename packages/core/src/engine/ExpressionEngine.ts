@@ -1967,9 +1967,41 @@ export class ExpressionEngine {
             // display bug, not evidence that NumberParselet does all the
             // parsing work. Slicing from the pre-parse baseline gives just
             // the events this line's own parse actually fired.
-            const debug = rawDebug
-                ? { ...rawDebug, parselets: rawDebug.parselets.slice(parseletsBefore) }
-                : undefined;
+            let debug = rawDebug;
+            if (rawDebug) {
+                const lineParselets = rawDebug.parselets.slice(parseletsBefore);
+                // summary.totalParselets/parseCategories are recomputed from
+                // the SAME per-line slice above, for the same reason —
+                // TimelineDiagnosticCollector's parseCategories Map is
+                // cumulative across the whole document pass, so reusing it
+                // as-is would report "distinct categories seen all session"
+                // instead of "categories this line's own parse used" (e.g.
+                // a document that touches arithmetic/datetime/finance
+                // packages across many lines would show totalParselets: 3
+                // on EVERY line once all three had been seen once,
+                // regardless of what that specific line actually parsed).
+                // summary.totalTokens/totalOpcodes/cacheHit/elapsedNs are
+                // deliberately left as the collector's session-cumulative
+                // values — none of them currently has a UI consumer to
+                // validate a per-line reinterpretation against, and
+                // equivalent, already-correct per-line values exist
+                // elsewhere for tokens/opcodes/cache-hit (see LineResult's
+                // own token/opcodeCount/wasCached fields in
+                // packages/playground-bridge/src/engine.ts).
+                const lineParseCategories: Record<string, number> = {};
+                for (const p of lineParselets) {
+                    lineParseCategories[p.parseletCategory] = (lineParseCategories[p.parseletCategory] ?? 0) + 1;
+                }
+                debug = {
+                    ...rawDebug,
+                    parselets: lineParselets,
+                    summary: {
+                        ...rawDebug.summary,
+                        totalParselets: Object.keys(lineParseCategories).length,
+                        parseCategories: lineParseCategories,
+                    },
+                };
+            }
             return {
                 value: result!,
                 tokens: normalizedTokens,
