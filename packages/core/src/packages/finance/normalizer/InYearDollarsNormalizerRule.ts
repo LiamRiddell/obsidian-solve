@@ -21,6 +21,10 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  * followed by "dollars") are left alone for InflationQueryParselet /
  * InflationFutureValueParselet to consume directly -- see their own
  * binding-power guards against the same InParselet collision.
+ *
+ * "dollar"/"dollars" now lexes as a UNIT token (uom/CurrencyAliases.ts's
+ * word-alias support, added to lexer/units.ts's knownUnits), not IDENT --
+ * accept both token types here so this fusion still fires post-expansion.
  */
 export function inYearDollarsNormalizerRule(priority = 70): NormalizerRule {
   return {
@@ -32,7 +36,7 @@ export function inYearDollarsNormalizerRule(priority = 70): NormalizerRule {
       const dollarsToken = tokens[pos + 2];
       if (inToken.type !== "IN") return null;
       if (yearToken?.type !== "NUMBER") return null;
-      if (dollarsToken?.type !== "IDENT") return null;
+      if (dollarsToken?.type !== "IDENT" && dollarsToken?.type !== "UNIT") return null;
       const word = dollarsToken.value.toLowerCase();
       if (word !== "dollars" && word !== "dollar") return null;
 
