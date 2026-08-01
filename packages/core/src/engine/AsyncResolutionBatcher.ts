@@ -613,6 +613,22 @@ export class AsyncResolutionBatcher {
 					entry.result = result.value;
 					this.onLineResult?.(lineNumber, result.value);
 					updatedLineNumbers.push(lineNumber);
+				} else if (result.type === "error") {
+					// executeBytecode() reports controlled failures (undefined
+					// variable, stack/instruction limits, a plugin throw) as this
+					// {type:'error'} return value now, not a thrown exception — the
+					// catch block below only remains as a backstop for whatever
+					// still throws outside that contract (e.g. a bug in the
+					// stack-cleanup loop itself). Without this branch, a VM-level
+					// error here fell through both the "value" and "pending" cases
+					// silently: no entry.result update, no onLineResult, not counted
+					// in updatedLineNumbers — the same class of silent-drop bug this
+					// method's containment fix exists to prevent, just moved one
+					// level up from "uncaught exception" to "unhandled Result arm".
+					const value = errorValue(result.error.code, result.error.message);
+					entry.result = value;
+					this.onLineResult?.(lineNumber, value);
+					updatedLineNumbers.push(lineNumber);
 				}
 				// If still pending, don't mark as updated — will be handled by the
 				// next resolution batch.

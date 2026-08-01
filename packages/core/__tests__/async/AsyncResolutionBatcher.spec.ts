@@ -20,7 +20,7 @@ import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { createVM } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { numberValue } from "@solve-js/vm/Value";
+import { numberValue, ValueType } from "@solve-js/vm/Value";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
@@ -708,11 +708,8 @@ describe("AsyncResolutionBatcher — empty DAG", () => {
 // §8  Topological sort (producer → consumer order)
 // ────────────────────────────────────────────────────────────────────────
 
-describe("AsyncResolutionBatcher — topological sort", () => {  // SKIPPED: LOAD_VAR now throws on undefined variables. The batcher's
-  // re-execution path doesn't properly chain VM state between line executions
-  // — consumer bytecode's LOAD_VAR throws because producer's STORE_VAR isn't
-  // persisted. Pre-existing batcher VM state bug, masked by old silent-0.
-  test.skip("should re-evaluate producer lines before consumer lines", async () => {
+describe("AsyncResolutionBatcher — topological sort", () => {
+  test("should re-evaluate producer lines before consumer lines", async () => {
 		const { batcher, dag, lc } = freshBatcher();
 
 		// Line 10 produces variable "x", line 20 reads "x" and produces "y"
@@ -723,8 +720,18 @@ describe("AsyncResolutionBatcher — topological sort", () => {  // SKIPPED: LOA
 		dag.registerLineDataSourceDependency(10, "pkg", ["key"]);
 		dag.registerLineDataSourceDependency(20, "pkg", ["key"]);
 
-		// Line 10: push 5, store x, halt
-		const bc10 = buildVarBytecode("x", 5, "x"); // Reads x (0) + 5 → stores x (=5)
+		// Line 10: push 5, store x, halt — a pure producer. Deliberately NOT
+		// buildVarBytecode() (which also LOAD_VARs "x" first): now that LOAD_VAR
+		// throws for an undefined variable instead of silently reading 0, a line
+		// with no prior producer must not read the variable it's about to define.
+		const producerBuilder = new BytecodeBuilder();
+		producerBuilder.reset();
+		producerBuilder.emitOpcode(OpCode.PUSH_NUMBER);
+		producerBuilder.emitNumber(5);
+		producerBuilder.emitOpcode(OpCode.STORE_VAR);
+		producerBuilder.emitString("x");
+		producerBuilder.emitOpcode(OpCode.HALT);
+		const bc10 = producerBuilder.build();
 		// Line 20: load x, add 10, store y, halt
 		const bc20 = buildVarBytecode("x", 10, "y");
 
@@ -742,6 +749,7 @@ describe("AsyncResolutionBatcher — topological sort", () => {  // SKIPPED: LOA
 		// Line 10 (producer) should come before line 20 (consumer)
 		expect(evt.lineNumbers[0]).toBe(10);
 		expect(evt.lineNumbers[1]).toBe(20);
+		expect(lc.getEntryForLine(20)?.result.toNumber()).toBe(15);
 		collector.stop();
 	});
 
@@ -912,7 +920,107 @@ describe("AsyncResolutionBatcher — topological sort", () => {  // SKIPPED: LOA
 		expect(evt.lineNumbers).toEqual([]);
 		collector.stop();
 	});
-});// ────────────────────────────────────────────────────────────────────────
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// §8a  Per-line crash containment (fatal-bug regression)
+// ────────────────────────────────────────────────────────────────────────
+
+describe("AsyncResolutionBatcher — per-line crash containment (fatal-bug regression)", () => {
+	// Regression for the fatal bug fixed this pass: reExecuteMainThread() used
+	// to have no try/catch anywhere in its call chain, and ran inside a bare
+	// queueMicrotask with no caller able to catch anything that escaped it —
+	// one line's bytecode failing during re-execution (a corrupted-bytecode
+	// TypeError, an undefined-variable throw, a stack/instruction-limit throw)
+	// aborted the `for` loop immediately: every line scheduled AFTER the
+	// failure in the same batch was silently never re-executed or notified,
+	// and the exception itself was uncatchable — an uncaughtException that
+	// could crash the host process outright (see AsyncResolutionBatcher.ts's
+	// reExecuteMainThread() doc comment for the full account).
+
+	test("a failing line's error does not abort re-execution of later lines in the same batch", async () => {
+		const { batcher, dag, lc } = freshBatcher();
+
+		// Line 1 registered FIRST so it lands first in iteration order (see
+		// topologicalSort: independent lines with no producer/consumer edges
+		// preserve DAG-registration order) — this reproduces the original bug
+		// shape exactly: the failing line is not the last one in the batch.
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		dag.registerLineDataSourceDependency(5, "pkg", ["key"]);
+
+		// Line 1: LOAD_VAR of a variable that was never defined — a controlled
+		// UNDEFINED_VARIABLE failure, returned as {type:'error'} by
+		// executeBytecode() (not thrown) per this session's EvalResult
+		// extension.
+		const badBuilder = new BytecodeBuilder();
+		badBuilder.reset();
+		badBuilder.emitOpcode(OpCode.LOAD_VAR);
+		badBuilder.emitString("neverDefined");
+		badBuilder.emitOpcode(OpCode.HALT);
+		const bcBad = badBuilder.build();
+
+		lc.set(1, new LineCacheEntry(numberValue(0), bcBad, [], null));
+		lc.set(5, new LineCacheEntry(numberValue(0), buildSimpleBytecode(99), [], null));
+
+		const collector = captureEvents(batcher);
+		const events = collector.events;
+
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// Both lines counted as updated — the failure on line 1 didn't stop
+		// line 5 from being re-executed and reported.
+		const evt = events[0] as Extract<AsyncResolutionEvent, { type: "lines-updated" }>;
+		expect(evt.lineNumbers.slice().sort()).toEqual([1, 5]);
+
+		// Line 1 gets a contained Error Value instead of being silently
+		// dropped (this is the exact gap the reExecuteMainThread() fix in
+		// this same session's pass closed — executeBytecode() returning
+		// {type:'error'} as a value, not a thrown exception, previously fell
+		// through both the success and pending branches unhandled).
+		const line1Result = lc.getEntryForLine(1)!.result;
+		expect(line1Result.type).toBe(ValueType.Error);
+
+		// Line 5 executed normally and produced its real value — proof the
+		// batch continued past the failure instead of aborting.
+		expect(lc.getEntryForLine(5)!.result.toNumber()).toBe(99);
+
+		collector.stop();
+	});
+
+	test("add() -> flush() settles cleanly with no thrown/unhandled error, even with no listeners attached", async () => {
+		// Confirms the other half of the original bug: reExecuteMainThread()
+		// ran inside a bare queueMicrotask() with no caller able to catch an
+		// escaping exception — the failure was an uncaughtException, not just
+		// a lost update. Asserts the whole add() -> flush() path settles
+		// cleanly even with no event listeners or _testCaptures attached, so
+		// there's no "someone happened to be listening and caught it" masking
+		// the underlying containment.
+		const { batcher, dag, lc } = freshBatcher();
+
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+
+		const badBuilder = new BytecodeBuilder();
+		badBuilder.reset();
+		badBuilder.emitOpcode(OpCode.LOAD_VAR);
+		badBuilder.emitString("neverDefined");
+		badBuilder.emitOpcode(OpCode.HALT);
+		lc.set(1, new LineCacheEntry(numberValue(0), badBuilder.build(), [], null));
+
+		expect(() => {
+			batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		}).not.toThrow();
+
+		// The microtask queue must drain without an unhandled rejection or a
+		// synchronous throw escaping queueMicrotask's callback.
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		expect(lc.getEntryForLine(1)!.result.type).toBe(ValueType.Error);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────
 // §8b  Pending re-execution (VM returns pending during flush)
 // ────────────────────────────────────────────────────────────────────────
 

@@ -42,6 +42,14 @@ export const CoreErrorCodes = {
   NO_MATCHING_PHRASE_ALTERNATIVE: "NO_MATCHING_PHRASE_ALTERNATIVE",
   INVALID_PHRASE_PATTERN: "INVALID_PHRASE_PATTERN",
   PHRASE_KEYWORD_MISMATCH: "PHRASE_KEYWORD_MISMATCH",
+  /** User-defined-function definition parsing (`f(x, y) = ...`) — an invalid token where a parameter name was expected. */
+  USER_FUNCTION_INVALID_PARAM_NAME: "USER_FUNCTION_INVALID_PARAM_NAME",
+  /** `f() = ...` with zero parameters — indistinguishable from a plain no-arg function call, so rejected at definition time. */
+  USER_FUNCTION_NO_PARAMS: "USER_FUNCTION_NO_PARAMS",
+  /** A user-defined function body calling an async plugin (weather/stocks/currency/...) — rejected at definition time; v1 scope excludes async function bodies. */
+  FUNCTION_BODY_MUST_BE_SYNCHRONOUS: "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
+  /** `BytecodeBuilder`'s `userFunctionBodies` side-table exceeding its capacity — same class as `TOO_MANY_NUMERIC_CONSTANTS`/`TOO_MANY_STRING_CONSTANTS` below. */
+  TOO_MANY_FUNCTION_DEFINITIONS: "TOO_MANY_FUNCTION_DEFINITIONS",
 
   // ── VM (vm/VM.ts, vm/OpRegistry.ts, vm/VMBuiltins.ts) ──
   EVALUATION_ERROR: "EVALUATION_ERROR",
@@ -59,6 +67,10 @@ export const CoreErrorCodes = {
   UNDEFINED_FUNCTION: "UNDEFINED_FUNCTION",
   FUNCTION_ARITY_MISMATCH: "FUNCTION_ARITY_MISMATCH",
   USER_FUNCTION_ASYNC_UNSUPPORTED: "USER_FUNCTION_ASYNC_UNSUPPORTED",
+  /** `pushCallFrame()`'s recursion guard — a nested `CALL_USER_FUNCTION` re-enters `executeBytecode()`, so `maxInstructions` alone can't catch e.g. `f(x) = f(x)`; this is the dedicated backstop. Always `recoverable: false` (would otherwise overflow the native call stack uncatchably). */
+  FUNCTION_RECURSION_LIMIT_EXCEEDED: "FUNCTION_RECURSION_LIMIT_EXCEEDED",
+  /** `DEFINE_USER_FUNCTION`'s body-index lookup failing — a compiler/VM invariant violation (the opcode stream referenced a `userFunctionBodies` slot that doesn't exist), never a user-input error. */
+  INTERNAL_MISSING_FUNCTION_BODY: "INTERNAL_MISSING_FUNCTION_BODY",
 
   // ── Engine (engine/ExpressionEngine.ts, engine/ExpressionEngineSafety.ts, engine/AsyncResolutionBatcher.ts) ──
   EXPRESSION_TOO_LONG: "EXPRESSION_TOO_LONG",

@@ -393,6 +393,30 @@ describe("ExpressionEngine EvalResult handling", () => {
         delete pluginFunctionRegistry[203];
     });
 
+    // Regression for the second fatal bug fixed this pass, per
+    // ARCHITECTURE.md's P0 item: executeCached() is Tier 2's (scroll into
+    // view) fast path — it re-executes cached bytecode directly and never
+    // calls preflightAll(), the async preflight that normally guarantees a
+    // global variable is resolved before LOAD_GLOBAL_VAR reads it. If a
+    // Pending async result got marked clean and routed through this path
+    // anyway, LOAD_GLOBAL_VAR used to hit a bare non-null assertion on the
+    // global variable store, producing a raw uncaught TypeError instead of a
+    // clear, catchable error. VM.ts's LOAD_GLOBAL_VAR case now throws a
+    // controlled GLOBAL_VARIABLE_NOT_RESOLVED EngineError instead, and
+    // executeCached() re-throws it like any other executeRaw() failure.
+    test("executeCached throws a controlled GLOBAL_VARIABLE_NOT_RESOLVED error for an unresolved global (Tier-2/LOAD_GLOBAL_VAR bypass)", () => {
+        const builder = new BytecodeBuilder();
+        builder.reset();
+        builder.emitOpcode(OpCode.LOAD_GLOBAL_VAR);
+        builder.emitString("neverResolvedGlobal_CoreInfrastructureRegression");
+        builder.emitOpcode(OpCode.HALT);
+        const bytecode = builder.build();
+
+        expect(() => engine.executeCached(bytecode)).toThrow(
+            /Global variable "neverResolvedGlobal_CoreInfrastructureRegression" was read before it resolved/
+        );
+    });
+
     // Gap found while hardening for release: every existing test here covers
     // a plugin function that either returns synchronously (throwing or not)
     // or returns a Promise that RESOLVES — none covered a Promise that
