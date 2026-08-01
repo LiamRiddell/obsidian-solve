@@ -1,0 +1,361 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource/instrument-serif";
+
+/* Brand wordmark font — self-hosted, single weight (Regular/400 only). */
+@font-face {
+  font-family: "BBH Bartle";
+  src: url("/fonts/BBHBartle-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Palette copied directly from the Solve product's sibling app's tokens.css
+  (dark-mode primary is lime `--brand-volt`, light-mode primary is violet
+  `--brand-grape`). This devtool runs dark-only (see main.tsx), but both
+  are defined verbatim so the tokens stay swappable if a light mode is
+  ever added, and so this file stays a straight diff against the source.
+*/
+:root {
+  --font-mono: "Roboto Mono", monospace;
+  --radius: 0.5rem;
+
+  --background: #fcfcfe;
+  --foreground: #03080a;
+  --card: #ffffff;
+  --card-foreground: #03080a;
+  --card-hover: rgb(3 8 10 / 0.02);
+  --popover: #ffffff;
+  --popover-foreground: #03080a;
+  --surface: #ffffff;
+  --muted: rgb(3 8 10 / 0.031);
+  --muted-foreground: rgb(3 8 10 / 0.69);
+  --faint: rgb(3 8 10 / 0.44);
+  --selected: rgb(3 8 10 / 0.031);
+
+  --primary: #7624f4;
+  --primary-foreground: #fcfcfe;
+  --secondary: rgb(118 36 244 / 0.078);
+  --secondary-foreground: #7624f4;
+  --accent: rgb(118 36 244 / 0.078);
+  --accent-foreground: #7624f4;
+  --accent-subtle: rgb(118 36 244 / 0.031);
+  --accent-border: rgb(118 36 244 / 0.125);
+  --accent-hover: rgb(118 36 244 / 0.878);
+  --link: #7624f4;
+  --link-hover: #5f13d6;
+
+  --border: rgb(3 8 10 / 0.078);
+  --input: rgb(3 8 10 / 0.078);
+  --input-bg: #ffffff;
+  --ring: #7624f4;
+  --shadow-color: transparent;
+
+  --destructive: #e11d48;
+  --destructive-foreground: #fcfcfe;
+  --success: #00bf6f;
+  --success-foreground: #fcfcfe;
+  --success-text: #007544;
+  --success-bg: rgb(0 191 111 / 0.078);
+  --warning: #e5a000;
+  --warning-foreground: #03080a;
+  --warning-text: #8a6000;
+  --warning-bg: rgb(229 160 0 / 0.078);
+  --info: #035ade;
+  --info-foreground: #fcfcfe;
+  --info-text: #0352c9;
+  --info-bg: rgb(3 90 222 / 0.078);
+  --highlight: #ffd426;
+
+  --chart-1: oklch(0.3 0 0);
+  --chart-2: oklch(0.45 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.75 0 0);
+  --chart-5: oklch(0.85 0 0);
+
+  --sidebar: #fafafa;
+  --sidebar-foreground: #09090b;
+  --sidebar-primary: #7624f4;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #a1a1aa;
+}
+
+.dark {
+  --background: #03080a;
+  --foreground: #fcfcfe;
+  --card: rgb(252 252 254 / 0.02);
+  --card-foreground: #fcfcfe;
+  --card-hover: rgb(252 252 254 / 0.031);
+  --popover: #08131a;
+  --popover-foreground: #fcfcfe;
+  --surface: rgb(252 252 254 / 0.012);
+  --muted: rgb(252 252 254 / 0.031);
+  --muted-foreground: rgb(252 252 254 / 0.627);
+  --faint: rgb(252 252 254 / 0.44);
+  --selected: rgb(252 252 254 / 0.039);
+
+  --primary: #c8ff00;
+  --primary-foreground: #03080a;
+  --secondary: rgb(200 255 0 / 0.078);
+  --secondary-foreground: #c8ff00;
+  --accent: rgb(200 255 0 / 0.078);
+  --accent-foreground: #c8ff00;
+  --accent-subtle: rgb(200 255 0 / 0.031);
+  --accent-border: rgb(200 255 0 / 0.125);
+  --accent-hover: rgb(200 255 0 / 0.878);
+  --link: #c8ff00;
+  --link-hover: #a3cc00;
+
+  --border: rgb(252 252 254 / 0.078);
+  --input: rgb(252 252 254 / 0.078);
+  --input-bg: rgb(252 252 254 / 0.039);
+  --ring: #c8ff00;
+  --shadow-color: rgb(0 0 0 / 0.35);
+
+  --destructive: #e11d48;
+  --destructive-foreground: #fcfcfe;
+  --success: #34dfaa;
+  --success-foreground: #03080a;
+  --success-text: #34dfaa;
+  --success-bg: rgb(0 191 111 / 0.078);
+  --warning: #e5a000;
+  --warning-foreground: #03080a;
+  --warning-text: #ffab00;
+  --warning-bg: rgb(229 160 0 / 0.078);
+  --info: #035ade;
+  --info-foreground: #fcfcfe;
+  --info-text: #4d8dff;
+  --info-bg: rgb(3 90 222 / 0.078);
+  --highlight: #c9a227;
+
+  --chart-1: oklch(0.85 0 0);
+  --chart-2: oklch(0.7 0 0);
+  --chart-3: oklch(0.55 0 0);
+  --chart-4: oklch(0.4 0 0);
+  --chart-5: oklch(0.25 0 0);
+
+  --sidebar: #09090b;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #c8ff00;
+  --sidebar-primary-foreground: #03080a;
+  --sidebar-accent: #27272a;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #3d3d42;
+  --sidebar-ring: #a1a1aa;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-hover: var(--card-hover);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-surface: var(--surface);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint);
+  --color-selected: var(--selected);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-border: var(--accent-border);
+  --color-accent-hover: var(--accent-hover);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-text: var(--success-text);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-text: var(--warning-text);
+  --color-warning-bg: var(--warning-bg);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-text: var(--info-text);
+  --color-info-bg: var(--info-bg);
+  --color-highlight: var(--highlight);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-bg: var(--input-bg);
+  --color-ring: var(--ring);
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --font-serif: 'Instrument Serif', ui-serif, Georgia, serif;
+  --font-brand: 'BBH Bartle', var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --shadow-2xs: 0 1px 1px var(--shadow-color);
+  --shadow-xs: 0 1px 2px var(--shadow-color);
+  --shadow-sm: 0 1px 2px var(--shadow-color);
+  --shadow-md: 0 2px 6px -1px var(--shadow-color);
+  --shadow-lg: 0 4px 12px -2px var(--shadow-color);
+  --shadow-xl: 0 10px 24px -4px var(--shadow-color);
+  --shadow-2xl: 0 16px 40px -8px var(--shadow-color);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ── Themed scrollbars — neutral alpha only, never the brand accent. ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(252 252 254 / 0.16) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(252 252 254 / 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(252 252 254 / 0.22);
+}
+
+/* ── CodeMirror editor overrides ──────────────────────────────────
+   The editor uses CodeMirror's `oneDark` theme for syntax highlighting,
+   but its background/gutter/cursor/selection colors are overridden here to
+   match the app's own shadcn theme tokens, so the editor surface reads as
+   part of the same app rather than a different, oneDark-branded shade of
+   dark. */
+.cm-editor {
+  height: 100%;
+  font-size: 13px;
+  background-color: var(--background) !important;
+}
+.cm-editor.cm-focused {
+  outline: none;
+}
+.cm-editor .cm-content {
+  padding: 8px 0;
+  caret-color: var(--primary);
+}
+.cm-editor .cm-line {
+  padding: 0 10px;
+}
+.cm-editor .cm-scroller {
+  overflow: auto;
+}
+.cm-editor .cm-gutters {
+  background-color: var(--background) !important;
+  border-right: 1px solid var(--border) !important;
+  color: var(--muted-foreground) !important;
+}
+.cm-editor .cm-activeLineGutter,
+.cm-editor .cm-activeLine {
+  background-color: var(--muted) !important;
+}
+.cm-editor .cm-selectionBackground {
+  background-color: rgb(200 255 0 / 0.16) !important;
+}
+.cm-editor .cm-cursor {
+  border-left-color: var(--primary) !important;
+}
+
+.cm-inline-solve {
+  background: rgb(200 255 0 / 0.1);
+  border-radius: 3px;
+  border: 1px solid rgb(200 255 0 / 0.22);
+  box-shadow: inset 0 0 0 1px rgb(200 255 0 / 0.06);
+  transition: background 0.2s;
+}
+.cm-inline-solve:hover {
+  background: rgb(200 255 0 / 0.16);
+}
+
+/* Syntax highlight colors — "One Dark" palette, hardcoded to match. */
+.cm-solve-number { color: #61afef; }
+.cm-solve-string { color: #98c379; }
+.cm-solve-keyword { color: #c678dd; }
+.cm-solve-operator { color: #abb2bf; }
+.cm-solve-comparison { color: #56b6c2; }
+.cm-solve-bitwise { color: #56b6c2; }
+.cm-solve-function { color: #e5c07b; }
+.cm-solve-variable { color: #e06c75; }
+.cm-solve-unit { color: #56b6c2; }
+.cm-solve-datetime { color: #d19a66; }
+.cm-solve-vector { color: #d19a66; }
+.cm-solve-punctuation { color: #5c6370; }
+.cm-solve-error { color: #e06c75; text-decoration: underline wavy; }
+.cm-solve-osrs-item { color: #a6e22e; font-weight: 600; }
+
+/* ── Inline results ────────────────────────────────────────────── */
+.os-result-inline {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgb(200 255 0 / 0.14);
+  color: #c8ff00;
+  font-size: 11px;
+  font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  white-space: nowrap;
+}
+.os-result-inline.os-result-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.os-result-inline-spinner {
+  display: inline-block;
+  animation: os-result-spin 1s linear infinite;
+}
+@keyframes os-result-spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+.os-result-inline-pending-label {
+  font-style: italic;
+}

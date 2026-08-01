@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@bridge/*": ["../packages/playground-bridge/src/*"],
+      "@solve-js/*": ["../packages/core/src/*"],
+      "@solve-js-examples/*": ["../packages/core/examples/*"]
+    }
+  }
+}
