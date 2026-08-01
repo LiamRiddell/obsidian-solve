@@ -49,12 +49,26 @@ export function tryConsumeZoneReference(parser: Parser): ZoneReference | null {
     if (signToken?.type === "PLUS" || signToken?.type === "MINUS") {
       const isNegative = signToken.type === "MINUS";
       parser.consume();
-      const hourToken = parser.consume("NUMBER");
-      let totalMinutes = parseInt(hourToken.value, 10) * 60;
-      if (parser.peek()?.type === "COLON") {
+
+      // "8:30" between the sign and a following word (e.g. "in Paris") has
+      // already been fused into a single CLOCK_TIME token by the lexer's
+      // clock-time normalizer (see ClockTimeNormalizerRule.ts) before this
+      // parselet ever runs, so a bare NUMBER never appears in that case —
+      // the fused token's value IS already hour*60+minute, matching
+      // `totalMinutes` below exactly, so it can be used as-is.
+      const offsetToken = parser.peek();
+      let totalMinutes: number;
+      if (offsetToken?.type === "CLOCK_TIME") {
         parser.consume();
-        const minuteToken = parser.consume("NUMBER");
-        totalMinutes += parseInt(minuteToken.value, 10);
+        totalMinutes = parseInt(offsetToken.value, 10);
+      } else {
+        const hourToken = parser.consume("NUMBER");
+        totalMinutes = parseInt(hourToken.value, 10) * 60;
+        if (parser.peek()?.type === "COLON") {
+          parser.consume();
+          const minuteToken = parser.consume("NUMBER");
+          totalMinutes += parseInt(minuteToken.value, 10);
+        }
       }
       const zoneRef = encodeFixedOffset(isNegative ? -totalMinutes : totalMinutes);
       return { zoneRef, displayName: zoneLabel(zoneRef) };

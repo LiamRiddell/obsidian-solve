@@ -272,6 +272,40 @@ describe("timezone conversion", () => {
     expect(value.value as string).toMatch(/^\d{1,2}:\d{2} (AM|PM)/);
   });
 
+  // Regression for a bug where the lexer's clock-time normalizer fuses
+  // "8:30" (after the sign) into a single CLOCK_TIME token before
+  // ZoneReference.ts ever runs, so its NUMBER-then-optional-COLON-then-
+  // NUMBER path never saw a bare NUMBER there and threw. Converting into
+  // UTC (also a fixed offset, no DST) makes the expected wall-clock time
+  // exact and date-independent, unlike the Paris-target tests above.
+  test("3pm GMT+5:30 in UTC converts a numeric UTC offset with a non-zero minutes component", () => {
+    const engine = new ExpressionEngine("en");
+    const [value] = engine.evaluateExpression("3pm GMT+5:30 in UTC");
+    expect(value.type).toBe(ValueType.String);
+    expect(value.value as string).toBe("9:30 AM");
+  });
+
+  test("3pm GMT+8:45 in UTC converts a numeric UTC offset with a non-zero minutes component", () => {
+    const engine = new ExpressionEngine("en");
+    const [value] = engine.evaluateExpression("3pm GMT+8:45 in UTC");
+    expect(value.type).toBe(ValueType.String);
+    expect(value.value as string).toBe("6:15 AM");
+  });
+
+  test("3pm GMT+8 in UTC still converts a whole-hour numeric UTC offset (no COLON token at all)", () => {
+    const engine = new ExpressionEngine("en");
+    const [value] = engine.evaluateExpression("3pm GMT+8 in UTC");
+    expect(value.type).toBe(ValueType.String);
+    expect(value.value as string).toBe("7:00 AM");
+  });
+
+  test("3pm GMT in UTC still converts a bare zero-offset zone (no sign token at all)", () => {
+    const engine = new ExpressionEngine("en");
+    const [value] = engine.evaluateExpression("3pm GMT in UTC");
+    expect(value.type).toBe(ValueType.String);
+    expect(value.value as string).toBe("3:00 PM");
+  });
+
   test("a recognized zone name with no following 'in <target>' is a parse error, not silently ignored", () => {
     const engine = new ExpressionEngine("en");
     expect(() => engine.evaluateExpression("6pm Sydney")).toThrow();
