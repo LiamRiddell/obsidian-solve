@@ -1374,28 +1374,7 @@ export class ExpressionEngine {
                 }
             };
         }
-        const rewritten = this.applyRawTextPreprocessors(lineText);
-        if (rewritten !== null) {
-            return this.evaluateExpressionWithDiagnostic(rewritten, lineNumber, inputType);
-        }
         return this.evaluateExpressionWithDiagnostic(lineText, lineNumber, inputType);
-    }
-
-    /**
-     * Tries every registered package's {@link IEnginePackage.rawTextPreprocessors}
-     * in registration order, returning the first non-`null` rewrite, or
-     * `null` if none apply. See that field's own doc comment for the full
-     * design — this is the one place it's actually consulted.
-     */
-    private applyRawTextPreprocessors(lineText: string): string | null {
-        for (const pkg of this.registeredPackages.values()) {
-            if (!pkg.rawTextPreprocessors) continue;
-            for (const preprocess of pkg.rawTextPreprocessors) {
-                const rewritten = preprocess(lineText);
-                if (rewritten !== null) return rewritten;
-            }
-        }
-        return null;
     }
 
     //#endregion

@@ -202,41 +202,6 @@ export interface IEnginePackage {
    * ```
    */
   asConverters?: Record<string, (value: Value) => Value>;
-  /**
-   * Raw line-text rewriters, tried before ANY tokenization happens — the
-   * fifth SDK extension point, added for `packages/latex/` (see GitHub
-   * issue #37). Each function receives the untouched line text and
-   * either returns `null` ("doesn't apply, try the next one") or a
-   * REPLACEMENT string, which is what actually gets lexed/normalized/
-   * parsed from that point on — same recursive-reprocessing shape this
-   * codebase already uses for `s\`expr\`` inline-solve syntax (see
-   * `evaluateLineWithDebug()`'s own `inlineSolveMatch` check, which this
-   * hook runs alongside).
-   *
-   * This is a genuinely different shape from {@link lexerVocabulary}'s
-   * `rawLinePatterns`: that mechanism ALSO sees raw text before
-   * tokenization, but folds a match down into exactly ONE opaque
-   * synthetic token (right for "ship this whole line to an external
-   * function verbatim," e.g. `packages/knowledge/`'s `<query> = ?`).
-   * `rawTextPreprocessors` is for the opposite need — text that should
-   * be REWRITTEN into ordinary Solve syntax and then parsed completely
-   * normally (arithmetic operators, function calls, everything), which a
-   * single-token capture can't do. Tried in registration order; the
-   * first non-`null` result wins and short-circuits the rest.
-   *
-   * @example
-   * ```ts
-   * // "$x = 2 + 2$" -> "2 + 2", which then parses as ordinary arithmetic.
-   * rawTextPreprocessors: [(text) => {
-   *   const m = text.match(/^\$(.+)\$$/);
-   *   if (!m) return null;
-   *   const inner = m[1];
-   *   const eq = inner.lastIndexOf("=");
-   *   return eq === -1 ? inner : inner.slice(eq + 1);
-   * }]
-   * ```
-   */
-  rawTextPreprocessors?: Array<(lineText: string) => string | null>;
 }
 
 /**

@@ -18,7 +18,6 @@ export {
 	createStocksPackage,
 	createKnowledgePackage,
 	LINES_PACKAGE,
-	createLatexPackage,
 	BUILTIN_PACKAGES,
 } from "./builtins";
 
