@@ -244,3 +244,33 @@ owns and this simpler debug harness doesn't use.
 
 Verified via the full four-command gate (`tsc --noEmit --skipLibCheck`, full `jest --no-coverage`
 — 162 suites, 3580 tests, 0 failures, `tsup`, production `esbuild`) after each phase.
+
+## 2026-08-01 — Engine-version package compatibility gating
+
+A real gap in the public SDK, distinct from `PackageCompatibility.ts` (§5.2): that checker only
+ever asks "do two SIMULTANEOUSLY-registered packages' fields collide," always advisory, never
+blocks. It has zero notion of TIME — a third-party package built against an old `@solve/core`
+release, loaded into a much newer engine whose `IEnginePackage` contract has since changed shape,
+registered with no signal at all. New `IEnginePackage.engineVersion?: string` (a semver range,
+e.g. `"^0.1.0"`), checked via the standard `semver` package against a new, real `ENGINE_VERSION`
+constant (`constants/version.ts`, a build-time JSON import of this package's own `package.json` —
+nothing like it existed before this pass). `api/EngineVersionCompatibility.ts`'s
+`checkEngineVersionCompatibility()`/`assertEngineVersionCompatible()` are deliberately a SEPARATE
+module from `PackageCompatibility.ts`, not an extension of it — an unsatisfied or malformed range
+is a hard REJECTION (`PACKAGE_ENGINE_VERSION_MISMATCH`/`PACKAGE_ENGINE_VERSION_INVALID_RANGE`,
+both `ErrorCategory.CONFIG`), the one deliberate exception to this codebase's otherwise-consistent
+"warn and proceed" convention for package-registration signals — folding a genuinely-blocking
+check into §5.2's always-advisory report type would have misled a future reader. Wired as the
+literal first statement in BOTH `ExpressionEngine.registerPackage()` and the weaker
+`PackageRegistry` singleton's `registerPackage()` (which had zero compatibility checking of any
+kind before this — otherwise a trivially bypassable gate), and specifically before the
+duplicate-name/unregister guard, so rejecting an incompatible "upgrade" never tears down an
+already-working package first. `engineVersion` is optional; every package that predates this field
+(all 16 built-ins, `examples/osrs`) keeps registering unchanged — `examples/osrs` was updated to
+declare `"^0.1.0"` purely as a canonical worked example for future package authors reading it.
+
+**Honest, disclosed limitation, not solved here**: this gate's long-term value depends on
+`package.json`'s `version` actually getting bumped in step with real `IEnginePackage`/
+advanced-public-tier breaking changes — a discipline this repo does not yet practice (see
+`ARCHITECTURE.md` §5.3's closing note). This pass builds the mechanism; making version bumps
+actually happen going forward is a separate, unstarted process change.

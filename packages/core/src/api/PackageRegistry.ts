@@ -10,6 +10,7 @@ import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { assertEngineVersionCompatible } from "./EngineVersionCompatibility";
 
 /**
  * Public API for registering plugins with the solve-js engine.
@@ -61,6 +62,25 @@ export interface IPackageRegistry {
 export interface IEnginePackage {
   /** Human-readable name for debugging and error attribution. */
   name: string;
+  /**
+   * Semver range of `@solve/core` versions this package is compatible with
+   * (e.g. `"^0.1.0"`, `">=0.1.0 <0.3.0"`), checked against the engine's own
+   * running version ({@link ENGINE_VERSION}, `@solve-js/constants/version`)
+   * via `checkEngineVersionCompatibility()`/`assertEngineVersionCompatible()`
+   * (`@solve-js/api/EngineVersionCompatibility`) at registration time.
+   *
+   * Optional — omitted means "no declared constraint," so every package
+   * that predates this field (all built-ins, `examples/osrs`) keeps
+   * registering exactly as before.
+   *
+   * Unlike every other compatibility signal in this codebase (e.g.
+   * `checkPackageCompatibility()`'s sibling-package collision warnings,
+   * which always log and proceed — see `api/PackageCompatibility.ts`), a
+   * declared `engineVersion` range the running engine does NOT satisfy is
+   * a deliberate, hard REJECTION: `registerPackage()` throws rather than
+   * warning. See `ARCHITECTURE.md` §5.3.
+   */
+  engineVersion?: string;
   /** Optional lexer vocabulary (keywords/operators/units) for recognizing custom tokens (e.g., `GE`, `£`). */
   lexerVocabulary?: LexerVocabulary;
   /** Prefix parselets for this package's custom functions/operators. */
@@ -218,6 +238,13 @@ export class PackageRegistry implements IPackageRegistry {
   }
 
   registerPackage(pkg: IEnginePackage): void {
+    // Same hard engine-version gate ExpressionEngine.registerPackage() uses
+    // (see its own comment and ARCHITECTURE.md §5.3) — this weaker,
+    // shared-singleton path had no compatibility checking of any kind
+    // before this, so without this call the version gate would be
+    // trivially bypassable through this entry point.
+    assertEngineVersionCompatible(pkg);
+
     if (pkg.lexerVocabulary) {
       sharedLexer.registerVocabulary(pkg.lexerVocabulary);
     }

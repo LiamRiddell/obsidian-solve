@@ -17,5 +17,10 @@ export type {
   CompatibilitySeverity,
 } from "./PackageCompatibility";
 
+export { checkEngineVersionCompatibility, assertEngineVersionCompatible } from "./EngineVersionCompatibility";
+export type { EngineVersionCheckResult } from "./EngineVersionCompatibility";
+
 export { ExpressionEngine } from "@solve-js/engine";
 export type { LineEvaluation, EvalResults } from "@solve-js/engine";
+
+export { ENGINE_VERSION } from "@solve-js/constants/version";

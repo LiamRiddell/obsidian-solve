@@ -9,6 +9,12 @@ import { OSRS_ITEMS } from "./OsrsItemVocabulary";
 export const OSRS_PACKAGE: IEnginePackage = {
   name: "osrs",
 
+  // Demonstrates IEnginePackage.engineVersion for third-party package
+  // authors reading this example — not because OSRS itself needs a real
+  // floor. See PackageRegistry.ts's engineVersion doc comment and
+  // ARCHITECTURE.md §5.3.
+  engineVersion: "^0.1.0",
+
   lexerVocabulary: osrsLexerVocabulary,
 
   normalizerRules: [

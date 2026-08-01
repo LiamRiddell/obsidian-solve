@@ -261,6 +261,40 @@ including why `clamp` was judged low-risk enough to stay a bare keyword (the val
 between the trigger and its qualifying keyword, so it can't be phrase-fused, and it's not
 a common variable name the way "total" is).
 
+### 5.3 Engine-version compatibility gating (`api/EngineVersionCompatibility.ts`)
+
+A sixth piece of SDK surface, and a deliberately different KIND from §5.2's checker, even
+though the two sound similar. §5.2's `checkPackageCompatibility()` answers "do these two
+SIMULTANEOUSLY-registered packages' declared fields collide" — always advisory, every
+conflict including `error` severity just gets logged, registration always proceeds. This
+module answers a different question — "can THIS package's declared engine-version range run
+against the engine that's actually running RIGHT NOW" — and unlike every other compatibility
+signal in this codebase, an unsatisfied (or malformed) `IEnginePackage.engineVersion` is a
+hard **rejection**: `registerPackage()` throws (`PACKAGE_ENGINE_VERSION_MISMATCH` /
+`PACKAGE_ENGINE_VERSION_INVALID_RANGE`, both `ErrorCategory.CONFIG`), not a warning. The two
+checkers are kept in separate files/report types on purpose — folding a genuinely-blocking
+check into §5.2's "always advisory" contract would mislead a future reader who's learned
+(correctly, until now) that nothing from that module ever blocks.
+
+`checkEngineVersionCompatibility(pkg, engineVersion?)` is the pure predicate (mirrors §5.2's
+"return a result, caller decides" shape); `assertEngineVersionCompatible(pkg, engineVersion?)`
+is the thin throwing wrapper both `ExpressionEngine.registerPackage()` and the `PackageRegistry`
+singleton call as the literal first thing they do — before §5.2's checker, and before the
+duplicate-name/unregister guard, so re-registering an incompatible "upgrade" for an
+already-working package never tears down the working original first. `engineVersion` is
+optional on `IEnginePackage`; omitting it means "no declared constraint," so every package
+that predates this field (all 16 built-ins, `examples/osrs`) keeps registering unchanged.
+`ENGINE_VERSION` (`constants/version.ts`) is sourced directly from this package's own
+`package.json` at build time (a JSON import, inlined by esbuild — no runtime `fs` read), so it
+can never drift from what's actually published.
+
+**One real caveat this feature depends on but does not fix**: its long-term value assumes
+`package.json`'s `version` gets bumped in step with actual breaking changes to the
+`IEnginePackage` contract or the advanced-public tier (§3's "for semver purposes" framing) —
+a discipline this repo does not yet rigorously practice (dated engineering-log entries here
+and in `ENGINE_ITERATIONS.md` don't currently correspond to version bumps). This pass adds the
+mechanism; it does not retroactively fix that process gap.
+
 ## 6. Async evaluation
 
 Not every value is available synchronously — currency rates, a game-item price API, any

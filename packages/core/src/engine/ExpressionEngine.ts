@@ -17,6 +17,7 @@ import { Value, numberValue, pendingValue, freezeIfDev, errorValue } from "@solv
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { checkPackageCompatibility } from "@solve-js/api/PackageCompatibility";
+import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
 import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
@@ -434,6 +435,17 @@ export class ExpressionEngine {
      * @param pkg - The package to register.
      */
     registerPackage(pkg: IEnginePackage): void {
+        // Engine-vs-package version gating — checked FIRST, before the
+        // duplicate-name guard below. Unlike checkPackageCompatibility()
+        // further down (package-vs-package, always advisory, never blocks —
+        // ARCHITECTURE.md §5.2), an unsatisfied or malformed engineVersion is
+        // a hard rejection: throwing here means re-registering an
+        // incompatible REPLACEMENT for an already-working package never
+        // unregisters the old one first — the engine is never left with
+        // neither version registered. See ARCHITECTURE.md §5.3 and
+        // api/EngineVersionCompatibility.ts.
+        assertEngineVersionCompatible(pkg);
+
         // Guard against double-registration under the same name: without
         // this, a second registerPackage() call for the same pkg.name would
         // overwrite packageContributions' tracked record for the FIRST

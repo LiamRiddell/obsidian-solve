@@ -155,4 +155,18 @@ it("supports registerPackage with prefix parselets", () => {
     const tokens = Array.from(sharedLexer);
     expect(tokens[0].type).toBe("COMBINED_TEST");
   });
+
+  // This shared-singleton path had NO compatibility checking of any kind
+  // before the engine-version gate was added (see api/EngineVersionCompatibility.ts)
+  // — proving it's gated here too closes what would otherwise be a trivial
+  // bypass of ExpressionEngine.registerPackage()'s equivalent gate.
+  it("rejects a package whose declared engineVersion the running engine doesn't satisfy", () => {
+    const pkg: IEnginePackage = { name: "too-old-or-new-package", engineVersion: "^99.0.0" };
+    expect(() => packageRegistry.registerPackage(pkg)).toThrow();
+  });
+
+  it("still registers a package with no declared engineVersion (backward compatible default)", () => {
+    const pkg: IEnginePackage = { name: "no-version-declared-package" };
+    expect(() => packageRegistry.registerPackage(pkg)).not.toThrow();
+  });
 });

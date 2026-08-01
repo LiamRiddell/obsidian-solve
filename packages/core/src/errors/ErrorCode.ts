@@ -87,6 +87,10 @@ export const CoreErrorCodes = {
   PLUGIN_OPERATOR_COLLISION: "PLUGIN_OPERATOR_COLLISION",
   PLUGIN_KEYWORD_COLLISION: "PLUGIN_KEYWORD_COLLISION",
   PLUGIN_UNIT_COLLISION: "PLUGIN_UNIT_COLLISION",
+  /** A package's declared `IEnginePackage.engineVersion` semver range doesn't satisfy the running engine's ENGINE_VERSION — see api/EngineVersionCompatibility.ts. */
+  PACKAGE_ENGINE_VERSION_MISMATCH: "PACKAGE_ENGINE_VERSION_MISMATCH",
+  /** A package's declared `IEnginePackage.engineVersion` isn't a parseable semver range at all (a typo in the package's own descriptor). */
+  PACKAGE_ENGINE_VERSION_INVALID_RANGE: "PACKAGE_ENGINE_VERSION_INVALID_RANGE",
   /** `OpRegistry.allocateOpcode()`'s dynamic opcode pool (started at 201) exhausted — too many packages calling it. */
   OPCODE_POOL_EXHAUSTED: "OPCODE_POOL_EXHAUSTED",
   /** `VMBuiltins.allocatePluginFunctionIndex()`'s 0-255 index pool (a single opcode-stream byte) exhausted. */

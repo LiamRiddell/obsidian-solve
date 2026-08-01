@@ -14,6 +14,7 @@
     "moduleResolution": "node",
     "strictNullChecks": true,
     "allowJs": true,
+    "resolveJsonModule": true,
     "noImplicitAny": true,
     "isolatedModules": true,
     "importHelpers": true,

@@ -100,6 +100,7 @@ const MY_FN_IDX = allocatePluginFunctionIndex();
 
 export const MY_PACKAGE: IEnginePackage = {
   name: "MyPackage",
+  // engineVersion: "^0.1.0", // optional — see below
   prefixParselets: [{ tokenType: "MY_FUNC", parselet: new MyParselet() }],
   pluginFunctions: [{ index: MY_FN_IDX, handler: (args) => /* ... */ }],
 };
@@ -107,6 +108,20 @@ export const MY_PACKAGE: IEnginePackage = {
 
 Register it either as one of the packages passed to the `ExpressionEngine` constructor, or
 at runtime via `ExpressionEngine.registerPackage()` / `unregisterPackage()`.
+
+### Declaring engine-version compatibility
+
+`IEnginePackage.engineVersion` is an optional semver range (e.g. `"^0.1.0"`) declaring which
+`@solve/core` versions your package is built against. It's checked against the real, running
+engine version at registration time. Omit it and your package always registers, exactly as
+before this field existed — this is the default for every package that predates it. Declare it
+once you want protection against the reverse case: your package being loaded into a much
+newer (or much older) engine whose `IEnginePackage` contract has since changed shape.
+
+Unlike every other compatibility signal in this codebase (see `ARCHITECTURE.md` §5.2's
+sibling-package collision warnings, which always log and proceed), a declared range the
+running engine does **not** satisfy causes `registerPackage()` to **throw**, not warn — see
+`ARCHITECTURE.md` §5.3 for the full reasoning.
 
 ### Three more extension points, beyond `pluginFunctions`
 
