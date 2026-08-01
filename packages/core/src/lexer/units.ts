@@ -68,6 +68,30 @@ export const knownUnits = new Set([
   "B", "KB", "MB", "GB", "TB", // bytes (uppercase)
   // Area
   "m2", "ft2",
+  // Speed — custom measure, `convert` package has no MeasureKind for this
+  // (see ExtendedUnits.ts). "fps" (feet/s) is deliberately NOT registered —
+  // collides with the Time package's "fps" (frames/s), which requires an
+  // IDENT token; "ft_s" is used instead.
+  "mps", "kph", "mph", "kn", "ft_s",
+  // Pace — custom measure (time/distance, the reciprocal of speed).
+  // Underscore stands in for "/" since the lexer only tokenizes
+  // [a-zA-Z0-9_] as a single UNIT token — "min/km" isn't representable.
+  "min_km", "min_mi",
+  // Voltage / Current — custom measures. Bare "V" is deliberately NOT
+  // registered — collides with the stocks package's "V" (Visa) ticker,
+  // which also requires an IDENT token (see ExtendedUnits.ts).
+  "mV", "kV", "mA", "A", "kA",
+  // Apparent Power / Reactive Power / Reactive Energy — custom measures.
+  // `convert`'s Power/Energy kinds cover real power (W) and real energy
+  // (Wh) only, not these. The bare IEC symbol "var" is deliberately NOT
+  // registered — see the comment in ExtendedUnits.ts (collides with "var"
+  // as a variable name).
+  "VA", "kVA", "MVA", "kvar", "Mvar", "varh", "kvarh", "Mvarh",
+  // Volume Flow Rate — custom measure.
+  "m3s", "m3h", "lps", "lpm", "gpm", "cfs",
+  // Parts-Per — custom measure (dimensionless ratio). "%" is intentionally
+  // excluded — owned by the dedicated Percentage provider, not UoM.
+  "ppm", "ppb", "ppt", "permille",
   // Currencies — ISO 4217 uppercase by convention
   "USD", "EUR", "GBP", "JPY",
   "AUD", "CAD", "CHF", "CNY", "SEK", "NOK", "DKK", "NZD",

@@ -9,6 +9,7 @@
 import convert, { getMeasureKind, MeasureKind } from "convert";
 import { conversions } from "convert/conversions";
 import { LFUCache } from "@solve-js/cache";
+import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
 
 // Cache for valid units to avoid repeated conversion attempts
 const validUnitsCache = new LFUCache<string>(1000);
@@ -119,6 +120,13 @@ export function getMeasure(unit: string): string | undefined {
   // comment) — the `convert` package has never heard of it, so resolve its
   // measure via "day" instead of attempting the real lookup below.
   if (isWorkdayUnit(unit)) return getMeasure("day");
+
+  // Extended (custom) categories the `convert` package doesn't know about —
+  // see ExtendedUnits.ts. Checked before the try block since it's a plain
+  // object lookup, cheaper than round-tripping through convert()'s try/catch.
+  const extended = EXTENDED_UNITS[unit];
+  if (extended) return extended.measure;
+
   try {
     const resolved = resolveUnit(unit);
     const kindId = getMeasureKind(resolved as any);
@@ -152,7 +160,16 @@ export function canConvert(from: string, to: string): boolean {
     if (!fromMeasure || !toMeasure || fromMeasure !== toMeasure) {
       return false;
     }
-    
+
+    // Extended (custom) categories aren't known to the `convert` package at
+    // all — calling convert() below would throw. The measure check above
+    // already proves f and t both resolve to this same extended category
+    // (that measure name can only have come from EXTENDED_UNITS), so no
+    // further validation is needed.
+    if (EXTENDED_UNITS[f]) {
+      return true;
+    }
+
     convert(1, f as any).to(t as any);
     return true;
   } catch {
@@ -203,6 +220,19 @@ export function convertUnit(value: number, from: string, to: string): number {
     return value * cachedRate;
   }
 
+  // Extended (custom) categories the `convert` package doesn't know about
+  // (see ExtendedUnits.ts) — compute the ratio directly from each unit's
+  // factor-to-base value instead of calling convert(), which would throw on
+  // an unrecognized unit string. Every extended category is a pure linear
+  // ratio scale (no Temperature-style offset), so this is always safe.
+  const fExt = EXTENDED_UNITS[f];
+  const tExt = EXTENDED_UNITS[t];
+  if (fExt && tExt) {
+    const rate = fExt.toBase / tExt.toBase;
+    conversionRateCache.put(cacheKey, rate);
+    return value * rate;
+  }
+
   // Temperature conversions use offset-based formulas (e.g. C→F: °F = °C × 9/5 + 32)
   // and cannot be reduced to a simple multiplicative factor. Bypass the cache.
   // Only checked on cache miss — the hot path skips this getMeasure() call.
@@ -247,6 +277,7 @@ export function getConvertiblePossibilities(unit: string): string[] {
 /** Check whether `unit` is a unit the `convert` package recognizes. Never throws. */
 export function isConvertibleUnit(unit: string): boolean {
   if (isWorkdayUnit(unit)) return true;
+  if (EXTENDED_UNITS[unit]) return true;
   // The convert package doesn't have a possibilities method
   // We'll need to check if the unit can be converted to a known unit
   try {

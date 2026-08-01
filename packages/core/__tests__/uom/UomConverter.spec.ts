@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, test, beforeEach } from "@jest/globals";
-import { resolveUnit, getMeasure, canConvert, convertUnit } from "@solve-js/uom/UomConverter";
+import { resolveUnit, getMeasure, canConvert, convertUnit, isConvertibleUnit, getBestUnit } from "@solve-js/uom/UomConverter";
 import { LFUCache } from "@solve-js/cache";
 
 describe("LFUCache", () => {
@@ -282,5 +282,208 @@ describe("convertUnit", () => {
 
   test("1 min = 60 s", () => {
     expect(convertUnit(1, "min", "s")).toBeCloseTo(60, 10);
+  });
+});
+
+/**
+ * Extended (custom) measure categories — Speed, Pace, Voltage, Current,
+ * Apparent Power, Reactive Power, Reactive Energy, Volume Flow Rate,
+ * Parts-Per. None of these are supported by the `convert` package itself
+ * (confirmed: `Object.keys(MeasureKind)` only has the 16 kinds covered
+ * above), so they're hand-implemented in ExtendedUnits.ts and wired into
+ * getMeasure/canConvert/convertUnit as a fallback layer.
+ */
+describe("extended measures: speed", () => {
+  test("getMeasure returns 'speed'", () => {
+    expect(getMeasure("mps")).toBe("speed");
+    expect(getMeasure("kph")).toBe("speed");
+    expect(getMeasure("mph")).toBe("speed");
+    expect(getMeasure("kn")).toBe("speed");
+    expect(getMeasure("ft_s")).toBe("speed");
+  });
+
+  // "fps" (feet/s) is deliberately NOT a registered unit — it collides with
+  // the Time package's "fps" (frames/s), confirmed by a real regression in
+  // VideoTimecode.spec.ts. "ft_s" is used instead.
+  test("'fps' alone is not a UoM unit (reserved for the Time package's frames/s)", () => {
+    expect(getMeasure("fps")).toBeUndefined();
+  });
+
+  test("canConvert is true within speed, false against other measures", () => {
+    expect(canConvert("mph", "kph")).toBe(true);
+    expect(canConvert("kn", "mps")).toBe(true);
+    expect(canConvert("mph", "kg")).toBe(false);
+    expect(canConvert("mph", "min_km")).toBe(false); // speed ≠ pace
+  });
+
+  test("1 mps = 3.6 kph", () => {
+    expect(convertUnit(1, "mps", "kph")).toBeCloseTo(3.6, 10);
+  });
+
+  test("60 mph ≈ 96.56064 kph", () => {
+    expect(convertUnit(60, "mph", "kph")).toBeCloseTo(96.56064, 5);
+  });
+
+  test("1 kn ≈ 1.852 kph", () => {
+    expect(convertUnit(1, "kn", "kph")).toBeCloseTo(1.852, 10);
+  });
+
+  test("isConvertibleUnit is true for speed units", () => {
+    expect(isConvertibleUnit("mph")).toBe(true);
+    expect(isConvertibleUnit("kn")).toBe(true);
+  });
+});
+
+describe("extended measures: pace", () => {
+  test("getMeasure returns 'pace'", () => {
+    expect(getMeasure("min_km")).toBe("pace");
+    expect(getMeasure("min_mi")).toBe("pace");
+  });
+
+  test("canConvert is true within pace, false against speed", () => {
+    expect(canConvert("min_km", "min_mi")).toBe(true);
+    expect(canConvert("min_km", "mps")).toBe(false);
+  });
+
+  test("1 min_mi ≈ 0.621371 min_km (pace scales opposite to distance)", () => {
+    // A mile is longer than a km, so the same per-mile pace is a *smaller*
+    // per-km number — mi→km factor (1.609344) inverted.
+    expect(convertUnit(1, "min_mi", "min_km")).toBeCloseTo(1 / 1.609344, 5);
+  });
+
+  test("4 min_km ≈ 6.4374 min_mi", () => {
+    expect(convertUnit(4, "min_km", "min_mi")).toBeCloseTo(4 * 1.609344, 5);
+  });
+});
+
+describe("extended measures: voltage and current", () => {
+  test("getMeasure classifies voltage and current separately", () => {
+    expect(getMeasure("mV")).toBe("voltage");
+    expect(getMeasure("kV")).toBe("voltage");
+    expect(getMeasure("A")).toBe("current");
+    expect(getMeasure("mA")).toBe("current");
+    expect(getMeasure("kA")).toBe("current");
+  });
+
+  // Bare "V" is deliberately NOT a registered unit — it collides with the
+  // stocks package's "V" (Visa) ticker, which also requires an IDENT token
+  // (StockTickerNormalizerRule). "mV"/"kV" are used instead.
+  test("'V' alone is not a UoM unit (reserved for the stocks package's Visa ticker)", () => {
+    expect(getMeasure("V")).toBeUndefined();
+  });
+
+  test("voltage and current are not mutually convertible", () => {
+    expect(canConvert("kV", "A")).toBe(false);
+  });
+
+  test("1 kV = 1,000,000 mV", () => {
+    expect(convertUnit(1, "kV", "mV")).toBeCloseTo(1_000_000, 6);
+  });
+
+  test("1 kA = 1000 A = 1,000,000 mA", () => {
+    expect(convertUnit(1, "kA", "A")).toBeCloseTo(1000, 10);
+    expect(convertUnit(1, "kA", "mA")).toBeCloseTo(1_000_000, 6);
+  });
+});
+
+describe("extended measures: apparent power, reactive power, reactive energy", () => {
+  test("getMeasure classifies each power/energy variant separately, distinct from real power/energy", () => {
+    expect(getMeasure("VA")).toBe("apparentPower");
+    expect(getMeasure("kvar")).toBe("reactivePower");
+    expect(getMeasure("varh")).toBe("reactiveEnergy");
+    // Real power/energy (covered by the `convert` package) stay distinct categories.
+    expect(getMeasure("W")).toBe("power");
+    expect(getMeasure("Wh")).toBe("energy");
+  });
+
+  // The bare IEC symbol "var" is deliberately NOT a registered unit — it
+  // collides with "var" as a variable name (confirmed by a real regression
+  // in ExpressionLexer.identifiers-keywords.spec.ts's "$var" test). Only
+  // "kvar"/"Mvar" are supported; see ExtendedUnits.ts.
+  test("'var' alone is not a UoM unit (reserved for variable names)", () => {
+    expect(getMeasure("var")).toBeUndefined();
+  });
+
+  test("apparent power, reactive power, and real power are not mutually convertible", () => {
+    expect(canConvert("VA", "kvar")).toBe(false);
+    expect(canConvert("VA", "W")).toBe(false);
+    expect(canConvert("kvar", "W")).toBe(false);
+  });
+
+  test("1 MVA = 1000 kVA = 1,000,000 VA", () => {
+    expect(convertUnit(1, "MVA", "kVA")).toBeCloseTo(1000, 10);
+    expect(convertUnit(1, "MVA", "VA")).toBeCloseTo(1_000_000, 6);
+  });
+
+  test("1 Mvar = 1000 kvar", () => {
+    expect(convertUnit(1, "Mvar", "kvar")).toBeCloseTo(1000, 10);
+  });
+
+  test("1 kvarh = 1000 varh", () => {
+    expect(convertUnit(1, "kvarh", "varh")).toBeCloseTo(1000, 10);
+  });
+});
+
+describe("extended measures: volume flow rate", () => {
+  test("getMeasure returns 'volumeFlowRate'", () => {
+    expect(getMeasure("m3s")).toBe("volumeFlowRate");
+    expect(getMeasure("m3h")).toBe("volumeFlowRate");
+    expect(getMeasure("lps")).toBe("volumeFlowRate");
+    expect(getMeasure("lpm")).toBe("volumeFlowRate");
+    expect(getMeasure("gpm")).toBe("volumeFlowRate");
+    expect(getMeasure("cfs")).toBe("volumeFlowRate");
+  });
+
+  test("1 m3s = 3600 m3h", () => {
+    expect(convertUnit(1, "m3s", "m3h")).toBeCloseTo(3600, 10);
+  });
+
+  test("1 m3s = 1000 lps", () => {
+    expect(convertUnit(1, "m3s", "lps")).toBeCloseTo(1000, 10);
+  });
+
+  test("1 lps = 60 lpm", () => {
+    expect(convertUnit(1, "lps", "lpm")).toBeCloseTo(60, 10);
+  });
+
+  test("1 gpm ≈ 0.0630901964 lps", () => {
+    expect(convertUnit(1, "gpm", "lps")).toBeCloseTo(0.0630901964, 8);
+  });
+
+  test("1 cfs ≈ 28.3168466 lps", () => {
+    expect(convertUnit(1, "cfs", "lps")).toBeCloseTo(28.3168466, 5);
+  });
+
+  test("volume flow rate is not convertible with plain volume", () => {
+    expect(canConvert("m3s", "l")).toBe(false);
+  });
+});
+
+describe("extended measures: parts-per", () => {
+  test("getMeasure returns 'partsPer'", () => {
+    expect(getMeasure("ppm")).toBe("partsPer");
+    expect(getMeasure("ppb")).toBe("partsPer");
+    expect(getMeasure("ppt")).toBe("partsPer");
+    expect(getMeasure("permille")).toBe("partsPer");
+  });
+
+  test("1 ppm = 1000 ppb = 1,000,000 ppt", () => {
+    expect(convertUnit(1, "ppm", "ppb")).toBeCloseTo(1000, 10);
+    expect(convertUnit(1, "ppm", "ppt")).toBeCloseTo(1_000_000, 6);
+  });
+
+  test("1 permille = 1000 ppm", () => {
+    expect(convertUnit(1, "permille", "ppm")).toBeCloseTo(1000, 10);
+  });
+
+  test("'%' is not part of the Parts-Per UoM category (owned by the Percentage provider)", () => {
+    expect(getMeasure("%")).toBeUndefined();
+  });
+});
+
+describe("extended measures: getBestUnit gracefully no-ops (no 'best' heuristic implemented for custom categories)", () => {
+  test("returns the value and unit unchanged rather than throwing", () => {
+    expect(getBestUnit(5000, "kV")).toEqual({ value: 5000, unit: "kV" });
+    expect(getBestUnit(2, "mph")).toEqual({ value: 2, unit: "mph" });
   });
 });
