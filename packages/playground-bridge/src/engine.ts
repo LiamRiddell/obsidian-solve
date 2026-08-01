@@ -364,7 +364,12 @@ function decodeOpcodeArgs(
  * Uses the engine's lexer to classify the line (headings, blockquotes, code
  * fences, comments, horizontal rules, tables, wikilinks are all skipped).
  * Additionally, skips pure-prose lines that contain no expression indicators
- * (digits, operators, equals, colon, currency, backticks).
+ * (digits, operators, equals, colon, currency, backticks) UNLESS the line's
+ * own normalized token stream proves it's real, registered vocabulary
+ * anyway (see the second check below) — this is what makes all-word
+ * expressions like "weather in Tokyo" or "average of 2, 4, 6" evaluate
+ * correctly instead of being silently treated as prose just because they
+ * contain no digit or symbol.
  *
  * Lines with inline solve markers (`s`...``) are always evaluated.
  */
@@ -376,13 +381,23 @@ function shouldEvaluateLine(engine: ExpressionEngine, text: string): boolean {
 	// Inline solves always evaluate — they contain explicit expression markers.
 	if (classification.hasInlineSolve) return true;
 
-	// Prose gating: skip multi-word lines with no expression indicators.
-	// A multi-word line without digits, operators, currency, equals, colon,
-	// or backticks is almost certainly prose (e.g., "Hello my name is dave").
-	// Single-word identifiers like "pi" or "hello" are allowed through —
-	// they may be valid keyword expressions or variable references.
+	// Prose gating: a multi-word line without digits, operators, currency,
+	// equals, colon, or backticks LOOKS like prose (e.g. "Hello my name is
+	// dave") — but that's only a cheap first guess, not proof. Confirm it
+	// with the real lexer/normalizer before rejecting: any word tokenizes
+	// as the generic IDENT fallback if nothing more specific claims it, but
+	// a genuinely registered keyword or fused multi-word phrase (weather
+	// in <city>, time in <city>, average of X Y Z, if/then/else, ...)
+	// normalizes to its OWN specific token type instead. Only bail out as
+	// prose when even that check finds nothing recognized — this is what
+	// lets all-word expressions with no digit/symbol evaluate correctly
+	// instead of being silently dropped before ever reaching the engine.
 	if (!/[0-9+\-*/^%=<>!&|~(){}\[\],;?#`$£€:\\]/.test(text) && text.includes(' ')) {
-		return false;
+		const tokens = engine.tokenizeForClassification(text).filter(
+			(t) => t.type !== "WS" && t.type !== "NEWLINE"
+		);
+		const firstType = tokens[0]?.type;
+		if (!firstType || firstType === "IDENT") return false;
 	}
 
 	return true;

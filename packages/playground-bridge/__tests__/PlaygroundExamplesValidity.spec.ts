@@ -3,7 +3,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ValueType } from "@solve-js/vm/Value";
 import { exampleData, fullDocumentExamples } from "@bridge/examples";
-import { PLAYGROUND_PACKAGES } from "@bridge/engine";
+import { PLAYGROUND_PACKAGES, runEngine } from "@bridge/engine";
 
 /**
  * Validates every example the playground ships (the single-line snippet
@@ -73,6 +73,40 @@ describe("Playground example content is valid against the real engine", () => {
             const msg = e instanceof Error ? e.message : String(e);
             failures.push(`[${category.name} / ${ex.name}] "${trimmed}" THREW: ${msg}`);
           }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  /**
+   * The test above deliberately bypasses runEngine()/shouldEvaluateLine()
+   * and calls engine.evaluateLine() directly — it proves the engine CAN
+   * evaluate this content, but not that a real playground/webapp session
+   * would ever actually reach it. That gap is exactly what let
+   * "weather in Tokyo" ship silently broken: shouldEvaluateLine()'s
+   * prose-gate heuristic (no digit/symbol + multi-word => assumed prose)
+   * rejected it before the engine ever saw it, and nothing in this file
+   * would have caught that, since it never goes through the gate at all.
+   * This test closes that gap by running every example through the real
+   * runEngine() entry point instead, so any future example this specific
+   * class of bug affects fails loudly here.
+   */
+  test("every single-line example also gets past the playground's line-classifier (shouldEvaluateLine), not silently skipped as prose", () => {
+    primeAllRates();
+    const failures: string[] = [];
+    for (const category of exampleData) {
+      for (const ex of category.examples) {
+        if (KNOWN_STATEFUL_SNIPPETS.has(ex.name)) continue;
+        const expectedLineCount = ex.expression
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0).length;
+        const { lineResults } = runEngine(ex.expression);
+        if (lineResults.length !== expectedLineCount) {
+          failures.push(
+            `[${category.name} / ${ex.name}] "${ex.expression}" -> expected ${expectedLineCount} line result(s), got ${lineResults.length} (some line(s) were silently skipped by shouldEvaluateLine)`
+          );
         }
       }
     }

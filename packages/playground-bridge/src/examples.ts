@@ -221,11 +221,14 @@ export const exampleData: ExampleCategory[] = [
   },
   {
     name: "Time Zones",
-    description: "Convert times between cities. (Also supported but not shown here: \"time in <city>\", \"date in <city>\", and \"time difference between X and Y\" — this playground's line-classifier currently requires a digit/symbol to recognize a line as an expression, so these all-word forms don't display a result as a standalone example here, even though the engine evaluates them correctly.)",
+    description: "Convert times between cities, and query the current time/date or difference between zones.",
     examples: [
       { name: "Convert a time", expression: "6pm Sydney in Chicago", description: "What time is 6pm Sydney time, in Chicago?" },
       { name: "Zone offset", expression: "3pm GMT+8 in Paris", description: "Convert from a numeric UTC offset" },
       { name: "Convert via abbreviation", expression: "2am PST in GMT", description: "Convert using a standard-time abbreviation" },
+      { name: "Current time in a city", expression: "time in Paris", description: "The current time right now, in Paris" },
+      { name: "Current date in a city", expression: "date in Vancouver", description: "The current date right now, in Vancouver" },
+      { name: "Time difference between cities", expression: "time difference between Seattle and Moscow", description: "How far apart two zones' clocks are right now" },
     ]
   },
   {
@@ -244,9 +247,13 @@ export const exampleData: ExampleCategory[] = [
   },
   {
     name: "Live Data",
-    description: "Weather (real Open-Meteo data, built in), plus Stocks/Knowledge — both opt-in, shown here with the default \"not configured\" message since they need a host-supplied API key/fetch function (see packages/core/src/packages/{stocks,knowledge}/ JSDoc). Weather makes a real network call, so its result may vary or fail without connectivity. Note: \"weather in <city>\"/\"temperature in <city>\" are all-word lines with no digit/symbol — this playground's line-classifier currently requires one to recognize a line as an expression (the same limitation noted under \"Time Zones\"), so they won't display a result as a standalone example here even though the engine evaluates them correctly.",
+    description: "Weather (real Open-Meteo data, built in), plus Stocks/Knowledge — both opt-in, shown here with the default \"not configured\" message since they need a host-supplied API key/fetch function (see packages/core/src/packages/{stocks,knowledge}/ JSDoc). Weather makes a real network call, so its result may vary or fail without connectivity.",
     examples: [
-      { name: "Weather in a city", expression: "weather in Tokyo", description: "Live conditions + temperature via Open-Meteo (free, keyless) — see category note re: this playground's line-classifier" },
+      { name: "Weather in a city", expression: "weather in Tokyo", description: "Live conditions + temperature via Open-Meteo (free, keyless)" },
+      { name: "Temperature in a city", expression: "temperature in Berlin", description: "Current temperature only, via Open-Meteo" },
+      { name: "Feels-like temperature", expression: "feels like in Cairo", description: "Apparent temperature accounting for wind/humidity" },
+      { name: "Today's high", expression: "high in Miami", description: "Today's forecast high temperature" },
+      { name: "Today's low", expression: "low in Reykjavik", description: "Today's forecast low temperature" },
       { name: "Stock quote (unconfigured)", expression: "stock(AAPL)", description: "Shows the honest \"provider not configured\" error by default — a host wires up createStocksPackage({ fetchQuote })" },
     ]
   },

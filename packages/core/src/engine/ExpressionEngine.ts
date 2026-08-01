@@ -2170,6 +2170,39 @@ export class ExpressionEngine {
         };
     }
 
+    /**
+     * Lex + normalize (phrase fusion, implicit multiply, domain token
+     * merging) `text` WITHOUT parsing or executing it — a cheap way for a
+     * host to inspect what token stream a line would actually produce,
+     * without paying for a full parse/compile/VM pass.
+     *
+     * Built for line-classification heuristics like "does this look like a
+     * real expression, or is it prose I shouldn't bother evaluating" — a
+     * host that only checks for digits/operators/symbols before deciding
+     * whether to evaluate a line will incorrectly skip genuine all-word
+     * expressions (`weather in Tokyo`, `time in Paris`, `average of X, Y,
+     * Z`), since none of those contain a digit or symbol. Checking whether
+     * `tokenizeForClassification(text)[0]?.type` is anything OTHER than the
+     * generic `IDENT` fallback is a reliable signal that the lexer/normalizer
+     * actually recognized a specific keyword or fused multi-word phrase —
+     * i.e., this is real, registered vocabulary, not an arbitrary word that
+     * merely happens to be lexable (every word lexes as IDENT if nothing
+     * more specific claims it, so IDENT alone proves nothing about intent).
+     *
+     * Assumes the caller has already ruled out markdown-structural lines
+     * (headings, code fences, etc.) via `getLexer().classifyLine()` — this
+     * always tokenizes as a plain expression line, mirroring
+     * `Lexer.resetExpression()`'s own "caller already knows this is
+     * evaluable" contract.
+     */
+    tokenizeForClassification(text: string): Token[] {
+        this.lexer.resetExpression(text);
+        const rawTokens = Array.from(this.lexer);
+        const exprTokens = rawTokens.filter(t => t.type !== 'COMMENT');
+        if (exprTokens.length === 0) return [];
+        return this.normalizer.normalize(exprTokens);
+    }
+
     getParser(): PrecedenceParser {
         return this.parser;
     }
