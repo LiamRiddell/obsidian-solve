@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 
 /**
  * InParselet — handles the standalone `IN` keyword as a postfix conversion.
@@ -33,12 +34,16 @@ export class InParselet implements InfixParselet {
 			targetToken.type === "DOLLAR" ||
 			targetToken.type === "POUND" ||
 			targetToken.type === "EURO" ||
+			targetToken.type === "YEN" ||
+			targetToken.type === "RUBLE" ||
+			targetToken.type === "WON" ||
+			targetToken.type === "CURRENCY_SYMBOL" ||
 			targetToken.type === "IDENT" ||
 			targetToken.type === "IN"
 		)) {
 			parser.consume();
 			builder.emitOpcode(OpCode.PUSH_STRING);
-			builder.emitString(targetToken.value);
+			builder.emitString(resolveCurrencyAlias(targetToken.value) ?? targetToken.value);
 			builder.emitOpcode(OpCode.UOM_CONVERT_IN);
 		}
 		// If the next token isn't a valid target unit, silently skip.

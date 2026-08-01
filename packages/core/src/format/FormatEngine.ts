@@ -2,6 +2,7 @@ import { Value, ValueType } from "@solve-js/vm/Value";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat } from "@solve-js/utilities/Number";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
+import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings): string {
   const dp = settings.floatResult.decimalPlaces;
@@ -40,11 +41,11 @@ function formatDatetime(value: number, locale: ILocale): string {
 function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings): string {
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
   const useUnitNames = settings.unitOfMeasurementResult.unitNames;
-  
+
   // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
   const timeSpanUnits = ["days", "weeks", "hours", "minutes", "seconds", "day", "week", "hour", "minute", "second"];
   const isTimeSpan = unit && timeSpanUnits.includes(unit);
-  
+
   let formatted: string;
   if (isTimeSpan && value === Math.floor(value)) {
     // For whole number TimeSpan values, format as integer
@@ -53,7 +54,23 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
     // For other values, use the configured decimal places
     formatted = value.toFixed(dp);
   }
-  
+
+  // Currency display: symbol + culturally-conventional placement (e.g.
+  // "$100.00" prefix vs "100.00 kr" suffix) instead of the generic
+  // "amount CODE" fallback below — see uom/CurrencyAliases.ts's
+  // CURRENCY_DISPLAY table for the exact set covered and the reasoning
+  // behind each placement choice. Any currency code NOT in that table
+  // (most of the ~150 `CurrencyExchange.isCurrency()` recognizes) falls
+  // through to the unchanged "amount CODE" format below.
+  const currencyDisplay = unit ? CURRENCY_DISPLAY[unit.toUpperCase()] : undefined;
+  if (currencyDisplay) {
+    const sep = currencyDisplay.spaced ? " " : "";
+    const withSymbol = currencyDisplay.position === "prefix"
+      ? `${currencyDisplay.symbol}${sep}${formatted}`
+      : `${formatted}${sep}${currencyDisplay.symbol}`;
+    return `= ${withSymbol}`;
+  }
+
   const unitLabel = useUnitNames ? (unit || "") : (unit || "");
   return `= ${formatted} ${unitLabel}`.trim();
 }

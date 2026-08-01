@@ -4,6 +4,12 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
+
+/** Resolve a currency WORD alias (e.g. "euros" -> "EUR") if recognized; otherwise return `rawUnit` unchanged. See uom/CurrencyAliases.ts. */
+function resolveUnitAlias(rawUnit: string): string {
+  return resolveCurrencyAlias(rawUnit) ?? rawUnit;
+}
 
 export class ConvertParselet implements PrefixParselet {
 	readonly category = "UoM";
@@ -15,14 +21,14 @@ export class ConvertParselet implements PrefixParselet {
     if (nextToken && nextToken.type === "UNIT") {
       parser.consume();
       builder.emitOpcode(OpCode.PUSH_STRING);
-      builder.emitString(nextToken.value);
+      builder.emitString(resolveUnitAlias(nextToken.value));
 
       if (parser.peek()?.type === "TO") {
         parser.consume("TO");
         const targetToken = parser.consume();
         if (targetToken?.type === "UNIT") {
           builder.emitOpcode(OpCode.PUSH_STRING);
-          builder.emitString(targetToken.value);
+          builder.emitString(resolveUnitAlias(targetToken.value));
           builder.emitOpcode(OpCode.UOM_CONVERT_TO);
         } else if (targetToken?.type === "BEST") {
           builder.emitOpcode(OpCode.UOM_BEST);
@@ -40,10 +46,12 @@ export class ConvertParselet implements PrefixParselet {
       const targetToken = parser.peek();
       if (targetToken?.type === "UNIT" || targetToken?.type === "IN" ||
           targetToken?.type === "DOLLAR" || targetToken?.type === "POUND" ||
-          targetToken?.type === "EURO" || targetToken?.type === "IDENT") {
+          targetToken?.type === "EURO" || targetToken?.type === "YEN" ||
+          targetToken?.type === "RUBLE" || targetToken?.type === "WON" ||
+          targetToken?.type === "CURRENCY_SYMBOL" || targetToken?.type === "IDENT") {
         parser.consume();
         builder.emitOpcode(OpCode.PUSH_STRING);
-        builder.emitString(targetToken.value);
+        builder.emitString(resolveUnitAlias(targetToken.value));
         builder.emitOpcode(OpCode.UOM_CONVERT_IN);
       } else if (targetToken?.type === "BEST") {
         parser.consume();
