@@ -373,4 +373,70 @@ describe("ExpressionEngine constructor — packages parameter", () => {
     // Lines are classified but evaluation will fail — should have errors
     expect(result.lines.length).toBe(2);
   });
+
+  // ── Per-package containment (gap found during the error-handling pass) ──
+  //
+  // registerPackage()'s lexerVocabulary sub-registration is the one call in
+  // that method that can throw (ExpressionLexer.registerVocabulary()'s hard
+  // guard against overriding a built-in keyword/operator/unit — every other
+  // sub-registration there is already "warn and proceed"). Before this fix,
+  // an unguarded throw from one bad package (most plausibly third-party,
+  // passed via this constructor's `packages` param) escaped the constructor
+  // loop entirely: `new ExpressionEngine(...)` never returned an instance,
+  // every package listed AFTER the offender never registered, and anything
+  // the offending or earlier packages already wrote into shared
+  // module-level registries had no owning engine instance left to clean up.
+
+  test("a package whose lexerVocabulary collides with a built-in keyword is skipped, not fatal to construction", () => {
+    const collidingPackage = {
+      name: "CollidingTestPackage",
+      lexerVocabulary: {
+        // "pi" is a built-in English-locale keyword (see
+        // LexerVocabularyFuzz.spec.ts's BUILTIN_KEYWORDS) — registering it
+        // here reproduces ExpressionLexer.registerVocabulary()'s
+        // PLUGIN_KEYWORD_COLLISION throw deterministically.
+        keywords: { pi: "COLLIDING_PI_TOKEN" },
+      },
+    };
+
+    let engine!: ExpressionEngine;
+    expect(() => {
+      engine = new ExpressionEngine("en", false, undefined, undefined, [
+        ARITHMETIC_PACKAGE,
+        collidingPackage,
+        VARIABLES_PACKAGE,
+      ]);
+    }).not.toThrow();
+
+    // Packages registered before AND after the offender in the list still
+    // work — construction didn't abort partway through.
+    expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
+    engine.evaluateLine(2, ":x = 100");
+    expect(engine.evaluateLine(3, ":x + 50")[0].toNumber()).toBe(150);
+  });
+
+  test("a package that fails registration is not left in a phantom registeredPackages entry", () => {
+    const collidingPackage = {
+      name: "CollidingTestPackage2",
+      lexerVocabulary: { keywords: { pi: "COLLIDING_PI_TOKEN_2" } },
+    };
+    const engine = new ExpressionEngine("en", false, undefined, undefined, [
+      ARITHMETIC_PACKAGE,
+      collidingPackage,
+    ]);
+
+    // Since it never actually registered, re-registering it directly
+    // (registerPackage() itself still throws for a single bad package —
+    // only the constructor's loop contains the failure) should throw the
+    // SAME PLUGIN_KEYWORD_COLLISION error again, not silently no-op as it
+    // would if a stale "already registered" entry had survived the failed
+    // construction-time attempt (that path logs a warning and calls
+    // unregisterPackage() instead of re-attempting registration).
+    expect.assertions(1);
+    try {
+      engine.registerPackage(collidingPackage);
+    } catch (e) {
+      expect((e as { code?: string }).code).toBe("PLUGIN_KEYWORD_COLLISION");
+    }
+  });
 });

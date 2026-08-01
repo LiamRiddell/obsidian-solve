@@ -23,7 +23,7 @@ import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient } from "@solve-js/services/DataQueryService";
-import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { ErrorFactory, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
 import {
 	ResolverRegistry,
 } from "@solve-js/resolvers/ResolverRegistry";
@@ -345,7 +345,33 @@ export class ExpressionEngine {
 
         const pkgList = packages ?? BUILTIN_PACKAGES;
         for (const pkg of pkgList) {
-            this.registerPackage(pkg);
+            // Per-package containment: registerPackage() can throw (a
+            // lexerVocabulary keyword/operator/unit colliding with a
+            // built-in one — ExpressionLexer.registerVocabulary()'s hard
+            // guard, the one sub-registration in registerPackage() that
+            // isn't already "warn and proceed"). Unguarded, that throw used
+            // to escape the constructor itself: every package after the
+            // offender in pkgList never got registered, `new
+            // ExpressionEngine(...)` never returned an instance, and
+            // whatever THIS package or earlier ones already wrote into
+            // shared module-level registries (pluginFunctionRegistry,
+            // sharedVariableResolver, TokenCategoryMap, asConverterRegistry)
+            // had no owning engine instance left to call
+            // unregisterPackage() and clean it up. Same containment shape
+            // as AsyncResolutionBatcher.reExecuteMainThread()'s fatal-bug
+            // fix: one bad package (most likely a third-party one passed via
+            // the `packages` constructor param, not a built-in) is skipped
+            // with a clear, verbose error instead of taking the whole engine
+            // down.
+            try {
+                this.registerPackage(pkg);
+            } catch (e) {
+                const engineError = normalizeUnknownError(e);
+                console.error(
+                    `[ExpressionEngine] Failed to register package "${pkg.name}" — skipping it and continuing ` +
+                    `construction with the remaining packages: ${engineError.format()}`
+                );
+            }
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
@@ -440,7 +466,6 @@ export class ExpressionEngine {
             const log = conflict.severity === "error" ? console.error : console.warn;
             log(`[ExpressionEngine] Package compatibility ${conflict.severity} (${conflict.kind}): ${conflict.detail}`);
         }
-        this.registeredPackages.set(pkg.name, pkg);
 
         // Track shared-registry contributions so unregisterPackage() can
         // reverse them. Isolated per-engine registrations (parselets,
@@ -459,6 +484,16 @@ export class ExpressionEngine {
             asConverterNames: [] as string[],
         };
 
+        // Only lexerVocabulary can throw here (built-in keyword/operator/unit
+        // collision, ExpressionLexer.registerVocabulary()'s hard guard) —
+        // every other sub-registration below is already "warn and proceed".
+        // Deliberately done BEFORE registeredPackages/packageContributions
+        // are recorded (see below) so a throw here leaves no phantom
+        // entry — the caller's try/catch (registerPackage() itself still
+        // throws for a single bad package; ExpressionEngine's constructor
+        // catches per-package so one bad package can't take down engine
+        // construction, see that loop's own comment) sees a package that
+        // registered NOTHING, not a partially-registered one.
         if (pkg.lexerVocabulary) {
             this.lexer.registerVocabulary(pkg.lexerVocabulary);
         }
@@ -517,6 +552,12 @@ export class ExpressionEngine {
         }
 
         this.packageContributions.set(pkg.name, contribution);
+        // Recorded LAST — only once every sub-registration above actually
+        // succeeded. If this ran up front (as it used to), a mid-function
+        // throw from lexerVocabulary would leave a phantom entry: callers
+        // checking registeredPackages.has(pkg.name) would see "registered"
+        // for a package that contributed nothing.
+        this.registeredPackages.set(pkg.name, pkg);
     }
 
     /**
