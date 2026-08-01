@@ -8,6 +8,8 @@
  * with a small synthetic grammar, independent of any real package.
  */
 
+import { registerPackageForTesting } from "@tools/testUtils";
+import { ARITHMETIC_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { TokenTypes } from "@solve-js/lexer/Token";
@@ -16,7 +18,7 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
-import { registerArithmeticParselets } from "@solve-js/packages/arithmetic/parselets/index";
+
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value } from "@solve-js/vm/Value";
@@ -47,7 +49,7 @@ const testPattern = definePhrasePattern({
         { kind: "keyword", tokenTypes: ["BETWEEN"] },
         // "and" lexes as PLUS (en.ts: `and: "PLUS"`, a synonym for
         // arithmetic "+") — not a dedicated AND token. Since PLUS is also
-        // a real active infix operator here (registerArithmeticParselets),
+        // a real active infix operator here (registerPackageForTesting(ARITHMETIC_PACKAGE, )),
         // this first expr slot MUST use a binding power above Sum, or
         // parseExpression() will happily swallow "and 3" as if computing
         // "2 + 3" instead of stopping so the PLUS keyword slot below can
@@ -101,7 +103,7 @@ function tokenize(lexer: Lexer, input: string) {
 function run(input: string): Value {
   const lexer = new Lexer();
   const registry = new ParseletRegistry();
-  registerArithmeticParselets(registry);
+  registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
   const parser = new Parser(registry);
   const builder = new BytecodeBuilder();
   const tokens = tokenize(lexer, input);

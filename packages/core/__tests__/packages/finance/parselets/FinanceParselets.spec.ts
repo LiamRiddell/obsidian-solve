@@ -22,15 +22,15 @@
  * variants -> $26.84 / $322.08 / $0.88 / $1,932.48.
  */
 
+import { registerPackageForTesting } from "@tools/testUtils";
+import { ARITHMETIC_PACKAGE, FINANCE_PACKAGE, FUNCTION_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { TokenTypes } from "@solve-js/lexer/Token";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { registerArithmeticParselets } from "@solve-js/packages/arithmetic/parselets/index";
-import { registerFunctionParselets } from "@solve-js/packages/function/parselets/index";
-import { registerFinanceParselets } from "@solve-js/packages/finance/parselets/index";
+
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
@@ -50,9 +50,9 @@ function parseAndExecute(input: string): Value {
   const lexer = new Lexer();
   const tokens = tokenize(lexer, input);
   const registry = new ParseletRegistry();
-  registerArithmeticParselets(registry);
-  registerFunctionParselets(registry);
-  registerFinanceParselets(registry);
+  registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
+  registerPackageForTesting(FUNCTION_PACKAGE, registry);
+  registerPackageForTesting(FINANCE_PACKAGE, registry);
   const parser = new Parser(registry);
   const builder = new BytecodeBuilder();
   parser.load(tokens);

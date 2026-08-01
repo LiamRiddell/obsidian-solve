@@ -7,6 +7,8 @@
  * function calls, constants, keywords, bitwise, hex, and percentages.
  */
 
+import { registerPackageForTesting } from "@tools/testUtils";
+import { ARITHMETIC_PACKAGE, BIGINT_PACKAGE, FUNCTION_PACKAGE, PERCENTAGE_PACKAGE, VARIABLES_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { Parser } from "@solve-js/parser/Parser";
@@ -14,18 +16,18 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { registerArithmeticParselets } from "@solve-js/packages/arithmetic/parselets/index";
-import { registerPercentageParselets } from "@solve-js/packages/percentage/parselets/index";
-import { registerFunctionParselets } from "@solve-js/packages/function/parselets/index";
-import { registerVariableParselets } from "@solve-js/packages/variables/parselets/index";
+
+
+
+
 
 function fullEval(expression: string): number {
   const lexer = new Lexer();
   const reg = new ParseletRegistry();
-  registerArithmeticParselets(reg);
-  registerPercentageParselets(reg);
-  registerFunctionParselets(reg);
-  registerVariableParselets(reg);
+  registerPackageForTesting(ARITHMETIC_PACKAGE, reg);
+  registerPackageForTesting(PERCENTAGE_PACKAGE, reg);
+  registerPackageForTesting(FUNCTION_PACKAGE, reg);
+  registerPackageForTesting(VARIABLES_PACKAGE, reg);
   const parser = new Parser(reg);
 
   const tokens: any[] = [];
@@ -250,10 +252,8 @@ describe("Full pipeline: Lexer → Parser → BytecodeBuilder → VM", () => {
   test("BODMAS: expression with hex: 0xFF + 1 = 256", () => {
     const lexer = new Lexer();
     const registry = new ParseletRegistry();
-    registerArithmeticParselets(registry);
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { registerBigIntParselets } = require("@solve-js/packages/biginteger/parselets/index");
-    registerBigIntParselets(registry);
+    registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
+    registerPackageForTesting(BIGINT_PACKAGE, registry);
     const parser = new Parser(registry);
     const builder = new BytecodeBuilder();
     const tokens: any[] = [];

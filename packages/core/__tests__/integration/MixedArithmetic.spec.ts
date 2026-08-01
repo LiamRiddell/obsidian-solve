@@ -1,3 +1,5 @@
+import { registerPackageForTesting } from "@tools/testUtils";
+import { ARITHMETIC_PACKAGE, BIGINT_PACKAGE, CURRENCY_PACKAGE, DATETIME_PACKAGE, DICE_PACKAGE, FUNCTION_PACKAGE, PERCENTAGE_PACKAGE, UOM_PACKAGE, VECTOR_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test, beforeAll, jest } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { Parser } from "@solve-js/parser/Parser";
@@ -5,15 +7,15 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { registerArithmeticParselets } from "@solve-js/packages/arithmetic/parselets/index";
-import { registerPercentageParselets } from "@solve-js/packages/percentage/parselets/index";
-import { registerUomParselets } from "@solve-js/packages/uom/parselets/index";
-import { registerCurrencyParselets } from "@solve-js/packages/currency/parselets/index";
-import { registerVectorParselets } from "@solve-js/packages/vector/parselets/index";
-import { registerBigIntParselets } from "@solve-js/packages/biginteger/parselets/index";
-import { registerFunctionParselets } from "@solve-js/packages/function/parselets/index";
-import { registerDatetimeParselets } from "@solve-js/packages/datetime/parselets/index";
-import { registerDiceParselets } from "@solve-js/packages/dice/parselets/index";
+
+
+
+
+
+
+
+
+
 import { TokenTypes } from "@solve-js/lexer/Token";
 import { Value } from "@solve-js/vm/Value";
 import { currencyExchangeService } from "@solve-js/uom/CurrencyExchange";
@@ -62,15 +64,15 @@ function evalFull(input: string): Value {
   const lexer = new Lexer();
   const tokens = tokenize(lexer, input);
   const registry = new ParseletRegistry();
-  registerArithmeticParselets(registry);
-  registerPercentageParselets(registry);
-  registerUomParselets(registry);
-  registerCurrencyParselets(registry);
-  registerVectorParselets(registry);
-  registerBigIntParselets(registry);
-  registerFunctionParselets(registry);
-  registerDatetimeParselets(registry);
-  registerDiceParselets(registry);
+  registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
+  registerPackageForTesting(PERCENTAGE_PACKAGE, registry);
+  registerPackageForTesting(UOM_PACKAGE, registry);
+  registerPackageForTesting(CURRENCY_PACKAGE, registry);
+  registerPackageForTesting(VECTOR_PACKAGE, registry);
+  registerPackageForTesting(BIGINT_PACKAGE, registry);
+  registerPackageForTesting(FUNCTION_PACKAGE, registry);
+  registerPackageForTesting(DATETIME_PACKAGE, registry);
+  registerPackageForTesting(DICE_PACKAGE, registry);
   const parser = new Parser(registry);
   const builder = new BytecodeBuilder();
   parser.load(tokens);

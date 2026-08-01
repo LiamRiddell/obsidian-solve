@@ -1,13 +1,15 @@
+import { registerPackageForTesting } from "@tools/testUtils";
+import { ARITHMETIC_PACKAGE, CURRENCY_PACKAGE, PERCENTAGE_PACKAGE, UOM_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test, beforeAll, jest } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { TokenTypes } from "@solve-js/lexer/Token";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { registerArithmeticParselets } from "@solve-js/packages/arithmetic/parselets/index";
-import { registerUomParselets } from "@solve-js/packages/uom/parselets/index";
-import { registerCurrencyParselets } from "@solve-js/packages/currency/parselets/index";
-import { registerPercentageParselets } from "@solve-js/packages/percentage/parselets/index";
+
+
+
+
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
@@ -56,10 +58,10 @@ function parseAndExecute(input: string): Value {
   const lexer = new Lexer();
   const tokens = tokenize(lexer, input);
   const registry = new ParseletRegistry();
-  registerArithmeticParselets(registry);
-  registerUomParselets(registry);
-  registerCurrencyParselets(registry);
-  registerPercentageParselets(registry);
+  registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
+  registerPackageForTesting(UOM_PACKAGE, registry);
+  registerPackageForTesting(CURRENCY_PACKAGE, registry);
+  registerPackageForTesting(PERCENTAGE_PACKAGE, registry);
   const parser = new Parser(registry);
   const builder = new BytecodeBuilder();
   parser.load(tokens);
@@ -210,6 +212,36 @@ describe("UoM Lexer", () => {
     }
     expect(types).toEqual(["YEN", "NUMBER"]);
   });
+
+  // ₹/₺/₴/₪/₫/₦/₱ — expanded currency-symbol support (rupee, lira, hryvnia,
+  // shekel, dong, naira, peso), all sharing the single generic
+  // CURRENCY_SYMBOL token type + CurrencySymbolParselet (unlike $/£/€/¥/₽/₩
+  // which each got their own dedicated token type historically).
+  test.each([
+    ["₹", "INR"],
+    ["₺", "TRY"],
+    ["₴", "UAH"],
+    ["₪", "ILS"],
+    ["₫", "VND"],
+    ["₦", "NGN"],
+    ["₱", "PHP"],
+  ])("%s lexed as CURRENCY_SYMBOL token", (symbol) => {
+    const lexer = new Lexer();
+    lexer.reset(symbol);
+    const t = lexer.next();
+    expect(t!.type).toBe("CURRENCY_SYMBOL");
+  });
+
+  test("'₹1000' lexes as CURRENCY_SYMBOL then NUMBER", () => {
+    const lexer = new Lexer();
+    lexer.reset("₹1000");
+    const types: string[] = [];
+    for (const t of lexer) {
+      if (t.type === "WS") continue;
+      types.push(t.type);
+    }
+    expect(types).toEqual(["CURRENCY_SYMBOL", "NUMBER"]);
+  });
 });
 
 describe("UomLiteralParselet (infix UNIT)", () => {
@@ -310,6 +342,112 @@ describe("CurrencySymbolParselet ($, £, €)", () => {
 
   test("$0.5 + $0.5 = 1", () => {
     expect(parseNum("$0.5 + $0.5")).toBe(1);
+  });
+});
+
+describe("CurrencySymbolParselet — expanded symbol set (₹, ₺, ₴, ₪, ₫, ₦, ₱)", () => {
+  test.each([
+    ["₹100", "INR"],
+    ["₺100", "TRY"],
+    ["₴100", "UAH"],
+    ["₪100", "ILS"],
+    ["₫100", "VND"],
+    ["₦100", "NGN"],
+    ["₱100", "PHP"],
+  ])("%s produces uomValue(100, '%s')", (expr, iso) => {
+    const result = parseAndExecute(expr);
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.toNumber()).toBe(100);
+    expect(result.unit).toBe(iso);
+  });
+
+  test("₹500 + ₹500 adds both as INR", () => {
+    const result = parseAndExecute("₹500 + ₹500");
+    expect(result.unit).toBe("INR");
+    expect(result.toNumber()).toBe(1000);
+  });
+});
+
+describe("Currency WORD aliases (dollar, euro, peso, franc, krona, krone, riyal, rial)", () => {
+  test.each([
+    ["5 dollars", "USD", 5],
+    ["5 dollar", "USD", 5],
+    ["10 euros", "EUR", 10],
+    ["10 euro", "EUR", 10],
+    ["7 yen", "JPY", 7],
+    ["3 rubles", "RUB", 3],
+    ["3 roubles", "RUB", 3],
+    ["4 won", "KRW", 4],
+    ["6 rupees", "INR", 6],
+    ["8 yuan", "CNY", 8],
+    ["9 rand", "ZAR", 9],
+    ["11 reais", "BRL", 11],
+    ["12 shekels", "ILS", 12],
+    ["13 lira", "TRY", 13],
+    ["14 hryvnias", "UAH", 14],
+    ["15 zlotys", "PLN", 15],
+    ["16 forint", "HUF", 16],
+    ["17 koruna", "CZK", 17],
+    ["18 dirhams", "AED", 18],
+    ["19 ringgit", "MYR", 19],
+    ["20 rupiah", "IDR", 20],
+    ["21 baht", "THB", 21],
+    ["22 dong", "VND", 22],
+    ["23 naira", "NGN", 23],
+  ])("'%s' resolves to uomValue(%d, '%s')", (expr, iso, amount) => {
+    const result = parseAndExecute(expr);
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.toNumber()).toBe(amount);
+    expect(result.unit).toBe(iso);
+  });
+
+  // Documented ambiguous defaults — see uom/CurrencyAliases.ts's doc comment
+  // for why each of these picks one specific real currency over its
+  // same-spelling siblings (peso also used by several other countries,
+  // franc also used by African currencies, krona/krone shared with Danish
+  // krone, riyal/rial shared across Gulf states and Iran).
+  test.each([
+    ["100 pesos", "MXN"],
+    ["100 francs", "CHF"],
+    ["100 krona", "SEK"],
+    ["100 krone", "NOK"],
+    ["100 riyals", "SAR"],
+    ["100 rials", "SAR"],
+  ])("'%s' defaults to %s (documented ambiguity)", (expr, iso) => {
+    const result = parseAndExecute(expr);
+    expect(result.unit).toBe(iso);
+  });
+
+  test("'pound'/'pounds' is NOT resolved as currency — stays the pre-existing Mass unit", () => {
+    const result = parseAndExecute("5 pounds");
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.unit).toBe("pounds");
+    expect(result.unit).not.toBe("GBP");
+  });
+
+  test("convert 1 pound to kg still performs a Mass conversion (~0.4536), not a currency one", () => {
+    expect(parseNum("convert 1 pound to kg")).toBeCloseTo(0.4536, 3);
+  });
+
+  test("word aliases are case-sensitive — 'Euro'/'DOLLARS' don't lex as UNIT at all", () => {
+    // Capitalized forms aren't in knownUnits (case-sensitive, no aliasing),
+    // so they lex as plain IDENT and never reach UomLiteralParselet.
+    const lexer = new Lexer();
+    lexer.reset("Euro");
+    const t = lexer.next();
+    expect(t!.type).not.toBe("UNIT");
+  });
+
+  test("convert 100 dollars to EUR resolves the word alias before conversion", () => {
+    const result = parseNum("convert 100 dollars to EUR");
+    expect(result).toBeGreaterThan(0);
+    expect(result).toBeLessThan(200);
+  });
+
+  test("100 dollars in GBP resolves the word alias via InParselet", () => {
+    const result = parseNum("100 dollars in GBP");
+    expect(result).toBeGreaterThan(0);
+    expect(result).toBeLessThan(200);
   });
 });
 

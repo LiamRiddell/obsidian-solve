@@ -2,15 +2,15 @@
  * Converters package — the general `<expr> as <type>` mechanism.
  */
 
+import { registerPackageForTesting } from "@tools/testUtils";
+import { ARITHMETIC_PACKAGE, CONVERTERS_PACKAGE, PERCENTAGE_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test, afterEach } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { TokenTypes } from "@solve-js/lexer/Token";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { registerArithmeticParselets } from "@solve-js/packages/arithmetic/parselets/index";
-import { registerPercentageParselets } from "@solve-js/packages/percentage/parselets/index";
-import { registerConvertersParselets } from "@solve-js/packages/converters/parselets/index";
+
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType, numberValue } from "@solve-js/vm/Value";
@@ -33,9 +33,9 @@ function parseAndExecute(input: string): Value {
   const lexer = new Lexer();
   const tokens = tokenize(lexer, input);
   const registry = new ParseletRegistry();
-  registerArithmeticParselets(registry);
-  registerPercentageParselets(registry);
-  registerConvertersParselets(registry);
+  registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
+  registerPackageForTesting(PERCENTAGE_PACKAGE, registry);
+  registerPackageForTesting(CONVERTERS_PACKAGE, registry);
   const parser = new Parser(registry);
   const builder = new BytecodeBuilder();
   parser.load(tokens);

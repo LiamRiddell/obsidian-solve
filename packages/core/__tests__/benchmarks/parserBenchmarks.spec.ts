@@ -5,6 +5,8 @@
  * Uses a fully configured ParseletRegistry (same as ExpressionEngine).
  */
 
+import { registerPackageForTesting } from "@tools/testUtils";
+import { ARITHMETIC_PACKAGE, BIGINT_PACKAGE, CURRENCY_PACKAGE, DATETIME_PACKAGE, DICE_PACKAGE, FUNCTION_PACKAGE, PERCENTAGE_PACKAGE, UOM_PACKAGE, VARIABLES_PACKAGE, VECTOR_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test, afterAll } from "@jest/globals";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
@@ -12,29 +14,29 @@ import { Lexer } from "@solve-js/lexer/Lexer";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 
 // Import all provider registration functions
-import { registerArithmeticParselets } from "@solve-js/packages/arithmetic/parselets/index";
-import { registerPercentageParselets } from "@solve-js/packages/percentage/parselets/index";
-import { registerFunctionParselets } from "@solve-js/packages/function/parselets/index";
-import { registerDatetimeParselets } from "@solve-js/packages/datetime/parselets/index";
-import { registerDiceParselets } from "@solve-js/packages/dice/parselets/index";
-import { registerVariableParselets } from "@solve-js/packages/variables/parselets/index";
-import { registerUomParselets } from "@solve-js/packages/uom/parselets/index";
-import { registerCurrencyParselets } from "@solve-js/packages/currency/parselets/index";
-import { registerVectorParselets } from "@solve-js/packages/vector/parselets/index";
-import { registerBigIntParselets } from "@solve-js/packages/biginteger/parselets/index";
+
+
+
+
+
+
+
+
+
+
 
 function createConfiguredParser(): Parser {
   const registry = new ParseletRegistry();
-  registerArithmeticParselets(registry);
-  registerPercentageParselets(registry);
-  registerFunctionParselets(registry);
-  registerDatetimeParselets(registry);
-  registerDiceParselets(registry);
-  registerVariableParselets(registry);
-  registerUomParselets(registry);
-  registerCurrencyParselets(registry);
-  registerVectorParselets(registry);
-  registerBigIntParselets(registry);
+  registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
+  registerPackageForTesting(PERCENTAGE_PACKAGE, registry);
+  registerPackageForTesting(FUNCTION_PACKAGE, registry);
+  registerPackageForTesting(DATETIME_PACKAGE, registry);
+  registerPackageForTesting(DICE_PACKAGE, registry);
+  registerPackageForTesting(VARIABLES_PACKAGE, registry);
+  registerPackageForTesting(UOM_PACKAGE, registry);
+  registerPackageForTesting(CURRENCY_PACKAGE, registry);
+  registerPackageForTesting(VECTOR_PACKAGE, registry);
+  registerPackageForTesting(BIGINT_PACKAGE, registry);
   return new Parser(registry);
 }
 

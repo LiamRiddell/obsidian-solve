@@ -4,36 +4,3 @@ export { BinaryOpParselet } from "./BinaryOpParselet";
 export { GroupParselet } from "./GroupParselet";
 export { ConstantParselet } from "./ConstantParselet";
 
-import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
-import { BindingPower } from "@solve-js/parser/BindingPower";
-import { OpCode } from "@solve-js/parser/OpCode";
-import { NumberParselet } from "./NumberParselet";
-import { PrefixOpParselet } from "./PrefixOpParselet";
-import { BinaryOpParselet } from "./BinaryOpParselet";
-import { GroupParselet } from "./GroupParselet";
-import { ConstantParselet } from "./ConstantParselet";
-
-export function registerArithmeticParselets(registry: ParseletRegistry): void {
-  registry.registerPrefix("NUMBER", new NumberParselet());
-  registry.registerPrefix("LPAREN", new GroupParselet());
-  registry.registerPrefix("PI", new ConstantParselet());
-  registry.registerPrefix("E", new ConstantParselet());
-  registry.registerPrefix("PLUS", new PrefixOpParselet(OpCode.POS));
-  registry.registerPrefix("MINUS", new PrefixOpParselet(OpCode.NEG));
-
-  registry.registerInfix("PLUS", new BinaryOpParselet(BindingPower.Sum, OpCode.ADD));
-  registry.registerInfix("MINUS", new BinaryOpParselet(BindingPower.Sum, OpCode.SUB));
-  registry.registerInfix("STAR", new BinaryOpParselet(BindingPower.Product, OpCode.MUL));
-  registry.registerInfix("SLASH", new BinaryOpParselet(BindingPower.Product, OpCode.DIV));
-  registry.registerInfix("MOD", new BinaryOpParselet(BindingPower.Product, OpCode.MOD));
-  registry.registerInfix("CARET", new BinaryOpParselet(BindingPower.Exponent, OpCode.EXP));
-
-  registry.registerInfix("TIMES_BY", new BinaryOpParselet(BindingPower.Product, OpCode.MUL));
-  registry.registerInfix("MULTIPLY_BY", new BinaryOpParselet(BindingPower.Product, OpCode.MUL));
-  registry.registerInfix("DIVIDE_BY", new BinaryOpParselet(BindingPower.Product, OpCode.DIV));
-  registry.registerInfix("LSHIFT", new BinaryOpParselet(BindingPower.Sum, OpCode.LSHIFT));
-  registry.registerInfix("RSHIFT", new BinaryOpParselet(BindingPower.Sum, OpCode.RSHIFT));
-  registry.registerInfix("BIT_AND", new BinaryOpParselet(BindingPower.Product, OpCode.BIT_AND));
-  registry.registerInfix("BIT_OR", new BinaryOpParselet(BindingPower.Sum, OpCode.BIT_OR));
-  registry.registerInfix("BIT_XOR", new BinaryOpParselet(BindingPower.BitwiseXor, OpCode.BIT_XOR));
-}

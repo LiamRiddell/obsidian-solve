@@ -85,6 +85,63 @@ describe("FormatEngine", () => {
   });
 });
 
+describe("Currency display formatting (formatUom via CURRENCY_DISPLAY)", () => {
+  it("formats USD as a prefix symbol with no space: $100.00", () => {
+    const result = formatValue(uomValue(100, "USD"));
+    expect(result).toBe("= $100.00");
+  });
+
+  it("formats GBP as a prefix symbol: £250.00", () => {
+    const result = formatValue(uomValue(250, "GBP"));
+    expect(result).toBe("= £250.00");
+  });
+
+  it("formats EUR as a prefix symbol: €50.00", () => {
+    const result = formatValue(uomValue(50, "EUR"));
+    expect(result).toBe("= €50.00");
+  });
+
+  it("formats RUB as a spaced suffix symbol: 100.00 ₽", () => {
+    const result = formatValue(uomValue(100, "RUB"));
+    expect(result).toBe("= 100.00 ₽");
+  });
+
+  it("formats UAH as a spaced suffix symbol: 100.00 ₴", () => {
+    const result = formatValue(uomValue(100, "UAH"));
+    expect(result).toBe("= 100.00 ₴");
+  });
+
+  it("formats VND as an unspaced suffix symbol: 100.00₫", () => {
+    const result = formatValue(uomValue(100, "VND"));
+    expect(result).toBe("= 100.00₫");
+  });
+
+  it("formats SEK as a spaced suffix 'kr': 100.00 kr", () => {
+    const result = formatValue(uomValue(100, "SEK"));
+    expect(result).toBe("= 100.00 kr");
+  });
+
+  it("formats BRL with the multi-character prefix symbol 'R$': R$100.00", () => {
+    const result = formatValue(uomValue(100, "BRL"));
+    expect(result).toBe("= R$100.00");
+  });
+
+  it("is case-insensitive on the unit code (lowercase 'usd' still matches CURRENCY_DISPLAY)", () => {
+    const result = formatValue(uomValue(100, "usd"));
+    expect(result).toBe("= $100.00");
+  });
+
+  it("falls back to the generic 'amount CODE' format for a currency not in CURRENCY_DISPLAY (e.g. AED)", () => {
+    const result = formatValue(uomValue(100, "AED"));
+    expect(result).toBe("= 100.00 AED");
+  });
+
+  it("non-currency units are unaffected by the currency-display path (e.g. cm)", () => {
+    const result = formatValue(uomValue(100, "cm"));
+    expect(result).toBe("= 100.00 cm");
+  });
+});
+
 describe("Locale framework", () => {
   it("loads en locale by default", () => {
     const locale = getLocale("en");

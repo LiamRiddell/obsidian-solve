@@ -12,15 +12,15 @@
  *   parselet).
  */
 
+import { registerPackageForTesting } from "@tools/testUtils";
+import { ARITHMETIC_PACKAGE, DATETIME_PACKAGE, UOM_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test, jest, afterEach } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { TokenTypes } from "@solve-js/lexer/Token";
 import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { registerArithmeticParselets } from "@solve-js/packages/arithmetic/parselets/index";
-import { registerDatetimeParselets } from "@solve-js/packages/datetime/parselets/index";
-import { registerUomParselets } from "@solve-js/packages/uom/parselets/index";
+
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
@@ -45,9 +45,9 @@ function parseAndExecute(input: string): Value {
   const rawTokens = tokenize(lexer, input);
   const tokens = normalizer.normalize(rawTokens);
   const registry = new ParseletRegistry();
-  registerArithmeticParselets(registry);
-  registerDatetimeParselets(registry);
-  registerUomParselets(registry);
+  registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
+  registerPackageForTesting(DATETIME_PACKAGE, registry);
+  registerPackageForTesting(UOM_PACKAGE, registry);
   const parser = new Parser(registry);
   const builder = new BytecodeBuilder();
   parser.load(tokens);
