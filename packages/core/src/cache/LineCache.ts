@@ -20,6 +20,20 @@ export class LineCacheEntry {
  *
  * The string keys exposed by keys()/forEach() keep the historical
  * "line" / "line:expression" format for diagnostics consumers.
+ *
+ * INVARIANT: at most one entry per line number at a time. `set()` stores
+ * the expression alongside the entry ONLY as a same-key staleness check for
+ * `get(line, expression)` — a line's previous text is never meaningfully
+ * cacheable once the line has moved on, since `get()`/`getEntryForLine()`
+ * are only ever called with the line's CURRENT text (see
+ * `ExpressionEngine.reEvaluateLine()`). Before this invariant was enforced,
+ * every distinct keystroke state of a line accumulated its own entry here
+ * forever (nothing ever called `remove()`/`removeAllForLine()` per-edit,
+ * only a full `clear()` on document switch) — an unbounded, session-long
+ * memory leak reachable via ordinary typing, and a latent correctness bug
+ * in `getEntryForLine()`, which picks "first in insertion order" and could
+ * silently return a STALE entry from an old edit of the line instead of
+ * its current one once more than one entry had piled up.
  */
 export class LineCache {
   /** line number → (expression, or "" for expressionless entries) → entry */
@@ -56,6 +70,13 @@ export class LineCache {
       this.byLine.set(line, entries);
     }
     const key = LineCache.exprKey(expression);
+    // Enforce the one-entry-per-line invariant (see class doc comment):
+    // any entry under a DIFFERENT expression key for this same line is for
+    // text this line no longer has — drop it rather than let it pile up.
+    if (entries.size > 0 && !entries.has(key)) {
+      this.count -= entries.size;
+      entries.clear();
+    }
     if (!entries.has(key)) this.count++;
     entries.set(key, entry);
   }

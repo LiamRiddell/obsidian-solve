@@ -93,7 +93,7 @@ describe("LineCache", () => {
     expect(cache.size).toBe(0);
   });
 
-  test("removeAllForLine cleans all entries for a line number", () => {
+  test("removeAllForLine cleans up the entry for a line number", () => {
     const cache = new LineCache();
     cache.set(10, new LineCacheEntry(
       numberValue(1),
@@ -101,15 +101,56 @@ describe("LineCache", () => {
       [],
       null
     ), "expr1");
+    expect(cache.size).toBe(1);
+    cache.removeAllForLine(10);
+    expect(cache.size).toBe(0);
+  });
+
+  // Regression guard for a real, session-long memory leak (and a latent
+  // getEntryForLine() staleness bug): every edit to a line used to add a
+  // NEW entry keyed by that edit's expression text, with nothing ever
+  // evicting the previous one — set() must instead enforce "at most one
+  // entry per line number," since get()/getEntryForLine() are only ever
+  // meaningfully queried with a line's CURRENT text.
+  test("set() for a NEW expression on an already-cached line evicts the old entry instead of accumulating", () => {
+    const cache = new LineCache();
+    cache.set(10, new LineCacheEntry(
+      numberValue(1),
+      { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
+      [],
+      null
+    ), "1 + 1");
+    expect(cache.size).toBe(1);
+
+    // Simulates the user editing line 10's text -- a different expression,
+    // same line number.
     cache.set(10, new LineCacheEntry(
       numberValue(2),
       { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
       [],
       null
-    ), "expr2");
-    expect(cache.size).toBe(2);
-    cache.removeAllForLine(10);
-    expect(cache.size).toBe(0);
+    ), "1 + 2");
+
+    // The old expression's entry is gone -- not still sitting in the map --
+    // and the cache has NOT grown: still exactly one entry for this line.
+    expect(cache.size).toBe(1);
+    expect(cache.get(10, "1 + 1")).toBeUndefined();
+    expect(cache.get(10, "1 + 2")!.result.toNumber()).toBe(2);
+    expect(cache.getEntryForLine(10)!.result.toNumber()).toBe(2);
+  });
+
+  test("many successive edits to the same line never grow the cache past one entry (leak regression)", () => {
+    const cache = new LineCache();
+    for (let i = 0; i < 500; i++) {
+      cache.set(1, new LineCacheEntry(
+        numberValue(i),
+        { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
+        [],
+        null
+      ), `expression-state-${i}`);
+    }
+    expect(cache.size).toBe(1);
+    expect(cache.getEntryForLine(1)!.result.toNumber()).toBe(499);
   });
 
   test("clearLine is alias for removeAllForLine", () => {

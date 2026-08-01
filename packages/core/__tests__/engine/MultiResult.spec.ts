@@ -385,17 +385,22 @@ describe("Engine isolation — evaluateLine direct", () => {
     expect(cached!.result.toNumber()).toBe(99);
   });
 
-  test("line cache entries survive across sequential evaluateLine calls", () => {
-    // Verify that evaluating multiple expressions at the same line number
-    // doesn't cause cross-contamination between expressions.
+  test("re-evaluating the same line number with a new expression replaces the old cache entry, not contaminates it", () => {
+    // Verify that evaluating a new expression at an already-cached line
+    // number cleanly supersedes the previous one -- LineCache enforces
+    // "at most one entry per line number" (see LineCache.ts's doc comment)
+    // since a line's old text is never queried again once the line has
+    // moved on; letting both pile up was a real, unbounded memory leak
+    // (every edit to a line added a new cache entry that nothing ever
+    // evicted) fixed by LineCache.set().
     engine.evaluateLine(1, "10 USD in EUR");
     engine.evaluateLine(1, "100 USD in JPY"); // same line, different expression
 
     const cache = engine.getLineCache();
 
-    expect(cache.get(1, "10 USD in EUR")).toBeDefined();
+    expect(cache.get(1, "10 USD in EUR")).toBeUndefined();
     expect(cache.get(1, "100 USD in JPY")).toBeDefined();
-    expect(cache.size).toBe(2);
+    expect(cache.size).toBe(1);
   });
 
   test("evaluateExpression single call integrates correctly", () => {
