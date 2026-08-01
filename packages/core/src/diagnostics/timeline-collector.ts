@@ -25,6 +25,21 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
   private hasBytecodeBuilt = false;
   private firstBytecodeOpcodesLength = 0;
   private parseletMatches: CategorizedParselet[] = [];
+  private lastExpression = "";
+  private lastInputType = "";
+
+  /**
+   * Current cumulative count of `parselet_matched` events seen since
+   * construction (or the last `reset()`) — a cheap peek that doesn't build
+   * the full report (`getReport()` copies the whole `parseletMatches`
+   * array). Used by `ExpressionEngine.evaluateExpressionWithDiagnostic()`
+   * to capture a "before" baseline per line, since `parseletMatches` itself
+   * is deliberately cumulative across an entire document pass (see
+   * `onPipelineStart`'s doc comment) rather than reset per line.
+   */
+  get parseletMatchCount(): number {
+    return this.parseletMatches.length;
+  }
 
   reset(): void {
     this.events = [];
@@ -36,6 +51,8 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
     this.hasBytecodeBuilt = false;
     this.firstBytecodeOpcodesLength = 0;
     this.parseletMatches = [];
+    this.lastExpression = "";
+    this.lastInputType = "";
   }
 
   /** Stamp the real wall-clock `elapsedNs` onto an event before storing it. */
@@ -60,6 +77,15 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
     if (this.startNs === 0) {
       this.startNs = performance.now() * 1e6;
     }
+    // Tracked incrementally (most-recent wins) so getReport()'s `metadata`
+    // describes the line THIS report is actually about — reading
+    // `events[0]` instead (the old code) froze `expression`/`inputType` on
+    // the very first line ever evaluated in the session, forever, which is
+    // wrong regardless of whether a field is meant to be cumulative or
+    // per-line: nothing downstream ever wanted "line 1's expression" once
+    // the document had moved on to line 50.
+    this.lastExpression = event.expression;
+    this.lastInputType = event.inputType;
     this.events.push(this.stamp(event));
   }
 
@@ -182,10 +208,8 @@ getReport(): DiagnosticReport | undefined {
          parseCategories,
        },
        metadata: {
-         expression:
-           this.events[0]?.type === "pipeline_start" ? this.events[0].expression : "",
-         inputType:
-           this.events[0]?.type === "pipeline_start" ? this.events[0].inputType : "",
+         expression: this.lastExpression,
+         inputType: this.lastInputType,
          timestamp: Date.now(),
          vmTraceEnabled: this.vmStepSeen,
        },

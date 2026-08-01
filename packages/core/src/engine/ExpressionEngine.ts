@@ -130,6 +130,17 @@ export class ExpressionEngine {
     private vm: VM;
     private config: typeof DEFAULT_CONFIG;
     private diagnosticPipeline: DiagnosticPipeline;
+    /**
+     * Direct reference to the timeline collector registered above (when
+     * diagnosticMode is on), kept alongside the generic `diagnosticPipeline`
+     * so `evaluateExpressionWithDiagnostic()` can cheaply read its current
+     * `parseletMatchCount` as a "before" baseline without paying for a full
+     * `getReport()` build (which copies the whole cumulative parselets
+     * array). See that method's use of it for why a baseline is needed at
+     * all — `TimelineDiagnosticCollector`'s state is deliberately cumulative
+     * across an entire document pass, not reset per line.
+     */
+    private timelineCollector?: TimelineDiagnosticCollector;
     /** Registry of async resolvers from registered packages. */
     private resolverRegistry = new ResolverRegistry();
 
@@ -240,7 +251,8 @@ export class ExpressionEngine {
              this.diagnosticPipeline = diagnosticPipeline;
          } else if (diagnosticMode) {
              this.diagnosticPipeline = new DiagnosticPipeline();
-             this.diagnosticPipeline.register(new TimelineDiagnosticCollector());
+             this.timelineCollector = new TimelineDiagnosticCollector();
+             this.diagnosticPipeline.register(this.timelineCollector);
          } else {
              this.diagnosticPipeline = new DiagnosticPipeline();
              // Production: no collectors — pipeline length-check exits immediately with zero overhead
@@ -1248,6 +1260,10 @@ export class ExpressionEngine {
     private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; debug?: DiagnosticReportJSON; diagnostic?: DiagnosticPipelineResult } {
         const pipeline = this.diagnosticPipeline;
         const hasCollectors = pipeline.hasCollectors;
+        // Baseline for slicing THIS line's own parselet_matched events out of
+        // the timeline collector's cumulative-across-the-document array below
+        // — see debug.parselets' construction at the end of this method.
+        const parseletsBefore = this.timelineCollector?.parseletMatchCount ?? 0;
         const trackEnabled = AllocationTracker.isEnabled();
         const stageAllocs: StageAllocation[] = [];
         const stages: PipelineStageResult[] = [];
@@ -1940,11 +1956,25 @@ export class ExpressionEngine {
         // Build debug info — structured diagnostic report
         if (hasCollectors) {
             const reports = pipeline.collectReports();
+            const rawDebug = reports[0]?.toJSON();
+            // `rawDebug.parselets` as returned by TimelineDiagnosticCollector
+            // is cumulative across the WHOLE document pass (deliberately —
+            // see onPipelineStart's doc comment), not scoped to this one
+            // line. Without this slice, every line after the first reports
+            // whichever parselet fired FIRST in the entire session
+            // (typically NumberParselet, from the document's very first
+            // token) as if it were this line's own — a real, confusing
+            // display bug, not evidence that NumberParselet does all the
+            // parsing work. Slicing from the pre-parse baseline gives just
+            // the events this line's own parse actually fired.
+            const debug = rawDebug
+                ? { ...rawDebug, parselets: rawDebug.parselets.slice(parseletsBefore) }
+                : undefined;
             return {
                 value: result!,
                 tokens: normalizedTokens,
                 program,
-                debug: reports[0]?.toJSON() || undefined,
+                debug,
                 diagnostic: this.buildDiagnosticResult(stages, result!, normalizedTokens, program, null),
             };
         }
