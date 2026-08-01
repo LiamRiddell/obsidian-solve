@@ -1,0 +1,75 @@
+{
+  "timestamp": "2026-07-25T11:49:54.552Z",
+  "tiers": {
+    "small": {
+      "cold": {
+        "meanMs": 2.551525000000015,
+        "opsPerSec": 391.9224777339019,
+        "linesPerSec": 39.19224777339019,
+        "exprsPerSec": 39.19224777339019
+      },
+      "warm": {
+        "meanMs": 2.2711534,
+        "opsPerSec": 440.3049129134121,
+        "linesPerSec": 44.030491291341214,
+        "exprsPerSec": 44.030491291341214
+      }
+    },
+    "medium": {
+      "cold": {
+        "meanMs": 22.229325000000017,
+        "opsPerSec": 44.98562147073738,
+        "linesPerSec": 44.98562147073738,
+        "exprsPerSec": 22.49281073536869
+      },
+      "warm": {
+        "meanMs": 23.189443999999995,
+        "opsPerSec": 43.12306927238101,
+        "linesPerSec": 43.12306927238101,
+        "exprsPerSec": 21.561534636190505
+      }
+    },
+    "large": {
+      "cold": {
+        "meanMs": 260.46209,
+        "opsPerSec": 3.839330322504899,
+        "linesPerSec": 38.39330322504899,
+        "exprsPerSec": 7.678660645009798
+      },
+      "warm": {
+        "meanMs": 263.39135000000005,
+        "opsPerSec": 3.796631893947921,
+        "linesPerSec": 37.966318939479216,
+        "exprsPerSec": 7.593263787895842
+      }
+    },
+    "massive": {
+      "cold": {
+        "meanMs": 2547.3852400000005,
+        "opsPerSec": 0.39255939160580194,
+        "linesPerSec": 19.6279695802901,
+        "exprsPerSec": 1.9627969580290097
+      },
+      "warm": {
+        "meanMs": 2575.032980000001,
+        "opsPerSec": 0.388344540736717,
+        "linesPerSec": 19.417227036835847,
+        "exprsPerSec": 1.9417227036835847
+      }
+    }
+  },
+  "stageBreakdown": {
+    "lexNs": 2068.1199999984024,
+    "parseCompileNs": 3922.180000003956,
+    "executeNs": 637.7200000013746,
+    "totalNs": 6628.020000003733,
+    "lexPercent": 31.202681947206518,
+    "parseCompilePercent": 59.175741775096434,
+    "executePercent": 9.621576277697041
+  },
+  "metadata": {
+    "nodeVersion": "v24.16.0",
+    "platform": "win32",
+    "totalLinesAcrossTiers": 0
+  }
+}

@@ -1,4 +1,4 @@
-import type { SolveTokenCategory } from "@solve-js/language/SolveTokenCategory";
+import type { TokenCategory } from "@solve-js/language/TokenCategory";
 
 export type SyntaxHighlightPresetName = "one-dark" | "github-light";
 
@@ -11,5 +11,5 @@ export interface ISyntaxHighlightSettings {
 	 * clear these — a preset sets the base, overrides are the user's own
 	 * deltas on top of whichever preset is active.
 	 */
-	overrides: Partial<Record<SolveTokenCategory, string>>;
+	overrides: Partial<Record<TokenCategory, string>>;
 }

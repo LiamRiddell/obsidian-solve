@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-25T11:49:14.230Z",
+  "results": {
+    "simple_add": 0.2616840000000229,
+    "variable_access": 0.22869999999995344,
+    "vector_creation": 0.3000080000000162,
+    "unit_conversion": 0.5675719999999274,
+    "dice_roll": 0.5482319999999162,
+    "percentage": 0.5481079999999929
+  }
+}

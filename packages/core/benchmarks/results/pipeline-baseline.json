@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-07-25T11:49:00.425Z",
+  "results": {
+    "single_eval_cold": 0.06587493999999947,
+    "single_eval_warm": 0.0025997459999999137,
+    "50_line_doc": 0.34143649999999753,
+    "200_line_doc": 1.1410200000000077,
+    "variable_chain": 0.0789675400000012,
+    "20_inline_solves": 0.15432539999999825,
+    "re_eval_dirty": 0.06537158000000136,
+    "mixed_complex": 0.09702524000000044,
+    "function_plus_literal": 0.05497908500000301
+  }
+}

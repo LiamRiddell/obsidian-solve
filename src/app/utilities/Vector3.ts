@@ -1,4 +1,4 @@
-import { IVector3 } from "@solve-js/providers/vector/IVector3";
+import { IVector3 } from "@solve-js/packages/vector/IVector3";
 
 /**
  * Mathematical operations on 3D vectors.

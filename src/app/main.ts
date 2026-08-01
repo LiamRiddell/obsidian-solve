@@ -3,7 +3,7 @@ import { FeatureFlagClass } from "@app/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { EPluginStatus } from "@app/constants/EPluginStatus";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
-import { solve } from "@solve-js/api/SolveAPI";
+import { packageRegistry } from "@solve-js/api/PackageRegistry";
 import { EngineProvider } from "@app/engine/EngineProvider";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import { SettingTab } from "@app/settings/SettingsTab";
@@ -61,7 +61,7 @@ export default class SolvePlugin extends Plugin {
 
 		await this.registerCommands();
 
-		pluginEventBus.emit(EPluginEvent.SolveEngineReady, solve);
+		pluginEventBus.emit(EPluginEvent.SolveEngineReady, packageRegistry);
 		logger.debug(`[Solve] Fired: SolveEngineReady`);
 	}
 

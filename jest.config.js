@@ -71,7 +71,7 @@ const config = {
 	maxWorkers: 2,
 
 	// Force Jest to recycle workers when they exceed 512MB heap.
-	// Prevents OOM on memory-leak-prone test suites (e.g., LexerPluginFuzz).
+	// Prevents OOM on memory-leak-prone test suites (e.g., LexerVocabularyFuzz).
 	workerIdleMemoryLimit: '512MB',
 
 	// An array of directory names to be searched recursively up from the requiring module's location
@@ -101,13 +101,15 @@ const config = {
 		"^(\\.{1,2}/.*)\\.js$": "$1",
 		"@/(.*)": "<rootDir>/src/$1",
 		"@app/(.*)": "<rootDir>/src/app/$1",
-		"@solve-js/workers/(.*)\\.worker$": "<rootDir>/src/solve-js/__tests__/__mocks__/worker-mock.ts",
-		"@solve-js/(.*)": "<rootDir>/src/solve-js/src/$1",
-		"@tools/(.*)": "<rootDir>/src/solve-js/tools/$1",
-		"test/(.*)": "<rootDir>/src/solve-js/__tests__/$1",
-		"^@codemirror/language$": "<rootDir>/src/solve-js/__tests__/__mocks__/codemirror-language.ts",
-		"^@lezer/common$": "<rootDir>/src/solve-js/__tests__/__mocks__/lezer-common.ts",
-		"^obsidian$": "<rootDir>/src/solve-js/__tests__/__mocks__/obsidian.ts",
+		"@solve-js/workers/(.*)\\.worker$": "<rootDir>/packages/core/__tests__/__mocks__/worker-mock.ts",
+		"@solve-js-examples/(.*)": "<rootDir>/packages/core/examples/$1",
+		"@solve-js/(.*)": "<rootDir>/packages/core/src/$1",
+		"@bridge/(.*)": "<rootDir>/packages/playground-bridge/src/$1",
+		"@tools/(.*)": "<rootDir>/packages/core/tools/$1",
+		"test/(.*)": "<rootDir>/packages/core/__tests__/$1",
+		"^@codemirror/language$": "<rootDir>/packages/core/__tests__/__mocks__/codemirror-language.ts",
+		"^@lezer/common$": "<rootDir>/packages/core/__tests__/__mocks__/lezer-common.ts",
+		"^obsidian$": "<rootDir>/packages/core/__tests__/__mocks__/obsidian.ts",
 	},
 
 	// An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
@@ -144,13 +146,13 @@ const config = {
 	rootDir: ".",
 
 	// A list of paths to directories that Jest should use to search for files in
-	roots: ["<rootDir>", "src/solve-js/__tests__"],
+	roots: ["<rootDir>", "packages/core/__tests__"],
 
 	// Allows you to use a custom runner instead of Jest's default test runner
 	// runner: "jest-runner",
 
 	// The paths to modules that run some code to configure or set up the testing environment before each test
-	setupFiles: ["<rootDir>/src/solve-js/__tests__/__mocks__/jest-setup.ts"],
+	setupFiles: ["<rootDir>/packages/core/__tests__/__mocks__/jest-setup.ts"],
 
 	// A list of paths to modules that run some code to configure or set up the testing framework before each test
 	// setupFilesAfterEnv: [],
@@ -188,7 +190,7 @@ const config = {
 		"heavy/",
 		"benchmarks/",
 		"LexerFuzz\\.spec\\.",
-		"LexerPluginFuzz\\.spec\\.",
+		"LexerVocabularyFuzz\\.spec\\.",
 		"LongDocumentRobustness\\.spec\\."
 	],
 
@@ -206,7 +208,7 @@ const config = {
 		"^.+\\.tsx?$": [
 			"ts-jest",
 			{
-				tsconfig: "./src/solve-js/__tests__/tsconfig.test.json",
+				tsconfig: "./packages/core/__tests__/tsconfig.test.json",
 				skipLibCheck: true,
 				isolatedModules: true
 			},

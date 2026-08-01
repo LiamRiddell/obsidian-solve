@@ -1,4 +1,4 @@
-import { IVector4 } from "@solve-js/providers/vector/IVector4";
+import { IVector4 } from "@solve-js/packages/vector/IVector4";
 
 /**
  * Mathematical operations on 4D vectors (common in graphics and physics).

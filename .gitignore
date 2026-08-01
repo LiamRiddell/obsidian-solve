@@ -25,6 +25,16 @@ playground/.vite
 playground/*.local
 playground/*.env
 
+# webapp (React + shadcn/ui production app)
+webapp/node_modules
+webapp/dist
+webapp/.vite
+webapp/*.local
+webapp/*.env
+
+# @solve/core package build output (tsup)
+packages/core/dist
+
 # Testing
 coverage/
 

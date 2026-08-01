@@ -1,4 +1,4 @@
-import type { SolveTokenCategory } from "@solve-js/language/SolveTokenCategory";
+import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { SyntaxHighlightPresetName } from "@app/settings/definition/ISyntaxHighlightSettings";
 
 /**
@@ -8,7 +8,7 @@ import type { SyntaxHighlightPresetName } from "@app/settings/definition/ISyntax
  * anticipate; they still render with a sensible default via styles/highlight.css
  * and FALLBACK_COLOR below, just without a dedicated picker.
  */
-export const SOLVE_HIGHLIGHT_CATEGORIES: SolveTokenCategory[] = [
+export const SOLVE_HIGHLIGHT_CATEGORIES: TokenCategory[] = [
 	"number",
 	"string",
 	"keyword",
@@ -44,7 +44,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 /** Used when a category (typically plugin-contributed) has no preset entry at all. */
 export const FALLBACK_COLOR = "#ABB2BF";
 
-type Palette = Record<SolveTokenCategory, string>;
+type Palette = Record<TokenCategory, string>;
 
 const ONE_DARK: Palette = {
 	number: "#61AFEF",

@@ -1,0 +1,176 @@
+{
+  "timestamp": "2026-07-25T11:49:09.846Z",
+  "summary": {
+    "meanDeltaNs": -1.0910666666666202,
+    "meanPercentImprovement": -0.22500977292945246,
+    "estimatedAllocCostNs": -1.0910666666666202
+  },
+  "details": [
+    {
+      "name": "simple_literal",
+      "withoutPool": {
+        "meanNs": 2154.305,
+        "p95Ns": 2500,
+        "medianNs": 1700
+      },
+      "withPool": {
+        "meanNs": 2210.33,
+        "p95Ns": 2500,
+        "medianNs": 1800
+      },
+      "deltaNs": -56.02500000000009,
+      "speedupRatio": 1.0260060669218147,
+      "percentImprovement": -2.600606692181474
+    },
+    {
+      "name": "simple_add",
+      "withoutPool": {
+        "meanNs": 2405.564,
+        "p95Ns": 3000,
+        "medianNs": 2000
+      },
+      "withPool": {
+        "meanNs": 2450.778,
+        "p95Ns": 3000,
+        "medianNs": 2000
+      },
+      "deltaNs": -45.21399999999994,
+      "speedupRatio": 1.0187955922187062,
+      "percentImprovement": -1.8795592218706276
+    },
+    {
+      "name": "arithmetic",
+      "withoutPool": {
+        "meanNs": 3200.5233333333335,
+        "p95Ns": 4000,
+        "medianNs": 2800
+      },
+      "withPool": {
+        "meanNs": 3147.7233333333334,
+        "p95Ns": 3800,
+        "medianNs": 2800
+      },
+      "deltaNs": 52.80000000000018,
+      "speedupRatio": 0.9835026979962651,
+      "percentImprovement": 1.6497302003734862
+    },
+    {
+      "name": "nested_parens",
+      "withoutPool": {
+        "meanNs": 2987.75,
+        "p95Ns": 3700,
+        "medianNs": 2600
+      },
+      "withPool": {
+        "meanNs": 2940.9533333333334,
+        "p95Ns": 3200,
+        "medianNs": 2600
+      },
+      "deltaNs": 46.796666666666624,
+      "speedupRatio": 0.9843371544919532,
+      "percentImprovement": 1.5662845508046732
+    },
+    {
+      "name": "function_call",
+      "withoutPool": {
+        "meanNs": 2311.9533333333334,
+        "p95Ns": 2800,
+        "medianNs": 1900
+      },
+      "withPool": {
+        "meanNs": 2284.7433333333333,
+        "p95Ns": 2400,
+        "medianNs": 1900
+      },
+      "deltaNs": 27.210000000000036,
+      "speedupRatio": 0.9882307313008047,
+      "percentImprovement": 1.1769268699195212
+    },
+    {
+      "name": "percentage",
+      "withoutPool": {
+        "meanNs": 2832.1,
+        "p95Ns": 3200,
+        "medianNs": 2200
+      },
+      "withPool": {
+        "meanNs": 2690.13,
+        "p95Ns": 3200,
+        "medianNs": 2200
+      },
+      "deltaNs": 141.9699999999998,
+      "speedupRatio": 0.9498711203700435,
+      "percentImprovement": 5.0128879629956495
+    },
+    {
+      "name": "unit_conversion",
+      "withoutPool": {
+        "meanNs": 2272.175,
+        "p95Ns": 2800,
+        "medianNs": 1900
+      },
+      "withPool": {
+        "meanNs": 2313.47,
+        "p95Ns": 2700,
+        "medianNs": 1900
+      },
+      "deltaNs": -41.29499999999962,
+      "speedupRatio": 1.018174216334569,
+      "percentImprovement": -1.8174216334569129
+    },
+    {
+      "name": "datetime",
+      "withoutPool": {
+        "meanNs": 2212.0066666666667,
+        "p95Ns": 2800,
+        "medianNs": 1900
+      },
+      "withPool": {
+        "meanNs": 2288.7,
+        "p95Ns": 2700,
+        "medianNs": 1900
+      },
+      "deltaNs": -76.69333333333316,
+      "speedupRatio": 1.0346713843538746,
+      "percentImprovement": -3.4671384353874686
+    },
+    {
+      "name": "variable_assign",
+      "withoutPool": {
+        "meanNs": 2264.9,
+        "p95Ns": 2700,
+        "medianNs": 1900
+      },
+      "withPool": {
+        "meanNs": 2282.8,
+        "p95Ns": 2800,
+        "medianNs": 1900
+      },
+      "deltaNs": -17.90000000000009,
+      "speedupRatio": 1.0079032186851518,
+      "percentImprovement": -0.7903218685151703
+    },
+    {
+      "name": "mixed_complex",
+      "withoutPool": {
+        "meanNs": 3866,
+        "p95Ns": 4100,
+        "medianNs": 3400
+      },
+      "withPool": {
+        "meanNs": 3908.56,
+        "p95Ns": 3900,
+        "medianNs": 3400
+      },
+      "deltaNs": -42.559999999999945,
+      "speedupRatio": 1.0110087946197621,
+      "percentImprovement": -1.1008794619762012
+    }
+  ],
+  "metadata": {
+    "nodeVersion": "v24.16.0",
+    "platform": "win32",
+    "poolSize": 4,
+    "description": "Measures parse+compile phase comparing 'new BytecodeBuilder()' (before) vs pooled builder reuse (after). Eliminates 4 heap allocations per expression: opcode[], numbers[], strings[], stringIndex Map."
+  }
+}

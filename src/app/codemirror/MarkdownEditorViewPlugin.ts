@@ -7,13 +7,13 @@ import { Value, ValueType } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
-import { abortLogger } from "@app/utilities/AbortControllerLogger";
+import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { DocumentModel, ViewportRange, LineChange } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
 import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
-import { SolveLanguageService } from "@solve-js/language/SolveLanguageService";
+import { LanguageService } from "@solve-js/language/LanguageService";
 import { categoryClassName, completionItemToOption } from "@solve-js/language/adapters/codemirror";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
@@ -66,10 +66,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	 * Syntax-highlighting language service, sharing this pane's engine so it
 	 * recognizes exactly the same tokens (including any registered
 	 * package's custom ones) that real evaluation does — see
-	 * SolveLanguageService's own doc comment for why reusing the engine
+	 * LanguageService's own doc comment for why reusing the engine
 	 * matters for correctness, not just performance.
 	 */
-	private languageService: SolveLanguageService;
+	private languageService: LanguageService;
 
 	// ── Three-tier evaluator (Phase 5.2 integration) ─────────────────
 	private docModel: DocumentModel;
@@ -96,7 +96,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			EngineConfigMapper.toEngineConfig(this.userSettings)
 		);
 		this.engine = engine;
-		this.languageService = new SolveLanguageService(engine);
+		this.languageService = new LanguageService(engine);
 
 		// ── Initialize DocumentModel + ThreeTierEvaluator ────────────
 		this.docModel = new DocumentModel();

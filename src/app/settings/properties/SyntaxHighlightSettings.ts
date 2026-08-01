@@ -6,7 +6,7 @@ import {
 	SOLVE_HIGHLIGHT_CATEGORIES,
 	SYNTAX_HIGHLIGHT_PRESETS,
 } from "@app/settings/presets/SyntaxHighlightPresets";
-import type { SolveTokenCategory } from "@solve-js/language/SolveTokenCategory";
+import type { TokenCategory } from "@solve-js/language/TokenCategory";
 
 export class SyntaxHighlightSettings {
 	constructor(private parent: UserSettings) {}
@@ -31,7 +31,7 @@ export class SyntaxHighlightSettings {
 		this.parent.settings.syntaxHighlight.preset = value;
 	}
 
-	get overrides(): Partial<Record<SolveTokenCategory, string>> {
+	get overrides(): Partial<Record<TokenCategory, string>> {
 		return (
 			this.parent.settings.syntaxHighlight.overrides ??
 			DEFAULT_SETTINGS.syntaxHighlight.overrides
@@ -39,7 +39,7 @@ export class SyntaxHighlightSettings {
 	}
 
 	/** Set (or clear, with `undefined`) a single category's override color. */
-	setOverride(category: SolveTokenCategory, value: string | undefined): void {
+	setOverride(category: TokenCategory, value: string | undefined): void {
 		const overrides = { ...this.overrides };
 		if (value === undefined) {
 			delete overrides[category];
@@ -56,7 +56,7 @@ export class SyntaxHighlightSettings {
 	 * e.g. a plugin-contributed one). Used both to apply CSS variables and
 	 * to pre-fill the settings UI's color pickers.
 	 */
-	resolvedColor(category: SolveTokenCategory): string {
+	resolvedColor(category: TokenCategory): string {
 		return (
 			this.overrides[category] ??
 			SYNTAX_HIGHLIGHT_PRESETS[this.preset][category] ??

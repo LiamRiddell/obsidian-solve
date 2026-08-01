@@ -1,7 +1,7 @@
 /* Syntax highlight colors for solve expressions in the editor.
  * Class names (cm-solve-{category}) come from
  * @solve-js/language/adapters/codemirror's categoryClassName() — one class
- * per SolveTokenCategory, always following that exact naming convention,
+ * per TokenCategory, always following that exact naming convention,
  * including for categories contributed by solve-js packages at runtime
  * (e.g. cm-solve-osrs-item).
  *
