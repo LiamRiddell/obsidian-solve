@@ -89,6 +89,14 @@ export const CoreErrorCodes = {
   PLUGIN_OPERATOR_COLLISION: "PLUGIN_OPERATOR_COLLISION",
   PLUGIN_KEYWORD_COLLISION: "PLUGIN_KEYWORD_COLLISION",
   PLUGIN_UNIT_COLLISION: "PLUGIN_UNIT_COLLISION",
+  /** `OpRegistry.allocateOpcode()`'s dynamic opcode pool (started at 201) exhausted — too many packages calling it. */
+  OPCODE_POOL_EXHAUSTED: "OPCODE_POOL_EXHAUSTED",
+  /** `VMBuiltins.allocatePluginFunctionIndex()`'s 0-255 index pool (a single opcode-stream byte) exhausted. */
+  PLUGIN_FUNCTION_INDEX_POOL_EXHAUSTED: "PLUGIN_FUNCTION_INDEX_POOL_EXHAUSTED",
+
+  // ── vm/Value.ts caller-contract violations (check isRateUnit()/isTimecodeUnit() first) ──
+  INVALID_RATE_UNIT: "INVALID_RATE_UNIT",
+  INVALID_TIMECODE_UNIT: "INVALID_TIMECODE_UNIT",
 
   // ── errors/EngineError.ts's own fallback normalization ──
   UNEXPECTED_ERROR: "UNEXPECTED_ERROR",

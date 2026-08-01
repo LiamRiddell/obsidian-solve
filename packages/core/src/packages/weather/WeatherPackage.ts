@@ -2,8 +2,9 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
 import { stringValue, uomValue, type Value } from "@solve-js/vm/Value";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { weatherQueryParselet } from "./parselets/WeatherQueryParselet";
-import { fetchCityWeather } from "./OpenMeteoClient";
+import { fetchCityWeather, WeatherErrorCodes } from "./OpenMeteoClient";
 
 /**
  * Live weather data — `weather in <city>`, `temperature in <city>`,
@@ -71,7 +72,11 @@ const { resolver: weatherResolver, pluginFunction: weatherPluginFunction } = cre
 				// Unreachable via this package's own parselets (kind is always
 				// one of the 5 above) — an honest error rather than a guessed
 				// value if some other bytecode ever pushes a malformed query.
-				throw new Error(`Unknown weather query kind "${kind}"`);
+				throw ErrorFactory.internal(
+					WeatherErrorCodes.UNKNOWN_QUERY_KIND,
+					`Unknown weather query kind "${kind}"`,
+					{ kind },
+				);
 		}
 	},
 });

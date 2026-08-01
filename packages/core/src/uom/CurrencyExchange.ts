@@ -4,6 +4,23 @@
  */
 
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+
+/**
+ * Error codes for this service. Co-located rather than unioned into
+ * `errors/ErrorCode.ts`'s core catalog (that catalog is scoped to the
+ * parser/VM/engine/errors/config/lexer layers, not yet the ~17 domain
+ * packages — see that file's module doc for the intended per-package
+ * pattern this follows).
+ */
+export const CurrencyErrorCodes = {
+  /** Frankfurter's rates endpoint returned a non-OK HTTP status. */
+  API_ERROR: "CURRENCY_API_ERROR",
+  /** A requested currency/crypto code isn't in the fetched rate table — an unrecognized code, not an API failure. */
+  UNKNOWN_CODE: "UNKNOWN_CURRENCY_CODE",
+  /** CoinGecko's simple-price endpoint returned a non-OK HTTP status. */
+  CRYPTO_API_ERROR: "CRYPTO_PRICE_API_ERROR",
+} as const;
 
 // ============================================================================
 // CURRENCY EXCHANGE SERVICE
@@ -90,7 +107,7 @@ export class CurrencyExchangeService {
 
     try {
       const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${fromUpper}`, { signal: fetchSignal });
-      if (!response.ok) throw new Error(`Currency API returned ${response.status}`);
+      if (!response.ok) throw ErrorFactory.external(CurrencyErrorCodes.API_ERROR, `Currency API returned ${response.status}`, { status: response.status });
       const data = await response.json();
       // The v2 endpoint returns a flat array of { date, base, quote, rate }
       // entries (one per target currency) rather than the classic v1 shape
@@ -107,7 +124,7 @@ export class CurrencyExchangeService {
               .map((entry: { quote: string; rate: number }) => [entry.quote.toUpperCase(), entry.rate])
           )
         : (data.rates ?? {});
-      if (rates[toUpper] === undefined) throw new Error(`Unknown currency: ${toUpper}`);
+      if (rates[toUpper] === undefined) throw ErrorFactory.validation(CurrencyErrorCodes.UNKNOWN_CODE, `Unknown currency: ${toUpper}`, { code: toUpper });
 
       // The API returns ALL rates for the base currency — cache the whole
       // table so subsequent conversions (including cross pairs via
@@ -151,22 +168,22 @@ export class CurrencyExchangeService {
         const data = await this.fetchCoinGeckoPrices([fromId, toId], "usd", fetchSignal);
         const fromUsd = data[fromId]?.usd;
         const toUsd = data[toId]?.usd;
-        if (typeof fromUsd !== "number") throw new Error(`Unknown currency: ${fromUpper}`);
-        if (typeof toUsd !== "number") throw new Error(`Unknown currency: ${toUpper}`);
+        if (typeof fromUsd !== "number") throw ErrorFactory.validation(CurrencyErrorCodes.UNKNOWN_CODE, `Unknown currency: ${fromUpper}`, { code: fromUpper });
+        if (typeof toUsd !== "number") throw ErrorFactory.validation(CurrencyErrorCodes.UNKNOWN_CODE, `Unknown currency: ${toUpper}`, { code: toUpper });
         rate = fromUsd / toUsd;
       } else if (fromIsCrypto) {
         const fromId = CurrencyExchangeService.CRYPTO_IDS[fromUpper];
         const vs = toUpper.toLowerCase();
         const data = await this.fetchCoinGeckoPrices([fromId], vs, fetchSignal);
         const value = data[fromId]?.[vs];
-        if (typeof value !== "number") throw new Error(`Unknown currency: ${toUpper}`);
+        if (typeof value !== "number") throw ErrorFactory.validation(CurrencyErrorCodes.UNKNOWN_CODE, `Unknown currency: ${toUpper}`, { code: toUpper });
         rate = value;
       } else {
         const toId = CurrencyExchangeService.CRYPTO_IDS[toUpper];
         const vs = fromUpper.toLowerCase();
         const data = await this.fetchCoinGeckoPrices([toId], vs, fetchSignal);
         const priceOfToInFrom = data[toId]?.[vs];
-        if (typeof priceOfToInFrom !== "number") throw new Error(`Unknown currency: ${fromUpper}`);
+        if (typeof priceOfToInFrom !== "number") throw ErrorFactory.validation(CurrencyErrorCodes.UNKNOWN_CODE, `Unknown currency: ${fromUpper}`, { code: fromUpper });
         rate = 1 / priceOfToInFrom;
       }
 
@@ -187,7 +204,7 @@ export class CurrencyExchangeService {
   private async fetchCoinGeckoPrices(ids: string[], vsCurrency: string, signal: AbortSignal): Promise<Record<string, Record<string, number>>> {
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=${vsCurrency}`;
     const response = await fetch(url, { signal });
-    if (!response.ok) throw new Error(`Crypto price API returned ${response.status}`);
+    if (!response.ok) throw ErrorFactory.external(CurrencyErrorCodes.CRYPTO_API_ERROR, `Crypto price API returned ${response.status}`, { status: response.status });
     return response.json();
   }
 

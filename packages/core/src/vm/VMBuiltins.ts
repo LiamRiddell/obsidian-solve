@@ -1,4 +1,5 @@
 import { Value, ValueType, numberValue, stringValue, uomValue, errorValue } from "@solve-js/vm/Value";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
 // Type-only — VM.ts imports pluginFunctionRegistry FROM this file, so a
 // runtime import the other direction would be circular; `import type` is
@@ -499,7 +500,8 @@ let nextPluginFunctionIndex = 0;
  */
 export function allocatePluginFunctionIndex(): number {
     if (nextPluginFunctionIndex > MAX_PLUGIN_FUNCTION_INDEX) {
-        throw new Error(
+        throw ErrorFactory.config(
+            "PLUGIN_FUNCTION_INDEX_POOL_EXHAUSTED",
             `allocatePluginFunctionIndex: pool exhausted (max ${MAX_PLUGIN_FUNCTION_INDEX + 1} allocations).`
         );
     }

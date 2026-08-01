@@ -1,5 +1,26 @@
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { describeWeatherCode } from "./WmoWeatherCodes";
+
+/**
+ * Error codes for this package. Co-located with the package rather than
+ * unioned into `errors/ErrorCode.ts`'s core catalog (that catalog is scoped
+ * to the parser/VM/engine/errors/config/lexer layers, not yet the ~17
+ * domain packages — see that file's module doc for the intended per-package
+ * pattern this follows).
+ */
+export const WeatherErrorCodes = {
+	/** Open-Meteo's geocoding endpoint returned a non-OK HTTP status. */
+	GEOCODING_API_ERROR: "WEATHER_GEOCODING_API_ERROR",
+	/** Geocoding succeeded (200 OK) but matched no place for the given name — most likely a typo in the city, not an API failure. */
+	CITY_NOT_FOUND: "WEATHER_CITY_NOT_FOUND",
+	/** Open-Meteo's forecast endpoint returned a non-OK HTTP status. */
+	FORECAST_API_ERROR: "WEATHER_FORECAST_API_ERROR",
+	/** Forecast endpoint returned 200 OK but the response body is missing the expected current/daily blocks — an API contract violation, not a local bug. */
+	FORECAST_RESPONSE_MALFORMED: "WEATHER_FORECAST_RESPONSE_MALFORMED",
+	/** WeatherPackage.ts's fetchQuery switch fell through to its default case — unreachable via this package's own parselets, an internal invariant violation if it ever happens. */
+	UNKNOWN_QUERY_KIND: "WEATHER_UNKNOWN_QUERY_KIND",
+} as const;
 
 /**
  * Open-Meteo (https://open-meteo.com) — chosen because it's genuinely free
@@ -42,12 +63,20 @@ async function geocodeCity(city: string, signal: AbortSignal): Promise<Geocoding
 	const url = `${GEOCODING_API_URL}?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
 	const response = await fetch(url, { signal });
 	if (!response.ok) {
-		throw new Error(`Open-Meteo geocoding API returned ${response.status} for "${city}"`);
+		throw ErrorFactory.external(
+			WeatherErrorCodes.GEOCODING_API_ERROR,
+			`Open-Meteo geocoding API returned ${response.status} for "${city}"`,
+			{ city, status: response.status },
+		);
 	}
 	const json = await response.json();
 	const first = json?.results?.[0];
 	if (!first) {
-		throw new Error(`No location found for "${city}"`);
+		throw ErrorFactory.validation(
+			WeatherErrorCodes.CITY_NOT_FOUND,
+			`No location found for "${city}"`,
+			{ city },
+		);
 	}
 	return { latitude: first.latitude, longitude: first.longitude, name: first.name };
 }
@@ -69,13 +98,20 @@ async function fetchForecast(lat: number, lon: number, signal: AbortSignal): Pro
 	});
 	const response = await fetch(`${FORECAST_API_URL}?${params.toString()}`, { signal });
 	if (!response.ok) {
-		throw new Error(`Open-Meteo forecast API returned ${response.status}`);
+		throw ErrorFactory.external(
+			WeatherErrorCodes.FORECAST_API_ERROR,
+			`Open-Meteo forecast API returned ${response.status}`,
+			{ status: response.status },
+		);
 	}
 	const json = await response.json();
 	const current = json?.current;
 	const daily = json?.daily;
 	if (!current || !daily) {
-		throw new Error("Open-Meteo forecast response missing current/daily blocks");
+		throw ErrorFactory.external(
+			WeatherErrorCodes.FORECAST_RESPONSE_MALFORMED,
+			"Open-Meteo forecast response missing current/daily blocks",
+		);
 	}
 	return {
 		weatherCode: current.weather_code,

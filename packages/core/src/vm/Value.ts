@@ -1,3 +1,5 @@
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+
 /**
  * Discriminated union tag for {@link Value} objects.
  *
@@ -314,7 +316,11 @@ export function isRateUnit(unit: string | undefined): unit is string {
 export function splitRateUnit(unit: string): { numerator: string; denominator: string } {
 	const idx = unit.indexOf("/");
 	if (idx < 0) {
-		throw new Error(`splitRateUnit: "${unit}" is not a rate unit (expected "numerator/denominator")`);
+		throw ErrorFactory.internal(
+			"INVALID_RATE_UNIT",
+			`splitRateUnit: "${unit}" is not a rate unit (expected "numerator/denominator")`,
+			{ unit },
+		);
 	}
 	return { numerator: unit.slice(0, idx), denominator: unit.slice(idx + 1) };
 }
@@ -360,7 +366,11 @@ export function isTimecodeUnit(unit: string | undefined): unit is string {
  */
 export function timecodeFps(unit: string): number {
 	if (!isTimecodeUnit(unit)) {
-		throw new Error(`timecodeFps: "${unit}" is not a timecode unit (expected "timecode@<fps>")`);
+		throw ErrorFactory.internal(
+			"INVALID_TIMECODE_UNIT",
+			`timecodeFps: "${unit}" is not a timecode unit (expected "timecode@<fps>")`,
+			{ unit },
+		);
 	}
 	return parseFloat(unit.slice(TIMECODE_UNIT_PREFIX.length));
 }
