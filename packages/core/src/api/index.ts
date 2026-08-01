@@ -9,5 +9,13 @@
 export { PackageRegistry, packageRegistry } from "./PackageRegistry";
 export type { IPackageRegistry, IEnginePackage } from "./PackageRegistry";
 
+export { checkPackageCompatibility } from "./PackageCompatibility";
+export type {
+  CompatibilityReport,
+  CompatibilityConflict,
+  CompatibilityConflictKind,
+  CompatibilitySeverity,
+} from "./PackageCompatibility";
+
 export { ExpressionEngine } from "@solve-js/engine";
 export type { LineEvaluation, EvalResults } from "@solve-js/engine";

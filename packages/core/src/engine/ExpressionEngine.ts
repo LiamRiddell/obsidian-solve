@@ -15,6 +15,7 @@ import { pluginFunctionRegistry, registerAsConverter, unregisterAsConverter } fr
 import { Value, numberValue, pendingValue, freezeIfDev } from "@solve-js/vm/Value";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
+import { checkPackageCompatibility } from "@solve-js/api/PackageCompatibility";
 import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
@@ -157,6 +158,16 @@ export class ExpressionEngine {
         lexerVocabulary: LexerVocabulary | undefined;
         asConverterNames: string[];
     }>();
+
+    /**
+     * The actual `IEnginePackage` descriptor of every package currently
+     * registered on this engine instance, keyed by name — separate from
+     * {@link packageContributions} (which tracks what was WRITTEN into
+     * shared registries, not the original descriptor). Used by
+     * {@link registerPackage}'s automatic `checkPackageCompatibility()` call
+     * — see `api/PackageCompatibility.ts`'s module doc for why this exists.
+     */
+    private registeredPackages = new Map<string, IEnginePackage>();
 
     /**
      * Package-contributed completion candidates (`IEnginePackage.completionItems`),
@@ -369,6 +380,22 @@ export class ExpressionEngine {
             this.unregisterPackage(pkg.name);
         }
 
+        // Load-up resiliency: statically compare this package's declared
+        // fields against every OTHER package already on this engine, before
+        // touching any shared registry — see api/PackageCompatibility.ts's
+        // module doc for the full reasoning and the real bug that motivated
+        // it. Non-fatal (matches this codebase's established "warn and
+        // proceed" convention for collisions elsewhere — ParseletRegistry,
+        // asConverterRegistry) even for "error"-severity conflicts, since a
+        // host may have a deliberate reason to accept a collision; the
+        // point is making it IMPOSSIBLE to miss, not blocking registration.
+        const compatibility = checkPackageCompatibility(pkg, [...this.registeredPackages.values()]);
+        for (const conflict of compatibility.conflicts) {
+            const log = conflict.severity === "error" ? console.error : console.warn;
+            log(`[ExpressionEngine] Package compatibility ${conflict.severity} (${conflict.kind}): ${conflict.detail}`);
+        }
+        this.registeredPackages.set(pkg.name, pkg);
+
         // Track shared-registry contributions so unregisterPackage() can
         // reverse them. Isolated per-engine registrations (parselets,
         // phrases) die with the engine and don't need tracking. lexerVocabulary
@@ -494,6 +521,7 @@ export class ExpressionEngine {
         this.packageCompletionItems.delete(packageName);
 
         this.packageContributions.delete(packageName);
+        this.registeredPackages.delete(packageName);
         this.bytecodeCache.clear();
         return true;
     }
