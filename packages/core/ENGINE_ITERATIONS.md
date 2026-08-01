@@ -147,3 +147,43 @@ old unreachable behavior. A new `RegistrationPathParity.spec.ts` both re-verifie
 descriptor-vs-registered-token-type parity and scans the whole `packages/` tree to fail outright
 if a future package ever reintroduces a bespoke registration function — this bug class is now
 structurally impossible, not just monitored.
+
+## 2026-08-01 — Calca Phase 1 ships: user-defined, parameterized functions
+
+`f(x) = 2*x + 1`, then `f(5)` → `11`, composable (`double(double(5))`), works across units and
+constants (`hyp(a, b) = sqrt(a*a + b*b)`, `circle(r) = pi * r * r`). This is the primitive
+identified as the prerequisite for roughly half of Calca's remaining feature list
+(`der`/`taylor`/`jacobian`/`x => ...`/`map`/`reduce`) — see `OTHER_APPS_FEATURE_AUDIT.md`'s Calca
+section, item 2. New VM primitives: `LOAD_PARAM`/`CALL_USER_FUNCTION` opcodes, a per-VM
+`paramFrameStack` (deliberately separate from the flat `variables` map so recursion/nesting bind
+correctly and a parameter never clobbers an outer `:name` variable of the same name — regression-
+tested directly), and a definition-time `userFunctionRegistry` resolved the same way `LOAD_VAR`
+already resolves forward references (no parse-time function table, matching this codebase's
+existing ascending-evaluation-order semantics).
+
+Two non-obvious architectural facts surfaced and were worked around rather than shipped broken:
+`IDENT` is one of `PrecedenceParser`'s Tier-1 fast-path token types, hardcoded in its `parsePrefix()`
+switch and returned from before the `ParseletRegistry` is ever consulted — so the new
+definition/call grammar had to be added directly inside that switch (`parser/UserFunctionParselet.ts`),
+not as a normal package parselet, mirroring `NumberParselet.ts`'s already-documented precedent for
+the same reason. `UNIT`, unlike `IDENT`, has NO Tier-1 case — meaning `packages/variables/
+parselets/IdentifierParselet.ts` (registered for both) is dead code for `IDENT` but genuinely LIVE
+for `UNIT`, which matters because common short parameter names (`h`, `l`, `b`, ...) collide with
+unit abbreviations and lex as `UNIT` — both places needed the same parameter-frame check.
+
+Landed alongside (built concurrently by parallel iteration on the same approved plan, not this
+session's own work but sharing the same tree): cross-line data access (`prev`, `line<N>`,
+`sum`/`total`/`average(line X : line Y)`, `total above`) as a new `packages/lines/` package, and a
+VM-wide fix making internal invariant errors (undefined variable, stack underflow, safety-limit
+exceeded) controlled `EngineError` *returns* instead of raw throws — closing a real gap the Calca
+work surfaced directly: arithmetic opcodes never checked for `ValueType.Error`/`Pending` operands
+before computing, so an errored cross-line reference like `prev + 1` briefly, silently evaluated
+to `1` instead of propagating the error (fixed in `vm/VMConversion.ts`'s `binaryOp()`, the shared
+fallback every arithmetic opcode routes through). One reintroduction of the just-killed
+registration-drift bug class was caught and fixed the same way as the others: the new `lines`
+package had grown its own bespoke `registerLinesParselets()` — `RegistrationPathParity.spec.ts`
+caught it immediately, confirming the structural guard from the previous iteration actually works
+against new code, not just the packages that existed when it was written.
+
+Verified via the full four-command gate (`tsc --noEmit --skipLibCheck`, full `jest --no-coverage`
+— 161 suites, 3570 tests, 0 failures, `tsup`, production `esbuild`).

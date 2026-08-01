@@ -54,8 +54,8 @@ Last updated: 2026-08-01.
 | Date/time (`fromunix(...)`, `1 month in days`) | ✅ | Covered by this session's datetime-completions work (`<timestamp> to date`, magnitude-based ms/s disambiguation) — different call syntax, same capability. |
 | SI prefixes (`mm`, `GB`, case-sensitive) | ✅ | Pre-existing `knownUnits` table. |
 | **Binary-prefix (IEC) data units — `KiB`/`MiB`/`GiB`/`TiB`** | ✅ **added this pass** | Confirmed gap: the `convert` npm package this engine already depends on natively recognizes `KiB`/`MiB`/`GiB`/`TiB`/`PiB` (confirmed via its generated type definitions) — this was purely a `lexer/units.ts` allowlist omission, not a conversion-logic gap. Added directly. |
-| `sum`/`average` across all lines above until a blank line | ❌ **engine limitation** | Same root cause as SoulverCore's totals-and-subtotals item and Notes Calculator's `line<N>` below — see "Confirmed engine limitations" item 1. |
-| `prev` — reference the immediately-preceding line's result | ❌ **engine limitation** | See item 1 below. Notably, unlike SoulverCore's line-references feature (a pure mouse/drag gesture with no typeable syntax, correctly scoped OUT of `packages/core` in the SoulverCore audit), Numi's `prev` **is** plain typeable expression syntax — so this is a genuine engine-level gap, not an app-layer one. |
+| `sum`/`average` across all lines above until a blank line | ✅ **added this iteration** | `total above`/`sum above`/`average above` — see item 1 below, now shipped as `packages/lines/`. |
+| `prev` — reference the immediately-preceding line's result | ✅ **added this iteration** | See item 1 below — shipped as part of `packages/lines/`'s cross-line data access work. |
 | Data units, bits vs bytes (`b` vs `B`) | ✅ | Pre-existing. |
 | `#` headings, `"text"`/`// text` comments, `label:` | ✅ (mostly) | `#` headings and `//` comments both confirmed already implemented (`Comments.spec.ts`). A bare quoted string as a whole-line "comment" isn't specially treated, but doesn't error either — it just evaluates as a String value, a cosmetic difference not worth engineering around. `label:` (a named-line marker distinct from `:var =`) has no equivalent — low value, not investigated further (its use case is almost fully covered by variables already). |
 | JavaScript plugin/extension API (`numi.addUnit()`, `numi.addFunction()`) | ⚠️ different SDK shape, not a gap | Numi's extensions are runtime JS files dropped in a folder; this engine's `IEnginePackage` is a typed, compile-time TypeScript descriptor (`pluginFunctions`, `asConverters`, `phrases`, `normalizerRules`, `rawLinePatterns`, ...). Different tradeoffs (Numi: no rebuild needed, no type safety; this engine: type-checked, needs a build step) — not a capability gap either direction. |
@@ -71,8 +71,8 @@ new, checked directly against its docs:
 
 | Feature | Status | Notes |
 |---|---|---|
-| **`line<N>` / `l<N>` — reference any line's result by absolute number** (`line1 + line2`, case-insensitive, `l1` short form) | ❌ **engine limitation** | The MORE general form of Numi's `prev` above — same root cause, see item 1 below. Having THREE independent apps (Numi's `prev`, Notes Calculator's `line<N>`, SoulverCore's/Numi's cross-line `sum`/`total`/`average`) converge on needing the same missing primitive is a strong signal this is worth prioritizing whenever engine-architecture work resumes. |
-| **User-defined functions** (`f(x) = 2*x + 1`, then `f(5)` → `11`; multi-parameter, composable, works with units/currency) | ❌ **engine limitation** | See item 2 below. A real, well-specified, high-value feature — but architecturally substantial, not a quick addition. |
+| **`line<N>` / `l<N>` — reference any line's result by absolute number** (`line1 + line2`, case-insensitive, `l1` short form) | ✅ **added this iteration** (glued `line1` and spaced `line 1`; bare `l1` short alias deliberately deferred — see `packages/lines/normalizer/LineRefNormalizerRule.ts`'s doc comment) | The MORE general form of Numi's `prev` above — same root cause, see item 1 below, now shipped as `packages/lines/`. |
+| **User-defined functions** (`f(x) = 2*x + 1`, then `f(5)` → `11`; multi-parameter, composable, works with units/currency) | ✅ **added this iteration** | See item 2 below — Calca Phase 1, shipped. |
 
 ## Numbr — novel items beyond Numi/Notes Calculator overlap
 
@@ -83,7 +83,7 @@ worth calling out:
 |---|---|---|
 | **Currency symbols `¥`, `₽`, `₩`** (beyond the existing `$`/`£`/`€`) | ✅ **added this pass** | Confirmed gap: the lexer had dedicated handling only for `$`/`£`/`€` — `¥`/`₽`/`₩` fell into the generic "unknown Unicode" bucket (silently became an IDENT token, or in some code paths were invisible to the "does this line look like an expression" classifier entirely). Added matching `YEN`/`RUBLE`/`WON` token types, lexer recognition (mirroring `POUND`/`EURO`'s exact pattern in both the fast-path and fallback tokenizer branches, plus `EXPRESSION_INDICATOR_CODES`), and `CurrencySymbolParselet.ts`'s `symbolToCurrency` map (`¥`→JPY, `₽`→RUB, `₩`→KRW — `¥` is genuinely ambiguous between JPY/CNY; JPY matches convention). **Caught and fixed a real bug in the process**: `CurrencyPackage.ts` (the real, shipped `IEnginePackage`) and `packages/currency/parselets/index.ts`'s `registerCurrencyParselets()` (a *separate*, parallel registration path used only by the isolated test harness) had drifted out of sync before — the new symbols were wired into one but not the other, caught immediately by a real test failure. This exact class of bug — two independent registration paths for the same package silently diverging — is precisely what the package-compatibility-checking work below is meant to catch automatically instead of by accident. |
 | Bare `x` as a multiplication operator (`2 x 3`) | ❌ **declined, not a gap** | Deliberately not implemented: unlike `×` (U+00D7, unambiguous), bare ASCII `x` is one of the most overloaded characters in any expression language — a coordinate/variable name (`x = 5`), an implicit-multiply-adjacent identifier (`2x`), and now a proposed operator, all at once. Adding this would reopen the exact keyword/identifier-collision class this whole session's phrase-fusion policy exists to avoid, for a single app's stylistic choice with a safe existing alternative (`*` or `×`). |
-| `total`/`sum` aggregation up to the nearest `#` header | ❌ same root cause as item 1 below | Another data point for the cross-line-access gap — see the unified writeup below. |
+| `total`/`sum` aggregation up to the nearest `#` header | ✅ **added this iteration** | Another data point for the cross-line-access gap — see the unified writeup below, now shipped as `packages/lines/`'s `total above`/`sum above`. |
 
 ## NumPad — novel items beyond prior overlap
 
@@ -92,7 +92,7 @@ it overlaps with Numi/SoulverCore (already ✅); the genuinely new items:
 
 | Feature | Status | Notes |
 |---|---|---|
-| **`line 1 * 2` / `line 1 : line 4` — reference a line by number, including RANGES for aggregation** (`sum(line 1 : line 4)`) | ❌ **engine limitation** | The most sophisticated version yet of the cross-line-access gap — see item 1 below, now confirmed by FOUR independent apps (Numi's `prev`, Notes Calculator's `line<N>`, Numbr's `sum`-to-header, NumPad's `line<N>` plus RANGE syntax). |
+| **`line 1 * 2` / `line 1 : line 4` — reference a line by number, including RANGES for aggregation** (`sum(line 1 : line 4)`) | ✅ **added this iteration** | The most sophisticated version yet of the cross-line-access gap — see item 1 below, now confirmed by FOUR independent apps (Numi's `prev`, Notes Calculator's `line<N>`, Numbr's `sum`-to-header, NumPad's `line<N>` plus RANGE syntax) and shipped as `packages/lines/`'s `sum`/`total`/`average(line X : line Y)`. |
 | Percentage ratio forms: `$40 as a % of $50`, `$60 as a % on $50`, `$40 as a % off $50` | ⏸️ identified, not yet speced | These compute the percentage itself as the result (inverse direction from everything implemented this pass, which takes a percent and solves for an amount). NumPad's own docs don't fully disambiguate `as a % on`/`as a % off`'s exact semantics beyond one example each — worth a closer look before implementing, to avoid guessing at the wrong formula and shipping a silently-wrong result (this codebase's #1 stated priority per every finance/percentage parselet's own doc comments). Not attempted this pass for that reason. |
 | Variables with spaces/apostrophes (`Alice's food = £30`) | ⚠️ design difference, not a gap | Same underlying issue as Numbr's space-containing variable names — see the Numi table's "Variables" row above for the full reasoning (this engine's `:name` policy exists specifically to avoid the collision class bare/space-containing identifiers reopen). Two independent apps now do this, which is worth remembering if the variable-syntax policy is ever revisited wholesale, but not a quick fix in isolation. |
 | `X to Y` as **subtraction** (documented as "alternative subtraction, right-to-left") | ⚠️ semantic collision with existing `to`, not adopted | This engine (and SoulverCore, and Numi via `%` phrasing) already uses `X to Y` for **percentage change** (`800 to 1000` → 25%) and for **unit conversion** (`100cm to m`). Giving `to` a THIRD, mutually-exclusive meaning (plain subtraction) would make `5 to 3` genuinely ambiguous with the percentage-change form already shipped and tested. Confirmed as a real design divergence between apps, not something to copy. |
@@ -143,7 +143,7 @@ values and combine the results" — no symbolic manipulation required.
 
 **This is a multi-iteration roadmap, not a single pass**:
 
-- **Phase 1 (in progress this iteration)**: user-defined, parameterized, reusable functions —
+- **Phase 1 (✅ shipped this iteration)**: user-defined, parameterized, reusable functions —
   item 2 below. Unlocks Phases 4-6 entirely; independently valuable on its own.
 - **Phase 2 (queued next)**: general Matrix value type, consolidating `Vector2`/`Vector3`/
   `Vector4` into it (a vector becomes an N×1 matrix) — literals, 2D indexing, sub-matrix slicing,
@@ -167,14 +167,19 @@ as an operator but has zero consuming parselet anywhere, confirmed dead code.
 
 ## Confirmed engine limitations (for future architecture planning)
 
-### 1. No execution-context access for cross-line data (`prev`, `line<N>`/ranges, `sum`/`total`/`average` across lines)
+### 1. ✅ SHIPPED — execution-context access for cross-line data (`prev`, `line<N>`/ranges, `sum`/`total`/`average` across lines)
 
-**Confirmed by FOUR independent apps** now, the strongest, most-repeated signal in this whole
+**Confirmed by FOUR independent apps**, the strongest, most-repeated signal in this whole
 audit: Numi's `prev` (any preceding line, implicit), Notes Calculator's `line<N>`/`l<N>` (any
 line, explicit absolute reference), Numbr's `sum`/`total`-to-nearest-header, and NumPad's
 `line<N>` PLUS range syntax (`sum(line 1 : line 4)`) — four different apps, four different
-surface syntaxes, all needing the exact same missing primitive underneath. This is the
-highest-leverage single architecture investment identified across every app audited so far.
+surface syntaxes, all needing the exact same missing primitive underneath. Shipped this
+iteration as `packages/lines/` — see `ENGINE_ITERATIONS.md`'s 2026-08-01 entry for the design
+that landed (a `LineExecutionContext` threaded optionally through `executeBytecode`/`CALL_PLUGIN`,
+`ExpressionEngine.setDocumentModel`/`makeLineContext`, and a new package covering `prev`,
+`line<N>`/`line N`, `sum`/`total`/`average(line X : line Y)`, and `total above`/`sum above`/
+`average above`). `l<N>` (the bare short alias) remains deliberately deferred, per the original
+v1 scope note below.
 
 **Root cause**: `IEnginePackage.pluginFunctions` handlers — the extension point every
 "read some other line's value" feature would need — have the signature
@@ -217,13 +222,16 @@ surface area, not a package-level addition using existing primitives):
 sites, but is additive (optional parameter, no existing behavior changes) and unlocks three
 independently-motivated features at once.
 
-### 2. No mechanism for user-defined, parameterized, reusable functions
+### 2. ✅ SHIPPED — mechanism for user-defined, parameterized, reusable functions
 
-**Now the single highest-priority item in this document** — see the Calca section above: this
-was originally just a Notes Calculator gap, but turns out to be the prerequisite primitive for
-roughly half of Calca's feature list (`der`/`taylor`/`jacobian`/`x => ...`/`map`/`reduce`, all
+This was originally just a Notes Calculator gap, but turned out to be the prerequisite primitive
+for roughly half of Calca's feature list (`der`/`taylor`/`jacobian`/`x => ...`/`map`/`reduce`, all
 implementable via numerical methods once callable user functions exist). Phase 1 of the Calca
-roadmap, in progress this iteration.
+roadmap, shipped this iteration: `f(x) = 2*x + 1`, then `f(5)` → `11`, composable
+(`double(double(5))`), multi-parameter, works across units/constants. See
+`ENGINE_ITERATIONS.md`'s 2026-08-01 entry for the two non-obvious architectural facts the
+implementation had to work around (`IDENT`'s Tier-1 parser fast-path bypassing the
+`ParseletRegistry` entirely, and `UNIT`'s lack of one).
 
 **Root cause**: `BytecodeBuilder` compiles each line to ONE flat, single-use
 `BytecodeProgram` (`opcodes: Uint8Array`, `numbers: Float64Array`, `strings: string[]`) — see
@@ -299,13 +307,15 @@ Numbr section above). All verified via the full four-command gate (`tsc --noEmit
 full `jest --no-coverage` — 151/152 suites, 3316/3323 tests, the one failure being the
 pre-existing known-flaky GC-timing benchmark — `tsup`, and the plugin's production `esbuild`).
 
-Three items are confirmed, real engine limitations, each with a concrete root cause and a design
-sketch rather than a vague "not supported": cross-line data access (now confirmed by FOUR
-independent apps — `prev`, `line<N>`/ranges, and cross-line `sum`/`average`/`total` all need the
-exact same missing primitive, making this by far the highest-leverage of the three), user-defined
-parameterized functions, and dynamic unit-ratio reconfiguration. None were forced through with a
-half-measure — each genuinely needs new VM/engine surface area, which is exactly the kind of
-thing worth planning deliberately rather than rushing.
+Three items were confirmed as real engine limitations, each with a concrete root cause and a
+design sketch rather than a vague "not supported." **Two have since shipped** (2026-08-01
+iteration, see `ENGINE_ITERATIONS.md`): cross-line data access (`prev`, `line<N>`/ranges,
+cross-line `sum`/`average`/`total` — confirmed by FOUR independent apps, the highest-leverage of
+the three) as `packages/lines/`, and user-defined parameterized functions as Calca Phase 1. The
+third, dynamic unit-ratio reconfiguration, remains deliberately deferred — only one app wants it,
+and it's entangled with the already-tracked L1 cross-instance-isolation gap. None were forced
+through with a half-measure — each genuinely needed new VM/engine surface area, which is exactly
+the kind of thing worth planning deliberately rather than rushing.
 
 A further three items were identified but deliberately left unspeced rather than guessed at:
 NumPad's `as a % on`/`as a % off` ratio forms (ambiguous exact semantics from the docs alone) and
@@ -320,7 +330,7 @@ a natural-language calculator) is being chased to 100% parity by explicit produc
 a 6-phase roadmap rather than a quick feature check. Its research reordered this document's own
 priorities: user-defined parameterized functions (item 2 above) turned out to be the prerequisite
 primitive for roughly half of Calca's feature list, elevating it from "large effort, no particular
-urgency" to Phase 1 — in progress this iteration.
+urgency" to Phase 1 — shipped this iteration.
 
 **Process note, not a feature**: researching Calca's compatibility-checking needs alongside the
 "make packages resilient to overlapping logic" product direction surfaced a real, live bug class
