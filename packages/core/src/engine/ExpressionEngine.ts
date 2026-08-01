@@ -1076,19 +1076,25 @@ export class ExpressionEngine {
             // not assumed — so this can't misfire on any of them. Only a
             // genuine COLON token past position 0 counts (position 0 is
             // reserved for the existing leading-colon variable syntax).
-            let lastLabelColon = -1;
-            for (let i = 1; i < tokens.length; i++) {
-                if (tokens[i].type === "COLON") lastLabelColon = i;
-            }
-            if (lastLabelColon !== -1 && lastLabelColon + 1 < tokens.length) {
+            //
+            // Tries every colon position from rightmost to leftmost, not
+            // just the last one: a label can itself precede a
+            // ":name = value" definition ("input value: :x = 5"), whose
+            // OWN leading colon would otherwise be the rightmost colon in
+            // the line — slicing right after it strips the colon
+            // VariableParselet needs to recognize a definition at all,
+            // leaving a bare "x = 5" that fails to parse. Falling back to
+            // the next colon to the left ("value:") keeps ":x = 5" intact.
+            for (let i = tokens.length - 1; i >= 1; i--) {
+                if (tokens[i].type !== "COLON") continue;
+                if (i + 1 >= tokens.length) continue;
                 builder.reset();
                 try {
-                    this.parseExpression(builder, tokens.slice(lastLabelColon + 1), hasParens);
+                    this.parseExpression(builder, tokens.slice(i + 1), hasParens);
                     return;
                 } catch {
-                    // The text after the last colon didn't parse cleanly
-                    // either — report the original, whole-line failure
-                    // below instead of this fragment's own error.
+                    // This colon's fragment didn't parse cleanly either —
+                    // try the next one to the left before giving up.
                 }
             }
 

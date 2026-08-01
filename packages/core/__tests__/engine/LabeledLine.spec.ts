@@ -40,6 +40,14 @@ describe("labeled-line fallback", () => {
 		expect(value.toNumber()).toBe(8);
 	});
 
+	test("a label before a ':name = value' definition falls back past the definition's OWN leading colon (a real bug found during review: trying only the rightmost colon strips the colon VariableParselet needs, breaking the definition)", () => {
+		const engine = new ExpressionEngine();
+		const [defResult] = engine.evaluateExpression("input value: :x = 5");
+		expect(defResult.toNumber()).toBe(5);
+		const [readResult] = engine.evaluateExpression(":x + 1");
+		expect(readResult.toNumber()).toBe(6);
+	});
+
 	test("multiple colons: only the text after the LAST one is used", () => {
 		const engine = new ExpressionEngine();
 		const [value] = engine.evaluateExpression("label one: label two: 5 + 3");
