@@ -34,12 +34,13 @@ describe("createKnowledgePackage — descriptor shape", () => {
 		expect(BUILTIN_PACKAGES.some((p) => p.name === "solve-knowledge")).toBe(false);
 	});
 
-	test("registers a rawLinePatterns rule recognizing a trailing '= ?'", () => {
+	test("registers two rawLinePatterns rules — the leading 'search:'/'ask:'/'google:' form and the trailing '= ?' form", () => {
 		const pkg = createKnowledgePackage();
 		const rules = pkg.lexerVocabulary?.rawLinePatterns ?? [];
-		expect(rules).toHaveLength(1);
-		expect(rules[0].tokenType).toBe("KNOWLEDGE_QUERY");
-		expect("distance to the moon = ?".match(rules[0].pattern)?.[1].trim()).toBe("distance to the moon");
+		expect(rules).toHaveLength(2);
+		expect(rules.every((r) => r.tokenType === "KNOWLEDGE_QUERY")).toBe(true);
+		expect("search: distance to the moon".match(rules[0].pattern)?.[1].trim()).toBe("distance to the moon");
+		expect("distance to the moon = ?".match(rules[1].pattern)?.[1].trim()).toBe("distance to the moon");
 	});
 
 	test("each createKnowledgePackage() call allocates a fresh plugin-function index", () => {
@@ -151,5 +152,47 @@ describe("createKnowledgePackage — ExpressionEngine integration (real lexer/pa
 		expect(result.value.value).toBe("299,792 km/s");
 
 		engine.clear();
+	});
+
+	test.each(["search", "ask", "google"])("'%s: <query>' resolves the same way as '<query> = ?'", (keyword) => {
+		const { engine } = createEngine();
+		engine.queryClient.setQueryData(["knowledge", "distance to the moon"], stringValue("approximately 384,400 km"));
+
+		const result = engine.evaluateLineWithDebug(1, `${keyword}: distance to the moon`);
+
+		expect(result.error).toBeUndefined();
+		expect(result.tokens).toHaveLength(1);
+		expect(result.tokens[0].type).toBe("KNOWLEDGE_QUERY");
+		expect(result.tokens[0].value).toBe("distance to the moon");
+		expect(result.value.type).toBe(ValueType.String);
+		expect(result.value.value).toBe("approximately 384,400 km");
+
+		engine.clear();
+	});
+
+	test("'search:' is case-insensitive and tolerates extra spacing ('Search  :   query')", () => {
+		const { engine } = createEngine();
+		engine.queryClient.setQueryData(["knowledge", "distance to the moon"], stringValue("approximately 384,400 km"));
+
+		const result = engine.evaluateLineWithDebug(1, "Search  :   distance to the moon");
+
+		expect(result.error).toBeUndefined();
+		expect(result.value.value).toBe("approximately 384,400 km");
+
+		engine.clear();
+	});
+
+	test("regression guard: a real ':search = 5' variable is unaffected — 'search + 3' still reads the variable, not a knowledge query", () => {
+		const { engine } = createEngine();
+		engine.evaluateExpression(":search = 5");
+		const [value] = engine.evaluateExpression("search + 3");
+
+		expect(value.type).toBe(ValueType.Number);
+		expect(value.toNumber()).toBe(8);
+	});
+
+	test("regression guard: bare 'search' (no colon, undefined) is a plain undefined-variable error, not a knowledge query", () => {
+		const { engine } = createEngine();
+		expect(() => engine.evaluateExpression("search")).toThrow(/undefined variable/i);
 	});
 });

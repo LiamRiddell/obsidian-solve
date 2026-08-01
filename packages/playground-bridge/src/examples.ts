@@ -46,6 +46,9 @@ export const exampleData: ExampleCategory[] = [
       { name: "Percentage increase", expression: "increase 100 by 10%", description: "Increase by percentage" },
       { name: "Percentage decrease", expression: "decrease 100 by 10%", description: "Decrease by percentage" },
       { name: "Percentage change", expression: "800 to 1000", description: "Calculate percentage change" },
+      { name: "Solve for the base (of)", expression: "5% of what is 20", description: "20 is 5% of what number? -> 400" },
+      { name: "Solve for the base (on)", expression: "5% on what is 210", description: "What number, increased by 5%, gives 210? -> 200" },
+      { name: "Solve for the base (off)", expression: "5% off what is 190", description: "What number, decreased by 5%, gives 190? -> 200" },
     ]
   },
   {
@@ -61,6 +64,10 @@ export const exampleData: ExampleCategory[] = [
       { name: "Add workdays", expression: "now + 5 workdays", description: "Business-day-skip date arithmetic" },
       { name: "Unix timestamp to date", expression: "1733823083000 to date", description: "Millisecond-magnitude Unix timestamp, auto-detected" },
       { name: "Date to timestamp", expression: "now to timestamp", description: "Convert a date to a Unix timestamp (seconds)" },
+      { name: "Bare date literal (DD/MM/YYYY)", expression: "25/12/2023", description: "Slash-separated date, day first" },
+      { name: "Bare date literal (ISO)", expression: "2023-12-25", description: "ISO 8601 YYYY-MM-DD" },
+      { name: "Bare date literal (MM-DD-YYYY)", expression: "12-25-2023", description: "Dash-separated date, US month-first order" },
+      { name: "Bare date literal (dotted)", expression: "25.12.2023", description: "Dot-separated date, day first" },
     ]
   },
   {
@@ -89,6 +96,8 @@ export const exampleData: ExampleCategory[] = [
       { name: "Best unit", expression: "1000mm best", description: "Find best unit representation" },
       { name: "Cooking: mass to volume", expression: "300g butter in cups", description: "Ingredient-density-aware conversion (US Customary)" },
       { name: "Cooking: volume to mass", expression: "10 cups olive oil in grams", description: "Reverse direction — volume to mass" },
+      { name: "Binary data units", expression: "1 GiB to MiB", description: "IEC binary-prefix units (1024-based) -> 1024" },
+      { name: "Binary vs decimal prefix", expression: "1 GiB to GB", description: "GiB (1024-based) vs GB (1000-based) are NOT the same -> ~1.074" },
     ]
   },
   {
@@ -108,6 +117,11 @@ export const exampleData: ExampleCategory[] = [
       { name: "USD to EUR + tax", expression: "100 USD to EUR + 20%", description: "Convert then add 20% tax" },
       { name: "EUR to GBP - discount", expression: "500 EUR to GBP - 15%", description: "Convert then apply 15% discount" },
       { name: "Tax on multi-currency", expression: "(100 USD + 200 EUR) + 8%", description: "Add currencies then apply tax" },
+      { name: "Yen symbol", expression: "¥1000 to USD", description: "'¥' is recognized as a bare currency symbol (defaults to JPY)" },
+      { name: "Ruble symbol", expression: "₽1000 to USD", description: "'₽' recognized as RUB" },
+      { name: "Won symbol", expression: "₩1000 to USD", description: "'₩' recognized as KRW" },
+      { name: "Currency word alias", expression: "10 yen to USD", description: "Currency names spelled out as words also work, not just symbols/codes" },
+      { name: "Currency word alias (franc)", expression: "5 francs to USD", description: "'franc(s)' resolves to CHF" },
     ]
   },
   {
@@ -135,6 +149,11 @@ export const exampleData: ExampleCategory[] = [
       { name: "Square root", expression: "sqrt(16)", description: "Calculate square root" },
       { name: "Absolute value", expression: "abs(-10)", description: "Absolute value" },
       { name: "Round number", expression: "round(3.7)", description: "Round to nearest integer" },
+      { name: "Arcsine", expression: "arcsin(1)", description: "Inverse sine, in radians -> pi/2" },
+      { name: "Arccosine", expression: "arccos(1)", description: "Inverse cosine, in radians -> 0" },
+      { name: "Arctangent", expression: "arctan(1)", description: "Inverse tangent, in radians -> pi/4" },
+      { name: "N-th root", expression: "root(3, 27)", description: "General n-th root -> 3 (the cube root of 27)" },
+      { name: "Factorial", expression: "fact(5)", description: "5! -> 120 ('factorial(5)' also works)" },
     ]
   },
   {
@@ -217,6 +236,7 @@ export const exampleData: ExampleCategory[] = [
       { name: "bin()", expression: "bin(10)", description: "Call-syntax binary formatting" },
       { name: "int()", expression: "int(5.7)", description: "Truncate to a plain integer" },
       { name: "Large number suffix", expression: "2.5k", description: "'k'/'M'/'G'/'B'/'T' magnitude suffixes" },
+      { name: "Octal literal", expression: "0o17", description: "Octal (base-8) literal input -> 15" },
     ]
   },
   {
@@ -246,6 +266,27 @@ export const exampleData: ExampleCategory[] = [
     ]
   },
   {
+    name: "User-Defined Functions",
+    description: "Define a named, parameterized, reusable expression, then call it with different arguments",
+    examples: [
+      { name: "Define a function", expression: "f(x) = 2*x + 1", description: "Defines f — evaluates to a confirmation, not a number" },
+      { name: "Call it", expression: "f(x) = 2*x + 1\nf(5)", description: "Define, then call with x = 5 -> 11" },
+      { name: "Multi-parameter", expression: "area(w, h) = w * h\narea(3, 4)", description: "Two parameters -> 12" },
+      { name: "Composed calls", expression: "double(x) = 2 * x\ndouble(double(5))", description: "Nesting a function call inside itself -> 20" },
+      { name: "Using a built-in inside the body", expression: "hyp(a, b) = sqrt(a*a + b*b)\nhyp(3, 4)", description: "A function body can call built-ins/constants -> 5" },
+    ]
+  },
+  {
+    name: "Cross-Line Data Access",
+    description: "Reference another line's already-computed result — prev, line<N>, and range aggregation",
+    examples: [
+      { name: "Previous line", expression: "10 + 5\nprev + 1", description: "prev reads the immediately-preceding line's result -> 16" },
+      { name: "Reference by number", expression: "42\nline1 + 8", description: "line<N> (or spaced 'line N') reads any earlier line by its 1-based number -> 50" },
+      { name: "Sum a range", expression: "1\n2\n3\n4\nsum(line 1 : line 4)", description: "sum/total/average(line X : line Y) aggregate a range of lines -> 10" },
+      { name: "Total above", expression: "1\n2\n3\ntotal above", description: "Aggregates every line above back to the top of the document (or the nearest blank line/heading) -> 6" },
+    ]
+  },
+  {
     name: "Live Data",
     description: "Weather (real Open-Meteo data, built in), plus Stocks/Knowledge — both opt-in, shown here with the default \"not configured\" message since they need a host-supplied API key/fetch function (see packages/core/src/packages/{stocks,knowledge}/ JSDoc). Weather makes a real network call, so its result may vary or fail without connectivity.",
     examples: [
@@ -255,6 +296,16 @@ export const exampleData: ExampleCategory[] = [
       { name: "Today's high", expression: "high in Miami", description: "Today's forecast high temperature" },
       { name: "Today's low", expression: "low in Reykjavik", description: "Today's forecast low temperature" },
       { name: "Stock quote (unconfigured)", expression: "stock(AAPL)", description: "Shows the honest \"provider not configured\" error by default — a host wires up createStocksPackage({ fetchQuote })" },
+    ]
+  },
+  {
+    name: "Knowledge Queries",
+    description: "'search: <question>' (or 'ask:'/'google:') — ask an open-ended question and get it answered by a host-supplied provider. Unconfigured by default, shown here with the honest \"not configured\" message rather than a fake/hallucinated answer — a host wires one up via createKnowledgePackage({ answerQuery }), e.g. backing it with a real search API.",
+    examples: [
+      { name: "Open-ended question (unconfigured)", expression: "search: distance to the moon", description: "Any free-form text after 'search:' is sent to the configured answerQuery provider verbatim" },
+      { name: "'ask:' synonym", expression: "ask: what is the tallest mountain", description: "'ask:'/'google:' are equivalent synonyms for 'search:'" },
+      { name: "Phrased like a conversion", expression: "search: 10 km in miles", description: "The whole '10 km in miles' is sent to the provider VERBATIM as a question — this is not the engine's own unit-conversion syntax (that's '10 km to miles'), it just happens to read similarly" },
+      { name: "Calca-style '= ?' (also supported)", expression: "distance to the moon = ?", description: "The original Calca syntax still works too, for compatibility — 'search:'/'ask:'/'google:' are just the clearer, more discoverable form" },
     ]
   },
 ];
@@ -319,6 +370,11 @@ export const fullDocumentExamples: FullDocumentExample[] = [
     name: "Crypto Portfolio Tracker",
     description: "Track a diversified crypto portfolio with profit/loss",
     content: ":btcAmount = 0.05\n:ethAmount = 2\n:solAmount = 50\n:btcValueUSD = :btcAmount BTC to USD\n:ethValueUSD = :ethAmount ETH to USD\n:solValueUSD = :solAmount SOL to USD\n:totalValueUSD = :btcValueUSD + :ethValueUSD + :solValueUSD\n:btcAllocation = :btcValueUSD / :totalValueUSD\n:ethAllocation = :ethValueUSD / :totalValueUSD\n:solAllocation = :solValueUSD / :totalValueUSD\n:tradeProfitBTC = 0.01 BTC to USD\n:tradeProfitETH = 0.5 ETH to USD\n:totalProfit = :tradeProfitBTC + :tradeProfitETH\n:profitAfterTax = :totalProfit - 15%"
+  },
+  {
+    name: "Reusable Formula + Running Total",
+    description: "Define a function once, call it for several inputs, then total the results with cross-line access",
+    content: "circle(r) = pi * r * r\n\ncircle(2)\ncircle(5)\ncircle(10)\ntotal above"
   },
   {
     name: "Trip Budget & Timeline",

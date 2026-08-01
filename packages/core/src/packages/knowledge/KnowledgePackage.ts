@@ -6,14 +6,29 @@ import { knowledgeQueryParselet } from "./parselets/KnowledgeQueryParselet";
 import type { KnowledgePackageConfig } from "./types";
 
 /**
- * Knowledge-assistant queries — `<any query text> = ?`, e.g.
- * `distance to the moon = ?`. SoulverCore's own version of this feature
- * calls out to Wolfram|Alpha; there is no free equivalent of comparable
- * quality, so — same pluggable-provider approach as `packages/stocks` —
- * a host supplies `answerQuery` via {@link createKnowledgePackage}'s
- * `config` argument. No config -> every `= ?` expression resolves to a
- * clearly-worded `KNOWLEDGE_NOT_CONFIGURED` error `Value`, never a
- * hallucinated/guessed answer.
+ * Knowledge-assistant queries — open-ended questions answered by a
+ * host-supplied provider. Two supported surface forms, both producing the
+ * exact same `KNOWLEDGE_QUERY` token/behavior (see the two
+ * `rawLinePatterns` entries below):
+ *
+ * - **`search: <query>` / `ask: <query>` / `google: <query>`** (preferred,
+ *   added this iteration) — a clear, self-documenting leading verb, e.g.
+ *   `search: distance to the moon`. Reads like an instruction, not a
+ *   cryptic punctuation puzzle.
+ * - **`<query> = ?`** (the original form, kept for Calca-style
+ *   compatibility — see `OTHER_APPS_FEATURE_AUDIT.md`'s Calca section),
+ *   e.g. `distance to the moon = ?`. Less discoverable (a bare trailing
+ *   `= ?` doesn't read as "ask a question" the way a leading verb does),
+ *   but harmless to keep alongside the clearer form — this package has no
+ *   opinion about which one a host's users end up preferring.
+ *
+ * SoulverCore's own version of this feature calls out to Wolfram|Alpha;
+ * there is no free equivalent of comparable quality, so — same
+ * pluggable-provider approach as `packages/stocks` — a host supplies
+ * `answerQuery` via {@link createKnowledgePackage}'s `config` argument. No
+ * config -> every query resolves to a clearly-worded
+ * `KNOWLEDGE_NOT_CONFIGURED` error `Value`, never a hallucinated/guessed
+ * answer.
  *
  * **Not a member of `BUILTIN_PACKAGES`** — unconfigured, this package does
  * nothing useful, exactly like `packages/stocks` and `examples/osrs`.
@@ -24,10 +39,10 @@ import type { KnowledgePackageConfig } from "./types";
  * `weather`/`stocks`) is "structured syntax evaluates to a value" — the
  * grammar is known in advance, and the lexer/parser tokenize it like any
  * other expression. This package's grammar is "arbitrary free text,
- * terminated by a fixed marker, gets shipped to an external function
- * verbatim" — `distance to the moon` is not valid Solve syntax (it would
- * never parse as arithmetic), so it can't be tokenized-then-parsed the
- * normal way at all.
+ * terminated (or introduced) by a fixed marker, gets shipped to an
+ * external function verbatim" — `distance to the moon` is not valid Solve
+ * syntax (it would never parse as arithmetic), so it can't be
+ * tokenized-then-parsed the normal way at all.
  *
  * The fix lives one layer below the parser: `ExpressionLexer.ts` gained a
  * new, generic extension point, `LexerVocabulary.rawLinePatterns` (see
@@ -35,19 +50,26 @@ import type { KnowledgePackageConfig } from "./types";
  * tests the RAW line text — before any per-character tokenization — and
  * if it matches, the whole line becomes ONE synthetic token whose value
  * is the matched capture group, verbatim. This package is that
- * mechanism's reference/motivating use: the pattern below
- * (`/^(.+?)=\s*\?\s*$/`) recognizes a trailing `= ?` (optionally
- * `=?` with no space) and captures everything before it as the query
- * text, so "distance to the moon" is never split into IDENT/keyword
- * tokens or run through the normalizer/parser at all — it reaches
- * `KnowledgeQueryParselet` as one already-formed string.
+ * mechanism's reference/motivating use.
  *
- * No other Solve syntax uses a bare `= ?` marker (the codebase's other
- * "possibilities" feature, `cm to ?`, is a different token shape — `TO
- * QUESTION`, not `EQUALS QUESTION` — see
- * `packages/uom/normalizer/PossibilitiesNormalizerRule.ts`), so this
- * claims no ambiguity with existing grammar; it only activates for lines
- * a host has opted into via this package in the first place.
+ * **Why `search:`/`ask:`/`google:` require a literal trailing colon, not
+ * just a following space**: without it, `search 5` (a line reading the
+ * plain variable `search` — legitimately assignable via `:search = 5`,
+ * since these are ordinary lowercase words, not reserved — followed by
+ * what would otherwise be implicit-multiply-adjacent text) would be
+ * silently hijacked into a knowledge query for `"5"` instead of failing
+ * or reading the variable. Requiring `:` immediately after the keyword
+ * (`search:`, not `search `) is not valid syntax ANYWHERE else in this
+ * grammar, so it introduces zero ambiguity with a real `:name = value`
+ * variable of the same name — see the regression test guarding this
+ * exact scenario.
+ *
+ * No existing Solve syntax uses a bare `= ?` marker either (the
+ * codebase's other "possibilities" feature, `cm to ?`, is a different
+ * token shape — `TO QUESTION`, not `EQUALS QUESTION` — see
+ * `packages/uom/normalizer/PossibilitiesNormalizerRule.ts`), so neither
+ * form claims any ambiguity with existing grammar; both only activate for
+ * lines a host has opted into via this package in the first place.
  */
 export function createKnowledgePackage(config: KnowledgePackageConfig = {}): IEnginePackage {
 	const fnIdx = allocatePluginFunctionIndex();
@@ -73,6 +95,10 @@ export function createKnowledgePackage(config: KnowledgePackageConfig = {}): IEn
 
 		lexerVocabulary: {
 			rawLinePatterns: [
+				// Preferred: a clear leading verb + mandatory colon (see this
+				// file's own doc comment for why the colon isn't optional).
+				{ pattern: /^(?:search|ask|google)\s*:\s*(.+)$/i, tokenType: "KNOWLEDGE_QUERY" },
+				// Original Calca-style trailing marker, kept for compatibility.
 				{ pattern: /^(.+?)=\s*\?\s*$/, tokenType: "KNOWLEDGE_QUERY" },
 			],
 		},

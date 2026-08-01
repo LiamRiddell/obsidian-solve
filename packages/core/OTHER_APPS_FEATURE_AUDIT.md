@@ -118,7 +118,11 @@ not a ceiling.
 
 Two items are already covered, no new work needed: comparison/logical operators match the
 existing Conditionals package; `variable = ?` matches the already-shipped Knowledge package's
-`rawLinePatterns`-based grammar (see `SOULVERCORE_FEATURE_AUDIT.md`).
+`rawLinePatterns`-based grammar (see `SOULVERCORE_FEATURE_AUDIT.md`) — **improved this iteration**:
+Calca's own `= ?` marker is a bare trailing punctuation puzzle that doesn't read as "ask a
+question," so a clearer, self-documenting leading form (`search: <query>` / `ask: <query>` /
+`google: <query>`) was added alongside it (not replacing it — both resolve identically), per the
+explicit product direction to treat Calca's syntax as a floor, not a ceiling.
 
 **The load-bearing insight that reorders everything below**: `der()`/`taylor()`/`jacobian()`/
 `x => ...`/`map`/`reduce` all need the SAME missing primitive underneath them — a named, reusable,
@@ -229,9 +233,12 @@ for roughly half of Calca's feature list (`der`/`taylor`/`jacobian`/`x => ...`/`
 implementable via numerical methods once callable user functions exist). Phase 1 of the Calca
 roadmap, shipped this iteration: `f(x) = 2*x + 1`, then `f(5)` → `11`, composable
 (`double(double(5))`), multi-parameter, works across units/constants. See
-`ENGINE_ITERATIONS.md`'s 2026-08-01 entry for the two non-obvious architectural facts the
-implementation had to work around (`IDENT`'s Tier-1 parser fast-path bypassing the
-`ParseletRegistry` entirely, and `UNIT`'s lack of one).
+`ENGINE_ITERATIONS.md`'s 2026-08-01 "User-defined, parameterized functions ship" entry for the
+full implementation writeup — the parser fast-path workaround `IDENT`'s Tier-1 dispatch required,
+the name-keyed (not index-based) VM call-frame design and why it lives on the VM instance rather
+than a module-level registry, and the three non-obvious hardening risks (recursion depth,
+`VMCheckpointer` scroll survival, DAG parameter-shadowing) a rough sketch of this feature would
+have missed.
 
 **Root cause**: `BytecodeBuilder` compiles each line to ONE flat, single-use
 `BytecodeProgram` (`opcodes: Uint8Array`, `numbers: Float64Array`, `strings: string[]`) — see

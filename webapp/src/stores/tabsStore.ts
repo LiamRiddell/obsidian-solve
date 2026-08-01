@@ -38,6 +38,10 @@ const DEFAULT_TEXT = [
   "1733823083000 to date",
   "what is $500 from 1970",
   "300g butter in cups",
+  "double(x) = 2 * x",
+  "double(21)",
+  "42",
+  "prev + 8",
 ].join("\n")
 
 /** Plain (non-reactive) cache keyed by tabId — read/written directly, never subscribed to. */

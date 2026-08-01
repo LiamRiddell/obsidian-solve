@@ -1,5 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ValueType } from "@solve-js/vm/Value";
 import { exampleData, fullDocumentExamples } from "@bridge/examples";
@@ -60,12 +61,26 @@ describe("Playground example content is valid against the real engine", () => {
         // line like the full-document examples below, instead of passing
         // the whole string (with embedded newlines) to a single
         // evaluateLine() call.
+        //
+        // A DocumentModel is wired in (mirroring runEngine()'s own fix in
+        // engine.ts) so cross-line data access (packages/lines: prev,
+        // line<N>, sum/total/average ranges, total above) can actually read
+        // a preceding line's result instead of every reference erroring
+        // with "no document" — this loop DOES evaluate a real multi-line
+        // document, just without the incremental-caching machinery
+        // (ThreeTierEvaluator) that normally owns DocumentModel updates.
+        const doc = new DocumentModel();
+        doc.setDocument(ex.expression);
+        engine.setDocumentModel(doc);
         const exampleLines = ex.expression.split("\n");
-        for (const rawLine of exampleLines) {
-          const trimmed = rawLine.trim();
+        for (let i = 0; i < exampleLines.length; i++) {
+          const trimmed = exampleLines[i].trim();
           if (!trimmed) continue;
+          const lineNum = i + 1;
           try {
-            const [result] = engine.evaluateLine(1, trimmed);
+            const [result] = engine.evaluateLine(lineNum, trimmed);
+            const lineState = doc.getLineAt(lineNum);
+            if (lineState) lineState.result = result;
             if (result.type === ValueType.Error) {
               failures.push(`[${category.name} / ${ex.name}] "${trimmed}" -> Error value`);
             }
@@ -116,20 +131,27 @@ describe("Playground example content is valid against the real engine", () => {
   test("every full-document example evaluates every line without throwing", () => {
     primeAllRates();
     const failures: string[] = [];
-    for (const doc of fullDocumentExamples) {
+    for (const example of fullDocumentExamples) {
       const engine = new ExpressionEngine("en", false);
-      const lines = doc.content.split("\n");
+      // See the single-line test above for why a DocumentModel is wired in.
+      const documentModel = new DocumentModel();
+      documentModel.setDocument(example.content);
+      engine.setDocumentModel(documentModel);
+      const lines = example.content.split("\n");
       for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim();
         if (!trimmed) continue;
+        const lineNum = i + 1;
         try {
-          const [result] = engine.evaluateLine(i + 1, trimmed);
+          const [result] = engine.evaluateLine(lineNum, trimmed);
+          const lineState = documentModel.getLineAt(lineNum);
+          if (lineState) lineState.result = result;
           if (result.type === ValueType.Error) {
-            failures.push(`[${doc.name}] line ${i + 1} "${trimmed}" -> Error value`);
+            failures.push(`[${example.name}] line ${lineNum} "${trimmed}" -> Error value`);
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          failures.push(`[${doc.name}] line ${i + 1} "${trimmed}" THREW: ${msg}`);
+          failures.push(`[${example.name}] line ${lineNum} "${trimmed}" THREW: ${msg}`);
         }
       }
     }
