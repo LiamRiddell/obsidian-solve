@@ -1,5 +1,15 @@
 import { create } from "zustand"
 
+// Bounds stageSnapshots (below) to avoid unbounded growth over a long
+// session -- every distinct line number ever viewed in the pipeline
+// dropdown, across every tab/document, added an entry here that nothing
+// ever removed. FIFO eviction (oldest inserted key first) mirrors
+// ExpressionEngine.ts's bytecodeCache bound -- this data is purely a
+// "did this line's output change since I last looked at it" cache, so
+// losing the oldest entry only means one extra pulse-animation flash the
+// next time that line is revisited, never a correctness issue.
+const MAX_STAGE_SNAPSHOTS = 200
+
 interface PipelineState {
   /** Currently selected line in the pipeline dropdown (null = aggregate view). */
   selectedLine: number | null
@@ -28,7 +38,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     set((s) => ({ selectedLine: lineNumber, dropdownManuallyChanged: manual ? true : s.dropdownManuallyChanged })),
   resetDropdownOverride: () => set({ dropdownManuallyChanged: false }),
   saveStageSnapshot: (lineKey, snapshot) => {
-    get().stageSnapshots.set(lineKey, snapshot)
+    const snapshots = get().stageSnapshots
+    if (!snapshots.has(lineKey) && snapshots.size >= MAX_STAGE_SNAPSHOTS) {
+      const oldest = snapshots.keys().next().value
+      if (oldest !== undefined) snapshots.delete(oldest)
+    }
+    snapshots.set(lineKey, snapshot)
   },
   getStageSnapshot: (lineKey) => get().stageSnapshots.get(lineKey),
   setFlamegraphFilter: (stageLabel) => set({ flamegraphFilter: stageLabel }),
