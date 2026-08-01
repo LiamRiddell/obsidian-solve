@@ -3,6 +3,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ValueType } from "@solve-js/vm/Value";
 import { exampleData, fullDocumentExamples } from "@bridge/examples";
+import { PLAYGROUND_PACKAGES } from "@bridge/engine";
 
 /**
  * Validates every example the playground ships (the single-line snippet
@@ -52,7 +53,7 @@ describe("Playground example content is valid against the real engine", () => {
     for (const category of exampleData) {
       for (const ex of category.examples) {
         if (KNOWN_STATEFUL_SNIPPETS.has(ex.name)) continue;
-        const engine = new ExpressionEngine("en", false);
+        const engine = new ExpressionEngine("en", false, undefined, undefined, PLAYGROUND_PACKAGES);
         // Example content may itself be multi-line (e.g. a variable defined
         // on one line and used on the next, to stay self-contained when
         // insertExample() replaces the whole editor) — evaluate line by

@@ -91,13 +91,13 @@ const config = {
 
 	// A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
 	moduleNameMapper: {
-		// playground/ source uses ESM-style ".js"-suffixed relative imports
-		// (e.g. `from "./engineShared.js"`, resolved by Vite's bundler
-		// moduleResolution) — ts-jest's CommonJS resolution doesn't strip
-		// that suffix on its own, so a plain relative import to a
-		// same-named ".ts" file 404s under jest. Strip it generically so
-		// any playground file can be imported by a test without needing
-		// its own per-file mapping entry.
+		// packages/playground-bridge (and webapp) source uses ESM-style
+		// ".js"-suffixed relative imports (e.g. `from "./engineShared.js"`,
+		// resolved by Vite's bundler moduleResolution) — ts-jest's
+		// CommonJS resolution doesn't strip that suffix on its own, so a
+		// plain relative import to a same-named ".ts" file 404s under
+		// jest. Strip it generically so any such file can be imported by a
+		// test without needing its own per-file mapping entry.
 		"^(\\.{1,2}/.*)\\.js$": "$1",
 		"@/(.*)": "<rootDir>/src/$1",
 		"@app/(.*)": "<rootDir>/src/app/$1",

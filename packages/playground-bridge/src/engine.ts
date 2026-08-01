@@ -11,11 +11,21 @@ import type { ParseletInfo } from "@solve-js/types/ParsingResult";
 import { Value, ValueType, enableValueArena, disableValueArena } from "@solve-js/vm/Value";
 import { AllocationTracker } from "@solve-js/telemetry/AllocationTracker";
 import type { PipelineTelemetry } from "@solve-js/telemetry/AllocationTracker";
-import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
+import { BUILTIN_PACKAGES, createStocksPackage, createKnowledgePackage } from "@solve-js/packages/builtins";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
 
-/** OSRS is an example package (not a built-in) demonstrating the packages framework — registered here so the playground demo keeps working. */
-const PLAYGROUND_PACKAGES = [...BUILTIN_PACKAGES, OSRS_PACKAGE];
+/**
+ * OSRS is an example package (not a built-in) demonstrating the packages
+ * framework — registered here so the playground demo keeps working.
+ *
+ * Stocks/Knowledge are opt-in, pluggable-provider packages (see their own
+ * module docs) — registered here with NO fetchQuote/answerQuery configured
+ * so the demo's "stock(AAPL)"/"<query> = ?" gallery examples actually parse
+ * and evaluate to the real, honest "provider not configured" error, rather
+ * than failing at parse time with an unrelated "unknown token" error
+ * because the function/grammar was never registered at all.
+ */
+export const PLAYGROUND_PACKAGES = [...BUILTIN_PACKAGES, OSRS_PACKAGE, createStocksPackage(), createKnowledgePackage()];
 export type { ParseletInfo, Token };
 import {
 	buildDocumentStats,

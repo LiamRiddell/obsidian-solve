@@ -18,13 +18,6 @@ data.json
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
 
-# Playground
-playground/node_modules
-playground/dist
-playground/.vite
-playground/*.local
-playground/*.env
-
 # webapp (React + shadcn/ui production app)
 webapp/node_modules
 webapp/dist
