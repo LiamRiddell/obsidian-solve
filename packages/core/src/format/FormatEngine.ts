@@ -38,7 +38,29 @@ function formatDatetime(value: number, locale: ILocale): string {
   return `= ${d.toLocaleString()}`;
 }
 
+/**
+ * Renders a millisecond duration as clock-style `H:MM` (or `H:MM:SS` when
+ * there's a non-zero seconds component). `ms` is never a user-typeable
+ * unit (confirmed: it appears nowhere in `lexer/units.ts`) — it's only
+ * ever produced by subtracting two clock times/datetimes (`9:30 - 8:30`,
+ * `VM.ts`'s Datetime SUB case), so this is a safe, narrow special case,
+ * not a general change to how durations display.
+ */
+function formatMsDuration(ms: number): string {
+  const sign = ms < 0 ? "-" : "";
+  const totalSeconds = Math.round(Math.abs(ms) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  if (seconds === 0) return `${sign}${hours}:${mm}`;
+  const ss = String(seconds).padStart(2, "0");
+  return `${sign}${hours}:${mm}:${ss}`;
+}
+
 function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings): string {
+  if (unit === "ms") return `= ${formatMsDuration(value)}`;
+
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
   const useUnitNames = settings.unitOfMeasurementResult.unitNames;
 

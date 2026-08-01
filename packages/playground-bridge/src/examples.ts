@@ -184,6 +184,7 @@ export const exampleData: ExampleCategory[] = [
       { name: "Frame rate", expression: "30 fps", description: "A Rate value — 30 frames per second" },
       { name: "Rate multiplication", expression: "30 fps * 3 minutes", description: "Multiplying a rate by a matching duration cancels the denominator" },
       { name: "Lap time", expression: "03:04:05", description: "A two-colon lap time, parsed as a duration" },
+      { name: "Clock time subtraction", expression: "9:30 - 8:30", description: "Two clock times subtract to a duration -> 1:00" },
     ]
   },
   {
@@ -370,6 +371,11 @@ export const fullDocumentExamples: FullDocumentExample[] = [
     name: "Crypto Portfolio Tracker",
     description: "Track a diversified crypto portfolio with profit/loss",
     content: ":btcAmount = 0.05\n:ethAmount = 2\n:solAmount = 50\n:btcValueUSD = :btcAmount BTC to USD\n:ethValueUSD = :ethAmount ETH to USD\n:solValueUSD = :solAmount SOL to USD\n:totalValueUSD = :btcValueUSD + :ethValueUSD + :solValueUSD\n:btcAllocation = :btcValueUSD / :totalValueUSD\n:ethAllocation = :ethValueUSD / :totalValueUSD\n:solAllocation = :solValueUSD / :totalValueUSD\n:tradeProfitBTC = 0.01 BTC to USD\n:tradeProfitETH = 0.5 ETH to USD\n:totalProfit = :tradeProfitBTC + :tradeProfitETH\n:profitAfterTax = :totalProfit - 15%"
+  },
+  {
+    name: "Daily Timesheet",
+    description: "Subtract clock-in/out pairs to get each session's duration, then total the day",
+    content: "9:30 - 8:30\n12:00 - 11:00\n18:00 - 12:55\ntotal above"
   },
   {
     name: "Reusable Formula + Running Total",
