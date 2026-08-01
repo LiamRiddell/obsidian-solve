@@ -9,6 +9,7 @@ import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
 import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
+import type { LineExecutionContext } from "@solve-js/vm/VM";
 
 /**
  * Public API for registering plugins with the solve-js engine.
@@ -75,6 +76,12 @@ export interface IEnginePackage {
    * independently picking the same index would silently overwrite each
    * other's handler in the shared registry.
    *
+   * The handler's optional second parameter, `context`, carries the
+   * current line's {@link LineExecutionContext} (line number, and — only
+   * inside a real document, never `evaluateExpression()`'s single-shot
+   * path — closures for reading another line's cached result). Every
+   * handler that doesn't need cross-line data can ignore it entirely.
+   *
    * @example
    * ```ts
    * const MY_FN_IDX = allocatePluginFunctionIndex();
@@ -82,7 +89,7 @@ export interface IEnginePackage {
    * pluginFunctions: [{ index: MY_FN_IDX, handler: myHandler }]
    * ```
    */
-  pluginFunctions?: Array<{ index: number; handler: (args: Value[]) => Value | Promise<Value> }>;
+  pluginFunctions?: Array<{ index: number; handler: (args: Value[], context?: LineExecutionContext) => Value | Promise<Value> }>;
   /** Variable sources that provide values at runtime. */
   variableSources?: IVariableSource[];
   /**

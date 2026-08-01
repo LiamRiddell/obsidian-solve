@@ -117,6 +117,11 @@ export class ThreeTierEvaluator {
 		this.checkpointer = checkpointer ?? null;
 		this.pageManager = new PageManager();
 
+		// Lets the engine answer "what's line N's cached result" for
+		// cross-line features (prev/line<N>/aggregation) without owning
+		// document lifecycle itself — see ExpressionEngine.makeLineContext().
+		this.engine.setDocumentModel(this.doc);
+
 		// ── Cross-document global-variable propagation ──────────────────
 		// GlobalVariableAsyncResolver (via preflight) handles a line's FIRST
 		// resolution when a global it reads wasn't known yet. This handles
@@ -810,7 +815,7 @@ export class ThreeTierEvaluator {
 		for (const bytecode of state.bytecodes) {
 			if (bytecode.opcodes.length === 0) continue;
 			try {
-				const value = this.engine.executeCached(bytecode);
+				const value = this.engine.executeCached(bytecode, lineNumber);
 				lastValue = value;
 				results.push([value]);
 			} catch (e) {
@@ -877,7 +882,7 @@ export class ThreeTierEvaluator {
 
 				if (writes.length > 0 && program.opcodes.length > 0) {
 					// Variable definitions MUST execute to maintain VM state
-					lastResult = this.engine.executeCached(program);
+					lastResult = this.engine.executeCached(program, lineNumber);
 				}
 			} catch (e) {
 				const errorMessage = e instanceof Error ? e.message : String(e);

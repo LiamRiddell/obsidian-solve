@@ -143,7 +143,7 @@ describe("VM executeBytecode", () => {
   test("LOAD_VAR throws for undefined variable", () => {
     const vm = createVM(sharedOpRegistry);
     expect(() => {
-      executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm);
+      unwrapEvalResult(executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm));
     }).toThrow(/Undefined variable: undefined_var/);
   });
 

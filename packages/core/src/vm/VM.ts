@@ -3,12 +3,13 @@ import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomV
 import type { VM, OpRegistry } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
-import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, pluginFunctionRegistry, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
+import { userFunctionRegistry } from "@solve-js/vm/UserFunctionRegistry";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -31,6 +32,12 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
     let activeSignal: AbortSignal | undefined;
     let abortCurrent: (() => void) | undefined;
 
+    // User-defined-function parameter frames (Calca-parity Phase 1) — a
+    // real stack, not a flat map, so nested/recursive calls each get their
+    // own bound-argument array. See OpRegistry.ts's VM interface doc for
+    // why this is deliberately separate from `variables` above.
+    const paramFrameStack: Value[][] = [];
+
     return {
       push(v: Value) {
         if (stack.length < maxStackDepth) {
@@ -51,9 +58,13 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
       registry,
       getVar(key: string) { return variables.get(key); },
       setVar(key: string, val: Value) { variables.set(key, val); },
+      pushParamFrame(values: Value[]) { paramFrameStack.push(values); },
+      popParamFrame() { paramFrameStack.pop(); },
+      getParam(index: number) { return paramFrameStack[paramFrameStack.length - 1]?.[index]; },
       reset() {
         stack.length = 0;
         variables.clear();
+        paramFrameStack.length = 0;
         instructionCount = 0;
         // Abort any in-flight async work for the previous expression
         if (abortCurrent) { abortCurrent(); abortCurrent = undefined; }
@@ -89,6 +100,32 @@ export interface Bytecode {
 }
 
 /**
+ * Per-line execution context, threaded optionally through
+ * {@link executeBytecode} down to `CALL_PLUGIN`'s plugin-function handlers
+ * (see `vm/VMBuiltins.ts`'s `pluginFunctionRegistry`).
+ *
+ * Exists so a package can implement cross-line features (`prev`, `line<N>`,
+ * range/above aggregation — see `packages/lines/`) without every other
+ * plugin function having to care: it's optional, and every existing
+ * handler ignores it unchanged. Before this, a plugin function's only
+ * input was its own call-site arguments — no line number, no access to
+ * any other line's cached result. `getLineResult`/`isLineBoundary` are
+ * both `undefined` when there's no real document (e.g.
+ * `ExpressionEngine.evaluateExpression()`'s single-expression path, which
+ * uses `lineIndex = -1` as its existing "no document" sentinel) — a
+ * plugin function needing document access must check for that itself
+ * and return a clear error, never silently treat it as line 0.
+ */
+export interface LineExecutionContext {
+    /** 1-based current line number, or -1 when there is no real document (see class doc above). */
+    lineIndex: number;
+    /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range) — distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
+    getLineResult?: (lineNumber: number) => Value | undefined;
+    /** Whether line `lineNumber` is a blank line or a `#` heading — the stopping condition for "total above"/"sum above"/"average above" aggregation. */
+    isLineBoundary?: (lineNumber: number) => boolean;
+}
+
+/**
  * Discriminated union returned by {@link executeBytecode}.
  *
  * Two variants:
@@ -101,21 +138,58 @@ export interface Bytecode {
  */
 export type EvalResult =
     | { type: 'value'; value: Value }
-    | { type: 'pending'; queryKey: string; resolver: Promise<Value>; packageId: string; signal: AbortSignal };
+    | { type: 'pending'; queryKey: string; resolver: Promise<Value>; packageId: string; signal: AbortSignal }
+    /**
+     * NEW third arm — an internal invariant violation (stack underflow via
+     * `safePop()`, an unresolved global variable bypassing preflight, a
+     * safety limit exceeded) surfaced as a controlled, structured
+     * `EngineError` instead of letting a raw exception escape
+     * `executeBytecode()` uncaught. See `executeBytecode()`'s own doc
+     * comment on the try/catch this arm makes possible.
+     */
+    | { type: 'error'; error: EngineError };
 
 /**
- * Extract the Value from an EvalResult.
- * Throws if the result is pending (should not happen at call sites that
- * have already resolved async dependencies).
+ * Extract the Value from an EvalResult. Throws if the result is
+ * `'pending'` (should not happen at call sites that have already resolved
+ * async dependencies) or `'error'` (re-throws the original `EngineError`
+ * as-is, preserving its structure — this used to be a raw `new Error(...)`).
  */
 export function unwrapEvalResult(result: EvalResult): Value {
     if (result.type === 'value') return result.value;
-    throw new Error(`Expected value result but got pending: ${result.queryKey}`);
+    if (result.type === 'error') throw result.error;
+    throw ErrorFactory.internal("UNEXPECTED_PENDING_RESULT", `Expected value result but got pending: ${result.queryKey}`);
 }
 
 // ── Shared helpers ─────────────────────────────────────────────────────
 // Kept as module-level functions so V8 can inline them at the switch case
 // call sites. Cost: zero when inlined by TurboFan.
+
+/**
+ * Fatal-bug fix: pop the stack, throwing a controlled `EngineError` instead
+ * of silently returning `undefined` on an empty stack. Every one of this
+ * dispatch loop's ~90 opcode cases used to call the raw `stack.pop()!` —
+ * the `!` is compile-time-only, so if bytecode's push/pop counts ever
+ * didn't match what an opcode expected (corrupted bytecode, a buggy
+ * third-party package's parselet, an internal compiler bug), `pop()`
+ * silently returned `undefined` and the NEXT property access on it threw
+ * a raw, uncontrolled `TypeError` — this file's own comments already
+ * flagged the general risk class (see `maxStackDepth`'s doc comment above)
+ * but only ever built a backstop against stack GROWTH; underflow had none.
+ * Caught for free by `executeBytecode()`'s new outer try/catch.
+ */
+function safePop(stack: Value[]): Value {
+    if (stack.length === 0) {
+        throw ErrorFactory.internal({
+            code: "STACK_UNDERFLOW",
+            message: "Stack underflow: an opcode expected a value on the stack but it was empty",
+            expected: "at least one value on the VM stack",
+            found: "an empty stack",
+            suggestion: "this indicates corrupted bytecode or a bug in a package's parselet (mismatched push/pop counts), not a user-input error",
+        });
+    }
+    return stack.pop()!;
+}
 
 /** Extract milliseconds from a duration Value (UoM time unit or plain number).
  *  Used by ADD/SUB datetime fast paths and DATE_ADD/DATE_SUB opcodes. */
@@ -340,7 +414,8 @@ export function executeBytecode(
     bytecode: Bytecode,
     vm: VM,
     pipeline?: DiagnosticPipeline | undefined,
-    expression?: string
+    expression?: string,
+    context?: LineExecutionContext
 ): EvalResult {
     const { opcodes, numbers, strings } = bytecode;
     let ip = 0;
@@ -372,6 +447,20 @@ export function executeBytecode(
 
     if (opcodes.length === 0) return { type: 'value', value: numberValue(0) };
 
+    // Fatal-bug fix: this whole dispatch loop used to have NO surrounding
+    // try/catch at all — a safety-limit throw (INSTRUCTION_LIMIT_EXCEEDED/
+    // STACK_LIMIT_EXCEEDED, both just below), an UNDEFINED_VARIABLE throw,
+    // or a raw TypeError from a stack-underflow bug (see safePop() below)
+    // escaped this function entirely and was only ever caught because every
+    // production call site happened to sit inside SOMEONE ELSE's generic
+    // catch — confirmed NOT true for AsyncResolutionBatcher.reExecuteMainThread(),
+    // which had none (now fixed separately, see that file). EvalResult's
+    // new {type:'error'} arm makes this function's contract match what it
+    // always should have been: three possible outcomes, all returned, none
+    // silently relying on an external catch. Deliberately NOT re-indented
+    // (a ~900-line body) to keep this diff reviewable — a future full pass
+    // could re-indent, this fix does not depend on it.
+    try {
     while (ip < opcodes.length) {
       // Tighten instruction limit check: combined increment + guard.
       // V8 optimises `++localInstructionCount > maxInstructions` into a
@@ -419,14 +508,14 @@ export function executeBytecode(
         case OpCode.NOP:
           break;
         case OpCode.HALT: {
-          const result = stack.pop()!;
+          const result = safePop(stack);
           return { type: 'value', value: hasArena ? persistentValue(result) : result };
         }
         case OpCode.DUP:
           stack.push(stack[stack.length - 1]);
           break;
         case OpCode.SWAP: {
-          const a = stack.pop()!, b = stack.pop()!;
+          const a = safePop(stack), b = safePop(stack);
           stack.push(a);
           stack.push(b);
           break;
@@ -457,7 +546,7 @@ export function executeBytecode(
         //     fast paths; unary ops (NEG/POS) handle BigInt and UoM.
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) + (r.value as number)));
           } else if (l.type === ValueType.Boolean && r.type === ValueType.Boolean) {
@@ -497,7 +586,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.SUB: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) - (r.value as number)));
           } else if (l.type === ValueType.Datetime) {
@@ -526,7 +615,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.MUL: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) * (r.value as number)));
           } else if (l.type === ValueType.Uom && isRateUnit(l.unit) && r.type === ValueType.Uom && r.unit) {
@@ -542,7 +631,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.DIV: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
             const { lv, rv, sameMeasure } = unifyUom(l, r);
             if (sameMeasure) {
@@ -568,24 +657,34 @@ export function executeBytecode(
           break;
         }
         case OpCode.MOD: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           stack.push(binaryOp(l, r, (a, b) => a % b, (a, b) => a % b));
           break;
         }
         case OpCode.EXP: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
+          // Unlike ADD/SUB/MUL/DIV/MOD, EXP never routed through
+          // binaryOp() (VMConversion.ts) — it called Math.pow() on raw
+          // toNumber() output unconditionally, so it needs its own
+          // Error/Pending short-circuit for the same reason binaryOp()
+          // now has one: toNumber() returns 0 for both, so
+          // `errorValue ^ 2` used to silently become `0`.
+          if (l.type === ValueType.Error) { stack.push(l); break; }
+          if (r.type === ValueType.Error) { stack.push(r); break; }
+          if (l.type === ValueType.Pending) { stack.push(l); break; }
+          if (r.type === ValueType.Pending) { stack.push(r); break; }
           stack.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
           break;
         }
         case OpCode.NEG: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
           else if (v.type === ValueType.Uom) stack.push(uomValue(-v.toNumber(), v.unit!));
           else stack.push(numberValue(-v.toNumber()));
           break;
         }
         case OpCode.POS: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           else stack.push(numberValue(v.toNumber()));
           break;
@@ -595,7 +694,7 @@ export function executeBytecode(
         // §4  Bitwise  (OpCode 30–36)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.LSHIFT: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(BigInt(l.toNumber()) << BigInt(r.toNumber())));
           } else {
@@ -604,7 +703,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.RSHIFT: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(BigInt(l.toNumber()) >> BigInt(r.toNumber())));
           } else {
@@ -613,7 +712,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.BIT_AND: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(BigInt(l.toNumber()) & BigInt(r.toNumber())));
           } else {
@@ -622,7 +721,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.BIT_OR: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(BigInt(l.toNumber()) | BigInt(r.toNumber())));
           } else {
@@ -631,7 +730,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.BIT_XOR: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(BigInt(l.toNumber()) ^ BigInt(r.toNumber())));
           } else {
@@ -640,7 +739,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.BIT_NOT: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(~(v.value as bigint)));
           else stack.push(numberValue(~v.toNumber()));
           break;
@@ -652,7 +751,7 @@ export function executeBytecode(
         //     EQ/NEQ support UoM unification for same-measure comparison.
         // ═══════════════════════════════════════════════════════════════
         case OpCode.EQ: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) === (r.value as number)));
           } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
@@ -664,7 +763,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.NEQ: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) !== (r.value as number)));
           } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
@@ -676,7 +775,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.LT: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) < (r.value as number)));
           } else {
@@ -685,7 +784,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.LTE: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) <= (r.value as number)));
           } else {
@@ -694,7 +793,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.GT: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) > (r.value as number)));
           } else {
@@ -703,7 +802,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.GTE: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) >= (r.value as number)));
           } else {
@@ -716,12 +815,12 @@ export function executeBytecode(
         // §4c Logical / conditional select  (OpCode 130–132)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.LOGICAL_AND: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           stack.push(boolValue(isTruthy(l) && isTruthy(r)));
           break;
         }
         case OpCode.LOGICAL_OR: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           stack.push(boolValue(isTruthy(l) || isTruthy(r)));
           break;
         }
@@ -732,9 +831,9 @@ export function executeBytecode(
           // intentional simplification, not an oversight). Stack order
           // (bottom to top) matches the natural parse order of "if
           // condition then thenVal else elseVal": [condition, thenVal, elseVal].
-          const elseVal = stack.pop()!;
-          const thenVal = stack.pop()!;
-          const condition = stack.pop()!;
+          const elseVal = safePop(stack);
+          const thenVal = safePop(stack);
+          const condition = safePop(stack);
           stack.push(isTruthy(condition) ? thenVal : elseVal);
           break;
         }
@@ -746,13 +845,13 @@ export function executeBytecode(
           const fnIdx = opcodes[ip++];
           const argCount = opcodes[ip++];
           const args: Value[] = [];
-          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
+          for (let i = 0; i < argCount; i++) args.push(safePop(stack));
           args.reverse();
           const fn = pluginFunctionRegistry[fnIdx];
           if (!fn) {
             stack.push(numberValue(0));
           } else {
-            const result = fn(args);
+            const result = fn(args, context);
             if (result instanceof Promise) {
               // Return pending result — no throw. The orchestrator checks
               // result.type and handles async resolution outside the VM.
@@ -775,15 +874,85 @@ export function executeBytecode(
           const fnIdx = opcodes[ip++];
           const argCount = opcodes[ip++];
           const args: Value[] = [];
-          for (let i = 0; i < argCount; i++) args.push(stack.pop()!);
+          for (let i = 0; i < argCount; i++) args.push(safePop(stack));
           const fn = builtinFunctions[fnIdx];
           if (fn) stack.push(fn(args.reverse()));
+          break;
+        }
+        case OpCode.CALL_USER_FUNCTION: {
+          // User-defined, parameterized, reusable functions (Calca-parity
+          // Phase 1) — see UserFunctionRegistry.ts's doc comment. `name`'s
+          // body was compiled to its OWN independent BytecodeProgram at
+          // definition time (parameter references already rewritten to
+          // LOAD_PARAM, not LOAD_VAR — see UserFunctionParselet.ts), so
+          // re-executing it here is a genuinely reentrant executeBytecode()
+          // call sharing this same `vm`/stack — safe because any valid
+          // bytecode program, run to completion, leaves exactly one net
+          // value on the stack, the same invariant every other expression
+          // already relies on.
+          const nameIdx = opcodes[ip++];
+          const argCount = opcodes[ip++];
+          const name = strings[nameIdx];
+          const args: Value[] = [];
+          for (let i = 0; i < argCount; i++) args.push(safePop(stack));
+          args.reverse();
+          const fn = userFunctionRegistry.get(name);
+          if (!fn) {
+            throw ErrorFactory.execution("UNDEFINED_FUNCTION", `Undefined function: ${name}`, { name });
+          }
+          if (argCount !== fn.params.length) {
+            throw ErrorFactory.execution(
+              "FUNCTION_ARITY_MISMATCH",
+              `${name} expects ${fn.params.length} argument(s) but got ${argCount}`,
+              { name, expected: fn.params.length, actual: argCount },
+            );
+          }
+          vm.pushParamFrame(args);
+          let bodyResult: EvalResult;
+          try {
+            bodyResult = executeBytecode(fn.program, vm, pipeline, expression, context);
+          } finally {
+            // Always pop, even if the body throws — an uncaught error inside
+            // one call must not leave a stale frame poisoning whatever
+            // (unrelated) expression runs next.
+            vm.popParamFrame();
+          }
+          if (bodyResult.type === "pending") {
+            // Phase 1 scope decision: a user function's body calling an
+            // async plugin function (weather, stocks, ...) isn't supported
+            // yet — propagating a 'pending' result up through a reentrant
+            // executeBytecode() call would need the OUTER expression's own
+            // bytecode position/stack state to also be resumable later,
+            // which this first pass doesn't implement. An honest error
+            // beats a silently wrong/hung result.
+            throw ErrorFactory.execution(
+              "USER_FUNCTION_ASYNC_UNSUPPORTED",
+              `${name}: user-defined functions with async bodies (weather, stocks, currency, ...) aren't supported yet`,
+              { name },
+            );
+          }
+          if (bodyResult.type === "error") {
+            // A controlled internal-invariant error inside the body — surface
+            // it as-is rather than swallowing/rewrapping (same convention as
+            // unwrapEvalResult()).
+            throw bodyResult.error;
+          }
+          stack.push(bodyResult.value);
           break;
         }
 
         // ═══════════════════════════════════════════════════════════════
         // §6  Variables  (OpCode 60–63)
         // ═══════════════════════════════════════════════════════════════
+        case OpCode.LOAD_PARAM: {
+          // User-defined-function parameter read (Calca-parity Phase 1) —
+          // operand is a positional INDEX into the current call's bound
+          // arguments, not a strings-table index (see UserFunctionParselet.ts's
+          // definition-time LOAD_VAR -> LOAD_PARAM rewrite).
+          const index = opcodes[ip++];
+          stack.push(vm.getParam(index)!);
+          break;
+        }
         case OpCode.LOAD_VAR: {
           const varName = strings[opcodes[ip++]];
           const val = vm.getVar(varName);
@@ -799,7 +968,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.STORE_VAR: {
-          const val = stack.pop()!;
+          const val = safePop(stack);
           const varName = strings[opcodes[ip++]];
           vm.setVar(varName, hasArena ? persistentValue(val) : val);
           stack.push(val);
@@ -807,18 +976,36 @@ export function executeBytecode(
         }
         case OpCode.LOAD_GLOBAL_VAR: {
           // GlobalVariableAsyncResolver's preflight() runs BEFORE the VM ever
-          // reaches this opcode and intercepts the "not yet declared by any
-          // loaded document" case (returning a Pending value up front,
-          // mirroring how currency conversion's preflight intercepts before
-          // UOM_CONVERT_TO runs) — by the time execution gets here, the value
-          // is guaranteed present, so this is an unconditional read, no
-          // undefined-check/throw needed.
+          // reaches this opcode and is SUPPOSED to intercept the "not yet
+          // declared by any loaded document" case (returning a Pending value
+          // up front, mirroring how currency conversion's preflight
+          // intercepts before UOM_CONVERT_TO runs) — but that invariant is
+          // confirmed violable: ThreeTierEvaluator's Tier 2 (executeCached())
+          // can mark a line "clean" and skip straight to VM execution without
+          // ever running preflightAll() (see ARCHITECTURE.md §7's P0 item —
+          // still open, gated on the larger L1 migration). This used to be a
+          // bare `!` non-null assertion — a raw, uncontrolled TypeError the
+          // instant that invariant was violated, rather than a controlled
+          // error. Explicit check instead: the read is still expected to
+          // always succeed in the common case, but "expected to always
+          // succeed" was exactly the wrong assumption that produced the
+          // Tier-2 bypass bug in the first place.
           const varName = strings[opcodes[ip++]];
-          stack.push(sharedGlobalVariableStore.get(varName)!);
+          const globalValue = sharedGlobalVariableStore.get(varName);
+          if (globalValue === undefined) {
+            throw ErrorFactory.execution({
+              code: "GLOBAL_VARIABLE_NOT_RESOLVED",
+              message: `Global variable "${varName}" was read before it resolved`,
+              expected: `global variable "${varName}" to already be resolved (async preflight should guarantee this)`,
+              found: "no value in the global variable store",
+              context: { varName },
+            });
+          }
+          stack.push(globalValue);
           break;
         }
         case OpCode.STORE_GLOBAL_VAR: {
-          const val = stack.pop()!;
+          const val = safePop(stack);
           const varName = strings[opcodes[ip++]];
           // Persisting here matters even more than for STORE_VAR: a global
           // outlives not just this call's own VM but every OTHER document's
@@ -834,48 +1021,48 @@ export function executeBytecode(
         // §7  Type conversions  (OpCode 70–74, 140–145)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.TO_NUMBER: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(numberValue(v.toNumber()));
           break;
         }
         case OpCode.TO_HEX: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(hexValue(v.toNumber()));
           break;
         }
         case OpCode.TO_PERCENTAGE: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(percentageValue(v.toNumber()));
           break;
         }
         case OpCode.TO_FRACTION: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(stringValue(toFractionString(v.toNumber())));
           break;
         }
         case OpCode.TO_MULTIPLIER: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(stringValue(toMultiplierString(v.toNumber())));
           break;
         }
         case OpCode.TO_SCI: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(stringValue(toScientificString(v.toNumber())));
           break;
         }
         case OpCode.TO_BINARY: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(stringValue(toBinaryString(v.toNumber())));
           break;
         }
         case OpCode.TO_OCTAL: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(stringValue(toOctalString(v.toNumber())));
           break;
         }
         case OpCode.CALL_AS_CONVERTER: {
-          const name = (stack.pop()!.value as string).toLowerCase();
-          const value = stack.pop()!;
+          const name = (safePop(stack).value as string).toLowerCase();
+          const value = safePop(stack);
           const converter = asConverterRegistry.get(name);
           if (!converter) {
             stack.push(errorValue("UNKNOWN_AS_CONVERTER", `Unknown converter "as ${name}"`));
@@ -889,15 +1076,15 @@ export function executeBytecode(
         // §8  UoM  (OpCode 80–84)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.UOM_CONVERT: {
-          const unit = (stack.pop()!.value as string);
-          const val = stack.pop()!.toNumber();
+          const unit = (safePop(stack).value as string);
+          const val = safePop(stack).toNumber();
           stack.push(uomValue(val, unit));
           break;
         }
         case OpCode.UOM_CONVERT_TO: {
-          const toUnit = (stack.pop()!.value as string);
-          const fromUnit = (stack.pop()!.value as string);
-          const val = stack.pop()!.toNumber();
+          const toUnit = (safePop(stack).value as string);
+          const fromUnit = (safePop(stack).value as string);
+          const val = safePop(stack).toNumber();
           const measure = getMeasure(fromUnit);
           const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
           if (measure && getMeasure(toUnit) === measure) {
@@ -923,21 +1110,21 @@ export function executeBytecode(
         case OpCode.UOM_POSSIBILITIES: {
           // "sourceUnit to ?" — pops the source unit name string, pushes a
           // human-readable list of every other unit in the same measure.
-          const unit = (stack.pop()!.value as string);
+          const unit = (safePop(stack).value as string);
           const possibilities = getConvertiblePossibilities(unit);
           stack.push(stringValue(possibilities.length > 0 ? possibilities.join(", ") : `No known units for "${unit}"`));
           break;
         }
         case OpCode.UOM_BEST: {
-          const unit = (stack.pop()!.value as string);
-          const val = stack.pop()!.toNumber();
+          const unit = (safePop(stack).value as string);
+          const val = safePop(stack).toNumber();
           const { value, unit: bestUnit } = getBestUnit(val, unit);
           stack.push(uomValue(value, bestUnit));
           break;
         }
         case OpCode.UOM_CONVERT_IN: {
-          const toUnit = (stack.pop()!.value as string);
-          const left = stack.pop()!;
+          const toUnit = (safePop(stack).value as string);
+          const left = safePop(stack);
           if (left.type === ValueType.Uom) {
             const fromUnit = left.unit!;
             const val = left.toNumber();
@@ -964,7 +1151,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.UOM_GET_VALUE: {
-          const v = stack.pop()!;
+          const v = safePop(stack);
           stack.push(numberValue(v.toNumber()));
           break;
         }
@@ -976,8 +1163,8 @@ export function executeBytecode(
         case OpCode.RATE_DIV: {
           // Construction: Uom ÷ Uom (different measures) -> Rate.
           // "90 km / 3 day" -> "30 km/day": magnitude divides, units join.
-          const denominatorVal = stack.pop()!;
-          const numeratorVal = stack.pop()!;
+          const denominatorVal = safePop(stack);
+          const numeratorVal = safePop(stack);
           if (denominatorVal.type !== ValueType.Uom || !denominatorVal.unit) {
             stack.push(errorValue("RATE_MISSING_DENOMINATOR_UNIT", "Cannot build a rate: the right-hand side of \"/\" has no unit"));
             break;
@@ -992,8 +1179,8 @@ export function executeBytecode(
           // rate-shaped — see multiplyRateByMatchingUom(). Kept as its own
           // opcode for packages that want to emit it deliberately rather
           // than relying on operand-type auto-detection.
-          const multiplier = stack.pop()!;
-          const rate = stack.pop()!;
+          const multiplier = safePop(stack);
+          const rate = safePop(stack);
           if (rate.type !== ValueType.Uom || !isRateUnit(rate.unit)) {
             stack.push(errorValue("RATE_MUL_LEFT_NOT_A_RATE", "Left-hand side of a rate multiplication must be a rate (e.g. \"$50/week\")"));
             break;
@@ -1008,8 +1195,8 @@ export function executeBytecode(
         case OpCode.RATE_CONVERT: {
           // Rescale a rate's denominator to a new unit, preserving the
           // real-world rate. "30/week as /month" -> "~130/month".
-          const newDenominatorUnit = (stack.pop()!.value as string);
-          const rate = stack.pop()!;
+          const newDenominatorUnit = (safePop(stack).value as string);
+          const rate = safePop(stack);
           if (rate.type !== ValueType.Uom || !isRateUnit(rate.unit)) {
             stack.push(errorValue("RATE_CONVERT_NOT_A_RATE", "Cannot convert a non-rate value's denominator"));
             break;
@@ -1038,7 +1225,7 @@ export function executeBytecode(
           // "9:00am"/"16:00" — anchored to TODAY's calendar date, not a
           // relative offset from `now` (so it stays correct regardless of
           // what time it currently is — "9:00am" always means 9am today).
-          const totalMinutes = stack.pop()!.toNumber();
+          const totalMinutes = safePop(stack).toNumber();
           const now = new Date();
           const anchored = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
           anchored.setMinutes(totalMinutes);
@@ -1056,12 +1243,12 @@ export function executeBytecode(
           stack.push(datetimeValue(numbers[opcodes[ip++]]));
           break;
         case OpCode.DATE_ADD: {
-          const durValue = stack.pop()!, dtValue = stack.pop()!;
+          const durValue = safePop(stack), dtValue = safePop(stack);
           stack.push(datetimeValue(dtValue.toNumber() + extractDurationMs(durValue)));
           break;
         }
         case OpCode.DATE_SUB: {
-          const durValue = stack.pop()!, dtValue = stack.pop()!;
+          const durValue = safePop(stack), dtValue = safePop(stack);
           stack.push(datetimeValue(dtValue.toNumber() - extractDurationMs(durValue)));
           break;
         }
@@ -1074,8 +1261,8 @@ export function executeBytecode(
           // from a Monday lands 7 days back, not today. Time-of-day is
           // preserved from `now` (matches "today"/"now" both resolving to
           // the current instant elsewhere in this file, not midnight).
-          const targetDay = stack.pop()!.toNumber();
-          const nowValue = stack.pop()!;
+          const targetDay = safePop(stack).toNumber();
+          const nowValue = safePop(stack);
           const now = nowValue.toNumber();
           const currentDay = new Date(now).getDay();
           let diffDays = op === OpCode.DATE_NEXT_WEEKDAY
@@ -1094,22 +1281,22 @@ export function executeBytecode(
         case OpCode.ARR_NEW: {
           const count = opcodes[ip++];
           const components: number[] = [];
-          for (let i = 0; i < count; i++) components.unshift(stack.pop()!.toNumber());
+          for (let i = 0; i < count; i++) components.unshift(safePop(stack).toNumber());
           stack.push(arrayValue(components));
           break;
         }
         case OpCode.ARR_ADD: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           stack.push(binaryOp(l, r, (a, b) => a + b));
           break;
         }
         case OpCode.ARR_SUB: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           stack.push(binaryOp(l, r, (a, b) => a - b));
           break;
         }
         case OpCode.ARR_DOT: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           const lv = l.value as number[], rv = r.value as number[];
           const len = Math.min(lv.length, rv.length);
           let sum = 0;
@@ -1118,7 +1305,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.ARR_CROSS: {
-          const r = stack.pop()!, l = stack.pop()!;
+          const r = safePop(stack), l = safePop(stack);
           const lv = l.value as number[], rv = r.value as number[];
           if (lv.length >= 3 && rv.length >= 3) {
             stack.push(arrayValue([
@@ -1132,8 +1319,8 @@ export function executeBytecode(
           break;
         }
         case OpCode.ARR_SCALE: {
-          const scalar = stack.pop()!.toNumber();
-          const arr = stack.pop()!;
+          const scalar = safePop(stack).toNumber();
+          const arr = safePop(stack);
           const av = arr.value as number[];
           const result = new Array(av.length);
           for (let i = 0; i < av.length; i++) result[i] = av[i] * scalar;
@@ -1141,7 +1328,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.ARR_MAGNITUDE: {
-          const arr = stack.pop()!;
+          const arr = safePop(stack);
           const av = arr.value as number[];
           let sumSq = 0;
           for (let i = 0; i < av.length; i++) sumSq += av[i] * av[i];
@@ -1149,7 +1336,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.ARR_NORMALIZE: {
-          const arr = stack.pop()!;
+          const arr = safePop(stack);
           const av = arr.value as number[];
           let sumSq = 0;
           for (let i = 0; i < av.length; i++) sumSq += av[i] * av[i];
@@ -1168,6 +1355,9 @@ export function executeBytecode(
     }
 
     // Fallback return (reached if while loop exits without HALT — shouldn't happen on valid bytecode)
-    const fallback = stack.pop()!;
+    const fallback = safePop(stack);
     return { type: 'value', value: hasArena ? persistentValue(fallback) : fallback };
+    } catch (e) {
+        return { type: 'error', error: normalizeUnknownError(e) };
+    }
 }

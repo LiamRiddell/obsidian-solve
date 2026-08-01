@@ -168,6 +168,15 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	WON: "unit",
 	CURRENCY_SYMBOL: "unit",
 
+	// Cross-line data access (packages/lines/)
+	PREV: "keyword",
+	LINE_REF: "keyword",
+	SUM_RANGE_CALL: "keyword",
+	AVERAGE_RANGE_CALL: "keyword",
+	TOTAL_ABOVE: "keyword",
+	SUM_ABOVE: "keyword",
+	AVERAGE_ABOVE: "keyword",
+
 	// Datetime literals/durations
 	DATETIME_LITERAL: "datetime",
 	DURATION: "datetime",

@@ -1,8 +1,9 @@
 import type { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import type { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
-import type { Value } from "@solve-js/vm/Value";
+import { type Value, errorValue } from "@solve-js/vm/Value";
 import { executeBytecode } from "@solve-js/vm/VM";
 import type { VM } from "@solve-js/vm/OpRegistry";
+import { normalizeUnknownError } from "@solve-js/errors/EngineError";
 import {
 	ExecutionPool,
 	WORKER_OFFLOAD_THRESHOLD,
@@ -197,7 +198,25 @@ export class AsyncResolutionBatcher {
 
 		if (!this.scheduled) {
 			this.scheduled = true;
-			queueMicrotask(() => this.flush());
+			// Hard backstop, deliberately redundant with reExecuteMainThread()'s
+			// own per-line try/catch: this runs inside a bare queueMicrotask
+			// callback, which has no caller able to catch anything that escapes
+			// it — an uncaught throw here becomes an uncaughtException that can
+			// crash the host process. flush() is expected to never throw past
+			// its own internal per-line containment, but "expected to never" is
+			// exactly the assumption that was silently wrong before this pass
+			// (see reExecuteMainThread()'s doc comment) — this exists so a
+			// FUTURE regression in flush()'s own control flow (topologicalSort(),
+			// the DAG walk, an error-listener notification) degrades to a
+			// logged, contained failure instead of a repeat of that bug.
+			queueMicrotask(() => {
+				try {
+					this.flush();
+				} catch (e) {
+					const engineError = normalizeUnknownError(e);
+					console.error(`[AsyncResolutionBatcher] flush() failed unexpectedly — this should never happen; please report: ${engineError.format()}`);
+				}
+			});
 		}
 	}
 
@@ -367,7 +386,16 @@ export class AsyncResolutionBatcher {
 			for (const lineNumber of ordered) {
 				entryMap.set(lineNumber, this.lineCache.getEntryForLine(lineNumber));
 			}
-			void this.reExecuteViaWorkerPool(ordered, entryMap, allQueryKeys);
+			// .catch() is required, not optional: reExecuteViaWorkerPool() is an
+			// async method dispatched with `void` (fire-and-forget) — without a
+			// handler here, a rejection (a worker crash, `executionPool.executeBatch`
+			// throwing) becomes an unhandled promise rejection, the async
+			// equivalent of the uncaught-exception risk `add()`'s queueMicrotask
+			// backstop guards against for the synchronous path.
+			void this.reExecuteViaWorkerPool(ordered, entryMap, allQueryKeys).catch((e) => {
+				const engineError = normalizeUnknownError(e);
+				console.error(`[AsyncResolutionBatcher] reExecuteViaWorkerPool() failed unexpectedly: ${engineError.format()}`);
+			});
 			return;
 		}
 
@@ -534,6 +562,27 @@ export class AsyncResolutionBatcher {
 	 *
 	 * Used by both flush() (≤50 lines) and reExecuteViaWorkerPool() (fallback
 	 * when workers are unavailable). Extracted to avoid code duplication.
+	 *
+	 * **Per-line containment (fatal-bug fix)**: `executeBytecode()` used to
+	 * run here with NO try/catch anywhere in this method's call chain, and
+	 * this whole batch runs inside a bare `queueMicrotask` (see `add()`) with
+	 * no surrounding try/catch at any caller either — so if any ONE line's
+	 * cached bytecode threw (a stack/instruction-limit error, an undefined
+	 * variable, a corrupted-bytecode `TypeError`), the `for` loop aborted
+	 * immediately: every line scheduled AFTER the failure in this batch was
+	 * silently never re-executed or notified even though nothing was wrong
+	 * with them, every line BEFORE it had already had its `entry.result`
+	 * mutated in-place but `notifyListeners()` was never reached (a silent
+	 * `LineCache`/host desync), and — because a bare `queueMicrotask`
+	 * callback has no caller to catch it — the exception was uncatchable:
+	 * an `uncaughtException` that could crash the host process outright.
+	 * (`__tests__/async/AsyncResolutionBatcher.spec.ts`'s topological-sort
+	 * describe block used to have a test skipped specifically because of
+	 * this — see that file, now un-skipped and rewritten.) Each line's
+	 * execution is now its own try/catch: a failure is recorded as an
+	 * `Error` `Value` for THAT line (still counted as "updated" so the host
+	 * learns about it and stops showing a stale Pending state) and the loop
+	 * continues — one line's failure can no longer take out its neighbors.
 	 */
 	private reExecuteMainThread(
 		ordered: number[],
@@ -554,18 +603,33 @@ export class AsyncResolutionBatcher {
 			// the engine's execution pattern: snapshot the stack depth and pop
 			// back to it after execution.
 			const stackBefore = this.vm.getStack().length;
-			const result = executeBytecode(entry.bytecode, this.vm);
-			while (this.vm.getStack().length > stackBefore) {
-				this.vm.pop();
-			}
+			try {
+				const result = executeBytecode(entry.bytecode, this.vm);
+				while (this.vm.getStack().length > stackBefore) {
+					this.vm.pop();
+				}
 
-			if (result.type === "value") {
-				entry.result = result.value;
-				this.onLineResult?.(lineNumber, result.value);
+				if (result.type === "value") {
+					entry.result = result.value;
+					this.onLineResult?.(lineNumber, result.value);
+					updatedLineNumbers.push(lineNumber);
+				}
+				// If still pending, don't mark as updated — will be handled by the
+				// next resolution batch.
+			} catch (e) {
+				// Restore the stack to its pre-execution depth even on failure —
+				// a partially-executed opcode sequence may have pushed values it
+				// never got to pop, and leaving them would corrupt every
+				// subsequent line's execution in this same shared VM.
+				while (this.vm.getStack().length > stackBefore) {
+					this.vm.pop();
+				}
+				const engineError = normalizeUnknownError(e);
+				const value = errorValue(engineError.code, engineError.message);
+				entry.result = value;
+				this.onLineResult?.(lineNumber, value);
 				updatedLineNumbers.push(lineNumber);
 			}
-			// If still pending, don't mark as updated — will be handled by the
-			// next resolution batch.
 		}
 
 		// Notify listeners of updated lines.

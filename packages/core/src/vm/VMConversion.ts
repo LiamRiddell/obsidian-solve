@@ -45,6 +45,25 @@ export function binaryOp(
     op: (a: number, b: number) => number,
     bigOp?: (a: bigint, b: bigint) => bigint
 ): Value {
+    // Error/Pending short-circuit — MUST run before any other branch.
+    // Value.toNumber() returns 0 for both Error and Pending (see
+    // vm/Value.ts), so without this check, every path below (including
+    // the plain-number fast path two lines down) would silently treat an
+    // errored or not-yet-resolved operand as the number 0 — e.g. an
+    // errored cross-line reference (`prev + 1` in packages/lines) would
+    // quietly evaluate to 1 instead of surfacing the error. Propagate
+    // Error/Pending operands as-is (left operand checked first, matching
+    // left-to-right evaluation order) rather than manufacturing a new
+    // error, so the original error code/message (or pending query key)
+    // reaches the caller unchanged. Confirmed via ADD/SUB/MUL/DIV/MOD in
+    // vm/VM.ts: none of their type-specific fast paths (Number/Boolean/
+    // Datetime/Uom/Rate) match Error or Pending, so every one of them
+    // already funnels here on those operand types.
+    if (l.type === ValueType.Error) return l;
+    if (r.type === ValueType.Error) return r;
+    if (l.type === ValueType.Pending) return l;
+    if (r.type === ValueType.Pending) return r;
+
     // Fast path: both operands are plain numbers — skip all type checks.
     // This is the overwhelmingly common case (90%+ of all binary ops).
     // Inlined arithmetic avoids the overhead of helper function dispatch,

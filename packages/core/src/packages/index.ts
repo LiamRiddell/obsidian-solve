@@ -17,6 +17,7 @@ export {
 	WEATHER_PACKAGE,
 	createStocksPackage,
 	createKnowledgePackage,
+	LINES_PACKAGE,
 	BUILTIN_PACKAGES,
 } from "./builtins";
 

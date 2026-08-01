@@ -9,10 +9,11 @@ import { PrecedenceParser } from "@solve-js/parser/PrecedenceParser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
-import type { EvalResult } from "@solve-js/vm/VM";
+import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
+import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { pluginFunctionRegistry, registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
-import { Value, numberValue, pendingValue, freezeIfDev } from "@solve-js/vm/Value";
+import { Value, numberValue, pendingValue, freezeIfDev, errorValue } from "@solve-js/vm/Value";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { checkPackageCompatibility } from "@solve-js/api/PackageCompatibility";
@@ -168,6 +169,51 @@ export class ExpressionEngine {
      * — see `api/PackageCompatibility.ts`'s module doc for why this exists.
      */
     private registeredPackages = new Map<string, IEnginePackage>();
+
+    /**
+     * The `DocumentModel` this engine is currently evaluating, if any —
+     * `null` for a bare engine with no document (e.g. anything only ever
+     * calling `evaluateExpression()`). `ExpressionEngine` doesn't own its
+     * `DocumentModel` (`ThreeTierEvaluator` constructs and owns both as
+     * siblings) — this is set once, via {@link setDocumentModel}, purely so
+     * {@link makeLineContext} can answer "what's line N's cached result"
+     * for cross-line features (`prev`/`line<N>`/aggregation — see
+     * `packages/lines/`) without the engine needing to own document
+     * lifecycle itself.
+     */
+    private documentModel: DocumentModel | null = null;
+
+    /**
+     * Called once by `ThreeTierEvaluator`'s constructor. Not part of the
+     * public evaluate-a-document contract — purely internal wiring so
+     * {@link makeLineContext} has something to read from.
+     */
+    setDocumentModel(doc: DocumentModel | null): void {
+        this.documentModel = doc;
+    }
+
+    /**
+     * Build the {@link LineExecutionContext} passed to `executeBytecode()`
+     * for a given line. `lineNumber = -1` (the existing sentinel
+     * `evaluateExpression()`/`evaluateLine(-1, ...)` already use for "no
+     * real document") naturally produces a context with both closures
+     * `undefined` — a cross-line plugin function must check for that itself
+     * and return a clear error, never assume line 0 exists.
+     */
+    private makeLineContext(lineNumber: number): LineExecutionContext {
+        const doc = this.documentModel;
+        return {
+            lineIndex: lineNumber,
+            getLineResult: doc ? (n: number) => doc.getLineAt(n)?.result ?? undefined : undefined,
+            isLineBoundary: doc
+                ? (n: number) => {
+                      const state = doc.getLineAt(n);
+                      if (!state) return true; // out of range counts as a boundary — nothing to aggregate past it
+                      return state.isEmpty || /^\s*#/.test(state.text);
+                  }
+                : undefined,
+        };
+    }
 
     /**
      * Package-contributed completion candidates (`IEnginePackage.completionItems`),
@@ -616,7 +662,7 @@ export class ExpressionEngine {
         };
 
         setActiveQueryClient(this.queryClient);
-        const result = executeBytecode(program, this.vm);
+        const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber));
 
         // Single stack cleanup (replaces 10 occurrences)
         while (this.vm.getStack().length > stackBefore) {
@@ -641,6 +687,11 @@ export class ExpressionEngine {
             return pending;
         }
 
+        if (result.type === 'error') {
+            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+            throw result.error;
+        }
+
         // Success path — execution finished synchronously, so unhook the
         // keystroke listener now. Without this, one listener per evaluated
         // line accumulates on the keystroke signal for large documents.
@@ -655,8 +706,14 @@ export class ExpressionEngine {
      * Execute bytecode and return the raw EvalResult without DAG/LineCache updates.
      * Used by reEvaluateLine, executeCached, and evaluateIncremental which
      * manage their own cache state differently.
+     *
+     * @param lineNumber - 1-based line this bytecode belongs to, for
+     * cross-line features (`prev`/`line<N>`/aggregation — see
+     * `makeLineContext()`). Defaults to -1 (the existing "no real
+     * document" sentinel) for any caller that doesn't have a real line
+     * number to pass.
      */
-    private executeRaw(program: BytecodeProgram): EvalResult {
+    private executeRaw(program: BytecodeProgram, lineNumber: number = -1): EvalResult {
         const stackBefore = this.vm.getStack().length;
 
         const controller = new AbortController();
@@ -677,7 +734,7 @@ export class ExpressionEngine {
         };
 
         setActiveQueryClient(this.queryClient);
-        const result = executeBytecode(program, this.vm);
+        const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber));
 
         // Stack cleanup
         while (this.vm.getStack().length > stackBefore) {
@@ -1821,11 +1878,23 @@ export class ExpressionEngine {
                     program,
                     this.vm,
                     emitVmTrace ? pipeline : undefined,
-                    expression
+                    expression,
+                    this.makeLineContext(lineNumber)
                 );
             }, { cacheHit: !!cachedProgram });
             evalResult = vmResult.result;
             if (trackEnabled && vmResult.alloc) stageAllocs.push(vmResult.alloc);
+            if (evalResult.type === 'error') {
+                // executeBytecode()'s outer try/catch now returns internal
+                // invariant violations as DATA ({type:'error'}) instead of
+                // throwing them — re-throw here so this SAME catch block
+                // still converts it into the soft `error` return field
+                // below, exactly as it already does for every other VM
+                // failure. Without this, an internal-invariant failure
+                // would silently bypass this catch entirely and reach
+                // `evalResult.value` further down with no value to read.
+                throw evalResult.error;
+            }
         } catch (e) {
             // A VM runtime error (e.g. an undefined variable reference)
             // previously propagated straight out of evaluateExpressionWithDiagnostic
@@ -1864,13 +1933,16 @@ export class ExpressionEngine {
         }
 
         // Structured: VM Execute stage
+        // (evalResult is already narrowed to 'value' | 'pending' here — the
+        // try block above re-throws on 'error' so this same function's
+        // catch block handles it, same as any other VM failure.)
         if (hasCollectors) {
             const resultValue = evalResult.type === 'pending'
                 ? 'pending'
-                : String(evalResult.value?.value ?? '');
+                : String(evalResult.value.value ?? '');
             const resultType = evalResult.type === 'pending'
                 ? 'Pending'
-                : (evalResult.value?.unit ? 'Uom' : 'Number');
+                : (evalResult.value.unit ? 'Uom' : 'Number');
             this.addDiagnosticStage(stages, 'vm_execute', 'VM Execute', '⚡', 'vm', 11, zeroElapsed, false, {
                 type: 'vm_execute',
                 totalInstructions: program.opcodes.length,
@@ -2137,11 +2209,14 @@ export class ExpressionEngine {
         // No vm.reset() here: reset() clears the variable table, which would
         // wipe variables defined by other lines that this line's bytecode may
         // read. executeRaw() already snapshots and restores the stack depth.
-        const evalResult = this.executeRaw(program);
+        const evalResult = this.executeRaw(program, lineNumber);
 
         if (evalResult.type === 'pending') {
             void this.resolveAsync(evalResult);
             return pendingValue(evalResult.queryKey);
+        }
+        if (evalResult.type === 'error') {
+            throw evalResult.error;
         }
 
         const result = evalResult.value;
@@ -2504,19 +2579,34 @@ export class ExpressionEngine {
 	 * management via DocumentModel).
 	 *
 	 * @returns The execution result, or undefined if bytecode is empty.
+	 * @param lineNumber - 1-based line this bytecode belongs to, for
+	 * cross-line features (see `makeLineContext()`). Defaults to -1.
 	 */
-	executeCached(program: BytecodeProgram): Value {
+	executeCached(program: BytecodeProgram, lineNumber: number = -1): Value {
 		if (program.opcodes.length === 0) {
 			return numberValue(0);
 		}
-		const evalResult = this.executeRaw(program);
+		const evalResult = this.executeRaw(program, lineNumber);
 
 		if (evalResult.type === 'pending') {
 			void this.resolveAsync(evalResult);
 			return pendingValue(evalResult.queryKey);
 		}
+		if (evalResult.type === 'error') {
+			// This is exactly the Tier-2/LOAD_GLOBAL_VAR bypass path
+			// ARCHITECTURE.md's P0 item describes — executeCached() never
+			// calls preflightAll(), so a global-variable read that should
+			// have been guaranteed-resolved by preflight can now surface
+			// here as a controlled GLOBAL_VARIABLE_NOT_RESOLVED error
+			// (see VM.ts's LOAD_GLOBAL_VAR case) instead of a raw
+			// uncaught TypeError. Re-throw so the caller's existing
+			// error handling (ThreeTierEvaluator's own per-tier try/catch)
+			// handles it exactly like any other executeCached() failure.
+			throw evalResult.error;
+		}
 
-		return evalResult.value;    }
+		return evalResult.value;
+	}
 
     /**
      * Fast path: evaluate an expression and return a number directly.
@@ -2598,12 +2688,26 @@ export class ExpressionEngine {
         for (const lineNumber of affectedLines) {
             const entry = this.lineCache.getEntryForLine(lineNumber);
             if (!entry || entry.bytecode.opcodes.length === 0) continue;
-            const evalResult = this.executeRaw(entry.bytecode);
+            const evalResult = this.executeRaw(entry.bytecode, lineNumber);
 
             if (evalResult.type === 'pending') {
                 void this.resolveAsync(evalResult);
                 // Don't block — continue processing other affected lines.
                 // The pending result will trigger re-evaluation when resolved.
+                continue;
+            }
+            if (evalResult.type === 'error') {
+                // Same per-line-containment shape as
+                // AsyncResolutionBatcher.reExecuteMainThread()'s fatal-bug
+                // fix: this loop re-executes potentially many DAG-affected
+                // lines in one pass — a throw here would abort every
+                // remaining affected line even though nothing was wrong
+                // with them. Record this one line's failure as an Error
+                // Value and continue, rather than letting one bad line take
+                // out the whole incremental-update batch.
+                const value = errorValue(evalResult.error.code, evalResult.error.message);
+                updated.set(lineNumber, value);
+                entry.result = value;
                 continue;
             }
 

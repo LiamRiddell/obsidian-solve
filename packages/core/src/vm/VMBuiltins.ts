@@ -1,5 +1,9 @@
 import { Value, ValueType, numberValue, stringValue, uomValue, errorValue } from "@solve-js/vm/Value";
 import { unifyUom } from "@solve-js/vm/VMConversion";
+// Type-only — VM.ts imports pluginFunctionRegistry FROM this file, so a
+// runtime import the other direction would be circular; `import type` is
+// erased before compilation and doesn't create that problem.
+import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 
 // ── Local formatting helpers for hex()/bin() (indices 48/49 below) ─────────
@@ -475,7 +479,7 @@ function amortizeLoan(
  */
 export const pluginFunctionRegistry: Record<
     number,
-    (args: Value[]) => Value | Promise<Value>
+    (args: Value[], context?: LineExecutionContext) => Value | Promise<Value>
 > = {};
 
 /** Highest index that fits in a single Uint8Array opcode-stream byte. */

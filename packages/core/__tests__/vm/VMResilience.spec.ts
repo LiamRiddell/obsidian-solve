@@ -91,7 +91,7 @@ describe("VM Resilience", () => {
     }
     ops.push(OpCode.HALT);
     const numbers = new Float64Array([1]);
-    expect(() => executeBytecode({ opcodes: new Uint8Array(ops), numbers, strings: [] }, vm))
+    expect(() => unwrapEvalResult(executeBytecode({ opcodes: new Uint8Array(ops), numbers, strings: [] }, vm)))
       .toThrow(/maximum stack depth/i);
   });
 

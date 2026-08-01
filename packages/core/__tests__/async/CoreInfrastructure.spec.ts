@@ -366,7 +366,7 @@ describe("ExpressionEngine EvalResult handling", () => {
 
         const stackBefore = vm.getStack().length;
 
-        expect(() => executeBytecode(bytecode, vm)).toThrow("regular failure");
+        expect(() => unwrapEvalResult(executeBytecode(bytecode, vm))).toThrow("regular failure");
 
         // Stack should be cleaned up (engine's responsibility)
         while (vm.getStack().length > stackBefore) {

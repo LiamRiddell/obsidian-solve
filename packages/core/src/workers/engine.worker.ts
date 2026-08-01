@@ -232,6 +232,16 @@ function executeOne(item: ExecuteItem): ExecuteResult {
 			};
 		}
 
+		if (result.type === "error") {
+			return {
+				lineNumber: item.lineNumber,
+				valueType: ValueType.Error,
+				value: 0,
+				isPending: false,
+				unit: result.error.message,
+			};
+		}
+
 		const val = result.value;
 		return {
 			lineNumber: item.lineNumber,

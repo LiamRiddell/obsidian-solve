@@ -536,7 +536,7 @@ describe("VM — Variables", () => {
   test("LOAD_VAR throws for undefined variable", () => {
     const vm = freshVM();
     expect(() => {
-      executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm);
+      unwrapEvalResult(executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["undefined_var"]), vm));
     }).toThrow(/Undefined variable: undefined_var/);
   });
 });
@@ -573,7 +573,7 @@ describe("VM — Global Variables (direct bytecode, no parser/preflight)", () =>
     const vm = freshVM();
     executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.STORE_GLOBAL_VAR, 0, OpCode.HALT], [5], ["x"]), vm);
     expect(() => {
-      executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["x"]), vm);
+      unwrapEvalResult(executeBytecode(bc([OpCode.LOAD_VAR, 0, OpCode.HALT], [], ["x"]), vm));
     }).toThrow(/Undefined variable: x/);
   });
 
@@ -746,7 +746,7 @@ describe("VM — Edge cases & error handling", () => {
     }
     ops.push(OpCode.HALT);
     const numbers = new Float64Array(10).fill(42);
-    expect(() => executeBytecode(bc(ops, Array.from(numbers)), vm)).toThrow(/maximum stack depth/i);
+    expect(() => unwrapEvalResult(executeBytecode(bc(ops, Array.from(numbers)), vm))).toThrow(/maximum stack depth/i);
   });
 
   test("instruction limit exceeded throws", () => {
@@ -757,7 +757,7 @@ describe("VM — Edge cases & error handling", () => {
     }
     ops.push(OpCode.HALT);
     // Actual error message: "Execution exceeded maximum of 5 instructions"
-    expect(() => executeBytecode(bc(ops), vm)).toThrow(/maximum of \d+ instructions/i);
+    expect(() => unwrapEvalResult(executeBytecode(bc(ops), vm))).toThrow(/maximum of \d+ instructions/i);
   });
 
   test("invalid opcode does not throw — falls through default case", () => {

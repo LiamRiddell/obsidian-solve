@@ -428,6 +428,20 @@ resiliency fix — see "Done since the last pass" below for both.
    half-done — the "diagnostic" pipeline path this bug lives in is actually the real
    Tier-1 production path, not diagnostics-only). Sequence after L1 and Task 1 step 2,
    not before — both touch the same call paths.
+   — **Partial fix 2026-08-01**: the specific "silently wrong number" symptom of this bug
+     class — plain arithmetic (`+`/`-`/`*`/`/`/`%`/`^`) on an `Error` or `Pending` operand
+     silently coercing it to `0` via `Value.toNumber()` and producing a confidently-wrong
+     result — is now fixed at the operator level. `vm/VMConversion.ts`'s `binaryOp()`
+     (the shared fallback every one of ADD/SUB/MUL/DIV/MOD routes through for
+     non-Number/Boolean/Datetime/Uom-rate operand pairs) and `VM.ts`'s `EXP` opcode (which
+     never called `binaryOp()` at all — it called `Math.pow()` directly on raw
+     `toNumber()` output) now both short-circuit and propagate the `Error`/`Pending`
+     operand unchanged instead of computing with it as `0`. Found via
+     `packages/lines/`'s cross-line-reference regression tests
+     (`LinesParselets.spec.ts`'s "P0-interaction guard" describe block) — `prev + 1` on a
+     line whose `prev` target had errored was silently returning `1`. This closes the
+     arithmetic-level symptom engine-wide (not just for `packages/lines`); the underlying
+     Tier 2/3 preflight-bypass/caching bug this item is actually about is still open.
 2. ~~**`maxStackDepth` is documented as a safety limit but is dead code.**~~ **FIXED
    2026-07-30.** `createVM()`'s `push()` had the only bounds check, but
    `executeBytecode()` never called it — every one of the VM's ~40 push sites called

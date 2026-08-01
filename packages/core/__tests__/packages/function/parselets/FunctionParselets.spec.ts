@@ -266,10 +266,11 @@ describe("Function Parselets", () => {
     expect(parseAndExecute("max(9, 3, 7)")).toBe(9);
   });
 
-  test("unknown function parses as variable and fails at VM execution", () => {
-    // PrecedenceParser treats IDENT as LOAD_VAR (Tier 1 dispatch).
-    // Unknown functions are no longer parselet errors — they fail at
-    // VM execution time when the variable is not found (now throws).
+  test("unknown function parses as a user-function call and fails at VM execution", () => {
+    // PrecedenceParser's IDENT_ID case routes `IDENT LPAREN ... RPAREN` (with
+    // no trailing `=`) to CALL_USER_FUNCTION unconditionally (mirrors
+    // LOAD_VAR's own forward-reference behavior — resolved by name at VM
+    // execution time, not at parse time).
     const registry = new ParseletRegistry();
     const parser = new Parser(registry);
     const builder = new BytecodeBuilder();
@@ -280,19 +281,18 @@ describe("Function Parselets", () => {
       { type: "RPAREN", typeId: tokenTypeId("RPAREN"), value: ")", text: ")", offset: 14, lineBreaks: 0, line: 1, col: 15 },
     ];
     parser.load(tokens);
-    // Should NOT throw at parse time — IDENT is handled as LOAD_VAR, LPAREN as grouping.
-    // The VM now throws for undefined variables instead of returning 0.
+    // Should NOT throw at parse time — resolution is deferred to the VM.
     expect(() => {
       parser.parseExpression(0, builder);
     }).not.toThrow();
     const program = builder.build();
     const vm = createVM(sharedOpRegistry);
-    // Undefined variables now throw at VM execution time
+    // Undefined functions throw UNDEFINED_FUNCTION at VM execution time.
     expect(() => {
-      executeBytecode(
+      unwrapEvalResult(executeBytecode(
         { opcodes: new Uint8Array(program.opcodes), numbers: new Float64Array(program.numbers), strings: program.strings },
         vm
-      );
-    }).toThrow(/Undefined variable: unknownFunc/);
+      ));
+    }).toThrow(/Undefined function: unknownFunc/);
   });
 });

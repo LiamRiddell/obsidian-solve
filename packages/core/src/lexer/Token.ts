@@ -276,6 +276,26 @@ export const TokenTypes = {
   // type avoids needing a new TokenTypes entry + TokenCategoryMap entry +
   // CurrencyPackage.ts prefixParselets entry per additional symbol.
   CURRENCY_SYMBOL: "CURRENCY_SYMBOL",
+  // ── Cross-line data access (packages/lines/) ──
+  // "prev" -- bare keyword (nothing to phrase-fuse against, same shape as
+  // CLAMP -- accepted collision risk per that package's own precedent).
+  PREV: "PREV",
+  // "line1" / "line 1" / "l1" -- fused by LineRefNormalizerRule (never a
+  // bare lexer keyword, so ":line = 5"/":l = 5" stay untouched). Carries
+  // the parsed line number as its .value.
+  LINE_REF: "LINE_REF",
+  // "sum(" / "total(" -- fused ONLY when immediately followed by LPAREN
+  // (see LineRefNormalizerRule's lookahead guard), so ":sum = 100" and
+  // MathPhrases' "total of X, Y" (no paren after "of") are unaffected.
+  SUM_RANGE_CALL: "SUM_RANGE_CALL",
+  AVERAGE_RANGE_CALL: "AVERAGE_RANGE_CALL",
+  // "total above" / "sum above" / "average above" -- phrase-fused (see
+  // LinesPackage.ts's `phrases` field), a deliberate departure from
+  // Numi/Numbr's bare "total"/"sum" wording to avoid the exact bare-
+  // keyword collision this codebase already regressed on once.
+  TOTAL_ABOVE: "TOTAL_ABOVE",
+  SUM_ABOVE: "SUM_ABOVE",
+  AVERAGE_ABOVE: "AVERAGE_ABOVE",
 } as const;
 
 export type TokenType = (typeof TokenTypes)[keyof typeof TokenTypes];
