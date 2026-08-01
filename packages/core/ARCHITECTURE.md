@@ -216,6 +216,33 @@ Four extension points now cover the SDK surface beyond `pluginFunctions`/`normal
 (`PhrasePattern`, `createQueryResolver`, `asConverters`, `rawLinePatterns`) — each was
 added because a real built-in package needed it first, not speculatively.
 
+### 5.2 Package compatibility checking (`api/PackageCompatibility.ts`)
+
+A fifth piece of SDK surface, but a different KIND from the four above — not a way to
+build a package, a way to catch two packages FIGHTING each other before it becomes a
+silent bug. `checkPackageCompatibility(candidate, existingPackages)` statically compares
+a package's declared fields against every other package's, across every collision-capable
+field `IEnginePackage` has (parselet token types, phrases, `asConverters` names,
+`pluginFunctions` indices, lexer keywords/operators, async-resolver namespaces, token
+categories), and returns a structured report (`error`/`warning`/`info` per conflict) —
+pure and side-effect-free, callable before an engine even exists.
+
+`ExpressionEngine.registerPackage()` calls it automatically on every registration (logging
+via `console.warn`/`console.error`, never blocking — matches this codebase's established
+"warn and proceed" convention for `ParseletRegistry`/`asConverterRegistry` collisions
+elsewhere) — this is the "load-up resiliency" half: a host doesn't have to remember to run
+a check, it happens for free every time a package loads. Motivated by two real incidents
+this session: (1) three parallel background agents independently claiming the same
+`CALL_BUILTIN`/plugin-function indices — exactly the `pluginFunctionIndex` conflict kind
+this catches at `error` severity; (2) the currency package's real descriptor
+(`CurrencyPackage.ts`) and its parallel test-harness helper
+(`packages/currency/parselets/index.ts`) silently drifting out of sync when new currency
+symbols were added to one but not the other — a different bug class (two hand-written
+registration paths for the SAME package, not two packages colliding), which this checker
+does NOT catch, but which is exactly why the checker's own test suite includes a
+regression guard running it against the real, live `BUILTIN_PACKAGES` array rather than
+only synthetic fixtures.
+
 **A real, load-bearing lesson from building the four newest packages** (`time`,
 `conditionals`, `converters`, `mathphrases`): this codebase has a *tested, intentional*
 policy that a colon-prefixed variable name (`:name = expr`) cannot be a keyword-shaped
