@@ -1064,6 +1064,34 @@ export class ExpressionEngine {
             if (leftover.type === "EQUALS" && !this.parser.peekAt(1)) {
                 return;
             }
+
+            // Labeled-line fallback: "<label>: <expression>", e.g. "pi
+            // approximation: 355/113" (see GitHub issue #65). Only
+            // attempted once the whole-line parse has ALREADY failed, so
+            // it can never change behavior for a line that already
+            // worked. Clock times ("9:30"), lap times ("03:04:05"), and
+            // ":name = value" variable definitions all consume their
+            // colon(s) internally during lexing and never produce a real
+            // COLON token — confirmed directly against the token stream,
+            // not assumed — so this can't misfire on any of them. Only a
+            // genuine COLON token past position 0 counts (position 0 is
+            // reserved for the existing leading-colon variable syntax).
+            let lastLabelColon = -1;
+            for (let i = 1; i < tokens.length; i++) {
+                if (tokens[i].type === "COLON") lastLabelColon = i;
+            }
+            if (lastLabelColon !== -1 && lastLabelColon + 1 < tokens.length) {
+                builder.reset();
+                try {
+                    this.parseExpression(builder, tokens.slice(lastLabelColon + 1), hasParens);
+                    return;
+                } catch {
+                    // The text after the last colon didn't parse cleanly
+                    // either — report the original, whole-line failure
+                    // below instead of this fragment's own error.
+                }
+            }
+
             throw ErrorFactory.parsing(
                 "UNEXPECTED_TRAILING_TOKEN",
                 `Unexpected token after expression: "${leftover.value}"`,

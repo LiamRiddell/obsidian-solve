@@ -85,6 +85,8 @@ export const exampleData: ExampleCategory[] = [
     examples: [
       { name: "Simple variable", expression: ":myVar = 10", description: "Assign variable with colon prefix" },
       { name: "Variable in expression", expression: ":myVar = 10\n:myVar + 5", description: "Use variable in calculation" },
+      { name: "Trailing '=' marker", expression: "355/113=", description: "A trailing bare '=' with nothing after it is ignored, like a pocket calculator" },
+      { name: "Labeled line", expression: "pi approximation: 355/113", description: "Free-text before a colon is treated as a label, not part of the expression" },
     ]
   },
   {
