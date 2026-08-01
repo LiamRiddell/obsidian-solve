@@ -33,6 +33,7 @@ import { WEATHER_PACKAGE } from "./weather";
 import { createStocksPackage } from "./stocks";
 import { createKnowledgePackage } from "./knowledge";
 import { LINES_PACKAGE } from "./lines";
+import { createLatexPackage } from "./latex";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -54,6 +55,7 @@ export {
   createStocksPackage,
   createKnowledgePackage,
   LINES_PACKAGE,
+  createLatexPackage,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -74,6 +76,14 @@ export {
 // exported but deliberately left OUT of BUILTIN_PACKAGES. A host that
 // wants them calls the factory with their own fetch function/API key and
 // adds the result to their ExpressionEngine's `packages` array directly.
+//
+// `createLatexPackage()` (packages/latex/) is opt-in for a different
+// reason: it claims lines wrapped in `$...$`, and `$` is already the USD
+// currency prefix — enabling it by default for every host would be a
+// real behavior change (see that package's own module doc for why the
+// trigger shape can't misfire on ordinary currency once a host DOES
+// opt in). A host that wants LaTeX-subset arithmetic calls
+// `createLatexPackage()` and adds it to their `packages` array directly.
 export const BUILTIN_PACKAGES: IEnginePackage[] = [
   ARITHMETIC_PACKAGE,
   PERCENTAGE_PACKAGE,
