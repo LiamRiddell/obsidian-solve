@@ -30,12 +30,31 @@ function formatBoolean(value: boolean): string {
   return `= ${value}`;
 }
 
+/**
+ * Renders a Datetime value locale-aware — the previous implementation
+ * called `d.toLocaleString()` with no arguments, which always uses the JS
+ * runtime's own default locale and never actually consulted `locale.code`
+ * despite receiving it as a parameter (both branches of its old
+ * `dateFormat === "default"` check were byte-for-byte identical — dead
+ * groundwork for a distinction that was never implemented). Concretely,
+ * this meant every configured locale (including the shipped German one)
+ * always displayed weekday/month names in English — see GitHub issue #77.
+ *
+ * Uses `weekday`/`month`: "long" for a spelled-out date ("Monday,
+ * November 17, 2025" / "lundi 17 novembre 2025") since that's what a
+ * literal weekday name is for; a bare numeric date doesn't need
+ * localizing beyond the decimal/thousands separators `formatNumber()`
+ * already handles. The time-of-day portion is only appended when it's
+ * not exactly local midnight — bare date literals ("today", "17/11/2025")
+ * always anchor to local midnight, and showing "00:00:00" on every one of
+ * those would be noise, not information.
+ */
 function formatDatetime(value: number, locale: ILocale): string {
   const d = new Date(value);
-  if (locale.display.dateFormat === "default") {
-    return `= ${d.toLocaleString()}`;
-  }
-  return `= ${d.toLocaleString()}`;
+  const dateStr = d.toLocaleDateString(locale.code, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const isMidnight = d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0;
+  if (isMidnight) return `= ${dateStr}`;
+  return `= ${dateStr}, ${d.toLocaleTimeString(locale.code)}`;
 }
 
 /**
