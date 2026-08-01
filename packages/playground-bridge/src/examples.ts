@@ -32,6 +32,7 @@ export const exampleData: ExampleCategory[] = [
       { name: "Unary plus", expression: "+5", description: "Explicit positive" },
       { name: "Pi constant", expression: "pi", description: "Mathematical constant" },
       { name: "Addition keyword", expression: "1 plus 2", description: "Keyword-based addition" },
+      { name: "Large number suffix", expression: "2.5k + 1000", description: "'k'/'M'/'G'/'B'/'T' magnitude suffixes (thousand/million/billion/trillion)" },
     ]
   },
   {
@@ -56,6 +57,10 @@ export const exampleData: ExampleCategory[] = [
       { name: "Tomorrow", expression: "tomorrow", description: "Tomorrow's date" },
       { name: "Yesterday", expression: "yesterday", description: "Yesterday's date" },
       { name: "Duration", expression: "now + 20 days", description: "Date arithmetic" },
+      { name: "Workdays in a period", expression: "workdays in 3 weeks", description: "Count of Mon-Fri business days (no public-holiday exclusion)" },
+      { name: "Add workdays", expression: "now + 5 workdays", description: "Business-day-skip date arithmetic" },
+      { name: "Unix timestamp to date", expression: "1733823083000 to date", description: "Millisecond-magnitude Unix timestamp, auto-detected" },
+      { name: "Date to timestamp", expression: "now to timestamp", description: "Convert a date to a Unix timestamp (seconds)" },
     ]
   },
   {
@@ -82,6 +87,8 @@ export const exampleData: ExampleCategory[] = [
       { name: "Length conversion", expression: "100cm to m", description: "Convert centimeters to meters" },
       { name: "Mixed units", expression: "100cm + 1m", description: "Add different units" },
       { name: "Best unit", expression: "1000mm best", description: "Find best unit representation" },
+      { name: "Cooking: mass to volume", expression: "300g butter in cups", description: "Ingredient-density-aware conversion (US Customary)" },
+      { name: "Cooking: volume to mass", expression: "10 cups olive oil in grams", description: "Reverse direction — volume to mass" },
     ]
   },
   {
@@ -147,6 +154,100 @@ export const exampleData: ExampleCategory[] = [
     examples: [
       { name: "Large number", expression: "12345678901234567890n", description: "Big integer literal (the 'n' suffix is required for arbitrary precision — without it, this parses as an imprecise plain Number, same as JavaScript's own BigInt literal syntax)" },
       { name: "BigInt addition", expression: "12345678901234567890n + 1n", description: "BigInt addition — full precision preserved beyond Number.MAX_SAFE_INTEGER" },
+    ]
+  },
+  {
+    name: "Time",
+    description: "Clock time, intervals, lap times, and frame rates",
+    examples: [
+      { name: "Clock time", expression: "9:00am", description: "A clock-time literal, anchored to today's date" },
+      { name: "Time interval", expression: "7:30 to 20:45", description: "Duration between two clock times" },
+      { name: "Frame rate", expression: "30 fps", description: "A Rate value — 30 frames per second" },
+      { name: "Rate multiplication", expression: "30 fps * 3 minutes", description: "Multiplying a rate by a matching duration cancels the denominator" },
+      { name: "Lap time", expression: "03:04:05", description: "A two-colon lap time, parsed as a duration" },
+    ]
+  },
+  {
+    name: "Video Timecode",
+    description: "HH:MM:SS:FF video-editing timecode, fps-aware arithmetic",
+    examples: [
+      { name: "Timecode literal", expression: "01:02:03:04 at 30 fps", description: "A video timecode tagged with its frame rate" },
+      { name: "Timecode + frames", expression: "01:02:03:04 at 30 fps + 10 frames", description: "Carry-aware frame arithmetic" },
+      { name: "Timecode to frame count", expression: "01:02:03:04 at 30 fps in frames", description: "Total frame count since 00:00:00:00" },
+      { name: "Frames to timecode", expression: "900 frames @ 30 fps", description: "Reverse conversion — frame count back to HH:MM:SS:FF" },
+    ]
+  },
+  {
+    name: "Conditionals",
+    description: "Comparisons, boolean logic, and if/then/else",
+    examples: [
+      { name: "Comparison", expression: "5 > 3", description: "Comparison operators produce a boolean result" },
+      { name: "Word 'and'", expression: "true and false", description: "'and'/'or' as boolean-logic words" },
+      { name: "Logical &&", expression: "1 < 2 && 3 < 4", description: "'&&'/'||' correctly combine two comparisons (unlike bare 'and', see docs)" },
+      { name: "If/then/else", expression: "if 5 > 3 then 100 else 200", description: "An eager ternary conditional" },
+    ]
+  },
+  {
+    name: "Converters",
+    description: "The general 'as <type>' conversion mechanism",
+    examples: [
+      { name: "As percent", expression: "0.5 as percent", description: "Convert a decimal to a percentage" },
+      { name: "As hex", expression: "255 as hex", description: "Base-16 display" },
+      { name: "As fraction", expression: "0.5 as fraction", description: "Simplified fraction display" },
+      { name: "As scientific", expression: "1500000 as sci", description: "Scientific notation" },
+      { name: "As binary", expression: "10 as binary", description: "Base-2 display" },
+    ]
+  },
+  {
+    name: "Statistics",
+    description: "Math-phrase functions: aggregates, clamping, proportions",
+    examples: [
+      { name: "GCD", expression: "gcd(12, 18)", description: "Greatest common divisor" },
+      { name: "Average of", expression: "average of 2, 4, 6", description: "Arithmetic mean of any number of values" },
+      { name: "Clamp", expression: "clamp 15 between 0 and 10", description: "Restrict a value to a range" },
+      { name: "Midpoint", expression: "midpoint between 10 and 20", description: "The value halfway between two numbers" },
+      { name: "Proportion", expression: "5 km is to 500m as 5 cm is to what", description: "Unit-aware proportion — solves the missing fourth value" },
+    ]
+  },
+  {
+    name: "Bases & Bitwise",
+    description: "Python/JS-style base-conversion and truncation functions",
+    examples: [
+      { name: "hex()", expression: "hex(255)", description: "Call-syntax hex formatting" },
+      { name: "bin()", expression: "bin(10)", description: "Call-syntax binary formatting" },
+      { name: "int()", expression: "int(5.7)", description: "Truncate to a plain integer" },
+      { name: "Large number suffix", expression: "2.5k", description: "'k'/'M'/'G'/'B'/'T' magnitude suffixes" },
+    ]
+  },
+  {
+    name: "Time Zones",
+    description: "Convert times between cities. (Also supported but not shown here: \"time in <city>\", \"date in <city>\", and \"time difference between X and Y\" — this playground's line-classifier currently requires a digit/symbol to recognize a line as an expression, so these all-word forms don't display a result as a standalone example here, even though the engine evaluates them correctly.)",
+    examples: [
+      { name: "Convert a time", expression: "6pm Sydney in Chicago", description: "What time is 6pm Sydney time, in Chicago?" },
+      { name: "Zone offset", expression: "3pm GMT+8 in Paris", description: "Convert from a numeric UTC offset" },
+      { name: "Convert via abbreviation", expression: "2am PST in GMT", description: "Convert using a standard-time abbreviation" },
+    ]
+  },
+  {
+    name: "Finance",
+    description: "Compound interest, mortgage/loan repayment, and sales tax",
+    examples: [
+      { name: "Compound interest", expression: "compound interest on 1000 over 3 years at 7%", description: "Future value of an investment" },
+      { name: "Interest earned", expression: "interest on 1000 over 3 years at 7%", description: "Interest-only portion of compound growth" },
+      { name: "Monthly repayment", expression: "monthly repayment on 10000 over 6 years at 6%", description: "Standard mortgage/loan amortization" },
+      { name: "Sales tax", expression: "tax on 300 at 20%", description: "Add sales tax/VAT at an explicit rate" },
+      { name: "Remove tax", expression: "tax off 360 at 20%", description: "Extract the pre-tax amount from a tax-inclusive total" },
+      { name: "Inflation-adjusted value", expression: "what is $500 from 1970", description: "Present-day value using a bundled US CPI-U table (1970-2026, approximate)" },
+      { name: "Historical value", expression: "what was $500 worth in 1997", description: "What today's $500 was worth in a past year" },
+      { name: "Inflation function call", expression: "inflationAdjust(500, 1970, 2020)", description: "Adjust between two arbitrary years directly" },
+    ]
+  },
+  {
+    name: "Live Data",
+    description: "Weather (real Open-Meteo data, built in), plus Stocks/Knowledge — both opt-in, shown here with the default \"not configured\" message since they need a host-supplied API key/fetch function (see packages/core/src/packages/{stocks,knowledge}/ JSDoc). Weather makes a real network call, so its result may vary or fail without connectivity. Note: \"weather in <city>\"/\"temperature in <city>\" are all-word lines with no digit/symbol — this playground's line-classifier currently requires one to recognize a line as an expression (the same limitation noted under \"Time Zones\"), so they won't display a result as a standalone example here even though the engine evaluates them correctly.",
+    examples: [
+      { name: "Weather in a city", expression: "weather in Tokyo", description: "Live conditions + temperature via Open-Meteo (free, keyless) — see category note re: this playground's line-classifier" },
+      { name: "Stock quote (unconfigured)", expression: "stock(AAPL)", description: "Shows the honest \"provider not configured\" error by default — a host wires up createStocksPackage({ fetchQuote })" },
     ]
   },
 ];
