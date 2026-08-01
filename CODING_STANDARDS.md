@@ -13,7 +13,7 @@
 |-----------|-------|
 | `tokens: any[]` | `tokens: Token[]` |
 | `program: any` | `program: BytecodeProgram` |
-| `(error: unknown)` with no type guard | Use the `SolveError` type guard or narrow first |
+| `(error: unknown)` with no type guard | `normalizeUnknownError(error)` (see AGENT.md) or an `instanceof EngineError` narrow |
 | `containerEl: any` leaking into core engine | Inject via typed interface |
 
 **Current debt**: 0 `any` instances remain in solve-js production code. Zero is the target — any new `any` is a regression.
@@ -22,8 +22,15 @@
 
 ## 2. Error Handling
 
-### 2.1 Never `throw new Error(...)` in the hot path
-Use the typed error factory:
+**Full reference: [`AGENT.md`](./AGENT.md#error-handling)** — canonical, kept in sync
+with the actual `packages/core/src/errors/` implementation (this section used to drift
+from it — e.g. referencing a `SolveError` type and a per-category recovery-strategy
+dispatch that were never real — don't reintroduce that; if this section and AGENT.md
+ever disagree, AGENT.md wins and this section is wrong). Summary:
+
+### 2.1 Never `throw new Error(...)`
+Use the typed error factory — `EngineError`, imported from
+`@solve-js/errors/UnifiedErrorFramework`:
 
 ```typescript
 // ❌ Wrong
@@ -31,39 +38,43 @@ throw new Error('Invalid expression');
 
 // ✅ Correct
 throw ErrorFactory.parsing('INVALID_EXPRESSION', 'Expression contains invalid characters', { expression });
-throw ErrorFactory.validation('INVALID_LENGTH', 'Expression exceeds max length', { length: expr.length });
+throw ErrorFactory.validation('EXPRESSION_TOO_LONG', 'Expression exceeds max length', { length: expr.length });
 throw ErrorFactory.execution('STACK_UNDERFLOW', 'VM stack underflow on pop()', { ip });
 ```
 
-### 2.2 Error categories and when to use them
+### 2.2 Error categories
 
-| Category | When | Recovery |
-|----------|------|----------|
-| `PARSING` | Lexer/parser failures | `SKIP` — skip the line, continue |
-| `EXECUTION` | VM runtime errors | `DEGRADED` — return error result, keep engine alive |
-| `VALIDATION` | Input exceeds limits | `NONE` — reject before processing |
-| `EXTERNAL` | Worker/data-source failures | `RETRY` — with backoff |
-| `INTERNAL` | Engine bugs, invariant violations | `NONE` — crash loudly |
-| `CONFIG` | Bad configuration | `NONE` — reject at startup |
+`ErrorFactory` has six methods — `.parsing()` / `.validation()` / `.execution()` /
+`.external()` (all default `recoverable: true`) and `.internal()` / `.config()` (default
+`recoverable: false`). The dividing line is **user error vs. engine-internal invariant
+violation** — NOT "does evaluation continue" (per-line/per-batch containment means it
+always does, for any category). `recoverable` only gates message framing and telemetry.
+See AGENT.md for the full per-category breakdown and worked examples.
 
 ### 2.3 Result type for fallible returns
 
 ```typescript
-import { Result } from '@solve-js/errors';
+import { Result, ok, err } from '@solve-js/errors';
 
-function riskyOperation(): Result<number, SolveError> {
+function riskyOperation(): Result<number, EngineError> {
   if (somethingWrong) {
-    return { ok: false, error: ErrorFactory.execution('...', '...') };
+    return err(ErrorFactory.execution('SOME_CODE', 'message'));
   }
-  return { ok: true, value: 42 };
+  return ok(42);
 }
 ```
 
-### 2.4 Propagation
-- **Parser errors**: throw `SolveError` with category `PARSING`
-- **VM errors**: throw `SolveError` with category `EXECUTION`
-- **Validation errors**: throw before entering the pipeline
-- **Never swallow errors silently** — the `catch { durMs = 0; }` pattern in UoM conversion (VM.ts:153-159) is a bug, not a pattern to follow
+### 2.4 The two rules that matter most
+- **Never let one line/item's failure abort a whole batch or loop.** Any loop over
+  multiple document lines or items must contain each iteration's failure (try/catch, or
+  check `.type === 'error'` on an `EvalResult`) and continue — never let it propagate
+  and take out every other, unrelated item. Two real fatal bugs of exactly this shape
+  were found and fixed in 2026-08; see AGENT.md.
+- **Never flatten a caught `EngineError` down to its `.message` and reconstruct a
+  generic wrapper.** Re-throw the original (or build a new `EngineError` copying its
+  other fields if you need to add context — `EngineError.context` is `readonly`). A
+  caught error's specific `code` and `expected`/`found`/`suggestion` detail are more
+  useful than any generic replacement.
 
 ---
 
@@ -194,12 +205,16 @@ export function uomValue(n: number, unit: string): Value {
 /**
  * Categories for typed error handling throughout the engine.
  *
- * Each member maps to a specific recovery strategy.
+ * Purely descriptive (what kind of failure this is) — see AGENT.md's
+ * "Error handling" section for what each category actually means and how
+ * it's used; it does NOT map to a distinct recovery strategy (per-line
+ * containment means evaluation of the rest of the document continues
+ * regardless of category).
  */
 export enum ErrorCategory {
-	/** Lexer/parser failure — skip the line, continue to next. */
+	/** Lexer/parser failure. */
 	PARSING = 'PARSING',
-	/** VM runtime failure — return error Value, keep engine alive. */
+	/** VM runtime failure. */
 	EXECUTION = 'EXECUTION',
 }
 ```

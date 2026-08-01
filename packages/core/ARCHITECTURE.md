@@ -493,27 +493,37 @@ resiliency fix — see "Done since the last pass" below for both.
 
 ### P1 — robustness/consistency (real, smaller blast radius)
 
-6. **Raw `throw new Error(...)` bypasses the `EngineError`/`ErrorFactory` taxonomy** in
-   several spots (`CurrencyExchange.ts`, `OpRegistry.ts`, `VMBuiltins.ts`, `VM.ts`'s
-   `unwrapEvalResult`). **`NumberParselet.ts` and `TokenNormalizer.ts` fixed 2026-07-30**
-   — both now use `ErrorFactory.parsing`/`.validation` matching the pattern
-   `PrecedenceParser.ts`'s NUMBER_ID fast path and `ExpressionEngineSafety.ts`'s
-   complexity/length checks already used. **Correction to this item's original framing**:
-   the claimed impact ("breaks DAG-preservation on compile errors") turned out not to
-   apply to either fixed site, on closer inspection while implementing the fix —
-   `ExpressionEngine.prepareExpression()`'s parse-attempt `catch` block already flattens
+6. ~~**Raw `throw new Error(...)` bypasses the `EngineError`/`ErrorFactory` taxonomy.**~~
+   **FIXED 2026-08-01.** `NumberParselet.ts`/`TokenNormalizer.ts` were fixed 2026-07-30 (see
+   history below); this session's error-handling-refactor pass converted every remaining
+   real site: `CurrencyExchange.ts` (7 sites — `CurrencyErrorCodes`, co-located per
+   `errors/ErrorCode.ts`'s documented per-package pattern), `OpenMeteoClient.ts`/
+   `WeatherPackage.ts` (5 sites — `WeatherErrorCodes`), `OpRegistry.ts`,
+   `VMBuiltins.ts`'s `allocatePluginFunctionIndex()`, and `Value.ts`'s
+   `splitRateUnit`/`timecodeFps`. A repo-wide sweep (not just `packages/core`) confirms
+   **zero** raw `throw new Error(...)` sites remain anywhere in `packages/*/src` or
+   `src/app` except `workers/engine.worker.ts`'s build-time
+   `esbuild-plugin-inline-worker` sentinel, which is never actually reached at runtime
+   (the whole file is replaced by the plugin before execution) — left as-is deliberately.
+   Also found and deleted 4 fully-dead legacy `Error` subclasses in `src/app/errors/`
+   (`EmptyPipelineError`, `UndefinedContextInPipelineError`,
+   `UnsupportedCoercionOperationError`, `UnsupportedVisitorOperationError`) — zero
+   references anywhere in the live tree, residue from a pre-VM "pipeline"/"visitor"
+   evaluation architecture this codebase no longer has. See `AGENT.md` for the
+   authoritative error-handling reference going forward.
+   <details><summary>Original 2026-07-30 finding (superseded)</summary>
+
+   **Correction to this item's original framing**: the claimed impact ("breaks
+   DAG-preservation on compile errors") turned out not to apply to either fixed site —
+   `ExpressionEngine.prepareExpression()`'s parse-attempt `catch` block already flattened
    ANY thrown value (raw `Error` or `EngineError` alike) to a plain message string and
-   re-wraps it in a real `EngineError` with `.context.reads`/`.context.writes` attached
-   (`compileExpression()`'s `stage === 'parse'` branch) — so the DAG-preservation path
-   `ThreeTierEvaluator` depends on was never actually bypassed by these two sites' raw
-   throws. Separately, `NumberParselet.parse()` is dead code in real evaluation anyway
-   (its own doc comment: `PrecedenceParser`'s NUMBER_ID fast path always handles NUMBER
-   tokens first). The fix is still worth having — general taxonomy consistency, useful
-   for anything that calls these classes directly (tests, diagnostics tooling) without
-   going through `prepareExpression()`'s wrapping — just not the DAG-correctness fix
-   originally described. Remaining raw-throw sites (`CurrencyExchange.ts` etc.) are
-   lower priority since `resolveAsync`'s `try/catch` already normalizes any thrown value
-   for those async paths.
+   re-wrapped it in a real `EngineError` with `.context.reads`/`.context.writes` attached,
+   so the DAG-preservation path `ThreeTierEvaluator` depends on was never actually
+   bypassed by raw throws specifically — general taxonomy consistency was the real
+   motivation, not a DAG-correctness fix. (This flattening was itself a separate, real
+   error-quality bug, since fixed — see `AGENT.md`'s "preserve the original error"
+   section.)
+   </details>
 7. ~~**`registerPackage()` has no duplicate-name guard.**~~ **FIXED 2026-07-30.** Calling
    it twice with the same `pkg.name` used to silently overwrite the tracked contribution
    record, permanently orphaning the first registration's shared-registry entries

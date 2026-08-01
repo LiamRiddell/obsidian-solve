@@ -66,7 +66,7 @@ The user writes natural markdown text — `10 + 2`, `£100 in GBP`, `Now + 20 da
 | `providers/` | 9 provider modules | Domain-specific parselets and ops | `ParseletRegistry`, `OpRegistry` |
 | `workers/` | `compilation.worker`, `execution.worker` | Off-main-thread compile/execute | Transferable bytecode |
 | `diagnostics/` | `Event`, `Collector`, `Pipeline` | Diagnostic event system | None |
-| `errors/` | `UnifiedErrorFramework` | `SolveError`, `Result<T,E>`, `ErrorFactory` | None |
+| `errors/` | `EngineError.ts`, `Result.ts`, `ErrorCode.ts` | `EngineError`, `Result<T,E>`, `ErrorFactory` — see `AGENT.md` | None |
 | `api/` | `SolveAPI` | Public API exposure | `ExpressionEngine`, `PluginSystem` |
 | `types/` | `ParsingResult`, `core` | Shared type definitions | None |
 | `format/` | `FormatEngine`, `FormattingSettings` | Output formatting | `Value` |
@@ -105,7 +105,7 @@ lexer ← parser ← bytecode ← VM ← cache ← engine ← providers/plugins/
   `persistentValue()` before storing.
 - All numeric types: `Number`, `Hex`, `BigInt`, `Percentage`, `Uom`, plus vectors
 - VM has hard instruction limit and stack depth limit
-- Errors during execution throw `SolveError` with category `EXECUTION`
+- `executeBytecode()` returns failures as `EvalResult`'s `{type:'error', error: EngineError}` arm rather than throwing (public `ExpressionEngine` methods re-throw at the boundary) — category is usually `EXECUTION`, but `INTERNAL` for invariant violations (stack underflow, an unresolved global that preflight should have guaranteed). See `AGENT.md`.
 
 ### 3.4 Provider System
 - Each domain (arithmetic, units, datetime, etc.) is a **provider**
