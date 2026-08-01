@@ -3,6 +3,7 @@ import { create } from "zustand"
 export type ActiveTab =
   | "tokens"
   | "summary"
+  | "errors"
   | "qa"
   | "flow"
   | "bytecode"

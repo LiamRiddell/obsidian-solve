@@ -12,12 +12,14 @@ import {
   Gauge,
   Radio,
   FlaskConical,
+  AlertTriangle,
 } from "lucide-react"
 import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { useUiStore, type ActiveTab } from "@/stores/ui"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { OutputTab } from "@/components/tabs/OutputTab"
 import { SummaryTab } from "@/components/tabs/SummaryTab"
+import { ErrorsTab } from "@/components/tabs/ErrorsTab"
 import { QaTab } from "@/components/tabs/QaTab"
 import { PipelineTab } from "@/components/tabs/PipelineTab"
 import { BytecodeTab } from "@/components/tabs/BytecodeTab"
@@ -34,6 +36,7 @@ import { cn } from "@/lib/utils"
 const TABS: { id: ActiveTab; label: string; icon: typeof Terminal }[] = [
   { id: "tokens", label: "Output", icon: Terminal },
   { id: "summary", label: "Summary", icon: LayoutDashboard },
+  { id: "errors", label: "Errors", icon: AlertTriangle },
   { id: "normalizer", label: "Normalizer", icon: RefreshCw },
   { id: "flow", label: "Pipeline", icon: Waypoints },
   { id: "cache", label: "Cache", icon: Database },
@@ -60,6 +63,7 @@ export function DiagnosticsPane() {
   // tab's local UI state (expanded sections, collapsed groups, etc.)
   // doesn't carry over stale assumptions about the previous result's shape.
   const runId = useDiagnosticReportStore((s) => s.runId)
+  const errorCount = useDiagnosticReportStore((s) => s.lineResults.filter((lr) => lr.error).length)
 
   return (
     <section className={cn("flex min-h-0 flex-1 flex-col", diagnosticsCollapsed && "w-0 min-w-0 overflow-hidden")}>
@@ -68,6 +72,11 @@ export function DiagnosticsPane() {
           {TABS.map((tab) => (
             <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5 text-xs">
               <tab.icon className="size-3.5" /> {tab.label}
+              {tab.id === "errors" && errorCount > 0 && (
+                <span className="bg-destructive text-destructive-foreground ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none">
+                  {errorCount}
+                </span>
+              )}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -76,6 +85,9 @@ export function DiagnosticsPane() {
         </TabsContent>
         <TabsContent value="summary" className="mt-0 flex min-h-0 flex-col">
           <SummaryTab key={runId} />
+        </TabsContent>
+        <TabsContent value="errors" className="mt-0 flex min-h-0 flex-col">
+          <ErrorsTab key={runId} />
         </TabsContent>
         <TabsContent value="normalizer" className="mt-0 flex min-h-0 flex-col">
           <NormalizerTab key={runId} />

@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { DebugResult } from "@bridge/engine"
+import type { DebugResult, LineResult } from "@bridge/engine"
 import type { PipelineStageResult } from "@solve-js/types/DiagnosticPipelineResult"
 import { useDiagnosticReportStore } from "./diagnosticReport"
 // Circular by nature (engine.ts imports this store back), but safe: both
@@ -52,6 +52,17 @@ interface TabsState {
   activeTabId: string
 
   createTab: () => string
+  /**
+   * Opens a whole set of named documents at once and focuses the first.
+   *
+   * Unlike `insertExample`, this cannot go through the editor's imperative
+   * handle: the CodeMirror views for these tabs do not exist yet. Seeding
+   * `text` on the tab up front is what makes them work — EditorPane builds
+   * each view from `tab.text` when its container mounts and evaluates it
+   * immediately, so every document in the set is live (and therefore
+   * publishing its globals) without the user having to visit its tab.
+   */
+  openDocumentSet: (documents: readonly { title: string; content: string }[]) => void
   closeTab: (id: string) => void
   /** Switch focus — pushes that tab's cached result (if any) into the diagnostic report immediately, no re-evaluation needed. */
   setActiveTab: (id: string) => void
@@ -63,7 +74,10 @@ interface TabsState {
   /** Patch a single line's result (and pipeline stages) into a tab's CACHED DebugResult after an async resolution. */
   patchCachedLineResult: (
     id: string,
-    update: { lineNumber: number; result: string; type: string; timedOut?: boolean; stages?: PipelineStageResult[] },
+    update: Pick<
+      LineResult,
+      "lineNumber" | "result" | "type" | "timedOut" | "error" | "errorCode" | "errorCategory" | "errorExpected" | "errorFound" | "errorSuggestion" | "errorRecoverable"
+    > & { stages?: PipelineStageResult[] },
   ) => void
 }
 
@@ -85,6 +99,13 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     const id = `tab-${nextTabId++}`
     set((s) => ({ tabs: [...s.tabs, { id, title: `Untitled ${s.tabs.length + 1}`, text: "" }] }))
     return id
+  },
+
+  openDocumentSet: (documents) => {
+    if (documents.length === 0) return
+    const created = documents.map((d) => ({ id: `tab-${nextTabId++}`, title: d.title, text: d.content }))
+    set((s) => ({ tabs: [...s.tabs, ...created] }))
+    get().setActiveTab(created[0].id)
   },
 
   closeTab: (id) => {
@@ -127,7 +148,19 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     if (!cached) return
     const nextLineResults = cached.lineResults.map((lr) =>
       lr.lineNumber === update.lineNumber
-        ? { ...lr, result: update.result, type: update.type, timedOut: update.timedOut, error: undefined }
+        ? {
+            ...lr,
+            result: update.result,
+            type: update.type,
+            timedOut: update.timedOut,
+            error: update.error,
+            errorCode: update.errorCode,
+            errorCategory: update.errorCategory,
+            errorExpected: update.errorExpected,
+            errorFound: update.errorFound,
+            errorSuggestion: update.errorSuggestion,
+            errorRecoverable: update.errorRecoverable,
+          }
         : lr,
     )
     const nextStagesByLine = update.stages

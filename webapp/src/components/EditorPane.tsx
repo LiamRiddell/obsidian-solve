@@ -31,20 +31,176 @@ import { useUiStore } from "@/stores/ui"
 import { TabBar } from "@/components/TabBar"
 import { ExamplesMenu } from "@/components/ExamplesMenu"
 import { cn } from "@/lib/utils"
+import { categoryMeta } from "@/lib/errorCategory"
 
 /* ── Inline Result Widget ─────────────────────────────────────────────── */
+
+/** Structured error detail carried by an error-type inline result — see `LineResult`'s own error fields. */
+export interface ErrorDetail {
+  code?: string
+  category?: string
+  message: string
+  expected?: string
+  found?: string
+  suggestion?: string
+  recoverable?: boolean
+}
+
+
+/**
+ * Build a detail row (label + value) for the error popover, or nothing if
+ * `value` is unset — most `EngineError`s today only populate `message`
+ * (see AGENT.md: "expected/found/suggestion exist but almost nothing
+ * populates them yet"), so this renders however much detail is actually
+ * there rather than always reserving three rows.
+ */
+function popoverRow(label: string, value: string | undefined, accent = false): HTMLElement | null {
+  if (!value) return null
+  const row = document.createElement("div")
+  row.className = "flex gap-1.5 text-[11px] leading-snug"
+  const dt = document.createElement("span")
+  dt.className = "shrink-0 font-medium text-muted-foreground/80 w-16"
+  dt.textContent = label
+  const dd = document.createElement("span")
+  dd.className = accent ? "font-mono text-foreground" : "text-foreground/90"
+  dd.textContent = value
+  row.append(dt, dd)
+  return row
+}
+
+/**
+ * The hover popover's contents — category badge + code, message, then
+ * whichever of expected/found/suggestion are actually populated.
+ * Appended to `document.body` (not as a child of the badge) and positioned
+ * via `getBoundingClientRect()` on show, so it's never clipped by the
+ * editor scroller's `overflow: auto`.
+ */
+function buildErrorPopover(detail: ErrorDetail): HTMLDivElement {
+  const meta = categoryMeta(detail.category)
+  const popover = document.createElement("div")
+  popover.className =
+    "os-error-popover fixed z-50 w-80 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg " +
+    "p-3 flex flex-col gap-2 pointer-events-auto opacity-0 -translate-y-1 transition-all duration-100"
+  popover.style.visibility = "hidden"
+
+  const header = document.createElement("div")
+  header.className = "flex items-center gap-1.5"
+  const badge = document.createElement("span")
+  badge.className = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${meta.badgeClass}`
+  const dot = document.createElement("span")
+  dot.className = `size-1.5 rounded-full ${meta.dotClass}`
+  badge.append(dot, document.createTextNode(meta.label))
+  header.appendChild(badge)
+  if (detail.code) {
+    const code = document.createElement("span")
+    code.className = "font-mono text-[10px] text-muted-foreground truncate"
+    code.textContent = detail.code
+    header.appendChild(code)
+  }
+  if (detail.recoverable === false) {
+    const badBug = document.createElement("span")
+    badBug.title = "Engine-internal — likely worth reporting, not a syntax fix"
+    badBug.className = "ml-auto text-[10px] text-muted-foreground/70"
+    badBug.textContent = "⚑ internal"
+    header.appendChild(badBug)
+  }
+  popover.appendChild(header)
+
+  const message = document.createElement("div")
+  message.className = "text-xs font-medium leading-snug text-foreground"
+  message.textContent = detail.message
+  popover.appendChild(message)
+
+  const rows = [
+    popoverRow("Expected", detail.expected),
+    popoverRow("Found", detail.found, true),
+    popoverRow("Suggestion", detail.suggestion),
+  ].filter((r): r is HTMLElement => r !== null)
+  if (rows.length > 0) {
+    const detailBlock = document.createElement("div")
+    detailBlock.className = "flex flex-col gap-1 border-t border-border pt-2"
+    detailBlock.append(...rows)
+    popover.appendChild(detailBlock)
+  }
+
+  document.body.appendChild(popover)
+  return popover
+}
+
+function positionPopover(popover: HTMLDivElement, anchor: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect()
+  const popRect = popover.getBoundingClientRect()
+  let left = rect.left
+  if (left + popRect.width > window.innerWidth - 8) left = window.innerWidth - popRect.width - 8
+  left = Math.max(8, left)
+  let top = rect.bottom + 6
+  // Flip above the badge if there's not enough room below.
+  if (top + popRect.height > window.innerHeight - 8) top = rect.top - popRect.height - 6
+  popover.style.left = `${left}px`
+  popover.style.top = `${top}px`
+}
+
 class ResultWidget extends WidgetType {
+  private popover: HTMLDivElement | null = null
+  private hideTimer: ReturnType<typeof setTimeout> | null = null
+
   constructor(
     readonly text: string,
     readonly type: string,
     readonly pending = false,
+    readonly errorDetail?: ErrorDetail,
   ) {
     super()
   }
   eq(other: ResultWidget) {
-    return this.text === other.text && this.type === other.type && this.pending === other.pending
+    return (
+      this.text === other.text &&
+      this.type === other.type &&
+      this.pending === other.pending &&
+      this.errorDetail?.message === other.errorDetail?.message &&
+      this.errorDetail?.code === other.errorDetail?.code
+    )
   }
+
+  private scheduleHide() {
+    this.hideTimer = setTimeout(() => this.hidePopover(), 150)
+  }
+  private cancelHide() {
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer)
+      this.hideTimer = null
+    }
+  }
+  private showPopover(anchor: HTMLElement) {
+    if (!this.errorDetail) return
+    this.cancelHide()
+    if (!this.popover) this.popover = buildErrorPopover(this.errorDetail)
+    const popover = this.popover
+    positionPopover(popover, anchor)
+    popover.style.visibility = "visible"
+    requestAnimationFrame(() => {
+      popover.style.opacity = "1"
+      popover.style.transform = "translateY(0)"
+    })
+    popover.onmouseenter = () => this.cancelHide()
+    popover.onmouseleave = () => this.scheduleHide()
+  }
+  private hidePopover() {
+    if (!this.popover) return
+    this.popover.style.opacity = "0"
+    this.popover.style.visibility = "hidden"
+  }
+
   toDOM() {
+    if (this.errorDetail) {
+      const span = document.createElement("span")
+      span.className = "os-result-inline os-result-error"
+      span.textContent = `⚠ ${this.errorDetail.code ?? "Error"}`
+      span.addEventListener("mouseenter", () => this.showPopover(span))
+      span.addEventListener("mouseleave", () => this.scheduleHide())
+      return span
+    }
+
     const span = document.createElement("span")
     span.title = this.pending ? "Awaiting async resolution…" : this.type
 
@@ -64,6 +220,12 @@ class ResultWidget extends WidgetType {
     span.className = "os-result-inline"
     span.textContent = this.text
     return span
+  }
+
+  destroy() {
+    this.cancelHide()
+    this.popover?.remove()
+    this.popover = null
   }
 }
 
@@ -279,24 +441,50 @@ function renderInlineResults(tabId: string, lineResults: LineResult[]): void {
   if (!view.dom || !view.dom.parentNode) return
   const effects: { from: number; to: number; deco: Decoration }[] = []
   for (const lr of lineResults) {
-    if (lr.error) continue
     const isPending = lr.type === "Pending"
     // A Pending result formats to "" (see formatLineResultValue in
     // engineShared.ts — the queryKey must never be shown as if it were the
     // answer), so it needs its own branch instead of the `!lr.result` skip
     // other empty/non-evaluable lines take.
-    if (!lr.result && !isPending) continue
+    if (!lr.error && !lr.result && !isPending) continue
     if ((lr.lineNumber ?? 1) > view.state.doc.lines) continue
     const line = view.state.doc.line(lr.lineNumber ?? 1)
     const text = isPending ? "…" : lr.result
-    effects.push({ from: line.to, to: line.to, deco: Decoration.widget({ widget: new ResultWidget(text, lr.type, isPending), side: 1 }) })
+    // An error line previously rendered NO inline indicator at all (the
+    // caller used to `continue` past it entirely) — the only way to see
+    // what went wrong was the Output tab. Now shows a badge + hover
+    // popover with the full EngineError detail, right where you're
+    // already looking.
+    const errorDetail: ErrorDetail | undefined = lr.error
+      ? {
+          code: lr.errorCode,
+          category: lr.errorCategory,
+          message: lr.error,
+          expected: lr.errorExpected,
+          found: lr.errorFound,
+          suggestion: lr.errorSuggestion,
+          recoverable: lr.errorRecoverable,
+        }
+      : undefined
+    effects.push({
+      from: line.to,
+      to: line.to,
+      deco: Decoration.widget({ widget: new ResultWidget(text, lr.type, isPending, errorDetail), side: 1 }),
+    })
   }
   // Always dispatch, even with an empty effects array: resultField's update()
   // rebuilds the ENTIRE decoration set from this list every time, so skipping
   // the dispatch when every line errored left whatever was previously
   // rendered stuck on screen after the line was edited into something that
   // no longer parses.
-  view.dispatch({ effects: resultEffect.of(effects) })
+  try {
+    view.dispatch({ effects: resultEffect.of(effects) })
+  } catch (e) {
+    // RangeSetBuilder.add() throws if `effects` isn't in ascending position
+    // order — shouldn't happen (lineResults comes back in document order),
+    // but surfacing this clearly beats a silently-stale result display.
+    console.error("Failed to render inline results:", e)
+  }
 }
 
 function insertExample(expression: string): void {

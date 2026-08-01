@@ -89,7 +89,12 @@ interface DiagnosticReportState {
 
   /* Actions */
   /** Patch a single line's result after it resolves asynchronously (an OSRS price, a currency rate, ...). */
-  patchLineResult: (update: { lineNumber: number; result: string; type: string; timedOut?: boolean }) => void
+  patchLineResult: (
+    update: Pick<
+      LineResult,
+      "lineNumber" | "result" | "type" | "timedOut" | "error" | "errorCode" | "errorCategory" | "errorExpected" | "errorFound" | "errorSuggestion" | "errorRecoverable"
+    >,
+  ) => void
   patchLineStages: (lineNumber: number, newStages: PipelineStageResult[] | undefined) => void
   /** Folds async resolution wall-time into stats.totalTime as it actually happens. */
   recordAsyncElapsed: (elapsedNs: number) => void
@@ -143,7 +148,23 @@ export const useDiagnosticReportStore = create<DiagnosticReportState>((set, get)
     if (!result) return
     const nextLineResults = result.lineResults.map((lr) =>
       lr.lineNumber === update.lineNumber
-        ? { ...lr, result: update.result, type: update.type, timedOut: update.timedOut, error: undefined }
+        ? {
+            ...lr,
+            result: update.result,
+            type: update.type,
+            timedOut: update.timedOut,
+            // Explicitly cleared (not just left stale) when this update has
+            // no error — a line moving from "errored" to "resolved
+            // successfully" on re-evaluation must drop its old error state,
+            // not just overwrite result/type and leave a stale error badge.
+            error: update.error,
+            errorCode: update.errorCode,
+            errorCategory: update.errorCategory,
+            errorExpected: update.errorExpected,
+            errorFound: update.errorFound,
+            errorSuggestion: update.errorSuggestion,
+            errorRecoverable: update.errorRecoverable,
+          }
         : lr,
     )
     set({

@@ -10,6 +10,7 @@ import { getOpCodeName, OpCode } from "@solve-js/parser/OpCode";
 import type { DiagnosticPipelineResult, PipelineStageResult } from "@solve-js/types/DiagnosticPipelineResult";
 import type { ParseletInfo } from "@solve-js/types/ParsingResult";
 import { Value, ValueType, enableValueArena, disableValueArena } from "@solve-js/vm/Value";
+import type { EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { AllocationTracker } from "@solve-js/telemetry/AllocationTracker";
 import type { PipelineTelemetry } from "@solve-js/telemetry/AllocationTracker";
 import { BUILTIN_PACKAGES, createStocksPackage, createKnowledgePackage } from "@solve-js/packages/builtins";
@@ -121,6 +122,22 @@ export interface LineResult {
 	/** Category -> count of every parselet this line's own parse matched (e.g. {arithmetic: 2, conditionals: 1}) — not just the first one `parselet` names. Empty on a cache hit (no new parse ran). */
 	parseletCategories: Record<string, number>;
 	error?: string;
+	/**
+	 * Structured error detail, additive alongside `error` (which stays a
+	 * plain string for existing consumers) — sourced from the engine's
+	 * `EngineError` when available (a thrown parse/execution failure via
+	 * `evaluateLineWithDebug()`'s `engineError` field), or partially from a
+	 * `ValueType.Error` Value's code (an async-resolution failure surfacing
+	 * after the line already rendered — `errorValue()` only carries a
+	 * code+message, not category/expected/found/suggestion, so those stay
+	 * undefined for that path). All undefined when `error` itself is unset.
+	 */
+	errorCode?: string;
+	errorCategory?: string;
+	errorExpected?: string;
+	errorFound?: string;
+	errorSuggestion?: string;
+	errorRecoverable?: boolean;
 	opcodeCount: number;
 	wasCached: boolean;
 	/** Set when an async resolver timed out — the result is a 0-gp fallback, not real data. */
@@ -195,7 +212,7 @@ export interface DiagnosticEventInfo {
 		 * per-line stage data the Pipeline tab reads.
 		 */
 		stages?: PipelineStageResult[];
-	};
+	} & Partial<ErrorFields>;
 	/**
 	 * Present on "async_resolved" events: a fresh cache/query-cache snapshot
 	 * taken AFTER the resolving re-evaluation. `lineUpdate` above only
@@ -264,18 +281,54 @@ function formatType(val: Value): string {
 	return val.unit ? `${t} (${val.unit})` : t;
 }
 
+/** The structured-error subset of {@link LineResult} — see that field's own doc comment. */
+type ErrorFields = Pick<
+	LineResult,
+	"error" | "errorCode" | "errorCategory" | "errorExpected" | "errorFound" | "errorSuggestion" | "errorRecoverable"
+>;
+
 /**
- * A VM-level soft error (e.g. errorValue("INCOMPATIBLE_UNITS", ...) from
- * an ADD/SUB between two currencies with no fetched rate, or the existing
- * CURRENCY_RATE_UNAVAILABLE from UOM_CONVERT_TO/_IN) returns normally as
- * the line's final Value — it never throws, so it never reaches the
- * `result.error` (caught-exception) path below. Without this check, such
- * a line looked like a successful result and displayed the raw error
- * CODE via formatValue()'s fallback (e.g. "= CURRENCY_RATE_UNAVAILABLE")
- * instead of getting real error styling.
+ * Build the structured-error fields for a `LineResult` from whichever error
+ * source is actually available. `engineError` (the real `EngineError` a
+ * throw carried) wins when present — it has the full picture. Falling back
+ * to the plain `error` string, or to a `ValueType.Error` Value's code, keeps
+ * every existing call site working even though those two carry less detail.
+ *
+ * The `softErrorValue` fallback matters on its own: a VM-level soft error
+ * (e.g. `errorValue("INCOMPATIBLE_UNITS", ...)` from an ADD/SUB between two
+ * currencies with no fetched rate, or `CURRENCY_RATE_UNAVAILABLE` from
+ * UOM_CONVERT_TO/_IN) returns normally as the line's final Value — it never
+ * throws, so `error`/`engineError` are both unset for it. Without this
+ * fallback such a line looked like a successful result and displayed the
+ * raw error CODE via `formatValue()`'s fallback (e.g.
+ * "= CURRENCY_RATE_UNAVAILABLE") instead of getting real error styling.
  */
-function softErrorMessage(val: Value): string | undefined {
-	return val.type === ValueType.Error ? (val.unit ?? String(val.value)) : undefined;
+function buildErrorFields(
+	error: string | undefined,
+	engineError: EngineError | undefined,
+	softErrorValue: Value | undefined,
+): ErrorFields | undefined {
+	if (engineError) {
+		return {
+			error: engineError.message,
+			errorCode: engineError.code,
+			errorCategory: engineError.category,
+			errorExpected: engineError.expected,
+			errorFound: engineError.found,
+			errorSuggestion: engineError.suggestion,
+			errorRecoverable: engineError.recoverable,
+		};
+	}
+	if (error !== undefined) {
+		return { error };
+	}
+	if (softErrorValue && softErrorValue.type === ValueType.Error) {
+		return {
+			error: softErrorValue.unit ?? String(softErrorValue.value),
+			errorCode: typeof softErrorValue.value === "string" ? softErrorValue.value : undefined,
+		};
+	}
+	return undefined;
 }
 
 function generateMarkdownOutline(text: string): MarkdownNode[] {
@@ -605,8 +658,9 @@ export function runEngineWithStreaming(
 								);
 								const reLineState = streamDocumentModel.getLineAt(ln);
 								if (reLineState) reLineState.result = reResult.value;
-								const resultValue = reResult.error
-									? reResult.error
+								const reErrorFields = buildErrorFields(reResult.error, reResult.engineError, reResult.value);
+								const resultValue = reErrorFields
+									? reErrorFields.error!
 									: formatLineResultValue(reResult.value);
 								// Re-read the query cache from the (still-alive) engine and
 								// take the fresh cacheSnapshot off this re-evaluation's own
@@ -629,15 +683,18 @@ export function runEngineWithStreaming(
 									// resolution updates the worker's own engine state
 									// but the UI (which only saw the initial Pending
 									// value) never learns about it and stays stuck.
-									lineUpdate: reResult.error
-										? undefined
-										: {
-												lineNumber: ln,
-												result: resultValue,
-												type: formatType(reResult.value),
-												timedOut: (reResult.value as any).timedOut ?? false,
-												stages: reResult.diagnostic?.stages,
-										  },
+									// Always populated now, even on failure (previously
+									// `undefined` when the re-evaluation itself errored —
+									// the line stayed stuck showing "Pending" forever
+									// instead of surfacing the real failure).
+									lineUpdate: {
+										lineNumber: ln,
+										result: reErrorFields ? "" : resultValue,
+										type: reErrorFields ? "Error" : formatType(reResult.value),
+										timedOut: (reResult.value as any).timedOut ?? false,
+										stages: reResult.diagnostic?.stages,
+										...reErrorFields,
+									},
 									// See DiagnosticEventInfo.cacheUpdate — without this the
 									// Cache tab's Async Resolver Cache / Query Cache panels
 									// stay frozen showing "fetching" / in-flight forever.
@@ -841,8 +898,8 @@ export function runEngineWithStreaming(
 						result.tokens &&
 						result.tokens.length > 0;
 
-					const softError = softErrorMessage(result.value);
-					if (result.error || softError) {
+					const errorFields = buildErrorFields(result.error, result.engineError, result.value);
+					if (errorFields) {
 						lineResults.push({
 							lineNumber: lineNum,
 							expression: trimmed,
@@ -850,11 +907,11 @@ export function runEngineWithStreaming(
 							type: "Error",
 							parselet,
 							parseletCategories,
-							error: result.error ?? softError,
+							...errorFields,
 							opcodeCount: perLineOpCount,
 							wasCached,
 						});
-						errors.push((result.error ?? softError)!);
+						errors.push(errorFields.error!);
 					} else {
 						lineResults.push({
 							lineNumber: lineNum,
@@ -1198,8 +1255,8 @@ export function runEngine(expression: string): DebugResult {
 				result.tokens &&
 				result.tokens.length > 0;
 
-			const softError = softErrorMessage(result.value);
-			if (result.error || softError) {
+			const errorFields = buildErrorFields(result.error, result.engineError, result.value);
+			if (errorFields) {
 				lineResults.push({
 					lineNumber: lineNum,
 					expression: trimmed,
@@ -1207,11 +1264,11 @@ export function runEngine(expression: string): DebugResult {
 					type: "Error",
 					parselet,
 					parseletCategories,
-					error: result.error ?? softError,
+					...errorFields,
 					opcodeCount: perLineOpCount,
 					wasCached,
 				});
-				errors.push((result.error ?? softError)!);
+				errors.push(errorFields.error!);
 			} else {
 				lineResults.push({
 					lineNumber: lineNum,
