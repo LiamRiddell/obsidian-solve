@@ -1,4 +1,5 @@
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo } from "@solve-js/engine/ExpressionEngine";
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo };
 import type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
@@ -569,6 +570,16 @@ export function runEngineWithStreaming(
 				engine = new ExpressionEngine("en", true, {
 					diagnostic: { enabled: true, vmTraceEnabled: true },
 				}, undefined, PLAYGROUND_PACKAGES);
+				// Cross-line data access (packages/lines: prev, line<N>, sum/
+				// total/average ranges, total above) needs a DocumentModel
+				// wired in — see runEngine()'s matching fix above for the
+				// full reasoning. Declared here (not just inside the "Evaluate
+				// all lines" block below) so the async-resolution
+				// re-evaluation path (the "lines-updated" transform a few
+				// lines down) can also update it.
+				const streamDocumentModel = new DocumentModel();
+				streamDocumentModel.setDocument(expression);
+				engine.setDocumentModel(streamDocumentModel);
 				// ── Pipe batcher events through a TransformStream to convert
 				// AsyncResolutionEvent → DiagnosticEventInfo, eliminating the
 				// manual async IIFE reader loop. The pipeline uses Web Streams
@@ -592,6 +603,8 @@ export function runEngineWithStreaming(
 									ln,
 									lineText
 								);
+								const reLineState = streamDocumentModel.getLineAt(ln);
+								if (reLineState) reLineState.result = reResult.value;
 								const resultValue = reResult.error
 									? reResult.error
 									: formatLineResultValue(reResult.value);
@@ -699,6 +712,8 @@ export function runEngineWithStreaming(
 						lineNum,
 						trimmed
 					);
+					const lineState = streamDocumentModel.getLineAt(lineNum);
+					if (lineState) lineState.result = result.value;
 
 					// An unrecognized bare word (e.g. a stray "hello") is
 					// ambiguous prose, not a broken expression — ignore it
@@ -1050,6 +1065,23 @@ export function runEngine(expression: string): DebugResult {
 			diagnostic: { enabled: true, vmTraceEnabled: true },
 		}, undefined, PLAYGROUND_PACKAGES);
 
+		// Cross-line data access (packages/lines: prev, line<N>, sum/total/
+		// average(line X : line Y), total above) reads another line's cached
+		// result via ExpressionEngine.documentModel (see makeLineContext()) —
+		// without a DocumentModel wired here, every cross-line reference would
+		// error with "no document" even though this loop DOES evaluate a real
+		// multi-line document, just without the incremental-caching machinery
+		// (ThreeTierEvaluator) that normally owns DocumentModel updates. Set
+		// each line's result directly on the LIVE LineState object getLineAt()
+		// returns (not a copy — see DocumentModel.ts) after it evaluates,
+		// mirroring the one field ThreeTierEvaluator's own updateLineResult()
+		// writes that getLineResult()/isLineBoundary() actually read; the rest
+		// of that heavier API (bytecodes/reads/writes bookkeeping) exists for
+		// the incremental cache this simpler debug harness doesn't use.
+		const documentModel = new DocumentModel();
+		documentModel.setDocument(expression);
+		engine.setDocumentModel(documentModel);
+
 		markdownOutline = generateMarkdownOutline(expression);
 		const allLines = expression.split("\n");
 
@@ -1062,6 +1094,8 @@ export function runEngine(expression: string): DebugResult {
 			if (!shouldEvaluateLine(engine, trimmed)) return;
 
 			const result = engine.evaluateLineWithDebug(lineNum, trimmed);
+			const lineState = documentModel.getLineAt(lineNum);
+			if (lineState) lineState.result = result.value;
 
 			// An unrecognized bare word (e.g. a stray "hello") is ambiguous
 			// prose, not a broken expression — ignore it rather than
