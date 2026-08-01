@@ -23,7 +23,7 @@ import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient } from "@solve-js/services/DataQueryService";
-import { ErrorFactory, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
+import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
 import {
 	ResolverRegistry,
 } from "@solve-js/resolvers/ResolverRegistry";
@@ -1048,6 +1048,22 @@ export class ExpressionEngine {
         // of those into a real, visible parse error instead.
         const leftover = this.parser.peek();
         if (leftover) {
+            // A single trailing bare "=" with nothing after it (e.g.
+            // "355/113=") is tolerated rather than treated as an error.
+            // EQUALS is never registered as an infix operator anywhere in
+            // this grammar (confirmed — nothing consumes it after a
+            // complete expression), so it can't be a legitimate second
+            // operand or a typo'd continuation the way a stray number or
+            // identifier could be; it's an unambiguous "show the result"
+            // marker familiar from pocket calculators and other apps in
+            // this category (see GitHub issue #65). This is deliberately
+            // narrower than tolerating arbitrary trailing tokens, which
+            // would reopen the exact silently-wrong-answer bug this same
+            // check was added to close (see this function's own doc
+            // comment above).
+            if (leftover.type === "EQUALS" && !this.parser.peekAt(1)) {
+                return;
+            }
             throw ErrorFactory.parsing(
                 "UNEXPECTED_TRAILING_TOKEN",
                 `Unexpected token after expression: "${leftover.value}"`,
@@ -1065,8 +1081,19 @@ export class ExpressionEngine {
      * execution) and {@link compileExpression} (compile-only). Previously
      * both carried their own copy of this sequence, which had already
      * drifted. Returns a discriminated union instead of throwing so each
-     * caller can wrap failures in its own EngineError category
-     * (execution vs validation/parsing).
+     * caller decides whether/how to re-throw.
+     *
+     * The `'error'` variant carries the actual `EngineError` each safety
+     * check or `parseExpression()` itself already constructed — not just
+     * its flattened `.message` (the previous shape). A parse failure in
+     * particular can be any of dozens of specific codes (UNDEFINED_VARIABLE,
+     * NO_PREFIX_PARSELET, FUNCTION_ARITY_MISMATCH, ...), each with its own
+     * `expected`/`found`/`suggestion` detail — callers used to discard all
+     * of that and reconstruct a generic EVALUATION_ERROR/PARSE_ERROR wrapper
+     * around just the message, which directly worked against this session's
+     * "errors are verbose and easy to understand" goal. Callers should
+     * generally just `throw prep.error` (see {@link evaluateWithTokens},
+     * {@link compileExpression}) rather than wrapping it again.
      */
     private prepareExpression(
         expression: string,
@@ -1074,12 +1101,12 @@ export class ExpressionEngine {
         hasParens: boolean | undefined,
     ):
         | { kind: 'empty' }
-        | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; message: string; reads?: string[]; writes?: string[] }
+        | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; error: EngineError; reads?: string[]; writes?: string[] }
         | { kind: 'ready'; normalizedTokens: Token[]; reads: string[]; writes: string[]; program: BytecodeProgram; cached: boolean } {
         // ══ SAFETY CHECK 1: Expression length limit ══
         const lengthCheck = checkExpressionLength(expression, this.config.validation);
         if (!lengthCheck.passed) {
-            return { kind: 'error', stage: 'length', message: lengthCheck.error!.error };
+            return { kind: 'error', stage: 'length', error: lengthCheck.error!.engineError! };
         }
 
         // Filter COMMENT tokens — they have no parselet.
@@ -1095,7 +1122,7 @@ export class ExpressionEngine {
         // ══ SAFETY CHECK 2: Complexity scoring ══
         const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
         if (!complexityCheck.passed) {
-            return { kind: 'error', stage: 'complexity', message: complexityCheck.errorMessage! };
+            return { kind: 'error', stage: 'complexity', error: complexityCheck.engineError! };
         }
 
         const { reads, writes } = extractReadsAndWrites(normalizedTokens);
@@ -1113,11 +1140,14 @@ export class ExpressionEngine {
             this.parseExpression(builder, normalizedTokens, hasParens);
         } catch (e) {
             // reads/writes were already extracted above from the full token
-            // list (independent of whether parsing succeeds) — surface them
-            // even on failure so callers that track dependencies (DAG
-            // registration) still learn what this line references, and can
-            // re-evaluate it once those variables become defined.
-            return { kind: 'error', stage: 'parse', message: e instanceof Error ? e.message : String(e), reads, writes };
+            // list (independent of whether parsing succeeds) — returned
+            // alongside the error (not merged into its context here, since
+            // EngineError.context is readonly) so callers that track
+            // dependencies (ThreeTierEvaluator's compile-fallback DAG
+            // registration, via compileExpression()'s merge below) still
+            // learn what this line references and can re-evaluate it once
+            // those variables become defined.
+            return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes };
         }
 
         // build() allocates TypedArrays directly from builder arrays —
@@ -1149,11 +1179,12 @@ export class ExpressionEngine {
             return v;
         }
         if (prep.kind === 'error') {
-            throw ErrorFactory.execution(
-                'EVALUATION_ERROR',
-                prep.message,
-                { lineNumber }
-            );
+            // Re-throw the original error as-is — its own code/category
+            // (EXPRESSION_TOO_LONG/EXPRESSION_TOO_COMPLEX/whatever the
+            // parser actually threw) and expected/found/suggestion detail
+            // are more specific and useful than the generic EVALUATION_ERROR
+            // wrapper this used to construct around just the message.
+            throw prep.error;
         }
 
         const { normalizedTokens, reads, writes, program } = prep;
@@ -1243,6 +1274,16 @@ export class ExpressionEngine {
     evaluateLineDetailed(lineNumber: number, lineText: string): LineEvaluation {
         const result = this.evaluateLineWithDebug(lineNumber, lineText);
         if (result.error) {
+            // Re-throw the original error (its own specific code/category/
+            // expected/found/suggestion, e.g. CLAMP_EXPECTED_BETWEEN_OR_FROM
+            // or UNDEFINED_VARIABLE) rather than the generic EVALUATION_ERROR
+            // wrapper this used to always construct around just the message
+            // — engineError is only absent if some future failure path in
+            // the diagnostic pipeline sets `error` without it, which the
+            // fallback below still handles.
+            if (result.engineError) {
+                throw result.engineError;
+            }
             throw ErrorFactory.execution(
                 'EVALUATION_ERROR',
                 result.error,
@@ -1271,7 +1312,7 @@ export class ExpressionEngine {
         lineNumber: number,
         lineText: string,
         inputType: string = "expression"
-    ): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; inlineSolve?: InlineSolvePosition; debug?: DiagnosticReportJSON; diagnostic?: DiagnosticPipelineResult } {
+    ): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; engineError?: EngineError; inlineSolve?: InlineSolvePosition; debug?: DiagnosticReportJSON; diagnostic?: DiagnosticPipelineResult } {
         const inlineSolveMatch = lineText.match(/^s`([^`]*)`$/);
         if (inlineSolveMatch) {
             const expression = inlineSolveMatch[1];
@@ -1383,7 +1424,7 @@ export class ExpressionEngine {
      *          optional `debug` report JSON, and optional `diagnostic` containing
      *          the full structured pipeline stages array when collectors are active.
      */
-    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; debug?: DiagnosticReportJSON; diagnostic?: DiagnosticPipelineResult } {
+    private evaluateExpressionWithDiagnostic(expression: string, lineNumber: number, inputType: string = "expression"): { value: Value; tokens: Token[]; program: BytecodeProgram; error?: string; engineError?: EngineError; debug?: DiagnosticReportJSON; diagnostic?: DiagnosticPipelineResult } {
         const pipeline = this.diagnosticPipeline;
         const hasCollectors = pipeline.hasCollectors;
         // Baseline for slicing THIS line's own parselet_matched events out of
@@ -1628,6 +1669,7 @@ export class ExpressionEngine {
                 tokens: [],
                 program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
                 error: complexityCheck.errorMessage!,
+                engineError: complexityCheck.engineError,
                 debug: undefined,
                 diagnostic: undefined,
             };
@@ -1742,7 +1784,7 @@ export class ExpressionEngine {
                 if (trackEnabled && parseResult.alloc) stageAllocs.push(parseResult.alloc);
                 program = parseResult.result;
             } catch (e) {
-                const errorMessage = e instanceof Error ? e.message : String(e);
+                const engineError = normalizeUnknownError(e);
 
                 if (hasCollectors) {
                     pipeline.firePipelineEnd({
@@ -1759,7 +1801,8 @@ export class ExpressionEngine {
                     value: numberValue(0),
                     tokens: normalizedTokens,
                     program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
-                    error: errorMessage,
+                    error: engineError.message,
+                    engineError,
                     debug: undefined,
                     diagnostic: undefined,
                 };
@@ -1945,7 +1988,7 @@ export class ExpressionEngine {
             // line, matching how the parser stage above already handles its
             // own failures (catch, return a soft `error` instead of throwing).
             this.keystrokeSignal?.removeEventListener('abort', abortLocal);
-            const errorMessage = e instanceof Error ? e.message : String(e);
+            const engineError = normalizeUnknownError(e);
 
             if (hasCollectors) {
                 pipeline.firePipelineEnd({
@@ -1962,7 +2005,8 @@ export class ExpressionEngine {
                 value: numberValue(0),
                 tokens: normalizedTokens,
                 program,
-                error: errorMessage,
+                error: engineError.message,
+                engineError,
                 debug: undefined,
                 diagnostic: undefined,
             };
@@ -2551,20 +2595,31 @@ export class ExpressionEngine {
 			};
 		}
 		if (prep.kind === 'error') {
-			// Compile-only callers get validation/parsing error categories
-			// (evaluateWithTokens wraps the same failures as execution errors).
-			switch (prep.stage) {
-				case 'length':
-					throw ErrorFactory.validation("EXPRESSION_TOO_LONG", prep.message);
-				case 'complexity':
-					throw ErrorFactory.validation("EXPRESSION_TOO_COMPLEX", prep.message);
-				case 'parse':
-					// Attach the already-extracted reads/writes as error context so
-					// DAG-registering callers (e.g. ThreeTierEvaluator's compile
-					// fallback) can still track this line's dependencies even though
-					// it failed to compile.
-					throw ErrorFactory.parsing("PARSE_ERROR", prep.message, { reads: prep.reads ?? [], writes: prep.writes ?? [] });
+			if (prep.stage === 'parse' && (prep.reads?.length || prep.writes?.length)) {
+				// Preserve the original error's own code/category/expected/
+				// found/suggestion (whatever the parser actually threw —
+				// UNDEFINED_VARIABLE, FUNCTION_ARITY_MISMATCH, ...) rather
+				// than the generic PARSE_ERROR wrapper this used to
+				// construct, but still attach the already-extracted
+				// reads/writes as context so DAG-registering callers (e.g.
+				// ThreeTierEvaluator's compile fallback) can track this
+				// line's dependencies even though it failed to compile.
+				// EngineError.context is readonly, so this constructs a new
+				// error carrying every other field through unchanged rather
+				// than mutating prep.error in place.
+				throw new EngineError(prep.error.category, {
+					code: prep.error.code,
+					message: prep.error.message,
+					expected: prep.error.expected,
+					found: prep.error.found,
+					suggestion: prep.error.suggestion,
+					recoverable: prep.error.recoverable,
+					span: prep.error.span,
+					cause: prep.error.cause,
+					context: { ...prep.error.context, reads: prep.reads ?? [], writes: prep.writes ?? [] },
+				});
 			}
+			throw prep.error;
 		}
 
 		return { program: prep.program, tokens, reads: prep.reads, writes: prep.writes };
