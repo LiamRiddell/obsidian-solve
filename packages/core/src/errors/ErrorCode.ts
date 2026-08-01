@@ -67,7 +67,7 @@ export const CoreErrorCodes = {
   UNDEFINED_FUNCTION: "UNDEFINED_FUNCTION",
   FUNCTION_ARITY_MISMATCH: "FUNCTION_ARITY_MISMATCH",
   USER_FUNCTION_ASYNC_UNSUPPORTED: "USER_FUNCTION_ASYNC_UNSUPPORTED",
-  /** `pushCallFrame()`'s recursion guard — a nested `CALL_USER_FUNCTION` re-enters `executeBytecode()`, so `maxInstructions` alone can't catch e.g. `f(x) = f(x)`; this is the dedicated backstop. Always `recoverable: false` (would otherwise overflow the native call stack uncatchably). */
+  /** `pushCallFrame()`'s recursion guard — a nested `CALL_USER_FUNCTION` re-enters `executeBytecode()`, so `maxInstructions` alone can't catch e.g. `f(x) = f(x)`; this is the dedicated backstop. `recoverable: true` (the default for `.execution()`) — ordinary user-written infinite recursion, not an engine bug; the guard exists precisely so it surfaces as a clear error instead of overflowing the native call stack uncatchably. */
   FUNCTION_RECURSION_LIMIT_EXCEEDED: "FUNCTION_RECURSION_LIMIT_EXCEEDED",
   /** `DEFINE_USER_FUNCTION`'s body-index lookup failing — a compiler/VM invariant violation (the opcode stream referenced a `userFunctionBodies` slot that doesn't exist), never a user-input error. */
   INTERNAL_MISSING_FUNCTION_BODY: "INTERNAL_MISSING_FUNCTION_BODY",
@@ -76,8 +76,6 @@ export const CoreErrorCodes = {
   EXPRESSION_TOO_LONG: "EXPRESSION_TOO_LONG",
   EXPRESSION_TOO_COMPLEX: "EXPRESSION_TOO_COMPLEX",
   NORMALIZED_TOKEN_LIMIT_EXCEEDED: "NORMALIZED_TOKEN_LIMIT_EXCEEDED",
-  /** New this phase — `AsyncResolutionBatcher.reExecuteMainThread()`'s per-line containment: one line's re-execution failure, caught and reported for that line alone instead of aborting the rest of the batch or crashing the host. Always `recoverable: false` (the underlying failure is itself an internal invariant violation by the time it reaches here — a resolved async value's bytecode failing to re-execute isn't a user-input error). */
-  ASYNC_BATCH_LINE_EXECUTION_FAILED: "ASYNC_BATCH_LINE_EXECUTION_FAILED",
 
   // ── Config (constants/Configuration.ts) ──
   CONFIG_PATH_NOT_FOUND: "CONFIG_PATH_NOT_FOUND",
