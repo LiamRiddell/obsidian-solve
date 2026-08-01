@@ -148,42 +148,99 @@ descriptor-vs-registered-token-type parity and scans the whole `packages/` tree 
 if a future package ever reintroduces a bespoke registration function — this bug class is now
 structurally impossible, not just monitored.
 
-## 2026-08-01 — Calca Phase 1 ships: user-defined, parameterized functions
+## 2026-08-01 — Cross-line data access ships (Phase 1 of the approved engine-limitations plan)
+
+`prev` (immediately-preceding line's result), `line<N>`/`line N` (any earlier line by absolute
+number), `sum`/`total`/`average(line X : line Y)` (range aggregation), and `total above`/`sum
+above`/`average above` (aggregate back to the nearest blank line/heading) — confirmed by FOUR
+independent competitor apps wanting the same underlying capability (Numi's `prev`, Notes
+Calculator's `line<N>`, Numbr's `sum`-to-header, NumPad's `line<N>` plus range syntax). Shipped as
+a new `packages/lines/` package: a `LineExecutionContext` optionally threaded through
+`executeBytecode()`/`CALL_PLUGIN` down to plugin-function handlers, `ExpressionEngine.
+setDocumentModel()`/`makeLineContext()` answering "what's line N's result" from the real
+`DocumentModel`, and 7 new token types/2 normalizer rules/4 parselets/6 plugin handlers covering
+the full trigger-word collision policy (bare `prev`; normalizer-fused `line<N>`; `sum(`/`total(`/
+`average(` fused only when immediately followed by `(`, so `:sum = 100` and MathPhrases' existing
+`"total of X, Y"` stay unaffected; `"total above"` phrase-fused rather than claiming the bare
+`total`/`sum` keywords MathPhrasesPackage already regressed on once).
+
+While regression-testing the "referencing an errored/pending line must give a clear error, never
+a silently wrong number" requirement, found a real, pre-existing engine-wide gap: `vm/
+VMConversion.ts`'s `binaryOp()` (the shared fallback every one of ADD/SUB/MUL/DIV/MOD routes
+through for non-Number/Boolean/Datetime/Uom-rate operands) never checked for `ValueType.Error`/
+`Pending` operands before computing — `Value.toNumber()` returns `0` for both, so `prev + 1` on an
+errored line silently evaluated to `1` instead of propagating the error. `EXP` had the same gap
+via its own separate path (`Math.pow()` on raw `toNumber()` output, never routed through
+`binaryOp()` at all). Fixed at the operator level in both places — this closes the arithmetic-
+level symptom of the still-open `ARCHITECTURE.md` §12 P0-1 item engine-wide, not just for
+`packages/lines`.
+
+## 2026-08-01 — User-defined, parameterized functions ship (Phase 2 of the same plan)
 
 `f(x) = 2*x + 1`, then `f(5)` → `11`, composable (`double(double(5))`), works across units and
-constants (`hyp(a, b) = sqrt(a*a + b*b)`, `circle(r) = pi * r * r`). This is the primitive
-identified as the prerequisite for roughly half of Calca's remaining feature list
-(`der`/`taylor`/`jacobian`/`x => ...`/`map`/`reduce`) — see `OTHER_APPS_FEATURE_AUDIT.md`'s Calca
-section, item 2. New VM primitives: `LOAD_PARAM`/`CALL_USER_FUNCTION` opcodes, a per-VM
-`paramFrameStack` (deliberately separate from the flat `variables` map so recursion/nesting bind
-correctly and a parameter never clobbers an outer `:name` variable of the same name — regression-
-tested directly), and a definition-time `userFunctionRegistry` resolved the same way `LOAD_VAR`
-already resolves forward references (no parse-time function table, matching this codebase's
-existing ascending-evaluation-order semantics).
+constants (`hyp(a, b) = sqrt(a*a + b*b)`, `circle(r) = pi * r * r`). The primitive identified as
+the prerequisite for roughly half of Calca's remaining feature list (`der`/`taylor`/`jacobian`/
+`x => ...`/`map`/`reduce`) — see `OTHER_APPS_FEATURE_AUDIT.md`'s Calca section.
 
-Two non-obvious architectural facts surfaced and were worked around rather than shipped broken:
-`IDENT` is one of `PrecedenceParser`'s Tier-1 fast-path token types, hardcoded in its `parsePrefix()`
-switch and returned from before the `ParseletRegistry` is ever consulted — so the new
-definition/call grammar had to be added directly inside that switch (`parser/UserFunctionParselet.ts`),
-not as a normal package parselet, mirroring `NumberParselet.ts`'s already-documented precedent for
-the same reason. `UNIT`, unlike `IDENT`, has NO Tier-1 case — meaning `packages/variables/
-parselets/IdentifierParselet.ts` (registered for both) is dead code for `IDENT` but genuinely LIVE
-for `UNIT`, which matters because common short parameter names (`h`, `l`, `b`, ...) collide with
-unit abbreviations and lex as `UNIT` — both places needed the same parameter-frame check.
+`IDENT` is one of `PrecedenceParser`'s Tier-1 fast-path token types, hardcoded in its
+`parsePrefix()` switch and returned from before the `ParseletRegistry` is ever consulted — so the
+definition/call grammar (a new `findMatchingRParen()` plus `parseUserFunctionDefOrCall()`/
+`parseUserFunctionDefinition()`/`parseUserFunctionCall()`) lives directly inside that switch, not
+as a normal package parselet, mirroring `NumberParselet.ts`'s already-documented precedent for the
+same reason. New opcodes `DEFINE_USER_FUNCTION`/`CALL_USER_FUNCTION` (150/151); a definition's
+body compiles to its own independent `BytecodeProgram`, stored in a `BytecodeBuilder.
+userFunctionBodies` side-table and registered into the VM's `userFunctions` map only when
+`DEFINE_USER_FUNCTION` actually EXECUTES (not at parse time — a diagnostic/lookahead parse that
+never executes a definition line has no side effect on the registry). Parameter references inside
+a body compile to ORDINARY `LOAD_VAR` opcodes — no dedicated parameter-load opcode at all, since
+`CALL_USER_FUNCTION` binds arguments into a name-keyed call frame (`Map<string, Value>`) and
+`VM.getVar()` checks the innermost call frame before the flat variable store. This also means
+`packages/variables/parselets/IdentifierParselet.ts` (the `UNIT`-token variable-read path — common
+short parameter names like `h`/`l`/`b` collide with unit abbreviations and lex as `UNIT`, not
+`IDENT`) needs no special-casing either: a bare `LOAD_VAR` is correct for every identifier read,
+parameter or not.
 
-Landed alongside (built concurrently by parallel iteration on the same approved plan, not this
-session's own work but sharing the same tree): cross-line data access (`prev`, `line<N>`,
-`sum`/`total`/`average(line X : line Y)`, `total above`) as a new `packages/lines/` package, and a
-VM-wide fix making internal invariant errors (undefined variable, stack underflow, safety-limit
-exceeded) controlled `EngineError` *returns* instead of raw throws — closing a real gap the Calca
-work surfaced directly: arithmetic opcodes never checked for `ValueType.Error`/`Pending` operands
-before computing, so an errored cross-line reference like `prev + 1` briefly, silently evaluated
-to `1` instead of propagating the error (fixed in `vm/VMConversion.ts`'s `binaryOp()`, the shared
-fallback every arithmetic opcode routes through). One reintroduction of the just-killed
-registration-drift bug class was caught and fixed the same way as the others: the new `lines`
-package had grown its own bespoke `registerLinesParselets()` — `RegistrationPathParity.spec.ts`
-caught it immediately, confirming the structural guard from the previous iteration actually works
-against new code, not just the packages that existed when it was written.
+Both `userFunctions` and the call-frame stack live ON THE VM INSTANCE (`createVM()`'s closure),
+not a module-level registry — deliberately avoiding a new instance of the L1 cross-instance-
+isolation gap `ARCHITECTURE.md` §10 already tracks. Three risks a rough sketch of this feature
+would have missed, each closed with a dedicated regression test: (1) a recursion-safety gap —
+`localInstructionCount` is fresh per `executeBytecode()` call, so `f(x) = f(x)`'s nested reentrant
+calls would hit a native, uncatchable V8 stack overflow before `maxInstructions` ever caught it;
+fixed with a dedicated `maxFunctionRecursionDepth` guard (default 50) in `pushCallFrame()`. (2) a
+`VMCheckpointer` gap — `snapshot()` used to call `vm.getVar(name)` for every written name, which
+silently returns `undefined` for a function name (function defs live in `vm.userFunctions`, not
+the flat variable store), so a function defined above a scrolled-away viewport would vanish on
+`restoreTo()` even though the document still showed its definition line as clean; fixed by adding
+a separate `functions: Record<string, UserFunctionDef>` bag to `VMCheckpoint`. (3) a DAG
+parameter-shadowing gap — `ExpressionEngineSafety.ts`'s `extractReadsAndWrites()` needed its own
+bracket-matching pre-scan to detect `name(params) = body` as a write of `name` AND exclude the
+declared parameter names from reads/writes entirely, or `f(x) = 2*x+1` would spuriously depend on
+any unrelated `:x` elsewhere in the document.
+
+v1 scope decisions, disclosed rather than silently gapped: parameter names are bare `IDENT`/`UNIT`
+only; no `:x = ...` assignment statements inside a body (bodies are pure expressions); a body
+whose compiled `BytecodeProgram.hasAsync` is `true` (calls a weather/stocks/currency-style plugin
+function) is rejected at DEFINITION time with a clear `FUNCTION_BODY_MUST_BE_SYNCHRONOUS` error —
+propagating a `'pending'` result up through a reentrant `executeBytecode()` call would need the
+OUTER expression's own bytecode position/stack state to also be resumable later, which this pass
+doesn't implement.
+
+One reintroduction of the registration-drift bug class described earlier in this file was caught
+and fixed the same way as the others: `packages/lines` had grown its own bespoke
+`registerLinesParselets()` — `RegistrationPathParity.spec.ts` caught it immediately, confirming
+the structural guard from the earlier iteration actually works against new code, not just the
+packages that existed when it was written.
+
+Also found and fixed while verifying the shipped `packages/lines` playground example gallery:
+neither `playground-bridge`'s `runEngine()`/`runEngineWithStreaming()` (the actual live-playground
+evaluation paths) nor `PlaygroundExamplesValidity.spec.ts`'s own validation loops ever wired an
+`ExpressionEngine` to a `DocumentModel` — meaning cross-line references would have errored with
+"no document" in the live demo despite working correctly in the real Obsidian plugin (whose
+CodeMirror integration already uses `ThreeTierEvaluator`/`DocumentModel` properly). Fixed by
+setting each evaluated line's result directly on the `DocumentModel`'s live `LineState` object in
+all four places — the one field `getLineResult()`/`isLineBoundary()` actually read, without
+needing the heavier incremental-caching bookkeeping (`updateLineResult()`) `ThreeTierEvaluator`
+owns and this simpler debug harness doesn't use.
 
 Verified via the full four-command gate (`tsc --noEmit --skipLibCheck`, full `jest --no-coverage`
-— 161 suites, 3570 tests, 0 failures, `tsup`, production `esbuild`).
+— 162 suites, 3580 tests, 0 failures, `tsup`, production `esbuild`) after each phase.
