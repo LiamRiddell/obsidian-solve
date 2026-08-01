@@ -91,6 +91,23 @@ export interface VM {
 	registry: OpRegistry;
 	getVar(key: string): Value | undefined;
 	setVar(key: string, value: Value): void;
+	/**
+	 * User-defined-function parameter binding (Calca-parity Phase 1) — a
+	 * small stack of bound-argument arrays, PUSHED before a
+	 * `CALL_USER_FUNCTION` executes the callee's body and POPPED
+	 * immediately after, so nested/recursive calls (`double(double(5))`)
+	 * each get their own frame instead of clobbering a shared flat map —
+	 * see `vm/VM.ts`'s `CALL_USER_FUNCTION` case. Deliberately NOT the same
+	 * mechanism as `getVar`/`setVar` (the `:name`/bare-identifier variable
+	 * store): a parameter frame is call-scoped and stacked, a variable is
+	 * session-scoped and flat — conflating them risked a function call
+	 * silently shadowing (and, without careful save/restore, corrupting) an
+	 * unrelated same-named variable.
+	 */
+	pushParamFrame(values: Value[]): void;
+	popParamFrame(): void;
+	/** The Nth value (0-based) in the currently-active parameter frame, or `undefined` if no call is in progress. */
+	getParam(index: number): Value | undefined;
 	reset(): void;
 	getMaxInstructions(): number;
 	getMaxStackDepth(): number;

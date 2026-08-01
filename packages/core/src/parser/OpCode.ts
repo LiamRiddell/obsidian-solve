@@ -129,6 +129,16 @@ export enum OpCode {
 	ARR_MAGNITUDE = 106,
 	ARR_NORMALIZE = 107,
 
+	// User-defined, parameterized, reusable functions ("Calca parity" Phase
+	// 1 — f(x) = expr, then f(5) — see packages/variables/parselets/
+	// UserFunctionParselet.ts and vm/UserFunctionRegistry.ts). A definition
+	// line emits nothing but a confirmation string via ordinary
+	// PUSH_STRING; these two opcodes back CALLS into a previously-defined
+	// function's body, which is compiled to its own independent Bytecode
+	// program and re-executed (reentrantly, via executeBytecode) per call.
+	LOAD_PARAM = 150,         // Push the current call's Nth bound parameter value (operand = index, not a string-table index)
+	CALL_USER_FUNCTION = 151, // (N arg values already on stack) -> pop N args, bind params, execute the named function's stored body, push its result
+
 }
 
 // Reverse lookup built once at module load — getOpCodeName() is called once

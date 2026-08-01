@@ -6,6 +6,7 @@ import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPower";
 import { getLocale } from "@solve-js/constants/locales";
+import { tryParseUserFunction } from "@solve-js/parser/UserFunctionParselet";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -113,6 +114,52 @@ export class PrecedenceParser {
   /** Get locale code for NumberParselet to normalize separators */
   getLocaleCode(): string {
     return this.localeCode;
+  }
+
+  /**
+   * The live `ParseletRegistry` this parser dispatches through. Exposed so
+   * a parselet can TEMPORARILY override another token type's registration
+   * for the duration of a nested `parseExpression` call — the mechanism
+   * `UserFunctionParselet.ts`'s definition-parsing path uses to make bare
+   * identifiers matching the function's own parameter names resolve to
+   * `LOAD_PARAM` instead of the normal `LOAD_VAR`, without needing to
+   * guess at already-compiled bytecode's opcode boundaries after the fact.
+   * Any caller that swaps a registration here MUST restore the previous
+   * one in a `finally` block — this registry is shared parser-wide, not
+   * scoped to one `parseExpression` call.
+   */
+  getRegistry(): ParseletRegistry {
+    return this.registry;
+  }
+
+  /**
+   * The parameter names of the user-defined function whose BODY is
+   * currently being compiled (Calca-parity Phase 1), or `undefined` when
+   * not compiling one. Checked by the `IDENT_ID` Tier-1 case below to
+   * decide `LOAD_PARAM` vs. the ordinary `LOAD_VAR` — see
+   * `UserFunctionParselet.ts`'s module doc for why this couldn't be done
+   * via the `ParseletRegistry` (IDENT is a Tier-1 fast-path token type;
+   * the registry is never consulted for it).
+   */
+  private currentFunctionParams: string[] | undefined = undefined;
+
+  /** Read the currently-active function-body parameter list (if any) — see {@link currentFunctionParams}. */
+  getCurrentFunctionParams(): string[] | undefined {
+    return this.currentFunctionParams;
+  }
+
+  /**
+   * Set (or clear, via `undefined`) the currently-active function-body
+   * parameter list, returning the PREVIOUS value so the caller can restore
+   * it in a `finally` block once done — required for correctness on a
+   * nested function definition parsed while already compiling an outer
+   * one's body (`f(x) = (g(y) = y*2)`), not just for the common
+   * non-nested case.
+   */
+  setCurrentFunctionParams(params: string[] | undefined): string[] | undefined {
+    const previous = this.currentFunctionParams;
+    this.currentFunctionParams = params;
+    return previous;
   }
 
   /**
@@ -391,6 +438,26 @@ export class PrecedenceParser {
 
       // ── Identifiers (variables) ────────────────────────────────────────────
       case PrecedenceParser.IDENT_ID: {
+        // A bare identifier matching the CURRENT function body's own
+        // parameter name (Calca-parity Phase 1 — see UserFunctionParselet.ts
+        // and this.currentFunctionParams's doc comment above) reads from
+        // the call's bound-argument frame, not the ordinary variable store.
+        if (this.currentFunctionParams) {
+          const paramIndex = this.currentFunctionParams.indexOf(token.value);
+          if (paramIndex !== -1) {
+            builder.emitOpcode(OpCode.LOAD_PARAM);
+            builder.emitByte(paramIndex);
+            return;
+          }
+        }
+        // An identifier immediately followed by "(" may be a user-defined
+        // function DEFINITION or CALL — see tryParseUserFunction's doc
+        // comment for the full disambiguation. Only the (cheap) LPAREN
+        // check runs for the overwhelmingly common case of a bare
+        // identifier with nothing following it.
+        if (this.peek()?.typeId === PrecedenceParser.LPAREN_ID) {
+          if (tryParseUserFunction(this as any, token, builder)) return;
+        }
         // IDENT tokens map to LOAD_VAR by default. The IdentifierParselet
         // and VariableParselet add STORE_VAR for assignments — those are
         // handled via the parselet registry below.
@@ -493,6 +560,21 @@ export class PrecedenceParser {
 
   peek(): Token | undefined {
     return this.tokens[this.current];
+  }
+
+  /**
+   * Read-only lookahead `offset` tokens past the current position, without
+   * consuming anything — `peekAt(0)` is equivalent to {@link peek}.
+   * `this.tokens` is a plain in-memory array (not a stream), so this is a
+   * simple, safe index read; no rewind/checkpoint mechanism is needed since
+   * nothing is consumed. Added for the user-defined-function grammar
+   * (`f(x) = expr` vs. a plain call `f(5)`), which needs to look PAST a
+   * balanced `(...)` group to see whether `=` follows, before committing to
+   * parsing the parenthesized content as either parameter names or call
+   * arguments — see `packages/variables/parselets/UserFunctionParselet.ts`.
+   */
+  peekAt(offset: number): Token | undefined {
+    return this.tokens[this.current + offset];
   }
 
   previous(): Token | undefined {
