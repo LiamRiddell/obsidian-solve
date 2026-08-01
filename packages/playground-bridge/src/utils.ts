@@ -169,28 +169,31 @@ export const TELEMETRY_STAGE_COLORS: Record<string, string> = {
 
 /**
  * Maps the engine's emoji stage icons (PipelineStageResult.icon, e.g. "⚡",
- * "🔤") to Material Symbols icon names, so every UI surface that renders a
- * pipeline stage (HeaderBar's mini strip, PipelineStage cards) shares one
- * icon system without changing the shared engine-side type.
+ * "🔤") to lucide-react component names, so every UI surface that renders a
+ * pipeline stage shares one icon system without changing the shared
+ * engine-side type. Deliberately plain strings, not component references:
+ * this package is UI-framework-agnostic (no React/lucide-react dependency),
+ * so the actual icon-name -> component lookup lives at the consuming
+ * React layer (see webapp's PipelineStage.tsx).
  */
 export const STAGE_EMOJI_TO_ICON: Record<string, string> = {
-  '🛡️': 'shield',
-  '▶': 'play_arrow',
-  '🔤': 'text_fields',
-  '📋': 'checklist',
-  '🔄': 'sync',
-  '💾': 'save',
-  '🌳': 'account_tree',
-  '⚙️': 'settings',
-  '🔮': 'schedule',
-  '⚡': 'bolt',
-  '🔗': 'link',
-  '📦': 'inventory_2',
-  '✓': 'check',
-  '⏹': 'stop',
+  '🛡️': 'Shield',
+  '▶': 'Play',
+  '🔤': 'Type',
+  '📋': 'ListChecks',
+  '🔄': 'RefreshCw',
+  '💾': 'Save',
+  '🌳': 'Network',
+  '⚙️': 'Settings',
+  '🔮': 'Clock',
+  '⚡': 'Zap',
+  '🔗': 'Link',
+  '📦': 'Package',
+  '✓': 'Check',
+  '⏹': 'Square',
 };
 
-/** @returns the Material Symbols icon name for a stage's emoji icon, falling back to the emoji itself if unmapped. */
+/** @returns the lucide-react icon name for a stage's emoji icon, falling back to the emoji itself if unmapped. */
 export function stageIcon(emoji: string): string {
   return STAGE_EMOJI_TO_ICON[emoji] ?? emoji;
 }

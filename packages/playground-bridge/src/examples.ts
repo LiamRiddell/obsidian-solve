@@ -16,6 +16,25 @@ export interface FullDocumentExample {
   content: string;
 }
 
+/**
+ * A set of documents that are opened together, each as its own tab.
+ *
+ * These exist to demonstrate `global :name` — the process-wide variable store
+ * that is shared by every open document, as opposed to `:name`, which is local
+ * to the document it is written in. A global written in one document
+ * propagates to every other open document automatically: readers that were
+ * already evaluated go dirty and recompute, and readers that ran BEFORE the
+ * global was ever declared sit at Pending and resolve themselves once it is.
+ * None of that is observable in a single document, so it needs its own kind of
+ * example.
+ */
+export interface MultiDocumentExample {
+  name: string;
+  description: string;
+  /** Opened in order. Put the documents that WRITE globals before the ones that read them. */
+  documents: { title: string; content: string }[];
+}
+
 export const exampleData: ExampleCategory[] = [
   {
     name: "Arithmetic",
@@ -68,6 +87,24 @@ export const exampleData: ExampleCategory[] = [
       { name: "Bare date literal (ISO)", expression: "2023-12-25", description: "ISO 8601 YYYY-MM-DD" },
       { name: "Bare date literal (MM-DD-YYYY)", expression: "12-25-2023", description: "Dash-separated date, US month-first order" },
       { name: "Bare date literal (dotted)", expression: "25.12.2023", description: "Dot-separated date, day first" },
+    ]
+  },
+  {
+    name: "Day Questions",
+    description: "Ask for a single field of a date in plain English — the weekday, month or ISO week number, now or at some offset",
+    examples: [
+      { name: "What day is it", expression: "what day is it", description: "Today's weekday name -> e.g. Tuesday" },
+      { name: "What day in N days", expression: "what day is it in 30 days", description: "The weekday 30 days from now" },
+      { name: "What day on a date", expression: "what day is it on 25/12/2026", description: "The weekday of a specific date -> Friday" },
+      { name: "Weekday of an expression", expression: "next friday + 2 weeks as weekday", description: "'as weekday' composes after any date expression" },
+      { name: "What month in N days", expression: "what month is it in 90 days", description: "The month name 90 days from now" },
+      { name: "Month of a date", expression: "month of 25/12/2026", description: "Month name of a specific date -> December" },
+      { name: "What week is it", expression: "what week is it", description: "The current ISO-8601 week number (1-53)" },
+      { name: "Week of a date", expression: "week of 2026-01-01", description: "ISO week number — week 1 is the one containing the first Thursday -> 1" },
+      { name: "Days between two dates", expression: "days between 2026-01-01 and 2026-01-31", description: "Unsigned span between two explicit dates -> 30 days" },
+      { name: "How many days until", expression: "how many days until 25/12/2026", description: "'how many' is optional wording on until/since/between" },
+      { name: "Is it a weekend", expression: "26/12/2026 is a weekend", description: "Weekend predicate -> true" },
+      { name: "Is it a workday", expression: "25/12/2026 is a workday", description: "Mon-Fri predicate, no public-holiday exclusion -> true" },
     ]
   },
   {
@@ -388,5 +425,81 @@ export const fullDocumentExamples: FullDocumentExample[] = [
     name: "Trip Budget & Timeline",
     description: "Comprehensive trip planning with dates and costs",
     content: ":budget = 5000\n:flightCost = 800\n:hotelNights = 7\n:hotelPerNight = 150\n:foodPerDay = 60\n:totalHotel = :hotelPerNight * :hotelNights\n:totalFood = :foodPerDay * :hotelNights\n:totalTransport = :flightCost * 2\n:spendingMoney = :budget - :totalHotel - :totalFood - :totalTransport\n:dailyAllowance = :spendingMoney / :hotelNights\n:bookingDate = now\n:tripStart = :bookingDate + 30 days\n:tripEnd = :tripStart + :hotelNights days"
+  }
+];
+
+/**
+ * Sets of documents opened together, each demonstrating one property of
+ * `global :name`. Ordered easiest-first: declare/read, then fan-in, then
+ * chaining, then the local-vs-global distinction.
+ *
+ * Every set is written so the READER documents are meaningless on their own —
+ * that is the point. Editing a global in one tab visibly re-computes the
+ * others, which is the behaviour these exist to show off.
+ */
+export const multiDocumentExamples: MultiDocumentExample[] = [
+  {
+    name: "Shared Rates",
+    description: "One document owns the rates; another consumes them. Edit a rate and the invoice re-computes.",
+    documents: [
+      {
+        title: "Rates",
+        content: "global :vatRate = 20%\nglobal :usdToGbp = 0.79"
+      },
+      {
+        title: "Invoice",
+        content: ":net = 1200\n:vat = global :vatRate of :net\n:gross = :net + :vat\n:gross * global :usdToGbp"
+      }
+    ]
+  },
+  {
+    name: "Budget Roll-up",
+    description: "Two department documents each publish a global total; a third sums them. Note both departments use their own local :headcount without colliding.",
+    documents: [
+      {
+        title: "Engineering",
+        content: ":headcount = 12\n:avgSalary = 85000\nglobal :engineeringCost = :headcount * :avgSalary"
+      },
+      {
+        title: "Marketing",
+        content: ":headcount = 5\n:avgSalary = 62000\nglobal :marketingCost = :headcount * :avgSalary"
+      },
+      {
+        title: "Company Total",
+        content: "global :engineeringCost + global :marketingCost"
+      }
+    ]
+  },
+  {
+    name: "Capacity Chain",
+    description: "A global derived from another global, across three documents — change the server count and the change propagates all the way to the forecast.",
+    documents: [
+      {
+        title: "Config",
+        content: "global :serverCount = 4"
+      },
+      {
+        title: "Capacity",
+        content: "global :maxUsers = global :serverCount * 2500"
+      },
+      {
+        title: "Forecast",
+        content: ":expectedUsers = 8000\n:expectedUsers / global :maxUsers"
+      }
+    ]
+  },
+  {
+    name: "Local vs Global",
+    description: "The same identifier used both ways: :budget is private to its document, global :budget is shared by all of them.",
+    documents: [
+      {
+        title: "Shared Budget",
+        content: "global :budget = 100"
+      },
+      {
+        title: "My Scratchpad",
+        content: ":budget = 25\n:budget + 5\nglobal :budget\nglobal :budget - :budget"
+      }
+    ]
   }
 ];

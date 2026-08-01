@@ -26,6 +26,14 @@
   --font-mono: "Roboto Mono", monospace;
   --radius: 0.5rem;
 
+  /* Brand anchors */
+  --brand-ink: #03080a;
+  --brand-cloud: #fcfcfe;
+  --brand-grape: #7624f4;
+  --brand-volt: #c8ff00;
+  --brand-coral: #ff6849;
+  --brand-royal: #035ade;
+
   --background: #fcfcfe;
   --foreground: #03080a;
   --card: #ffffff;
@@ -73,11 +81,30 @@
   --info-bg: rgb(3 90 222 / 0.078);
   --highlight: #ffd426;
 
-  --chart-1: oklch(0.3 0 0);
-  --chart-2: oklch(0.45 0 0);
-  --chart-3: oklch(0.6 0 0);
-  --chart-4: oklch(0.75 0 0);
-  --chart-5: oklch(0.85 0 0);
+  /* Charts — categorical hues are a FIXED order, never cycled.
+     Order: violet (brand) · orange · teal · gold · pink · green · blue · coral. */
+  --chart-1: #7c3aed;
+  --chart-2: #e37019;
+  --chart-3: #0e9f8a;
+  --chart-4: #c99700;
+  --chart-5: #dd6faa;
+  --chart-6: #0b8a3c;
+  --chart-7: #2f6ef0;
+  --chart-8: #e2483f;
+
+  /* Sequential ramp — one hue (violet), light→dark. seq-1 lowest magnitude, seq-5 highest. */
+  --chart-seq-1: #bd9df3;
+  --chart-seq-2: #a075ee;
+  --chart-seq-3: #8452e4;
+  --chart-seq-4: #6b2ad2;
+  --chart-seq-5: #5416a6;
+
+  /* Diverging scale — blue ↔ coral poles around a neutral midpoint. */
+  --chart-div-1: #2f6ef0;
+  --chart-div-2: #97b6f7;
+  --chart-div-3: #e9e9ee;
+  --chart-div-4: #f0a794;
+  --chart-div-5: #e2483f;
 
   --sidebar: #fafafa;
   --sidebar-foreground: #09090b;
@@ -95,7 +122,7 @@
   --card: rgb(252 252 254 / 0.02);
   --card-foreground: #fcfcfe;
   --card-hover: rgb(252 252 254 / 0.031);
-  --popover: #08131a;
+  --popover: rgb(8 13 15);
   --popover-foreground: #fcfcfe;
   --surface: rgb(252 252 254 / 0.012);
   --muted: rgb(252 252 254 / 0.031);
@@ -137,11 +164,31 @@
   --info-bg: rgb(3 90 222 / 0.078);
   --highlight: #c9a227;
 
-  --chart-1: oklch(0.85 0 0);
-  --chart-2: oklch(0.7 0 0);
-  --chart-3: oklch(0.55 0 0);
-  --chart-4: oklch(0.4 0 0);
-  --chart-5: oklch(0.25 0 0);
+  /* Charts — same hue identities as light, re-stepped into the dark lightness band so each hue
+     stays vivid on near-black. Same fixed order: violet · orange · teal · gold · pink · green ·
+     blue · coral. */
+  --chart-1: #9a7cf0;
+  --chart-2: #e06a2b;
+  --chart-3: #16a88f;
+  --chart-4: #c08800;
+  --chart-5: #db63a0;
+  --chart-6: #1aa653;
+  --chart-7: #4f88ef;
+  --chart-8: #e85c49;
+
+  /* Sequential ramp (violet) — lightness direction flips vs light mode, same hue. */
+  --chart-seq-1: #523293;
+  --chart-seq-2: #6741ab;
+  --chart-seq-3: #8259da;
+  --chart-seq-4: #a37fee;
+  --chart-seq-5: #c3abf6;
+
+  /* Diverging scale — blue ↔ coral around a dark neutral midpoint. */
+  --chart-div-1: #4f88ef;
+  --chart-div-2: #35558f;
+  --chart-div-3: #33343c;
+  --chart-div-4: #9a4a3f;
+  --chart-div-5: #e85c49;
 
   --sidebar: #09090b;
   --sidebar-foreground: #fafafa;
@@ -212,11 +259,24 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  --color-chart-seq-1: var(--chart-seq-1);
+  --color-chart-seq-2: var(--chart-seq-2);
+  --color-chart-seq-3: var(--chart-seq-3);
+  --color-chart-seq-4: var(--chart-seq-4);
+  --color-chart-seq-5: var(--chart-seq-5);
+  --color-chart-div-1: var(--chart-div-1);
+  --color-chart-div-2: var(--chart-div-2);
+  --color-chart-div-3: var(--chart-div-3);
+  --color-chart-div-4: var(--chart-div-4);
+  --color-chart-div-5: var(--chart-div-5);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
@@ -358,4 +418,13 @@
 }
 .os-result-inline-pending-label {
   font-style: italic;
+}
+.os-result-inline.os-result-error {
+  background: rgb(225 29 72 / 0.14);
+  color: #fb7185;
+  cursor: default;
+  transition: background-color 100ms;
+}
+.os-result-inline.os-result-error:hover {
+  background: rgb(225 29 72 / 0.24);
 }

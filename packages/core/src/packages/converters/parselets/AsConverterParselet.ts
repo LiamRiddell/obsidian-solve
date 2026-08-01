@@ -59,6 +59,14 @@ const BUILTIN_CONVERTERS: Record<string, OpCode> = {
  * as-converter" error via `CALL_AS_CONVERTER` instead of this method's
  * parse-time `AS_CONVERTER_EXPECTED_NAME` error. No such input was ever
  * valid before or after this change.
+ *
+ * `UNIT` tokens are accepted for exactly the same reason, added for the
+ * Datetime package's `as month` / `as week` converters: "month" and "week"
+ * lex as time UNITs (they have to — `90 days in weeks`), so without this
+ * they could never reach the registry. Note `as <unit>` is NOT a unit
+ * conversion and never was — `100cm as m` was a parse error before this
+ * widening and is an unknown-as-converter error after it; the unit-
+ * conversion syntaxes are `to <unit>` and `in <unit>`.
  */
 export class AsConverterParselet implements InfixParselet {
   readonly category = "Converters";
@@ -76,7 +84,10 @@ export class AsConverterParselet implements InfixParselet {
 
     if (
       !nextToken ||
-      (nextToken.type !== "CONVERTER_NAME" && nextToken.type !== "IDENT" && nextToken.type !== "FUNC")
+      (nextToken.type !== "CONVERTER_NAME" &&
+        nextToken.type !== "IDENT" &&
+        nextToken.type !== "FUNC" &&
+        nextToken.type !== "UNIT")
     ) {
       throw ErrorFactory.parsing(
         "AS_CONVERTER_EXPECTED_NAME",

@@ -256,6 +256,22 @@ export const TokenTypes = {
   CURRENT_TIMESTAMP: "CURRENT_TIMESTAMP",
   TO_DATE: "TO_DATE",
   TO_TIMESTAMP: "TO_TIMESTAMP",
+  // Natural-question forms over the same date fields — "what day is it in
+  // 30 days", "what month is it on 25/12/2026", "what week is it". Each is
+  // a fully-fused phrase for the same reason as WEEKDAY_ON above: claiming
+  // bare "day"/"month"/"week" as keywords would break ":day = 5" and
+  // collide with the UNIT tokens of the same name.
+  WEEKDAY_IN: "WEEKDAY_IN",
+  MONTH_ON: "MONTH_ON",
+  MONTH_IN: "MONTH_IN",
+  WEEK_ON: "WEEK_ON",
+  WEEK_IN: "WEEK_IN",
+  // `<unit> between <date> and <date>` — fused UNIT+BETWEEN, exactly like
+  // UNTIL_UNIT/SINCE_UNIT above.
+  BETWEEN_UNIT: "BETWEEN_UNIT",
+  // Postfix day-type predicates — "<date> is a weekend" / "is a workday".
+  IS_WEEKEND: "IS_WEEKEND",
+  IS_WORKDAY: "IS_WORKDAY",
   // ── Time — video timecode (packages/time/) ──
   // Fused from a raw `HH:MM:SS:FF` token sequence (see
   // packages/time/normalizer/VideoTimecodeNormalizerRule.ts) and from

@@ -3,7 +3,8 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ValueType } from "@solve-js/vm/Value";
-import { exampleData, fullDocumentExamples } from "@bridge/examples";
+import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
+import { exampleData, fullDocumentExamples, multiDocumentExamples } from "@bridge/examples";
 import { PLAYGROUND_PACKAGES, runEngine } from "@bridge/engine";
 
 /**
@@ -153,6 +154,71 @@ describe("Playground example content is valid against the real engine", () => {
           const msg = e instanceof Error ? e.message : String(e);
           failures.push(`[${example.name}] line ${lineNum} "${trimmed}" THREW: ${msg}`);
         }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  /**
+   * Multi-document sets are the only examples whose correctness depends on
+   * something OUTSIDE their own text: the `global :name` values published by
+   * the sibling documents in the same set. Evaluating each document with its
+   * own engine — but against the shared, process-wide global store — is what
+   * the webapp actually does (one engine per tab, one store per process), so
+   * this catches a set whose reader references a global no sibling declares,
+   * or whose documents are listed reader-before-writer.
+   *
+   * Pending is a failure here, not a pass: a reader left Pending after every
+   * document in the set has been evaluated means nothing ever declared the
+   * global it is waiting on.
+   */
+  test("every multi-document example resolves — each document's globals are visible to its siblings", () => {
+    sharedGlobalVariableStore.clear();
+    const failures: string[] = [];
+    for (const example of multiDocumentExamples) {
+      // Isolate each set: a global left over from an earlier set must not be
+      // what makes this one appear to work.
+      sharedGlobalVariableStore.clear();
+      for (const document of example.documents) {
+        const engine = new ExpressionEngine("en", false);
+        const documentModel = new DocumentModel();
+        documentModel.setDocument(document.content);
+        engine.setDocumentModel(documentModel);
+        const lines = document.content.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          const trimmed = lines[i].trim();
+          if (!trimmed) continue;
+          const lineNum = i + 1;
+          const where = `[${example.name} / ${document.title}] line ${lineNum} "${trimmed}"`;
+          try {
+            const [result] = engine.evaluateLine(lineNum, trimmed);
+            const lineState = documentModel.getLineAt(lineNum);
+            if (lineState) lineState.result = result;
+            if (result.type === ValueType.Error) {
+              failures.push(`${where} -> Error value`);
+            } else if (result.type === ValueType.Pending) {
+              failures.push(`${where} -> still Pending (no sibling document declares the global it reads)`);
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            failures.push(`${where} THREW: ${msg}`);
+          }
+        }
+      }
+    }
+    sharedGlobalVariableStore.clear();
+    expect(failures).toEqual([]);
+  });
+
+  test("every multi-document example is actually multi-document, with unique tab titles", () => {
+    const failures: string[] = [];
+    for (const example of multiDocumentExamples) {
+      if (example.documents.length < 2) {
+        failures.push(`[${example.name}] has ${example.documents.length} document(s) — use fullDocumentExamples instead`);
+      }
+      const titles = example.documents.map((d) => d.title);
+      if (new Set(titles).size !== titles.length) {
+        failures.push(`[${example.name}] has duplicate document titles: ${titles.join(", ")}`);
       }
     }
     expect(failures).toEqual([]);

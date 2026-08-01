@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, stringValue, datetimeValue, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, datetimeValue, errorValue } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
@@ -22,6 +22,11 @@ export const WORKDAYS_IN_FN_IDX = allocatePluginFunctionIndex();
 export const WEEKDAY_ON_FN_IDX = allocatePluginFunctionIndex();
 export const TO_DATE_FN_IDX = allocatePluginFunctionIndex();
 export const TO_TIMESTAMP_FN_IDX = allocatePluginFunctionIndex();
+export const MONTH_ON_FN_IDX = allocatePluginFunctionIndex();
+export const WEEK_ON_FN_IDX = allocatePluginFunctionIndex();
+export const IS_WEEKEND_FN_IDX = allocatePluginFunctionIndex();
+export const IS_WORKDAY_FN_IDX = allocatePluginFunctionIndex();
+export const SPAN_BETWEEN_FN_IDX = allocatePluginFunctionIndex();
 
 /**
  * `workdays in <duration>` -> the number of Mon-Fri workdays in that span,
@@ -70,12 +75,118 @@ const WEEKDAY_NAMES = [
 ];
 
 /**
- * `day of the week on <date>` / `weekday on <date>` -> the weekday name
- * (e.g. "Tuesday") as a String value.
+ * Guards the date-field extractors below (weekday/month/week/is-a-weekend).
+ *
+ * The grammar-driven call sites always build a Datetime by construction,
+ * but the `as` converter forms don't: `<anything> as week` reaches the same
+ * handler, so `90 days as week` would otherwise read a duration's raw ms as
+ * if it were an epoch and answer "week 1" with a straight face. Returning
+ * an error instead is the difference between a wrong answer and a
+ * diagnosable one.
+ */
+function asEpochMs(value: Value, fieldName: string): number | Value {
+  if (value.type === ValueType.Datetime) return value.toNumber();
+  return errorValue(
+    "DATE_FIELD_EXPECTED_DATE",
+    `"${fieldName}" expects a date, got ${ValueType[value.type] ?? "an unsupported value"}`
+  );
+}
+
+/**
+ * `day of the week on <date>` / `what day is it in <duration>` /
+ * `<date> as weekday` -> the weekday name (e.g. "Tuesday") as a String.
  */
 function weekdayOnDateHandler(args: Value[]): Value {
-  const epochMs = args[0].toNumber();
+  const epochMs = asEpochMs(args[0], "weekday");
+  if (typeof epochMs !== "number") return epochMs;
   return stringValue(WEEKDAY_NAMES[new Date(epochMs).getDay()]);
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * `what month is it on <date>` / `<date> as month` -> the month name
+ * (e.g. "December") as a String value.
+ *
+ * English-only, exactly like {@link WEEKDAY_NAMES} directly above — the
+ * locale-aware path is `format/FormatEngine.ts`, which is what renders a
+ * whole Datetime; this returns a bare String field extracted from one, and
+ * matching the established weekday behaviour beats having the two
+ * neighbouring fields disagree about localization.
+ */
+function monthOnDateHandler(args: Value[]): Value {
+  const epochMs = asEpochMs(args[0], "month");
+  if (typeof epochMs !== "number") return epochMs;
+  return stringValue(MONTH_NAMES[new Date(epochMs).getMonth()]);
+}
+
+/**
+ * `what week is it on <date>` / `<date> as week` -> the ISO-8601 week
+ * number (1-53) as a plain Number.
+ *
+ * ISO weeks start on Monday and week 1 is the one containing the first
+ * Thursday of the year — which is why this shifts to the Thursday of the
+ * target's week before counting. A naive "day-of-year / 7" would disagree
+ * with every calendar app for the first and last days of a year.
+ */
+function weekOnDateHandler(args: Value[]): Value {
+  const epochMs = asEpochMs(args[0], "week");
+  if (typeof epochMs !== "number") return epochMs;
+  const d = new Date(epochMs);
+  // Work in UTC on a date-only copy so a local-time hour can't shift the day.
+  const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // getUTCDay(): Sunday=0. Map to ISO's Monday=1..Sunday=7, then step to Thursday.
+  const isoDay = target.getUTCDay() === 0 ? 7 : target.getUTCDay();
+  target.setUTCDate(target.getUTCDate() + 4 - isoDay);
+  const yearStart = Date.UTC(target.getUTCFullYear(), 0, 1);
+  const days = Math.floor((target.getTime() - yearStart) / 86_400_000);
+  return numberValue(Math.floor(days / 7) + 1);
+}
+
+/** True for Saturday/Sunday. */
+function isWeekendDate(epochMs: number): boolean {
+  const day = new Date(epochMs).getDay();
+  return day === 0 || day === 6;
+}
+
+/** `<date> is a weekend` -> Boolean. */
+function isWeekendOnDateHandler(args: Value[]): Value {
+  const epochMs = asEpochMs(args[0], "is a weekend");
+  if (typeof epochMs !== "number") return epochMs;
+  return boolValue(isWeekendDate(epochMs));
+}
+
+/**
+ * `<date> is a workday` / `is a weekday` -> Boolean.
+ *
+ * Mon-Fri only, with NO public-holiday exclusion — the same scope decision
+ * `vm/VM.ts`'s `addBusinessDays()` and `workdaysInDurationHandler` above
+ * already make, kept consistent so "is a workday" can never disagree with
+ * the workday arithmetic in the line above it.
+ */
+function isWorkdayOnDateHandler(args: Value[]): Value {
+  const epochMs = asEpochMs(args[0], "is a workday");
+  if (typeof epochMs !== "number") return epochMs;
+  return boolValue(!isWeekendDate(epochMs));
+}
+
+/**
+ * `<unit> between <date> and <date>` -> the UNSIGNED span between the two
+ * endpoints as a `Uom("ms")`, which the caller then converts into the
+ * requested unit via `UOM_CONVERT_IN` (identical to how
+ * `UntilSinceParselet` feeds that opcode).
+ *
+ * A plugin function rather than a `SUB`: "between" has no direction in
+ * English, so `days between A and B` must equal `days between B and A`,
+ * and there is no ABS opcode to apply after a signed subtraction.
+ * Arguments arrive in push order, so `args[0]` is the first endpoint as
+ * written — though by construction the result doesn't depend on that.
+ */
+function spanBetweenDatesHandler(args: Value[]): Value {
+  return uomValue(Math.abs(args[0].toNumber() - args[1].toNumber()), "ms");
 }
 
 /**
@@ -142,5 +253,10 @@ function toTimestampFromAnyHandler(args: Value[]): Value {
 
 export const workdaysInDuration = workdaysInDurationHandler;
 export const weekdayOnDate = weekdayOnDateHandler;
+export const monthOnDate = monthOnDateHandler;
+export const weekOnDate = weekOnDateHandler;
+export const isWeekendOnDate = isWeekendOnDateHandler;
+export const isWorkdayOnDate = isWorkdayOnDateHandler;
+export const spanBetweenDates = spanBetweenDatesHandler;
 export const toDateFromAny = toDateFromAnyHandler;
 export const toTimestampFromAny = toTimestampFromAnyHandler;

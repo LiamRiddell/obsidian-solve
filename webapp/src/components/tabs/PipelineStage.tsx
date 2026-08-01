@@ -1,21 +1,65 @@
 import type { ReactNode } from "react"
-import { ChevronRight } from "lucide-react"
+import {
+  ChevronRight,
+  Shield,
+  Play,
+  Type,
+  ListChecks,
+  RefreshCw,
+  Save,
+  Network,
+  Settings,
+  Clock,
+  Zap,
+  Link,
+  Package,
+  Check,
+  Square,
+  type LucideIcon,
+} from "lucide-react"
+import { stageIcon } from "@bridge/utils"
 import { cn } from "@/lib/utils"
 
-/** Maps a stage's `colorClass` to its accent color. Mirrors `.flow-stage.executed.{colorClass}` in playground/styles/main.css. */
+/**
+ * Maps a stage's `colorClass` to its accent color, drawn from the app's
+ * `--chart-1..8` categorical palette (index.css, ported from the shared
+ * design-token source) instead of bespoke hex — so pipeline-stage colors
+ * stay part of the same CVD-validated system every other chart/dataviz
+ * surface uses. Only 8 chart colors exist for 12 stage categories, so a
+ * few reuse a color; pairings were chosen so reused colors never land on
+ * two stages that appear adjacent in the pipeline flow.
+ */
 export const STAGE_COLOR: Record<string, string> = {
-  lexer: "#7bdff2",
-  validate: "#ffa07a",
-  cache: "#ff6ec7",
-  parser: "#c7a9ff",
-  compiler: "#90e0ef",
-  async: "#ff9b54",
-  vm: "#faff69",
-  normalizer: "#c7a9ff",
-  readwrite: "#ff6ec7",
-  dag: "#ff9b54",
-  result: "#b5e48c",
-  classify: "#faff69",
+  classify: "var(--chart-1)",
+  validate: "var(--chart-2)",
+  lexer: "var(--chart-3)",
+  normalizer: "var(--chart-4)",
+  readwrite: "var(--chart-5)",
+  cache: "var(--chart-6)",
+  parser: "var(--chart-7)",
+  compiler: "var(--chart-8)",
+  async: "var(--chart-2)",
+  vm: "var(--chart-1)",
+  dag: "var(--chart-6)",
+  result: "var(--chart-1)",
+}
+
+/** lucide-react icon components, keyed by the names `stageIcon()` (packages/playground-bridge) maps the engine's emoji stage icons to. */
+const STAGE_ICONS: Record<string, LucideIcon> = {
+  Shield,
+  Play,
+  Type,
+  ListChecks,
+  RefreshCw,
+  Save,
+  Network,
+  Settings,
+  Clock,
+  Zap,
+  Link,
+  Package,
+  Check,
+  Square,
 }
 
 /**
@@ -61,6 +105,7 @@ export function PipelineStage({
   detail?: ReactNode
 }) {
   const accent = executed ? STAGE_COLOR[colorClass] : undefined
+  const Icon = STAGE_ICONS[stageIcon(icon)]
 
   return (
     <div
@@ -84,7 +129,7 @@ export function PipelineStage({
         >
           {stepNumber}
         </span>
-        <span className="shrink-0 text-sm">{icon}</span>
+        {Icon ? <Icon className="text-muted-foreground size-3.5 shrink-0" /> : <span className="shrink-0 text-sm">{icon}</span>}
         <span className="shrink-0 text-xs font-semibold">{label}</span>
         {isGate && (
           <span
