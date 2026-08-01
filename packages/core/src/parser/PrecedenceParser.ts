@@ -394,10 +394,27 @@ export class PrecedenceParser {
         return;
       }
 
-      // ── Grouping ──────────────────────────────────────────────────────────
+      // ── Grouping / bare-tuple vector literal ─────────────────────────────────
+      // `(expr)` groups for precedence; `(x, y[, z[, w]])` is the bare-tuple
+      // vector literal documented as an alternative to vec2/vec3/vec4(...)
+      // (wiki: Arithmetic/Vector). This Tier-1 case is what actually runs for
+      // every LPAREN in production parsing — GroupParselet.ts mirrors this
+      // logic for registry-introspection/diagnostic-listing purposes, but a
+      // package can never override LPAREN's dispatch here (Tier 1 always
+      // wins over the ParseletRegistry fallback below), so both must be kept
+      // in sync by hand.
       case PrecedenceParser.LPAREN_ID: {
         this.parseExpression(0, builder);
+        let count = 1;
+        while (this.match(TokenTypes.COMMA)) {
+          this.parseExpression(0, builder);
+          count++;
+        }
         this.consume(TokenTypes.RPAREN);
+        if (count > 1) {
+          builder.emitOpcode(OpCode.ARR_NEW);
+          builder.emitIndex(count);
+        }
         return;
       }
 

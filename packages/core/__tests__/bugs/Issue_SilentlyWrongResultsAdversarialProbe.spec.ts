@@ -8,15 +8,30 @@ import { ValueType } from "@solve-js/vm/Value";
  * of an error, so a user would have no reason to suspect anything was off.
  */
 describe("Bugs: plausible-but-silently-wrong results found via adversarial probing", () => {
-  test("DIV between incompatible unit dimensions errors instead of mislabeling the result", () => {
+  test("DIV between incompatible unit dimensions constructs a Rate, not a mislabeled result", () => {
     // "5kg / 3m" used to bypass binaryOp()'s INCOMPATIBLE_UNITS check (DIV
     // had its own inline Uom-Uom handling) and return "1.67 kg" — silently
-    // discarding the denominator's unit rather than erroring or
-    // representing a derived unit (which this codebase doesn't support).
+    // discarding the denominator's unit. The intermediate fix was to error
+    // instead, since at the time this codebase had no derived-unit
+    // representation. It now does (see vm/Value.ts's rateValue()/
+    // isRateUnit() — added for SoulverCore-style rate support, "$99/week",
+    // "90 km / 3 day" -> "30 km/day"), so DIV between genuinely different
+    // measures now correctly constructs "kg/m" rather than either
+    // mislabeling or refusing to compute at all.
     const engine = new ExpressionEngine("en", false);
     const [result] = engine.evaluateLine(1, "5kg / 3m");
-    expect(result.type).toBe(ValueType.Error);
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.unit).toBe("kg/m");
+    expect(result.toNumber()).toBeCloseTo(5 / 3);
   });
+
+  // Currency-pair DIV with no cached rate is covered directly at the VM
+  // level in vm/Rate.spec.ts ("two currencies with no live rate still
+  // error honestly via DIV") — going through the full ExpressionEngine
+  // here instead confounds the assertion with the async-preflight/Pending
+  // path (CurrencyAsyncResolver kicks off a fetch and evaluateLine()
+  // returns a Pending result synchronously, not an Error), which tests a
+  // different layer than the DIV opcode logic this file is about.
 
   test("DIV between the same unit dimension still works (regression guard)", () => {
     const engine = new ExpressionEngine("en", false);

@@ -226,4 +226,34 @@ describe("Phase 1: Safety Limits", () => {
     expect(result.reads).toBeDefined();
     expect(result.writes).toBeDefined();
   });
+
+  // ── Constant pool overflow (bytecode opcodes are a Uint8Array) ────────
+  //
+  // Regression for a real bug found while hardening for release: an
+  // expression with more than 256 distinct numeric literals used to
+  // silently produce a WRONG answer (the constant-pool index wrapped
+  // instead of erroring) rather than throwing. Unreachable with the
+  // default maxComplexity (500 caps a "1+1+1+..." chain at ~250 literals),
+  // but reachable — and previously silent — the moment a host raises
+  // maxComplexity for legitimately larger expressions. BytecodeBuilder now
+  // throws instead of wrapping; this pins that behavior at the engine level.
+  test("expression with >256 distinct numeric literals throws instead of silently computing the wrong answer", () => {
+    const engine = new ExpressionEngine("en", false, {
+      validation: { maxExpressionLength: 100000, maxComplexity: 100000, maxNestingDepth: 50, autoBalanceParens: false },
+    });
+    const nums = Array.from({ length: 300 }, (_, i) => i + 1); // 1..300, all distinct
+    const expr = nums.join("+");
+    expect(() => engine.evaluateExpression(expr)).toThrow(/numeric literals/i);
+  });
+
+  test("expression with exactly 256 distinct numeric literals still evaluates correctly", () => {
+    const engine = new ExpressionEngine("en", false, {
+      validation: { maxExpressionLength: 100000, maxComplexity: 100000, maxNestingDepth: 50, autoBalanceParens: false },
+    });
+    const nums = Array.from({ length: 256 }, (_, i) => i + 1); // 1..256, all distinct
+    const expr = nums.join("+");
+    const expectedSum = nums.reduce((a, b) => a + b, 0);
+    const [value] = engine.evaluateExpression(expr);
+    expect(value.toNumber()).toBe(expectedSum);
+  });
 });

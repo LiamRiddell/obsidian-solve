@@ -6,9 +6,10 @@
 "paths": {
        "@/*": ["src/*"],
        "@app/*": ["src/app/*"],
-       "@solve-js/*": ["src/solve-js/src/*"],
-       "@tools/*": ["src/solve-js/tools/*"],
-       "test/*": ["src/solve-js/__tests__/*"]
+       "@solve-js/*": ["packages/core/src/*"],
+       "@solve-js-examples/*": ["packages/core/examples/*"],
+       "@tools/*": ["packages/core/tools/*"],
+       "test/*": ["packages/core/__tests__/*"]
      },
     "target": "ES6",
     "module": "ESNext",

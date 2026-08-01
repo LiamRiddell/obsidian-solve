@@ -1,5 +1,5 @@
 import { DiagnosticCollector } from "./collector";
-import { DiagnosticReport, DiagnosticReportJSON, DiagnosticEvent } from "./events";
+import { DiagnosticReport, DiagnosticReportJSON, DiagnosticEvent, CategorizedParselet } from "./events";
 
 /**
  * Collects all pipeline events with high-resolution timestamps.
@@ -16,10 +16,26 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
   private startNs: number = 0;
   private parseletEntries: Map<string, { category: string; count: number }> = new Map();
 
+  // Incrementally-maintained summary state — see getReport()'s doc comment
+  // for why these exist. Each mirrors exactly what getReport() used to
+  // recompute by rescanning the full `events` array on every call.
+  private totalTokens = 0;
+  private cacheHitSeen = false;
+  private vmStepSeen = false;
+  private hasBytecodeBuilt = false;
+  private firstBytecodeOpcodesLength = 0;
+  private parseletMatches: CategorizedParselet[] = [];
+
   reset(): void {
     this.events = [];
     this.parseletEntries.clear();
     this.startNs = 0;
+    this.totalTokens = 0;
+    this.cacheHitSeen = false;
+    this.vmStepSeen = false;
+    this.hasBytecodeBuilt = false;
+    this.firstBytecodeOpcodesLength = 0;
+    this.parseletMatches = [];
   }
 
   /** Stamp the real wall-clock `elapsedNs` onto an event before storing it. */
@@ -49,6 +65,7 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
 
   onTokenEmitted(event: DiagnosticEvent & { type: "token_emitted" }): void {
     this.events.push(this.stamp(event));
+    this.totalTokens++;
   }
 
   onNormalizerStart(event: DiagnosticEvent & { type: "normalizer_start" }): void {
@@ -75,14 +92,32 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
         count: 1,
       });
     }
+
+    this.parseletMatches.push({
+      tokenType: event.tokenType,
+      tokenValue: event.tokenValue,
+      parseletCategory: event.parseletCategory,
+      parseletType: event.parseletType,
+      isPrefix: event.isPrefix,
+      bindingPower: event.bindingPower,
+      tokenOffset: event.tokenOffset,
+    });
   }
 
   onBytecodeBuilt(event: DiagnosticEvent & { type: "bytecode_built" }): void {
     this.events.push(this.stamp(event));
+    // Matches getReport()'s original behavior: the FIRST bytecode_built
+    // event ever seen (not the most recent) wins — preserved as-is here,
+    // this rewrite only changes HOW that value is computed, not what it is.
+    if (!this.hasBytecodeBuilt) {
+      this.hasBytecodeBuilt = true;
+      this.firstBytecodeOpcodesLength = event.opcodesLength;
+    }
   }
 
   onVmStep(event: DiagnosticEvent & { type: "vm_step" }): void {
     this.events.push(this.stamp(event));
+    this.vmStepSeen = true;
   }
 
   onVmHalt(event: DiagnosticEvent & { type: "vm_halt" }): void {
@@ -91,6 +126,7 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
 
   onCacheHit(event: DiagnosticEvent & { type: "cache_hit" }): void {
     this.events.push(this.stamp(event));
+    this.cacheHitSeen = true;
   }
 
   onCacheMiss(event: DiagnosticEvent & { type: "cache_miss" }): void {
@@ -101,6 +137,25 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
     this.events.push(this.stamp(event));
   }
 
+/**
+ * Build the summary/metadata/parselets report from this collector's
+ * running state.
+ *
+ * These fields used to be recomputed by rescanning the FULL `events`
+ * array on every single call (`.some()`/`.filter()`/a manual scan) — since
+ * `events` is never cleared except by an explicit `reset()` (which nothing
+ * in `ExpressionEngine` currently calls — the cumulative-across-the-whole-
+ * document design is deliberate, see `onPipelineStart`'s comment and the
+ * playground's `buildLineStats()`, which slices per-line events out of
+ * this ever-growing array via cumulative-length diffing), that meant
+ * per-call cost grew linearly with total prior calls: O(n²) diagnostic-mode
+ * evaluation over a document's lifetime. Fixed by maintaining each of these
+ * incrementally as events arrive (see the `on*` handlers above), the same
+ * pattern already used for `parseletEntries`. Every value produced here is
+ * identical to what the old rescanning code produced — including its
+ * existing "first bytecode_built event wins" quirk — this is a performance
+ * fix, not a behavior change.
+ */
 getReport(): DiagnosticReport | undefined {
      if (this.events.length === 0) return undefined;
 
@@ -111,30 +166,13 @@ getReport(): DiagnosticReport | undefined {
        parseCategories.set(entry.category, entry.count);
      }
 
-     let totalOpcodes = 0;
-     for (const event of this.events) {
-       if (event.type === "bytecode_built") {
-         totalOpcodes = event.opcodesLength;
-         break;
-       }
-     }
-
-     const cacheHit = this.events.some((e) => e.type === "cache_hit");
-     const totalTokens = this.events.filter((e) => e.type === "token_emitted").length;
+     const totalOpcodes = this.firstBytecodeOpcodesLength;
+     const cacheHit = this.cacheHitSeen;
+     const totalTokens = this.totalTokens;
 
      const report: DiagnosticReport = {
        events: this.events,
-       parselets: this.events
-         .filter((e): e is DiagnosticEvent & { type: "parselet_matched" } => e.type === "parselet_matched")
-         .map((e) => ({
-           tokenType: e.tokenType,
-           tokenValue: e.tokenValue,
-           parseletCategory: e.parseletCategory,
-           parseletType: e.parseletType,
-           isPrefix: e.isPrefix,
-           bindingPower: e.bindingPower,
-           tokenOffset: e.tokenOffset,
-         })),
+       parselets: this.parseletMatches.map((e) => ({ ...e })),
        summary: {
          totalTokens,
          totalParselets: parseCategories.size,
@@ -149,7 +187,7 @@ getReport(): DiagnosticReport | undefined {
          inputType:
            this.events[0]?.type === "pipeline_start" ? this.events[0].inputType : "",
          timestamp: Date.now(),
-         vmTraceEnabled: this.events.some((e) => e.type === "vm_step"),
+         vmTraceEnabled: this.vmStepSeen,
        },
        toJSON(): DiagnosticReportJSON {
          return {

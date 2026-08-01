@@ -17,6 +17,28 @@ const builtinNameToIndex: Record<string, number> = {
   log10: 28, log1p: 29, log2: 30,
   pow: 31, random: 32, sign: 33, trunc: 34,
   degtorad: 35, radtodeg: 36,
+  // 37 is "roll" (dice), emitted directly by the Dice package, not routed
+  // through this name map.
+  gcd: 38, lcm: 39, permutation: 40, combination: 41,
+  // 42-46 (average/median/total/count/proportion) are emitted directly by
+  // the MathPhrases package's own phrase parselets, not routed through
+  // this name map either.
+  // 47 (clamp) is emitted via the CLAMP keyword's dedicated parselet.
+  hex: 48, bin: 49, int: 50,
+  // Finance (packages/finance/) function-call forms — see VMBuiltins.ts
+  // indices 51-59 for the implementations. The phrase-grammar forms
+  // ("compound interest on ...", "monthly repayment on ...", "tax on ...")
+  // are hand-written parselets in packages/finance/parselets/, not routed
+  // through this name map — see FinancePackage.ts.
+  compoundinterest: 51, interestearned: 52,
+  compoundinterestrate: 53, compoundinterestyears: 54,
+  loanrepayment: 55, loaninterest: 56, monthlypayment: 57,
+  taxadd: 58, taxremove: 59,
+  // Inflation-adjusted value (packages/finance/) -- see VMBuiltins.ts
+  // index 60. The present-year-relative phrase forms and the flat-rate
+  // future-value projection are pluginFunctions instead, not reachable
+  // via this map -- see InflationPluginFunctions.ts.
+  inflationadjust: 60,
 };
 
 export class FunctionCallParselet implements PrefixParselet {

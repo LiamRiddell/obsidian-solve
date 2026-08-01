@@ -18,24 +18,40 @@ import { ARITHMETIC_PACKAGE } from "./arithmetic";
 import { PERCENTAGE_PACKAGE } from "./percentage";
 import { FUNCTION_PACKAGE } from "./function";
 import { DATETIME_PACKAGE } from "./datetime";
+import { TIME_PACKAGE } from "./time";
 import { DICE_PACKAGE } from "./dice";
 import { VARIABLES_PACKAGE } from "./variables";
 import { UOM_PACKAGE } from "./uom";
 import { CURRENCY_PACKAGE } from "./currency";
 import { VECTOR_PACKAGE } from "./vector";
 import { BIGINT_PACKAGE } from "./biginteger";
+import { CONDITIONALS_PACKAGE } from "./conditionals";
+import { CONVERTERS_PACKAGE } from "./converters";
+import { MATHPHRASES_PACKAGE } from "./mathphrases";
+import { FINANCE_PACKAGE } from "./finance";
+import { WEATHER_PACKAGE } from "./weather";
+import { createStocksPackage } from "./stocks";
+import { createKnowledgePackage } from "./knowledge";
 
 export {
   ARITHMETIC_PACKAGE,
   PERCENTAGE_PACKAGE,
   FUNCTION_PACKAGE,
   DATETIME_PACKAGE,
+  TIME_PACKAGE,
   DICE_PACKAGE,
   VARIABLES_PACKAGE,
   UOM_PACKAGE,
   CURRENCY_PACKAGE,
   VECTOR_PACKAGE,
   BIGINT_PACKAGE,
+  CONDITIONALS_PACKAGE,
+  CONVERTERS_PACKAGE,
+  MATHPHRASES_PACKAGE,
+  FINANCE_PACKAGE,
+  WEATHER_PACKAGE,
+  createStocksPackage,
+  createKnowledgePackage,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -44,15 +60,33 @@ export {
 // handler), kept in src/solve-js/examples/osrs/ rather than shipped as
 // part of the engine. See ExpressionEngine's `packages` constructor
 // parameter to register it (or any other package) alongside these.
+//
+// Of the three "Live Data" packages (weather/stocks/knowledge), only
+// WEATHER_PACKAGE is included below. Open-Meteo (weather's provider) is
+// genuinely free and keyless — no configuration burden on a host who
+// doesn't want its network calls, who can filter it out of their own
+// `packages` array. Stocks and Knowledge have no equivalent free provider
+// (see their own module docs) — unconfigured, `createStocksPackage()`/
+// `createKnowledgePackage()` do nothing useful beyond returning an honest
+// "not configured" error, so — matching OSRS's own precedent — they are
+// exported but deliberately left OUT of BUILTIN_PACKAGES. A host that
+// wants them calls the factory with their own fetch function/API key and
+// adds the result to their ExpressionEngine's `packages` array directly.
 export const BUILTIN_PACKAGES: IEnginePackage[] = [
   ARITHMETIC_PACKAGE,
   PERCENTAGE_PACKAGE,
   FUNCTION_PACKAGE,
   DATETIME_PACKAGE,
+  TIME_PACKAGE,
   DICE_PACKAGE,
   VARIABLES_PACKAGE,
   UOM_PACKAGE,
   CURRENCY_PACKAGE,
   VECTOR_PACKAGE,
   BIGINT_PACKAGE,
+  CONDITIONALS_PACKAGE,
+  CONVERTERS_PACKAGE,
+  MATHPHRASES_PACKAGE,
+  FINANCE_PACKAGE,
+  WEATHER_PACKAGE,
 ];

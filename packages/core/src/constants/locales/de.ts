@@ -26,6 +26,8 @@ export const deLocale: ILocale = {
     degtorad: "FUNC", radtodeg: "FUNC",
     konvertieren: "CONVERT", in: "TO", amBesten: "BEST",
     naechste: "NEXT", letzte: "LAST", bis: "UNTIL", seit: "SINCE",
+    sonntag: "SUNDAY", montag: "MONDAY", dienstag: "TUESDAY", mittwoch: "WEDNESDAY",
+    donnerstag: "THURSDAY", freitag: "FRIDAY", samstag: "SATURDAY",
     zwischen: "BETWEEN",
     von_ab: "FROM",
     erhoehen: "INCREASE", verringern: "DECREASE",

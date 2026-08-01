@@ -33,7 +33,6 @@ describe("CurrencyExchange with TanStack Query", () => {
 	});
 
 	afterEach(() => {
-		fx.destroy();
 		global.fetch = originalFetch;
 	});
 
@@ -143,7 +142,6 @@ describe("CurrencyExchange crypto support", () => {
 	});
 
 	afterEach(() => {
-		fx.destroy();
 		global.fetch = originalFetch;
 	});
 

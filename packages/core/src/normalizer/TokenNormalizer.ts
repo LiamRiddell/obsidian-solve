@@ -33,6 +33,7 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch, TokenFusion } from "./NormalizerRule";
 import { PhraseTrie } from "./PhraseTrie";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 //#endregion
 //#region ─── NormalizerOptions — Configuration ────────────────────────────────
@@ -453,8 +454,14 @@ export class TokenNormalizer {
 
       // Safety: bail if token count explodes (runaway rule expansion)
       if (result.length > maxTokens) {
-        throw new Error(
-          `TokenNormalizer: normalized token count (${result.length}) exceeds safety limit (${maxTokens})`
+        // A raw Error here would bypass ThreeTierEvaluator's DAG-preservation
+        // enrichment on compile failure (it specifically checks for
+        // EngineError) — same reasoning as ExpressionEngineSafety.ts's
+        // complexity/length checks, which this mirrors.
+        throw ErrorFactory.validation(
+          "NORMALIZED_TOKEN_LIMIT_EXCEEDED",
+          `Normalized token count (${result.length}) exceeds safety limit (${maxTokens})`,
+          { tokenCount: result.length, maxTokens }
         );
       }
 

@@ -10,8 +10,6 @@ import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
 // ============================================================================
 
 export class CurrencyExchangeService {
-  private subscriptions: Map<string, Set<(rate: number, error?: string) => void>> = new Map();
-
   /**
    * Live rate tables cached from successful getRate() fetches, keyed by
    * uppercase base currency. Each table holds every rate the API returned
@@ -63,6 +61,17 @@ export class CurrencyExchangeService {
    */
   private static readonly FETCH_TIMEOUT_MS = 10_000;
 
+  /**
+   * Fetch the live exchange rate for converting 1 unit of `from` into `to`.
+   *
+   * Routes cryptocurrency codes (see {@link CRYPTO_IDS}) to CoinGecko and
+   * everything else to Frankfurter (ECB reference rates, fiat-only). On
+   * success, caches the whole returned rate table for `from` so subsequent
+   * lookups — including cross-pairs via triangulation — can be served
+   * synchronously by {@link getRateSync} within the freshness window.
+   *
+   * @throws If the currency code is unrecognized or the fetch fails/times out.
+   */
   async getRate(from: string, to: string, signal?: AbortSignal): Promise<number> {
     const fromUpper = from.toUpperCase();
     const toUpper = to.toUpperCase();
@@ -205,8 +214,7 @@ export class CurrencyExchangeService {
    *
    * Mainly for test isolation: {@link sharedCurrencyExchange} is a
    * module-level singleton, so a rate primed or fetched by one test can
-   * silently leak into a later test in the same file (no other reset
-   * existed — `destroy()` only clears subscriptions). Also usable in
+   * silently leak into a later test in the same file. Also usable in
    * production if a caller ever wants to force a full re-fetch.
    */
   clearRates(): void {
@@ -240,6 +248,7 @@ export class CurrencyExchangeService {
     return null;
   }
 
+  /** Convert `value` from `from` to `to` using a freshly-fetched live rate (see {@link getRate}). */
   async convert(value: number, from: string, to: string): Promise<number> {
     const rate = await this.getRate(from, to);
     return value * rate;
@@ -281,56 +290,14 @@ export class CurrencyExchangeService {
   }
 
   // ------------------------------------------------------------------------
-  // SUBSCRIPTIONS (Two-Way Binding)
-  // ------------------------------------------------------------------------
-
-  subscribeRate(
-    from: string,
-    to: string,
-    callback: (rate: number, error?: string) => void
-  ): () => void {
-    const queryKey = ["currency", from, to];
-    const queryKeyStr = JSON.stringify(queryKey);
-    
-    if (!this.subscriptions.has(queryKeyStr)) {
-      this.subscriptions.set(queryKeyStr, new Set());
-    }
-    this.subscriptions.get(queryKeyStr)!.add(callback);
-    
-    // Immediately return current rate if available
-    const currentRate = this.getRateSync(from, to);
-    if (currentRate !== null) {
-      callback(currentRate);
-    }
-    
-    // Return unsubscribe function
-    return () => {
-      const subscribers = this.subscriptions.get(queryKeyStr);
-      if (subscribers) {
-        subscribers.delete(callback);
-        if (subscribers.size === 0) {
-          this.subscriptions.delete(queryKeyStr);
-        }
-      }
-    };
-  }
-
-  // ------------------------------------------------------------------------
-  // REFRESH MECHANISMS
-  // ------------------------------------------------------------------------
-
-  refreshRate(from: string, to: string): void {
-    // No-op: TanStack Query handles refresh via invalidateQueries()
-  }
-
-  refreshAll(): void {
-    // No-op: TanStack Query handles refresh via invalidateQueries()
-  }
-
-  // ------------------------------------------------------------------------
   // CURRENCY VALIDATION
   // ------------------------------------------------------------------------
 
+  /**
+   * Check whether `code` is a recognized currency code (fiat or the
+   * cryptocurrencies in {@link CRYPTO_IDS}) — a fixed allowlist, not a
+   * live lookup against any API.
+   */
   isCurrency(code: string): boolean {
     // Check against known currency codes
     const knownCurrencies = [
@@ -344,13 +311,6 @@ export class CurrencyExchangeService {
     return knownCurrencies.includes(code.toUpperCase());
   }
 
-  // ------------------------------------------------------------------------
-  // SHUTDOWN
-  // ------------------------------------------------------------------------
-
-  destroy(): void {
-    this.subscriptions.clear();
-  }
 }
 
 // ============================================================================

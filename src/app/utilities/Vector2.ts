@@ -1,4 +1,4 @@
-import { IVector2 } from "@solve-js/packages/vector/IVector2";
+import { IVector2 } from "@solve/core/packages";
 
 /**
  * Mathematical operations on 2D vectors.

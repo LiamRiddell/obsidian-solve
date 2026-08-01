@@ -2,6 +2,7 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { VectorParselet } from "./parselets/VectorParselet";
 import { FloatParselet } from "./parselets/FloatParselet";
 
+/** Vector literals `vec2(x, y)`/`vec3(x, y, z)`/`vec4(x, y, z, w)` plus float literals, backed by the `ARR_*` opcodes (dot/cross/scale/magnitude/normalize). */
 export const VECTOR_PACKAGE: IEnginePackage = {
   name: "solve-vector",
   prefixParselets: [

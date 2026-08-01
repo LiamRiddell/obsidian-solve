@@ -1,4 +1,4 @@
-import type { EngineConfig, ValidationConfig, VMConfig } from "@solve-js/constants/Configuration";
+import type { EngineConfig, ValidationConfig, VMConfig } from "@solve/core/constants";
 import type UserSettings from "@app/settings/UserSettings";
 
 /**

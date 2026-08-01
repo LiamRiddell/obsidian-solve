@@ -733,7 +733,12 @@ describe("VM — Edge cases & error handling", () => {
     expect(unwrapEvalResult(result).toNumber()).toBe(42);
   });
 
-  test("stack overflow — push beyond maxStackDepth", () => {
+  test("stack overflow — push beyond maxStackDepth throws instead of silently continuing", () => {
+    // Regression: maxStackDepth used to be documented as an enforced VM
+    // safety limit but was dead code — executeBytecode's hot loop bypassed
+    // vm.push()'s bounds check entirely and pushed straight onto the raw
+    // stack array with no limit at all. Pins the fix: exceeding the limit
+    // now throws a clear error instead of growing the stack unbounded.
     const vm = freshVM(2, 50000);
     const ops: number[] = [];
     for (let i = 0; i < 10; i++) {
@@ -741,8 +746,7 @@ describe("VM — Edge cases & error handling", () => {
     }
     ops.push(OpCode.HALT);
     const numbers = new Float64Array(10).fill(42);
-    const result = executeBytecode(bc(ops, Array.from(numbers)), vm);
-    expect(result).toBeDefined();
+    expect(() => executeBytecode(bc(ops, Array.from(numbers)), vm)).toThrow(/maximum stack depth/i);
   });
 
   test("instruction limit exceeded throws", () => {

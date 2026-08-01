@@ -24,6 +24,13 @@ export interface ExpressionRecord {
 export class ScopeManager {
   private definitions: Map<string, { line: number; expr: ExpressionRecord }[]> = new Map();
 
+  /**
+   * Record a variable definition at `lineNumber`. A variable may have
+   * multiple definitions across different lines (e.g. redefined further
+   * down a document) — each call adds one, keeping the internal stack
+   * sorted by line so {@link read} can binary-scan for "most recent
+   * definition at or before" a given line.
+   */
   write(variable: string, lineNumber: number, expr: ExpressionRecord): void {
     if (!this.definitions.has(variable)) {
       this.definitions.set(variable, []);
@@ -33,6 +40,13 @@ export class ScopeManager {
     stack.sort((a, b) => a.line - b.line);
   }
 
+  /**
+   * Look up a variable's value as seen from `readLine`: returns the result
+   * of the closest definition at or before `readLine`, not simply the most
+   * recently-written one — so a read on line 5 of a variable redefined on
+   * lines 2 and 10 sees line 2's value, not line 10's. Returns `undefined`
+   * if the variable has no definition at or before `readLine`.
+   */
   read(variable: string, readLine: number): Value | undefined {
     const stack = this.definitions.get(variable);
     if (!stack) return undefined;
@@ -42,6 +56,12 @@ export class ScopeManager {
     return undefined;
   }
 
+  /**
+   * Drop every definition of `variable` that comes strictly after
+   * `definitionLine`. Call this when a line is re-evaluated with a new
+   * definition, so stale later-line definitions from a previous edit don't
+   * linger and get returned by {@link read}.
+   */
   invalidateDownstream(variable: string, definitionLine: number): void {
     const stack = this.definitions.get(variable);
     if (!stack) return;
@@ -50,6 +70,7 @@ export class ScopeManager {
     stack.splice(idx + 1);
   }
 
+  /** Remove every tracked variable definition — used when an engine/document is reset. */
   clear(): void {
     this.definitions.clear();
   }

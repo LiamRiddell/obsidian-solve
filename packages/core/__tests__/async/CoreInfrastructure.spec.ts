@@ -4,7 +4,6 @@
  * Tests for:
  * - TanStack QueryClient per-plugin isolation (setQueryData, getQueryData, fetchQuery, removeQueries, clear)
  * - ValueType.Pending + pendingValue() factory
- * - EResultType.Pending enum value
  * - VM CALL_PLUGIN returns EvalResult { type:'pending' } when plugin returns Promise
  * - ExpressionEngine handles EvalResult discriminated union (no try/catch needed)
  */
@@ -12,7 +11,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "@jest/globals";
 import { QueryClient } from "@tanstack/query-core";
 import { ValueType, Value, numberValue, stringValue, pendingValue } from "@solve-js/vm/Value";
-import { EResultType } from "@app/constants/EResultType";
 import { createVM, executeBytecode, unwrapEvalResult, type EvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -196,17 +194,6 @@ describe("ValueType.Pending", () => {	test("should have Pending = 12 in ValueTyp
         expect(a).not.toBe(b);
         expect(a.value).toBe("k1");
         expect(b.value).toBe("k2");
-    });
-});
-
-// ────────────────────────────────────────────────────────────────────────
-// §3  EResultType.Pending
-// ────────────────────────────────────────────────────────────────────────
-
-describe("EResultType.Pending", () => {	test("should exist in the enum", () => {
-        // EResultType is a numeric enum, so Pending should be a valid value
-        expect(EResultType.Pending).toBeDefined();
-        expect(typeof EResultType.Pending).toBe("number");
     });
 });
 
@@ -404,6 +391,41 @@ describe("ExpressionEngine EvalResult handling", () => {
         expect(result.value).toContain("plugin:203:");
 
         delete pluginFunctionRegistry[203];
+    });
+
+    // Gap found while hardening for release: every existing test here covers
+    // a plugin function that either returns synchronously (throwing or not)
+    // or returns a Promise that RESOLVES — none covered a Promise that
+    // REJECTS, the other real-world failure mode (e.g. a failed HTTP fetch
+    // inside a plugin function). Confirms the engine's resolveAsync()
+    // try/catch (ExpressionEngine.ts) surfaces it as a batcher "error" event
+    // rather than an unhandled rejection or a hang.
+    test("plugin function returning a REJECTED promise surfaces as an async error event, not an unhandled rejection", async () => {
+        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
+        pluginFunctionRegistry[204] = () => Promise.reject(new Error("simulated fetch failure"));
+
+        const events: import("@solve-js/engine/AsyncResolutionBatcher").AsyncResolutionEvent[] = [];
+        const batcher = engine.getBatcher();
+        batcher._testCaptures = events;
+
+        const vm = engine.getVM();
+        const bytecode = buildCallPluginBytecode(204, 1);
+        vm.activeSignal = new AbortController().signal;
+
+        const result = engine.executeCached(bytecode);
+        expect(result.type).toBe(ValueType.Pending);
+
+        // Flush the microtask queue so the rejected promise's .catch() and
+        // the batcher's queueMicrotask-scheduled flush() both run.
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+        expect(events.some(e => e.type === "error")).toBe(true);
+        const errorEvent = events.find(e => e.type === "error");
+        expect(errorEvent && "error" in errorEvent ? errorEvent.error.message : undefined).toBe("simulated fetch failure");
+
+        batcher._testCaptures = null;
+        delete pluginFunctionRegistry[204];
     });
 });
 

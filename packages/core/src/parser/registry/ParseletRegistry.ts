@@ -22,12 +22,53 @@ export class ParseletRegistry {
 	private prefixById: Map<number, PrefixParselet> = new Map();
 	private infixById: Map<number, InfixParselet> = new Map();
 
+	/**
+	 * Register a prefix parselet for `tokenType`.
+	 *
+	 * If another parselet is already registered for this token type, it is
+	 * silently overwritten by default (`Map.set()` semantics) — the old
+	 * parselet is simply unreachable from then on, with no error. This is
+	 * a real footgun for third-party packages: two packages independently
+	 * choosing the same custom token type will collide with zero signal
+	 * about which one "won". Mirrors ResolverRegistry.register()'s and
+	 * ExpressionEngine.registerPackage()'s existing "warn and replace"
+	 * pattern for the same class of problem at the resolver-namespace and
+	 * package-name levels.
+	 *
+	 * Note: this warns about registry-level collisions only. It does NOT
+	 * detect the separate case where `tokenType` is one of PrecedenceParser's
+	 * Tier-1 fast-path token types (NUMBER, STRING, IDENT, LPAREN, MINUS,
+	 * PLUS, and the Tier-1 infix operators) — those are deliberately kept
+	 * registered here for introspection/diagnostics even though Tier-1
+	 * always intercepts them before this registry is consulted (see
+	 * PrecedenceParser.parsePrefix()'s docs), so warning there would
+	 * misfire on that intentional, already-documented pattern.
+	 */
 	registerPrefix(tokenType: string, parselet: PrefixParselet): void {
+		const existing = this.prefixParselets.get(tokenType);
+		if (existing && existing !== parselet) {
+			console.warn(
+				`[ParseletRegistry] Prefix parselet for token "${tokenType}" is already registered ` +
+				`(category: "${(existing as any).category ?? "unknown"}"). Overwriting with a new ` +
+				`parselet (category: "${(parselet as any).category ?? "unknown"}") — the previous ` +
+				`parselet is now unreachable. Two packages may be claiming the same token type.`,
+			);
+		}
 		this.prefixParselets.set(tokenType, parselet);
 		this.prefixById.set(tokenTypeId(tokenType), parselet);
 	}
 
+	/** Register an infix parselet for `tokenType`. See {@link registerPrefix} for the collision-warning behavior this mirrors. */
 	registerInfix(tokenType: string, parselet: InfixParselet): void {
+		const existing = this.infixParselets.get(tokenType);
+		if (existing && existing !== parselet) {
+			console.warn(
+				`[ParseletRegistry] Infix parselet for token "${tokenType}" is already registered ` +
+				`(category: "${(existing as any).category ?? "unknown"}"). Overwriting with a new ` +
+				`parselet (category: "${(parselet as any).category ?? "unknown"}") — the previous ` +
+				`parselet is now unreachable. Two packages may be claiming the same token type.`,
+			);
+		}
 		this.infixParselets.set(tokenType, parselet);
 		this.infixById.set(tokenTypeId(tokenType), parselet);
 	}

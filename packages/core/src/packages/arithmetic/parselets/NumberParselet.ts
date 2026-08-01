@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ILocale, getLocale } from "@solve-js/constants/locales";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -36,12 +37,17 @@ export class NumberParselet implements PrefixParselet {
 		if (raw.startsWith("0x") || raw.startsWith("0X")) {
 			v = parseInt(raw, 16);
 			if (Number.isNaN(v)) {
-				throw new Error(`Invalid hex literal: "${raw}"`);
+				// Matches PrecedenceParser.ts's NUMBER_ID fast path (the
+				// actual production code path this dead-code parselet
+				// mirrors) — a raw Error here would skip
+				// ThreeTierEvaluator's DAG-preservation enrichment on parse
+				// failure, which specifically checks for EngineError.
+				throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid hex literal: "${raw}"`, { raw });
 			}
 		} else if (raw.startsWith("0b") || raw.startsWith("0B")) {
 			v = parseInt(raw.slice(2), 2);
 			if (Number.isNaN(v)) {
-				throw new Error(`Invalid binary literal: "${raw}"`);
+				throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid binary literal: "${raw}"`, { raw });
 			}
 		} else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
 			// The lexer accepts "." as a thousands-group separator

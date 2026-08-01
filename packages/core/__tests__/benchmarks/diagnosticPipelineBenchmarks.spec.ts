@@ -109,7 +109,11 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       engine.evaluateLine(1, "10 + 20");
     }, 10000, 500);
     results["DIAG_single_eval_warm"] = r.meanMs;
-    expect(r.meanMs).toBeLessThan(2);
+    // Was toBeLessThan(2) — a title/assertion mismatch that masked a real
+    // O(n²) bug (TimelineDiagnosticCollector.getReport() rescanning its
+    // entire event history on every call). Now that it's fixed (~0.01ms,
+    // was ~0.72ms), tighten the assertion to match what the title always claimed.
+    expect(r.meanMs).toBeLessThan(1);
   });
 
   test("[DIAG] parses 50-line doc in < 50ms", () => {

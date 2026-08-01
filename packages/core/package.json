@@ -2,10 +2,24 @@
 	"name": "@solve/core",
 	"version": "0.1.0",
 	"description": "The expression evaluation engine behind Solve — lexer, parser, bytecode VM, and an extensible package system.",
+	"keywords": ["expression-evaluator", "calculator", "bytecode-vm", "parser", "lexer", "dsl", "markdown", "obsidian"],
 	"license": "MIT",
+	"author": "Liam Riddell",
+	"homepage": "https://github.com/LiamRiddell/obsidian-solve/tree/main/packages/core#readme",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/LiamRiddell/obsidian-solve.git",
+		"directory": "packages/core"
+	},
+	"bugs": {
+		"url": "https://github.com/LiamRiddell/obsidian-solve/issues"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"type": "module",
 	"engines": { "node": ">=18" },
-	"files": ["dist"],
+	"files": ["dist", "LICENSE"],
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -93,12 +107,16 @@
 	},
 	"scripts": {
 		"build": "tsup",
-		"dev": "tsup --watch"
+		"dev": "tsup --watch",
+		"test": "jest --config jest.config.cjs --no-coverage"
 	},
 	"dependencies": {
 		"@tanstack/query-core": "^5.100.10"
 	},
 	"devDependencies": {
+		"@jest/globals": "^29.6.2",
+		"jest": "^29.6.2",
+		"ts-jest": "^29.1.1",
 		"tsup": "8.5.1",
 		"typescript": "5.1.6"
 	}

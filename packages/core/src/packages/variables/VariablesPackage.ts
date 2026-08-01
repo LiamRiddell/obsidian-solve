@@ -4,6 +4,7 @@ import { IdentifierParselet } from "./parselets/IdentifierParselet";
 import { GlobalVariableParselet } from "./parselets/GlobalVariableParselet";
 import { GlobalVariableAsyncResolver } from "@solve-js/vm/GlobalVariableAsyncResolver";
 
+/** Variable read/write: `:name = expr` to define, `name` to read, plus `global :name` for a document-spanning variable backed by the {@link GlobalVariableStore} instead of local VM scope. */
 export const VARIABLES_PACKAGE: IEnginePackage = {
   name: "solve-variables",
   // Resolves `global :name` reads that aren't yet known to any currently-

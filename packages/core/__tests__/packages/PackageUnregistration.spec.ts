@@ -1,23 +1,18 @@
 /**
  * Package Unregistration — Shared-Registry Cleanup
  *
- * registerPackage() writes opcode handlers into sharedOpRegistry and
- * variable sources into sharedVariableResolver — process-wide state.
- * These tests verify unregisterPackage() reverses exactly those
- * contributions (plan Task 2).
+ * registerPackage() writes variable sources into sharedVariableResolver —
+ * process-wide state. These tests verify unregisterPackage() reverses
+ * exactly those contributions (plan Task 2).
  */
 
-import { describe, expect, test, afterEach } from "@jest/globals";
+import { describe, expect, test, jest } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import type { IVariableSource } from "@solve-js/variables/IVariableSource";
-
-/** Opcode in the dynamic range (>= 200) that no builtin package uses. */
-const TEST_OPCODE = 253;
 
 function makeVariableSource(values: Record<string, number>): IVariableSource {
 	const store: Record<string, number | string> = { ...values };
@@ -36,34 +31,11 @@ function makeVariableSource(values: Record<string, number>): IVariableSource {
 function makeTestPackage(source: IVariableSource): IEnginePackage {
 	return {
 		name: "test-unregistration-pkg",
-		opcodeHandlers: [
-			{
-				opcode: TEST_OPCODE,
-				handler: (_vm, _opcodes, ip) => ip + 1,
-				pluginName: "test-unregistration-pkg",
-			},
-		],
 		variableSources: [source],
 	};
 }
 
 describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () => {
-	afterEach(() => {
-		// Safety net: never leak the test opcode into other suites.
-		sharedOpRegistry.unregister(TEST_OPCODE);
-	});
-
-	test("opcode handler is removed from sharedOpRegistry", () => {
-		const engine = new ExpressionEngine("en");
-		const pkg = makeTestPackage(makeVariableSource({}));
-
-		engine.registerPackage(pkg);
-		expect(sharedOpRegistry.has(TEST_OPCODE)).toBe(true);
-
-		expect(engine.unregisterPackage(pkg.name)).toBe(true);
-		expect(sharedOpRegistry.has(TEST_OPCODE)).toBe(false);
-	});
-
 	test("variable source no longer resolves after unregistration", async () => {
 		const engine = new ExpressionEngine("en");
 		const source = makeVariableSource({ unregTestVar: 42 });
@@ -81,17 +53,18 @@ describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () =>
 		expect(engine.unregisterPackage("never-registered")).toBe(false);
 	});
 
-	test("re-registering after unregistration works cleanly", () => {
+	test("re-registering after unregistration works cleanly", async () => {
 		const engine = new ExpressionEngine("en");
-		const pkg = makeTestPackage(makeVariableSource({}));
+		const source = makeVariableSource({ unregTestVar: 7 });
+		const pkg = makeTestPackage(source);
 
 		engine.registerPackage(pkg);
 		engine.unregisterPackage(pkg.name);
 		engine.registerPackage(pkg);
 
-		expect(sharedOpRegistry.has(TEST_OPCODE)).toBe(true);
+		expect(await sharedVariableResolver.resolve("unregTestVar")).toBe(7);
 		expect(engine.unregisterPackage(pkg.name)).toBe(true);
-		expect(sharedOpRegistry.has(TEST_OPCODE)).toBe(false);
+		expect(await sharedVariableResolver.resolve("unregTestVar")).toBeUndefined();
 	});
 
 	test("unregistration clears the bytecode cache", () => {
@@ -104,6 +77,49 @@ describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () =>
 
 		engine.unregisterPackage(pkg.name);
 		expect(engine.getBytecodeCache().size).toBe(0);
+	});
+});
+
+describe("ExpressionEngine.registerPackage — duplicate-name guard", () => {
+	// Regression: registerPackage() used to have no guard against being
+	// called twice with the same pkg.name — the second call's contribution
+	// record silently overwrote the first's in packageContributions, so the
+	// FIRST registration's shared-registry entries (variable sources,
+	// plugin-function indices, resolver namespaces, token categories) became
+	// permanently orphaned: unregisterPackage() could then only reverse the
+	// second registration, and the first's contributions were unreachable
+	// for the rest of the process's lifetime.
+	test("re-registering the same package name unregisters the previous registration first (no orphaned variable source)", async () => {
+		const engine = new ExpressionEngine("en");
+		const firstSource = makeVariableSource({ dupTestVar: 1 });
+		const secondSource = makeVariableSource({ dupTestVar: 2 });
+
+		engine.registerPackage({ name: "dup-test-pkg", variableSources: [firstSource] });
+		expect(await sharedVariableResolver.resolve("dupTestVar")).toBe(1);
+
+		// Same name, different source — used to silently orphan firstSource
+		// instead of cleanly replacing it.
+		engine.registerPackage({ name: "dup-test-pkg", variableSources: [secondSource] });
+		expect(await sharedVariableResolver.resolve("dupTestVar")).toBe(2);
+
+		// Unregistering once must fully clean up — if the first registration
+		// had been orphaned, a stale source would still resolve here.
+		expect(engine.unregisterPackage("dup-test-pkg")).toBe(true);
+		expect(await sharedVariableResolver.resolve("dupTestVar")).toBeUndefined();
+	});
+
+	test("warns on the console when re-registering the same package name", () => {
+		const engine = new ExpressionEngine("en");
+		const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+		engine.registerPackage({ name: "dup-warn-pkg" });
+		expect(warnSpy).not.toHaveBeenCalled();
+
+		engine.registerPackage({ name: "dup-warn-pkg" });
+		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("dup-warn-pkg"));
+
+		warnSpy.mockRestore();
+		engine.unregisterPackage("dup-warn-pkg");
 	});
 });
 

@@ -1,3 +1,17 @@
+/**
+ * The VM's bytecode instruction set.
+ *
+ * Emitted by parselets (via {@link BytecodeBuilder}) during parsing and
+ * consumed by the VM's dispatch loop during execution. Values are grouped
+ * into numeric bands by category (0-9 stack ops, 10-19 push-literal, 20-29
+ * arithmetic, ...) purely for readability — the VM dispatches on the exact
+ * numeric value, not the band.
+ *
+ * Third-party packages emit `CALL_PLUGIN` (with a plugin-function index
+ * from {@link allocatePluginFunctionIndex}) to invoke their own logic —
+ * see `IEnginePackage.pluginFunctions`. The other opcodes are used
+ * internally by the built-in packages' parselets.
+ */
 export enum OpCode {
 	// Stack operations
 	NOP = 0,
@@ -62,11 +76,47 @@ export enum OpCode {
 	UOM_GET_VALUE = 82,
 	UOM_BEST = 83,
 	UOM_CONVERT_IN = 84,
+	UOM_POSSIBILITIES = 85,  // "sourceUnit to ?" — list units convertible from sourceUnit
 
 	// Datetime
 	DATE_NOW = 90,
 	DATE_ADD = 91,
 	DATE_SUB = 92,
+	DATE_NEXT_WEEKDAY = 93,  // "next <Weekday>" — the next occurrence strictly after now
+	DATE_LAST_WEEKDAY = 94,  // "last <Weekday>" — the previous occurrence strictly before now
+
+	// Rate — "quantity per unit of something" ($99/week, 30 fps). See
+	// vm/Value.ts's rateValue()/isRateUnit()/splitRateUnit() for the
+	// representation these opcodes operate on.
+	RATE_DIV = 110,      // Uom ÷ Uom (different measures) -> Rate — the construction op
+	RATE_MUL = 111,      // Rate × Uom (same measure as denominator) -> plain Uom (denominator cancels)
+	RATE_CONVERT = 112,  // Rate -> Rate with a rescaled denominator unit (keeps the same real-world rate)
+
+	// Time — clock-time-of-day, lap times, video timecode (distinct from
+	// the Datetime band's calendar-date arithmetic).
+	CLOCK_TIME_TODAY = 120,  // minutes-since-midnight -> Datetime anchored to today's calendar date
+
+	// Conditionals — boolean logic and eager-evaluated ternary selection.
+	// EQ/NEQ/LT/LTE/GT/GTE (40-45, above) already existed as dead opcodes
+	// before this band was wired up; see vm/VM.ts for their handlers.
+	LOGICAL_AND = 130,  // Boolean && Boolean -> Boolean
+	LOGICAL_OR = 131,   // Boolean || Boolean -> Boolean
+	SELECT = 132,       // (thenVal, elseVal, condition) -> thenVal if condition else elseVal — EAGER (both
+	                    // branches already evaluated by the time this runs; no real branching/short-circuit,
+	                    // a deliberate simplification for a side-effect-free expression language, see
+	                    // packages/conditionals/parselets/IfThenElseParselet.ts)
+
+	// Converters — the general "as <type>" mechanism. TO_NUMBER/TO_HEX/
+	// TO_PERCENTAGE (70/71/74, above) cover the simplest cases; these cover
+	// the ones with no existing opcode. CALL_AS_CONVERTER is the SDK
+	// extension point — see IEnginePackage.asConverters and
+	// vm/VMBuiltins.ts's asConverterRegistry.
+	TO_FRACTION = 140,       // Number -> String, simplified fraction ("0.5" -> "1/2")
+	TO_MULTIPLIER = 141,     // Number -> String, "1 + n" growth multiplier ("0.5" -> "1.5x")
+	TO_SCI = 142,            // Number -> String, scientific notation ("1500000" -> "1.5e+6")
+	TO_BINARY = 143,         // Number -> String, base-2 display ("10" -> "0b1010")
+	TO_OCTAL = 144,          // Number -> String, base-8 display ("10" -> "0o12")
+	CALL_AS_CONVERTER = 145, // (value, name) -> runtime asConverterRegistry lookup + call
 
 	// Array (unified Vector/Array type — was VEC_ADD/VEC_SUB/etc.)
 	ARR_NEW = 100,

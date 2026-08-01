@@ -1,6 +1,5 @@
 import { sharedParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
-import { IOpcodeHandlerRegistration } from "@solve-js/vm/OpRegistry";
 import { Value } from "@solve-js/vm/Value";
 import { IVariableSource } from "@solve-js/variables/IVariableSource";
 import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
@@ -20,7 +19,7 @@ import type { CompletionItem } from "@solve-js/language/LanguageService";
  *
  * @example
  * ```typescript
- * import { packageRegistry } from "@solve-js";
+ * import { packageRegistry } from "@solve/core";
  * packageRegistry.registerPackage(myCustomPackage);
  * ```
  */
@@ -42,8 +41,9 @@ export interface IPackageRegistry {
  *
  * A package bundles all the pieces needed for a domain-specific provider:
  * lexer plugins for custom token recognition, parselets for Pratt parsing,
- * opcode handlers for VM bytecode, variable sources, and optional async
- * resolvers for data that loads asynchronously (e.g., exchange rates, game prices).
+ * plugin functions dispatched via CALL_PLUGIN bytecode, variable sources,
+ * and optional async resolvers for data that loads asynchronously (e.g.,
+ * exchange rates, game prices).
  *
  * @example
  * ```typescript
@@ -51,7 +51,7 @@ export interface IPackageRegistry {
  *   name: "MyProvider",
  *   lexerVocabulary: myLexerVocabulary,
  *   prefixParselets: [{ tokenType: "MY_FUNC", parselet: new MyParselet() }],
- *   opcodeHandlers: [{ opcode: MY_OPCODE, handler: myHandler, pluginName: "MyProvider" }],
+ *   pluginFunctions: [{ index: MY_FN_IDX, handler: myHandler }],
  *   asyncResolvers: [myAsyncResolver],
  * };
  * packageRegistry.registerPackage(myPackage);
@@ -66,8 +66,6 @@ export interface IEnginePackage {
   prefixParselets?: Array<{ tokenType: string; parselet: PrefixParselet }>;
   /** Infix parselets for this package's custom binary operators. */
   infixParselets?: Array<{ tokenType: string; parselet: InfixParselet }>;
-  /** VM opcode handlers for custom bytecode emitted by this package's parselets. */
-  opcodeHandlers?: IOpcodeHandlerRegistration[];
   /**
    * Functions dispatched via CALL_PLUGIN bytecode (emitted by this package's
    * parselets with `builder.emitIndex(index)`).
@@ -155,6 +153,28 @@ export interface IEnginePackage {
    * ```
    */
   completionItems?: CompletionItem[];
+  /**
+   * Custom `as <name>` converters — the extension point for the
+   * Converters package's general `<expr> as <type>` grammar (e.g.
+   * `50% as decimal`, `255 as hex`). The built-in converter names
+   * (`percent`, `decimal`, `hex`, `fraction`, `multiplier`, `sci`,
+   * `binary`, `octal`, ...) dispatch to dedicated fast opcodes; anything
+   * else — including any name a third-party package registers here —
+   * resolves through `OpCode.CALL_AS_CONVERTER` against
+   * `vm/VMBuiltins.ts`'s `asConverterRegistry` at runtime. No lexer
+   * keyword registration is needed for a custom name: the AS parselet
+   * accepts any bare-word token after "as" and reads its raw text.
+   *
+   * Each handler is a pure, synchronous `(value: Value) => Value` — for
+   * async conversions (e.g. a live currency-style lookup), use
+   * {@link asyncResolvers} instead.
+   *
+   * @example
+   * ```ts
+   * asConverters: { roman: (v) => stringValue(toRomanNumeral(v.toNumber())) }
+   * ```
+   */
+  asConverters?: Record<string, (value: Value) => Value>;
 }
 
 /**
@@ -166,7 +186,7 @@ export interface IEnginePackage {
  *
  * @example
  * ```typescript
- * import { packageRegistry } from "@solve-js";
+ * import { packageRegistry } from "@solve/core";
  *
  * // Register a complete provider package
  * packageRegistry.registerPackage({
@@ -212,8 +232,6 @@ export class PackageRegistry implements IPackageRegistry {
     // Note: asyncResolvers are NOT registered here — the shared PackageRegistry singleton
     // doesn't have a ResolverRegistry (that lives inside ExpressionEngine).
     // Use ExpressionEngine.registerPackage() directly if you need async resolvers.
-    // opcodeHandlers are also not processed here — CALL_PLUGIN + pluginFunctionRegistry
-    // is the only VM-dispatched extension mechanism; see ExpressionEngine.registerPackage().
   }
 }
 

@@ -61,7 +61,16 @@ export interface DiceConfig {
  * resource consumption on large documents.
  */
 export interface PerformanceConfig {
-  /** Default number of entries in the line cache before eviction */
+  /**
+   * Maximum number of entries in {@link ExpressionEngine}'s bytecode cache
+   * (per-instance, keyed by expression text) before the oldest entry is
+   * evicted. Raise this for documents with many distinct expressions if
+   * repeated re-evaluation (e.g. scrolling) is re-parsing instead of
+   * hitting cache — bug fix (release hardening pass): this field used to
+   * be read nowhere; the cache size was a hardcoded, unconfigurable
+   * constant. Note this does NOT bound {@link LineCache}, which has no
+   * size limit of its own.
+   */
   readonly defaultCacheSize: number;
   /** Maximum number of document lines processed in a single pass */
   readonly maxDocumentLines: number;
@@ -185,7 +194,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
      defaultDice: 1
    },
    performance: {
-     defaultCacheSize: 1000,
+     // Preserves the effective cache size the hardcoded (now-removed)
+     // BYTECODE_CACHE_MAX_ENTRIES constant had, so wiring this field up
+     // doesn't silently shrink the default cache for existing consumers.
+     defaultCacheSize: 2000,
      maxDocumentLines: 10000,
      parseTimeoutMs: 5000,
      executionTimeoutMs: 10000
@@ -213,8 +225,38 @@ export const DEFAULT_CONFIG: EngineConfig = {
   };
 
 /**
+ * Merge a partial config override onto a base `EngineConfig`, section by
+ * section — `{ ...base.section, ...override.section }` for each of the 7
+ * top-level sections, not a single top-level spread.
+ *
+ * A shallow `{ ...base, ...override }` at the TOP level replaces an entire
+ * section wholesale the moment a caller overrides even one field in it
+ * (e.g. `{ performance: { defaultCacheSize: 500 } }` would silently drop
+ * every other `performance.*` field back to `undefined`, not to its
+ * default) — this function exists specifically so every config consumer
+ * shares one correct merge instead of each hand-rolling (and risking) its
+ * own. `ConfigManager` and `ExpressionEngine` both call this rather than
+ * either duplicating the section list or instantiating a whole
+ * `ConfigManager` just to reuse its private merge logic.
+ */
+export function mergeEngineConfig(
+  base: EngineConfig,
+  override: Partial<EngineConfig>
+): EngineConfig {
+  return {
+    date: { ...base.date, ...override.date },
+    dice: { ...base.dice, ...override.dice },
+    performance: { ...base.performance, ...override.performance },
+    validation: { ...base.validation, ...override.validation },
+    vm: { ...base.vm, ...override.vm },
+    worker: { ...base.worker, ...override.worker },
+    diagnostic: { ...base.diagnostic, ...override.diagnostic },
+  };
+}
+
+/**
  * Configuration manager for engine settings
- * 
+ *
  * @example
  * ```typescript
  * const configManager = new ConfigManager();
@@ -226,7 +268,7 @@ export class ConfigManager {
   private config: EngineConfig;
 
   constructor(config: Partial<EngineConfig> = {}) {
-    this.config = this.mergeConfig(DEFAULT_CONFIG, config);
+    this.config = mergeEngineConfig(DEFAULT_CONFIG, config);
   }
 
   /**
@@ -304,7 +346,7 @@ export class ConfigManager {
    * Update multiple configuration values
    */
   update(config: Partial<EngineConfig>): void {
-    this.config = this.mergeConfig(this.config, config);
+    this.config = mergeEngineConfig(this.config, config);
   }
 
   /**
@@ -340,21 +382,6 @@ export class ConfigManager {
       error: errors.join('; '),
       warnings: []
     };
-  }
-
-  private mergeConfig(
-    base: EngineConfig,
-    override: Partial<EngineConfig>
-  ): EngineConfig {
-      return {
-        date: { ...base.date, ...override.date },
-        dice: { ...base.dice, ...override.dice },
-        performance: { ...base.performance, ...override.performance },
-        validation: { ...base.validation, ...override.validation },
-        vm: { ...base.vm, ...override.vm },
-        worker: { ...base.worker, ...override.worker },
-        diagnostic: { ...base.diagnostic, ...override.diagnostic },
-      };
   }
 }
 

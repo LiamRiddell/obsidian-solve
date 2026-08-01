@@ -37,14 +37,55 @@ export const enLocale: ILocale = {
     log10: "FUNC", log1p: "FUNC", log2: "FUNC",
     pow: "FUNC", random: "FUNC", sign: "FUNC", trunc: "FUNC",
     degtorad: "FUNC", radtodeg: "FUNC",
+    gcd: "FUNC", lcm: "FUNC", permutation: "FUNC", combination: "FUNC",
+    // hex/bin double as CONVERTER_NAME below ("255 as hex") AND as FUNC
+    // call-syntax ("hex(255)") — a word can only have one lexer token
+    // type, so these win FUNC (removed from the CONVERTER_NAME list
+    // below) and AsConverterParselet.ts's "as <name>" check was widened
+    // to also accept a FUNC-typed token, preserving "as hex"/"as bin"
+    // unchanged. See AsConverterParselet.ts's class doc for the full
+    // reasoning.
+    hex: "FUNC", bin: "FUNC", int: "FUNC",
+    // Finance (packages/finance/) function-call forms. Bare keywords, not
+    // phrase-fused — these are camelCase call-only names (e.g.
+    // "compoundInterest(...)"), not natural-language words a user would
+    // plausibly choose as a variable name, so the bare-keyword collision
+    // risk that blocks "interest"/"tax"/"principal" etc. doesn't apply here
+    // (matches "gcd"/"lcm"/... above, not "clamp" below).
+    compoundinterest: "FUNC", interestearned: "FUNC",
+    compoundinterestrate: "FUNC", compoundinterestyears: "FUNC",
+    loanrepayment: "FUNC", loaninterest: "FUNC", monthlypayment: "FUNC",
+    taxadd: "FUNC", taxremove: "FUNC",
+    // Inflation-adjusted value function-call form (packages/finance/).
+    inflationadjust: "FUNC",
+    clamp: "CLAMP",
     convert: "CONVERT", to: "TO", best: "BEST", in: "IN",
     next: "NEXT", last: "LAST", until: "UNTIL", since: "SINCE",
+    sunday: "SUNDAY", monday: "MONDAY", tuesday: "TUESDAY", wednesday: "WEDNESDAY",
+    thursday: "THURSDAY", friday: "FRIDAY", saturday: "SATURDAY",
     between: "BETWEEN", from: "FROM",
     increase: "INCREASE", decrease: "DECREASE",
+    // Finance (packages/finance/) phrase-grammar connectors. Bare
+    // prepositions, same accepted-risk category as "between"/"from" above —
+    // see Token.ts's OVER/RATE_AT doc comment.
+    over: "OVER", at: "RATE_AT",
     by: "BY",
     vec2: "VEC2", vec3: "VEC3", vec4: "VEC4",
      float: "FLOAT",
     global: "GLOBAL",
+    or: "OR",
+    true: "TRUE", false: "FALSE",
+    if: "IF", then: "THEN", else: "ELSE",
+    as: "AS",
+    percent: "CONVERTER_NAME", percentage: "CONVERTER_NAME",
+    decimal: "CONVERTER_NAME", dec: "CONVERTER_NAME", number: "CONVERTER_NAME",
+    fraction: "CONVERTER_NAME",
+    multiplier: "CONVERTER_NAME",
+    sci: "CONVERTER_NAME", scientific: "CONVERTER_NAME",
+    // hex/bin are FUNC (see above), not CONVERTER_NAME — "as hex"/"as bin"
+    // still work via AsConverterParselet.ts's widened token-type check.
+    binary: "CONVERTER_NAME",
+    octal: "CONVERTER_NAME", oct: "CONVERTER_NAME",
   },
   display: {
     resultPrefix: "= ",

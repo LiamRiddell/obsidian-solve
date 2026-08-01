@@ -104,4 +104,61 @@ describe("BytecodeBuilder", () => {
     expect(program.numbers.length).toBe(100);
     expect(program.numbers[99]).toBe(99);
   });
+
+  // Regression: the compiled opcode stream is a Uint8Array, so a constant
+  // index above 255 used to silently wrap (e.g. index 300 read back as 44)
+  // instead of erroring — a real, silent-wrong-answer bug for expressions
+  // with many distinct numeric literals under a raised maxComplexity. These
+  // pin the fix: exceeding the pool now throws instead of wrapping.
+  describe("constant pool overflow (256-entry Uint8Array limit)", () => {
+    test("256 distinct numeric literals build successfully (exactly at the limit)", () => {
+      const builder = new BytecodeBuilder();
+      for (let i = 0; i < 256; i++) {
+        builder.emitOpcode(OpCode.PUSH_NUMBER);
+        builder.emitNumber(i);
+      }
+      const program = builder.build();
+      expect(program.numbers.length).toBe(256);
+      expect(program.opcodes[511]).toBe(255); // last index, unwrapped
+    });
+
+    test("257th distinct numeric literal throws instead of silently wrapping the index", () => {
+      const builder = new BytecodeBuilder();
+      expect(() => {
+        for (let i = 0; i < 257; i++) {
+          builder.emitOpcode(OpCode.PUSH_NUMBER);
+          builder.emitNumber(i);
+        }
+      }).toThrow(/numeric literals/);
+    });
+
+    test("256 distinct string literals build successfully (exactly at the limit)", () => {
+      const builder = new BytecodeBuilder();
+      for (let i = 0; i < 256; i++) {
+        builder.emitOpcode(OpCode.PUSH_STRING);
+        builder.emitString(`s${i}`);
+      }
+      const program = builder.build();
+      expect(program.strings.length).toBe(256);
+    });
+
+    test("257th distinct string literal throws instead of silently wrapping the index", () => {
+      const builder = new BytecodeBuilder();
+      expect(() => {
+        for (let i = 0; i < 257; i++) {
+          builder.emitOpcode(OpCode.PUSH_STRING);
+          builder.emitString(`s${i}`);
+        }
+      }).toThrow(/string literals/);
+    });
+
+    test("repeating the SAME string past 256 other distinct strings never throws (deduplicated)", () => {
+      const builder = new BytecodeBuilder();
+      for (let i = 0; i < 300; i++) {
+        builder.emitOpcode(OpCode.PUSH_STRING);
+        builder.emitString("shared"); // always the same string — one pool entry, reused every time
+      }
+      expect(() => builder.build()).not.toThrow();
+    });
+  });
 });

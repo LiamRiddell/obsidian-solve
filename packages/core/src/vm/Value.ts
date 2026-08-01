@@ -5,7 +5,7 @@
  * be interpreted. Used by the VM for type-aware dispatch in arithmetic,
  * comparison, and conversion operations.
  */
-export const enum ValueType {
+export enum ValueType {
 	/** Plain 64-bit floating point number (IEEE 754 double) */
 	Number = 0,
 	Hex = 1,
@@ -282,6 +282,87 @@ export function stringValue(s: string): Value {
 export function uomValue(n: number, unit: string): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Uom, n, unit);
 	return new Value(ValueType.Uom, n, unit);
+}
+
+// ── Rate — "quantity per unit of something" (SoulverCore: `$99/week`,
+// `3 hours/day`, `30 fps`). Represented as a `ValueType.Uom` (no new
+// ValueType — a rate IS a unit-of-measurement, just a compound one) whose
+// `unit` string is `"<numerator>/<denominator>"`. The numerator is an
+// opaque label (may be a real convertible unit like "USD"/"km", or a bare
+// tag like "frames" that the `convert` package doesn't know about — rate
+// arithmetic never needs to convert the numerator, only compare it for
+// equality when combining two rates). The denominator MUST be a unit
+// `convertUnit()`/`getMeasure()` (uom/UomConverter.ts) recognizes, since
+// that's the part rate arithmetic actually rescales. See `vm/VM.ts`'s
+// `RATE_CONVERT`/`RATE_MUL`/`RATE_DIV` opcodes for the operations built on
+// this representation.
+
+/** Create a Rate value: `magnitude` of `numeratorUnit` per one `denominatorUnit`. */
+export function rateValue(magnitude: number, numeratorUnit: string, denominatorUnit: string): Value {
+	return uomValue(magnitude, `${numeratorUnit}/${denominatorUnit}`);
+}
+
+/** Whether `unit` is a compound rate unit (`"X/Y"`) rather than a plain unit. */
+export function isRateUnit(unit: string | undefined): unit is string {
+	return typeof unit === "string" && unit.includes("/");
+}
+
+/**
+ * Split a rate unit string into its numerator/denominator halves.
+ * @throws if `unit` isn't a rate unit — check with {@link isRateUnit} first.
+ */
+export function splitRateUnit(unit: string): { numerator: string; denominator: string } {
+	const idx = unit.indexOf("/");
+	if (idx < 0) {
+		throw new Error(`splitRateUnit: "${unit}" is not a rate unit (expected "numerator/denominator")`);
+	}
+	return { numerator: unit.slice(0, idx), denominator: unit.slice(idx + 1) };
+}
+
+/** Join a numerator/denominator pair back into a rate unit string. */
+export function joinRateUnit(numeratorUnit: string, denominatorUnit: string): string {
+	return `${numeratorUnit}/${denominatorUnit}`;
+}
+
+// ── Video timecode — "HH:MM:SS:FF at a given fps" (SoulverCore: video
+// editing timecode literals, e.g. `01:02:03:04 at 30fps`). Represented the
+// same way Rate is above: NOT a new ValueType, just a `ValueType.Uom` whose
+// `unit` string is `"timecode@<fps>"` and whose numeric `value` is the
+// TOTAL FRAME COUNT since 00:00:00:00 at that fps — e.g. "00:00:01:00 at
+// 30fps" is `Uom(30, "timecode@30")`.
+//
+// Storing the total frame count (rather than four separate H/M/S/F fields)
+// means ordinary integer addition/subtraction on the numeric value is
+// ALREADY correct carry/borrow-aware arithmetic with zero extra logic —
+// e.g. "frame 29 + 2 frames" at 30fps is just `29 + 2 = 31`, and 31 total
+// frames at 30fps IS frame 1 of the next second, with no explicit carry
+// step required. Carry/borrow only needs to be reconstructed when
+// converting a total frame count back into HH:MM:SS:FF display notation —
+// see `packages/time/timecode/TimecodeMath.ts`'s `framesToTimecodeString()`.
+// See `vm/VM.ts`'s ADD/SUB dispatch for the arithmetic built on this
+// representation (timecode + frames, + duration, + timecode, - timecode).
+
+const TIMECODE_UNIT_PREFIX = "timecode@";
+
+/** Build a timecode Uom unit string embedding its frame rate, e.g. `timecodeUnit(30)` -> `"timecode@30"`. */
+export function timecodeUnit(fps: number): string {
+	return `${TIMECODE_UNIT_PREFIX}${fps}`;
+}
+
+/** Whether `unit` is a compound video-timecode unit (`"timecode@<fps>"`). */
+export function isTimecodeUnit(unit: string | undefined): unit is string {
+	return typeof unit === "string" && unit.startsWith(TIMECODE_UNIT_PREFIX);
+}
+
+/**
+ * Extract the fps from a timecode unit string.
+ * @throws if `unit` isn't a timecode unit — check with {@link isTimecodeUnit} first.
+ */
+export function timecodeFps(unit: string): number {
+	if (!isTimecodeUnit(unit)) {
+		throw new Error(`timecodeFps: "${unit}" is not a timecode unit (expected "timecode@<fps>")`);
+	}
+	return parseFloat(unit.slice(TIMECODE_UNIT_PREFIX.length));
 }
 
 /**

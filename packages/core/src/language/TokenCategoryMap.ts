@@ -5,10 +5,15 @@ import type { TokenCategory } from "@solve-js/language/TokenCategory";
  *
  * Covers the full `TokenTypes` surface (see Token.ts) so nothing recognized
  * by the lexer's grammar goes uncategorized by omission. Structural/internal
- * token types (WS, NEWLINE, EOF, BACKTICK_OPEN, INLINE_SOLVE_START) are
- * intentionally absent — they're either filtered out before reaching this
- * lookup (see Lexer.getHighlightTokens) or simply have nothing meaningful to
- * highlight.
+ * token types (WS, NEWLINE, EOF, BACKTICK_OPEN, INLINE_SOLVE_START, COMMENT)
+ * are intentionally absent — they're either filtered out before reaching
+ * this lookup (see Lexer.getHighlightTokens) or simply have nothing
+ * meaningful to highlight. COMMENT specifically: it reaches
+ * Lexer.getHighlightTokens() (unlike WS/NEWLINE, filtered earlier), so a
+ * future "give comments their own color" pass would add a real category
+ * here — this is a rendering-scope decision, not a correctness
+ * requirement, since COMMENT tokens are already filtered out of the
+ * parser's input regardless of how they're highlighted.
  */
 const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	// Literals
@@ -42,6 +47,61 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	FROM: "keyword",
 	BEST: "keyword",
 	KEYWORD: "keyword",
+	TRUE: "keyword",
+	FALSE: "keyword",
+	IF: "keyword",
+	THEN: "keyword",
+	ELSE: "keyword",
+	AS: "keyword",
+	CONVERTER_NAME: "keyword",
+	AVERAGE_OF: "keyword",
+	MEDIAN_OF: "keyword",
+	TOTAL_OF: "keyword",
+	COUNT_OF: "keyword",
+	LARGER_OF: "keyword",
+	SMALLER_OF: "keyword",
+	HALF_OF: "keyword",
+	MIDPOINT_BETWEEN: "keyword",
+	CLAMP: "keyword",
+	TIME_IN: "keyword",
+	DATE_IN: "keyword",
+	TIME_DIFFERENCE_BETWEEN: "keyword",
+	CITY_NAME: "keyword",
+	OVER: "keyword",
+	RATE_AT: "keyword",
+	COMPOUND_INTEREST_ON: "keyword",
+	INTEREST_ON: "keyword",
+	DAILY_REPAYMENT_ON: "keyword",
+	MONTHLY_REPAYMENT_ON: "keyword",
+	ANNUAL_REPAYMENT_ON: "keyword",
+	TOTAL_REPAYMENT_ON: "keyword",
+	DAILY_LOAN_INTEREST_ON: "keyword",
+	MONTHLY_LOAN_INTEREST_ON: "keyword",
+	ANNUAL_LOAN_INTEREST_ON: "keyword",
+	TOTAL_LOAN_INTEREST_ON: "keyword",
+	TAX_ON: "keyword",
+	TAX_OFF: "keyword",
+	IS_TO: "keyword",
+	RANDOM_NUMBER: "keyword",
+	WHAT_IS: "keyword",
+	WHAT_WAS: "keyword",
+	VALUE_OF: "keyword",
+	WORTH_IN: "keyword",
+	IN_YEAR_DOLLARS: "keyword",
+	INGREDIENT_NAME: "keyword",
+	ASSUMING: "keyword",
+	// Datetime — workdays/weekdays/timestamps (packages/datetime/); Time —
+	// video timecode (packages/time/). See Token.ts's TokenTypes doc
+	// comments for why each is a fused phrase/sequence token rather than a
+	// bare keyword.
+	WORKDAYS_IN: "keyword",
+	WEEKDAY_ON: "keyword",
+	CURRENT_TIMESTAMP: "keyword",
+	TO_DATE: "keyword",
+	TO_TIMESTAMP: "keyword",
+	VIDEO_TIMECODE: "datetime",
+	FRAME_COUNT: "datetime",
+	AT: "keyword",
 
 	// Arithmetic / assignment-style operators
 	PLUS: "operator",
@@ -71,6 +131,11 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	GTE: "comparison",
 	LTE: "comparison",
 	EQUALITY: "comparison",
+	LT: "comparison",
+	GT: "comparison",
+	LOGICAL_AND: "comparison",
+	LOGICAL_OR: "comparison",
+	OR: "comparison",
 
 	// Bitwise operators
 	BIT_AND: "bitwise",
@@ -134,6 +199,7 @@ export const UNCATEGORIZED_TOKEN_TYPES: ReadonlySet<string> = new Set([
 	"EOF",
 	"BACKTICK_OPEN",
 	"INLINE_SOLVE_START",
+	"COMMENT",
 ]);
 
 /**

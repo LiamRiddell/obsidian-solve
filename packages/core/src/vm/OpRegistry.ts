@@ -93,6 +93,7 @@ export interface VM {
 	setVar(key: string, value: Value): void;
 	reset(): void;
 	getMaxInstructions(): number;
+	getMaxStackDepth(): number;
 	getInstructionCount(): number;
 	incrementInstructions(n: number): void;
 	/** Active AbortSignal for the current expression evaluation. Checked before cache writes. */

@@ -77,6 +77,25 @@ function formatUnit(value: number, unit: string | undefined): string {
   return `= ${value} ${unit || ""}`.trim();
 }
 
+/**
+ * Render an evaluated {@link Value} as a display string, dispatching on
+ * `value.type` to the type-specific formatter (number, hex, datetime, unit
+ * of measurement, vector, percentage, ...).
+ *
+ * Most branches produce a `"= "`-prefixed result string (matching the
+ * plugin's inline-result convention); `ValueType.Error` is the one
+ * exception — it returns the human-readable error message directly
+ * (stored in `value.unit`), not an `"= "`-prefixed string.
+ *
+ * @param value - The evaluated value to format.
+ * @param settings - Locale/precision/separator options; defaults to
+ *   {@link DEFAULT_FORMATTING_SETTINGS} when omitted.
+ * @example
+ * ```typescript
+ * const [value] = engine.evaluateExpression("10 USD to GBP");
+ * formatValue(value); // "= £7.85" (exact output depends on live exchange rates)
+ * ```
+ */
 export function formatValue(value: Value, settings?: FormattingSettings): string {
   const us = settings || DEFAULT_FORMATTING_SETTINGS;
   const localeCode = us.numberResult.decimalSeparatorLocale || "en";

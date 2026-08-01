@@ -78,7 +78,12 @@ describe("VM Resilience", () => {
     expect(result.type).toBeDefined();
   });
 
-  test("max stack depth - many pushes without pops", () => {
+  test("max stack depth - many pushes without pops throws a controlled error, not silent corruption", () => {
+    // Regression: this used to silently "succeed" — vm.push()'s bounds
+    // check was never consulted by the hot dispatch loop, so pushes past
+    // the default 200-slot maxStackDepth were dropped without warning
+    // rather than growing the stack, and execution continued in a
+    // silently-corrupted state. Now enforced: exceeding the limit throws.
     const vm = createVM(sharedOpRegistry);
     const ops: number[] = [];
     for (let i = 0; i < 500; i++) {
@@ -86,8 +91,8 @@ describe("VM Resilience", () => {
     }
     ops.push(OpCode.HALT);
     const numbers = new Float64Array([1]);
-    const result = executeBytecode({ opcodes: new Uint8Array(ops), numbers, strings: [] }, vm);
-    expect(result.type).toBeDefined();
+    expect(() => executeBytecode({ opcodes: new Uint8Array(ops), numbers, strings: [] }, vm))
+      .toThrow(/maximum stack depth/i);
   });
 
   test("nested CALL_BUILTIN with multiple arguments", () => {

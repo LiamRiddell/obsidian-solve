@@ -8,6 +8,8 @@ export type {
 	PerformanceConfig,
 	ValidationConfig,
 	WorkerConfig,
+	DiagnosticConfig,
+	VMConfig,
 	EngineConfig,
 	ValidationResult,
 } from "./Configuration";

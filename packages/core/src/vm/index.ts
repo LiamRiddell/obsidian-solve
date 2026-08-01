@@ -8,5 +8,5 @@ export type { VMCheckpoint } from "./VMCheckpoints";
 export { builtinFunctions, pluginFunctionRegistry, allocatePluginFunctionIndex } from "./VMBuiltins";
 export { unifyUom, binaryOp } from "./VMConversion";
 export { OpRegistry, sharedOpRegistry } from "./OpRegistry";
-export type { OpcodeHandler, IOpcodeHandlerRegistration, VM } from "./OpRegistry";
+export type { VM } from "./OpRegistry";
 export type { ExpressionRecord } from "./ScopeManager";

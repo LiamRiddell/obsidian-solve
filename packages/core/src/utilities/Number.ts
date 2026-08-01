@@ -21,6 +21,18 @@ function removeThousandsSeparators(
 	return localeNumber;
 }
 
+/**
+ * Format `number` for display, branching on whether it's a whole number:
+ * integers are always rendered with zero decimal places (never padded to
+ * `decimalPlaces`), while non-integers are rendered with up to
+ * `decimalPlaces` fractional digits. `includeThousandSeparators` controls
+ * whether groups are separated (e.g. `"1,234"`) per `numberLocale`.
+ *
+ * @param number - The value to format.
+ * @param decimalPlaces - Max fractional digits for non-integer values (default 2).
+ * @param includeThousandSeparators - Whether to group digits (default false).
+ * @param numberLocale - `Intl`/`toLocaleString` locale to format with (default "en-US").
+ */
 export function autoFormatIntegerOrFloat(
 	number: number,
 	decimalPlaces: number = 2,

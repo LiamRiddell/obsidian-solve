@@ -1,6 +1,6 @@
 import { describe, test, expect } from "@jest/globals";
 import { codeMirrorChangesToLineChanges } from "@app/codemirror/MarkdownEditorViewPlugin";
-import type { LineChange } from "@solve-js/engine/DocumentModel";
+import type { LineChange } from "@solve/core/engine";
 
 /**
  * Direct, adversarial coverage for the CodeMirror-diff → LineChange bridge.

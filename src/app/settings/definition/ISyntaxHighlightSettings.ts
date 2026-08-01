@@ -1,4 +1,4 @@
-import type { TokenCategory } from "@solve-js/language/TokenCategory";
+import type { TokenCategory } from "@solve/core/language";
 
 export type SyntaxHighlightPresetName = "one-dark" | "github-light";
 

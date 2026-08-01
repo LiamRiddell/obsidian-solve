@@ -28,6 +28,15 @@ export class UomLiteralParselet implements InfixParselet {
         builder.emitOpcode(OpCode.UOM_CONVERT_TO);
         return;
       }
+      // "sourceUnit to ?" — conversion-possibilities query (wiki:
+      // Units-Of-Measurement — "Explore what units a particular unit can
+      // be converted into"). The source unit name is already on the
+      // stack from the PUSH_STRING above.
+      if (targetToken?.type === "QUESTION") {
+        parser.consume();
+        builder.emitOpcode(OpCode.UOM_POSSIBILITIES);
+        return;
+      }
     }
     
     // Check if the next token is "best"

@@ -1,4 +1,4 @@
-import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { ExpressionEngine } from "@solve/core/engine";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";

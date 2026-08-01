@@ -6,7 +6,7 @@ import {
 	SOLVE_HIGHLIGHT_CATEGORIES,
 	SYNTAX_HIGHLIGHT_PRESETS,
 } from "@app/settings/presets/SyntaxHighlightPresets";
-import type { TokenCategory } from "@solve-js/language/TokenCategory";
+import type { TokenCategory } from "@solve/core/language";
 
 export class SyntaxHighlightSettings {
 	constructor(private parent: UserSettings) {}

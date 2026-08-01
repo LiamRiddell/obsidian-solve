@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-07-25T11:49:07.922Z",
+  "timestamp": "2026-07-30T15:11:29.712Z",
   "results": {
     "literal": {
-      "meanNs": 999.3515,
-      "p95Ns": 1200,
-      "meanUs": 0.9993515,
-      "opsPerUs": 1.0006489208251552,
+      "meanNs": 1068.4435,
+      "p95Ns": 1300,
+      "meanUs": 1.0684435,
+      "opsPerUs": 0.9359409271524417,
       "opcodeCount": 2,
       "numbersCount": 1,
       "stringsCount": 0,
@@ -13,10 +13,10 @@
       "iterations": 200000
     },
     "simple_add": {
-      "meanNs": 1319.761,
-      "p95Ns": 1800,
-      "meanUs": 1.319761,
-      "opsPerUs": 0.7577129495416216,
+      "meanNs": 1358.138,
+      "p95Ns": 1500,
+      "meanUs": 1.3581379999999998,
+      "opsPerUs": 0.7363022019853653,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -24,10 +24,10 @@
       "iterations": 100000
     },
     "simple_mul": {
-      "meanNs": 1296.392,
-      "p95Ns": 1700,
-      "meanUs": 1.296392,
-      "opsPerUs": 0.7713716221636665,
+      "meanNs": 1307.508,
+      "p95Ns": 1500,
+      "meanUs": 1.3075080000000001,
+      "opsPerUs": 0.7648136760922304,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -35,10 +35,10 @@
       "iterations": 100000
     },
     "three_ops": {
-      "meanNs": 1524.5625,
+      "meanNs": 1583.895,
       "p95Ns": 1800,
-      "meanUs": 1.5245625,
-      "opsPerUs": 0.6559258803755176,
+      "meanUs": 1.583895,
+      "opsPerUs": 0.6313549824956831,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -46,10 +46,10 @@
       "iterations": 80000
     },
     "four_ops": {
-      "meanNs": 2043.2733333333333,
-      "p95Ns": 2800,
-      "meanUs": 2.0432733333333335,
-      "opsPerUs": 0.4894107820458023,
+      "meanNs": 2108.9533333333334,
+      "p95Ns": 2100,
+      "meanUs": 2.1089533333333335,
+      "opsPerUs": 0.47416886101478456,
       "opcodeCount": 14,
       "numbersCount": 5,
       "stringsCount": 0,
@@ -57,10 +57,10 @@
       "iterations": 60000
     },
     "nested_parens": {
-      "meanNs": 1867.135,
+      "meanNs": 1981.1066666666666,
       "p95Ns": 2100,
-      "meanUs": 1.867135,
-      "opsPerUs": 0.5355799125398003,
+      "meanUs": 1.9811066666666666,
+      "opsPerUs": 0.5047683786166655,
       "opcodeCount": 11,
       "numbersCount": 4,
       "stringsCount": 0,
@@ -68,10 +68,10 @@
       "iterations": 60000
     },
     "negation": {
-      "meanNs": 1388.6425,
-      "p95Ns": 1700,
-      "meanUs": 1.3886425,
-      "opsPerUs": 0.7201277506629676,
+      "meanNs": 1446.795,
+      "p95Ns": 1500,
+      "meanUs": 1.446795,
+      "opsPerUs": 0.6911829250170204,
       "opcodeCount": 6,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -79,10 +79,10 @@
       "iterations": 80000
     },
     "function_call": {
-      "meanNs": 1250.5033333333333,
-      "p95Ns": 1700,
-      "meanUs": 1.2505033333333333,
-      "opsPerUs": 0.7996779963268125,
+      "meanNs": 1336.94,
+      "p95Ns": 1300,
+      "meanUs": 1.33694,
+      "opsPerUs": 0.7479767229643813,
       "opcodeCount": 5,
       "numbersCount": 1,
       "stringsCount": 0,
@@ -90,10 +90,10 @@
       "iterations": 60000
     },
     "function_two_args": {
-      "meanNs": 1389.952,
-      "p95Ns": 1500,
-      "meanUs": 1.389952,
-      "opsPerUs": 0.7194493047241919,
+      "meanNs": 1482.87,
+      "p95Ns": 1600,
+      "meanUs": 1.48287,
+      "opsPerUs": 0.674367948640137,
       "opcodeCount": 7,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -101,10 +101,10 @@
       "iterations": 50000
     },
     "percentage": {
-      "meanNs": 1477.444,
+      "meanNs": 1501.042,
       "p95Ns": 1600,
-      "meanUs": 1.477444,
-      "opsPerUs": 0.6768446046009189,
+      "meanUs": 1.501042,
+      "opsPerUs": 0.6662038770400829,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -112,10 +112,10 @@
       "iterations": 50000
     },
     "percentage_change": {
-      "meanNs": 1527.2525,
+      "meanNs": 1611.815,
       "p95Ns": 1700,
-      "meanUs": 1.5272525000000001,
-      "opsPerUs": 0.6547705765746004,
+      "meanUs": 1.611815,
+      "opsPerUs": 0.6204185964270093,
       "opcodeCount": 11,
       "numbersCount": 4,
       "stringsCount": 0,
@@ -123,10 +123,10 @@
       "iterations": 40000
     },
     "unit_conversion": {
-      "meanNs": 1207.955,
-      "p95Ns": 1400,
-      "meanUs": 1.207955,
-      "opsPerUs": 0.8278454081484824,
+      "meanNs": 1243.045,
+      "p95Ns": 1300,
+      "meanUs": 1.2430450000000002,
+      "opsPerUs": 0.8044761050484897,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 2,
@@ -134,10 +134,10 @@
       "iterations": 40000
     },
     "unit_in": {
-      "meanNs": 1147.22,
-      "p95Ns": 1500,
-      "meanUs": 1.1472200000000001,
-      "opsPerUs": 0.8716723906486985,
+      "meanNs": 1161.9575,
+      "p95Ns": 1200,
+      "meanUs": 1.1619575,
+      "opsPerUs": 0.8606166748783841,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 2,
@@ -145,10 +145,10 @@
       "iterations": 40000
     },
     "datetime": {
-      "meanNs": 1153.3833333333334,
-      "p95Ns": 1600,
-      "meanUs": 1.1533833333333334,
-      "opsPerUs": 0.8670144357903559,
+      "meanNs": 1253.2933333333333,
+      "p95Ns": 1400,
+      "meanUs": 1.2532933333333334,
+      "opsPerUs": 0.7978978052491037,
       "opcodeCount": 7,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -156,10 +156,10 @@
       "iterations": 30000
     },
     "dice": {
-      "meanNs": 1458.4266666666667,
-      "p95Ns": 1700,
-      "meanUs": 1.4584266666666668,
-      "opsPerUs": 0.6856704028085059,
+      "meanNs": 1617.1733333333334,
+      "p95Ns": 1600,
+      "meanUs": 1.6171733333333334,
+      "opsPerUs": 0.6183629048215817,
       "opcodeCount": 7,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -167,10 +167,10 @@
       "iterations": 30000
     },
     "vector": {
-      "meanNs": 1739.0766666666666,
-      "p95Ns": 2400,
-      "meanUs": 1.7390766666666666,
-      "opsPerUs": 0.5750177776329585,
+      "meanNs": 1727.99,
+      "p95Ns": 2300,
+      "meanUs": 1.72799,
+      "opsPerUs": 0.5787070527028513,
       "opcodeCount": 8,
       "numbersCount": 3,
       "stringsCount": 0,
@@ -178,10 +178,10 @@
       "iterations": 30000
     },
     "variable_assign": {
-      "meanNs": 1218.9216666666666,
-      "p95Ns": 1500,
-      "meanUs": 1.2189216666666667,
-      "opsPerUs": 0.8203972637016598,
+      "meanNs": 1269.1666666666667,
+      "p95Ns": 1300,
+      "meanUs": 1.2691666666666668,
+      "opsPerUs": 0.7879185817465528,
       "opcodeCount": 4,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -189,10 +189,10 @@
       "iterations": 60000
     },
     "variable_ref": {
-      "meanNs": 1198.845,
+      "meanNs": 1290.43,
       "p95Ns": 1300,
-      "meanUs": 1.198845,
-      "opsPerUs": 0.8341361894156459,
+      "meanUs": 1.29043,
+      "opsPerUs": 0.7749354866207389,
       "opcodeCount": 5,
       "numbersCount": 1,
       "stringsCount": 1,
@@ -200,10 +200,10 @@
       "iterations": 60000
     },
     "mixed_complex": {
-      "meanNs": 2842.285,
+      "meanNs": 2857.46,
       "p95Ns": 3200,
-      "meanUs": 2.842285,
-      "opsPerUs": 0.351829601887214,
+      "meanUs": 2.85746,
+      "opsPerUs": 0.34996115431187136,
       "opcodeCount": 23,
       "numbersCount": 7,
       "stringsCount": 0,
@@ -211,10 +211,10 @@
       "iterations": 20000
     },
     "bigint_hex": {
-      "meanNs": 1408.928,
-      "p95Ns": 2000,
-      "meanUs": 1.4089280000000002,
-      "opsPerUs": 0.7097594767085329,
+      "meanNs": 1420.23,
+      "p95Ns": 1500,
+      "meanUs": 1.42023,
+      "opsPerUs": 0.7041113059152391,
       "opcodeCount": 5,
       "numbersCount": 2,
       "stringsCount": 0,
@@ -223,9 +223,9 @@
     }
   },
   "summary": {
-    "meanUs": 1.47296555,
-    "minUs": 0.9993515,
-    "maxUs": 2.842285,
+    "meanUs": 1.5314126166666664,
+    "minUs": 1.0684435,
+    "maxUs": 2.85746,
     "meanOpcodesPerExpr": 7.75
   },
   "metadata": {

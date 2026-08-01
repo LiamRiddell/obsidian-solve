@@ -11,7 +11,7 @@ import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/Bytecode
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import type { EvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { pluginFunctionRegistry } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionRegistry, registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
 import { Value, numberValue, pendingValue, freezeIfDev } from "@solve-js/vm/Value";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -38,7 +38,7 @@ import {
 } from "@solve-js/types/ParsingResult";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
 import type { Token, ScanLineResult } from "@solve-js/lexer";
-import { DEFAULT_CONFIG, type EngineConfig } from "@solve-js/constants/Configuration";
+import { DEFAULT_CONFIG, mergeEngineConfig, type EngineConfig } from "@solve-js/constants/Configuration";
 import {
     DiagnosticPipeline,
     TimelineDiagnosticCollector,
@@ -110,9 +110,9 @@ export interface LineEvaluation {
  *
  * @example
  * ```typescript
- * import { ExpressionEngine } from "@solve-js";
+ * import { ExpressionEngine } from "@solve/core";
  * const engine = new ExpressionEngine("en");
- * const value = engine.evaluateExpression("2 + 2 * 10");
+ * const [value] = engine.evaluateExpression("2 + 2 * 10");
  * console.log(value.toNumber()); // 22
  * ```
  */
@@ -135,16 +135,16 @@ export class ExpressionEngine {
 
     /**
      * Per-package record of contributions made to the SHARED registries
-     * (sharedOpRegistry / sharedVariableResolver / resolver namespaces),
-     * so {@link unregisterPackage} can reverse them. Keyed by package name.
+     * (sharedVariableResolver / resolver namespaces), so
+     * {@link unregisterPackage} can reverse them. Keyed by package name.
      */
     private packageContributions = new Map<string, {
-        opcodes: number[];
         pluginFunctionIndices: number[];
         variableSources: import("@solve-js/variables/IVariableSource").IVariableSource[];
         resolverNamespaces: string[];
         tokenCategories: string[];
         lexerVocabulary: LexerVocabulary | undefined;
+        asConverterNames: string[];
     }>();
 
     /**
@@ -178,14 +178,25 @@ export class ExpressionEngine {
     /** TanStack Query client — injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
     // Bytecode cache — avoids re-parsing identical expressions.
-    // Bounded: when full, the oldest entry (Map insertion order) is evicted
-    // so unique expressions across a long session can't grow memory unboundedly.
-    private static readonly BYTECODE_CACHE_MAX_ENTRIES = 2000;
+    // Bounded by config.performance.defaultCacheSize: when full, the oldest
+    // entry (Map insertion order) is evicted so unique expressions across a
+    // long session can't grow memory unboundedly.
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
 
-    /** Insert into the bytecode cache, evicting the oldest entry when full. */
+    /**
+     * Insert into the bytecode cache, evicting the oldest entry when full.
+     *
+     * Bug fix (found during release hardening): this used to check against
+     * a hardcoded `BYTECODE_CACHE_MAX_ENTRIES = 2000` constant that never
+     * read `config.performance.defaultCacheSize` — despite that field being
+     * documented (see `EngineConfig`'s JSDoc example) as exactly this knob.
+     * A host raising `defaultCacheSize` for large documents had zero effect;
+     * every document beyond ~2000 unique expressions per line silently lost
+     * the bytecode-cache benefit on re-evaluation regardless of config.
+     */
     private cacheBytecode(expression: string, program: BytecodeProgram): void {
-        if (this.bytecodeCache.size >= ExpressionEngine.BYTECODE_CACHE_MAX_ENTRIES) {
+        const maxEntries = this.config.performance.defaultCacheSize;
+        if (this.bytecodeCache.size >= maxEntries) {
             const oldest = this.bytecodeCache.keys().next().value;
             if (oldest !== undefined) {
                 this.bytecodeCache.delete(oldest);
@@ -216,7 +227,11 @@ export class ExpressionEngine {
         packages?: IEnginePackage[]
     ) {
         this.localeCode = localeCode;
-        this.config = { ...DEFAULT_CONFIG, ...config };
+        // Per-section merge, not a top-level shallow spread — overriding one
+        // field of a section (e.g. `{ performance: { defaultCacheSize: 500 } }`)
+        // used to silently replace the WHOLE section, dropping every other
+        // field in it back to `undefined` instead of keeping its default.
+        this.config = mergeEngineConfig(DEFAULT_CONFIG, config ?? {});
         this.lexer = new Lexer(localeCode, buildTokenLookup(localeCode));
         this.registry = new ParseletRegistry();
 
@@ -315,7 +330,6 @@ export class ExpressionEngine {
      * - `lexerVocabulary` → engine's isolated lexer (via this.lexer.registerVocabulary)
      * - `prefixParselets` → engine's isolated ParseletRegistry
      * - `infixParselets` → engine's isolated ParseletRegistry
-     * - `opcodeHandlers` → sharedOpRegistry (shared across all engine instances)
      * - `variableSources` → sharedVariableResolver (shared across all engine instances)
      *
      * Built-in packages (ARITHMETIC, FUNCTION, UOM, etc.) are registered
@@ -325,6 +339,24 @@ export class ExpressionEngine {
      * @param pkg - The package to register.
      */
     registerPackage(pkg: IEnginePackage): void {
+        // Guard against double-registration under the same name: without
+        // this, a second registerPackage() call for the same pkg.name would
+        // overwrite packageContributions' tracked record for the FIRST
+        // registration, permanently orphaning its shared-registry
+        // contributions (pluginFunctionRegistry entries, variable sources,
+        // resolver namespaces, token categories) — unreachable and
+        // unreversible for the engine's lifetime, since those are shared
+        // module-level registries. Mirrors ResolverRegistry.register()'s
+        // existing "destroy old, warn, replace" pattern for the same class
+        // of problem at the resolver-namespace level.
+        if (this.packageContributions.has(pkg.name)) {
+            console.warn(
+                `[ExpressionEngine] Package "${pkg.name}" is already registered. ` +
+                `Unregistering the previous registration before re-registering.`,
+            );
+            this.unregisterPackage(pkg.name);
+        }
+
         // Track shared-registry contributions so unregisterPackage() can
         // reverse them. Isolated per-engine registrations (parselets,
         // phrases) die with the engine and don't need tracking. lexerVocabulary
@@ -334,12 +366,12 @@ export class ExpressionEngine {
         // called from here, leaving a package's lexer contribution live
         // after "unregistering" it. tokenCategories is tracked the same way.
         const contribution = {
-            opcodes: [] as number[],
             pluginFunctionIndices: [] as number[],
             variableSources: [] as import("@solve-js/variables/IVariableSource").IVariableSource[],
             resolverNamespaces: [] as string[],
             tokenCategories: [] as string[],
             lexerVocabulary: pkg.lexerVocabulary,
+            asConverterNames: [] as string[],
         };
 
         if (pkg.lexerVocabulary) {
@@ -353,12 +385,6 @@ export class ExpressionEngine {
         if (pkg.infixParselets) {
             for (const ip of pkg.infixParselets) {
                 this.registry.registerInfix(ip.tokenType, ip.parselet);
-            }
-        }
-        if (pkg.opcodeHandlers) {
-            for (const oh of pkg.opcodeHandlers) {
-                sharedOpRegistry.register(oh);
-                contribution.opcodes.push(oh.opcode);
             }
         }
         if (pkg.pluginFunctions) {
@@ -398,6 +424,12 @@ export class ExpressionEngine {
         if (pkg.completionItems) {
             this.packageCompletionItems.set(pkg.name, pkg.completionItems);
         }
+        if (pkg.asConverters) {
+            for (const [name, handler] of Object.entries(pkg.asConverters)) {
+                registerAsConverter(name, handler);
+                contribution.asConverterNames.push(name);
+            }
+        }
 
         this.packageContributions.set(pkg.name, contribution);
     }
@@ -405,9 +437,9 @@ export class ExpressionEngine {
     /**
      * Unregister a package previously registered via {@link registerPackage}.
      *
-     * Reverses the package's contributions to the SHARED registries — opcode
-     * handlers (sharedOpRegistry), plugin functions (pluginFunctionRegistry),
-     * variable sources (sharedVariableResolver), async resolvers, and now
+     * Reverses the package's contributions to the SHARED registries — plugin
+     * functions (pluginFunctionRegistry), variable sources
+     * (sharedVariableResolver), async resolvers, and now
      * token highlight categories (TokenCategoryMap) — which registerPackage
      * wrote into process-wide state. Also reverts
      * the package's lexer plugin (custom keyword/operator token types
@@ -429,9 +461,6 @@ export class ExpressionEngine {
         const contribution = this.packageContributions.get(packageName);
         if (!contribution) return false;
 
-        for (const opcode of contribution.opcodes) {
-            sharedOpRegistry.unregister(opcode);
-        }
         for (const index of contribution.pluginFunctionIndices) {
             delete pluginFunctionRegistry[index];
         }
@@ -446,6 +475,9 @@ export class ExpressionEngine {
         }
         if (contribution.lexerVocabulary) {
             this.lexer.unregisterVocabulary(contribution.lexerVocabulary);
+        }
+        for (const name of contribution.asConverterNames) {
+            unregisterAsConverter(name);
         }
         this.packageCompletionItems.delete(packageName);
 

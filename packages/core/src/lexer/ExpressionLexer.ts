@@ -139,6 +139,10 @@ function buildCharClassTable(): Uint8Array {
   table[124] = CharClass.OPERATOR; // |
   table[125] = CharClass.OPERATOR; // }
   table[126] = CharClass.OPERATOR; // ~
+  // "@" was previously unclassified (defaulted to CharClass.SKIP, silently
+  // dropped before ever reaching OP_MAP) — see OP_MAP's own "@" entry doc
+  // comment for why this is being activated now.
+  table[64] = CharClass.OPERATOR;  // @
 
   // Other
   table[34] = CharClass.QUOTE;    // "
@@ -177,6 +181,8 @@ const TWO_CHAR_OPS: TwoCharOpMap = {
   33: { 61: 'NEQ' },       // !=
   62: { 61: 'GTE' },       // >=
   60: { 61: 'LTE' },       // <=
+  38: { 38: 'LOGICAL_AND' }, // &&
+  124: { 124: 'LOGICAL_OR' }, // ||
   // Note: ** is NOT a single token — the existing moo lexer emits two
   // separate STAR tokens, and the parser consumes them that way.
   // 42: { 42: 'EXPONENT' },  // ** — disabled for moo compatibility
@@ -206,7 +212,17 @@ const OP_MAP: Record<number, string> = {
   33: 'BANG',     // !
   38: 'BIT_AND',  // &
   124: 'BIT_OR',  // |
+  60: 'LT',       // <
+  62: 'GT',       // >
   126: 'BIT_NOT', // ~
+  // "@" — activates the token type name already dormant-reserved for this
+  // exact purpose (see Token.ts's OVER/RATE_AT doc comment and
+  // normalizer/TokenNormalizer.ts's NON_WORD_NAMES, both of which already
+  // anticipated "AT" as a future "@" symbol token before this addition).
+  // Backs the time package's video-timecode literal's alternate fps
+  // separator (`01:02:03:04 @ 30fps`, equivalent to `... at 30fps`) — see
+  // packages/time/parselets/VideoTimecodeParselet.ts.
+  64: 'AT',       // @
 };
 
 /**
@@ -244,6 +260,38 @@ export interface LexerVocabulary {
    * These are checked alongside the built-in `knownUnits` set.
    */
   units?: string[];
+
+  /**
+   * Whole-line patterns matched against the RAW line text, BEFORE any
+   * per-character tokenization begins.
+   *
+   * Every other extension point in this file (`keywords`/`operators`/
+   * `units`, plus `IEnginePackage.phrases`/`normalizerRules`) transforms
+   * a token STREAM -- they all assume the line is, at some granularity,
+   * valid Solve syntax. This hook exists for the one shape that isn't:
+   * a package whose grammar captures arbitrary free-form text terminated
+   * by a fixed marker (e.g. a natural-language query ending in `= ?`),
+   * where the text itself ("distance to the moon") would never tokenize
+   * or parse as a normal expression and must be captured verbatim
+   * instead -- see `packages/knowledge/` for the reference use.
+   *
+   * Each entry's `pattern` is tested (via `RegExp.exec`) against the
+   * full, untrimmed line text. If it matches AND capture group 1 is
+   * non-empty after trimming, the ENTIRE line becomes a single
+   * synthetic token of `tokenType` whose `value`/`text` is the trimmed
+   * capture group -- the character-by-character scanner never runs for
+   * that line. Patterns are tried in registration order; the first
+   * match wins. A package registering a rule here still needs a
+   * `prefixParselets` entry for `tokenType` to actually consume the
+   * resulting token.
+   *
+   * Because this bypasses tokenization entirely, a matching line can
+   * contain characters that would otherwise be lexer errors (unmatched
+   * quotes, stray symbols, ...) -- by design, since the whole point is
+   * to hand the package raw text the normal pipeline was never meant to
+   * parse.
+   */
+  rawLinePatterns?: Array<{ pattern: RegExp; tokenType: string }>;
 }
 
 // ── Expression gating (L1) ──────────────────────────────────────────────
@@ -280,6 +328,20 @@ const EXPRESSION_INDICATOR_CODES = (() => {
 })();
 
 // ── ExpressionLexer ───────────────────────────────────────────────────────
+/**
+ * Character-by-character tokenizer for expression text.
+ *
+ * Scans a raw line/expression string into a stream of typed tokens
+ * (numbers, identifiers, operators, units, keywords, ...), handling
+ * markdown-line classification (`classifyLine`), inline `` s`...` `` solve
+ * spans, and package-contributed vocabulary (registered via
+ * {@link registerVocabulary}/{@link unregisterVocabulary} — keywords,
+ * operators, and units a package wants recognized as their own token
+ * types rather than falling through to generic identifiers).
+ *
+ * Most consumers should use the higher-level {@link Lexer} wrapper, which
+ * adds streaming `next()`/`peek()` access over this class's scan results.
+ */
 export class ExpressionLexer {
   private static readonly CHAR_CLASS = buildCharClassTable();
   /**
@@ -328,6 +390,41 @@ export class ExpressionLexer {
    * Populated by [Symbol.iterator]() and consumed by scanDocument().
    */
   _inlineSolveSpans: InlineSolveSpan[] = [];
+
+  // Plugin-extensible raw-line patterns — see LexerVocabulary.rawLinePatterns.
+  private pluginRawLinePatterns: Array<{ pattern: RegExp; tokenType: string }> = [];
+
+  /**
+   * If a `rawLinePatterns` rule matches the FULL text most recently passed
+   * to {@link reset}, this holds the single synthetic token that
+   * {@link tokenizeAll} should return instead of running the
+   * character-by-character scanner. Cleared (re-evaluated) on every
+   * {@link reset} call. `null` when no plugin registered any raw-line
+   * patterns, or none matched — the overwhelmingly common case, checked
+   * with a `length === 0` guard before ever touching this field so a
+   * plugin-free lexer pays zero cost for the feature.
+   */
+  private pendingRawLineToken: Token | null = null;
+
+  /**
+   * Test `text` against every registered `rawLinePatterns` rule, in
+   * registration order. Returns a synthetic token for the first rule
+   * whose `pattern` matches AND whose capture group 1 is non-empty after
+   * trimming; returns `null` if no rule matches (the normal
+   * character-by-character scanner should run instead).
+   */
+  private matchRawLine(text: string): Token | null {
+    for (const rule of this.pluginRawLinePatterns) {
+      const m = rule.pattern.exec(text);
+      if (m && typeof m[1] === 'string') {
+        const value = m[1].trim();
+        if (value.length > 0) {
+          return new LexerToken(rule.tokenType, tokenTypeId(rule.tokenType), value, value, 0, 0, this.line, 1);
+        }
+      }
+    }
+    return null;
+  }
 
   /** Rebuild merged keyword and unit collections after plugin registration. */
   private rebuildMergedCollections(): void {
@@ -449,6 +546,10 @@ export class ExpressionLexer {
       }
       this.rebuildMergedCollections();
     }
+
+    if (plugin.rawLinePatterns) {
+      this.pluginRawLinePatterns.push(...plugin.rawLinePatterns);
+    }
   }
 
   /**
@@ -495,6 +596,11 @@ export class ExpressionLexer {
       
       this.rebuildMergedCollections();
     }
+
+    if (plugin.rawLinePatterns) {
+      const toRemove = new Set(plugin.rawLinePatterns);
+      this.pluginRawLinePatterns = this.pluginRawLinePatterns.filter((r) => !toRemove.has(r));
+    }
   }
 
   reset(input: string): void {
@@ -503,6 +609,7 @@ export class ExpressionLexer {
     this.len = input.length;
     this.line = 1;
     this.lineStartPos = 0;
+    this.pendingRawLineToken = this.pluginRawLinePatterns.length > 0 ? this.matchRawLine(input) : null;
   }
 
   /**
@@ -560,23 +667,33 @@ export class ExpressionLexer {
       // within the same memory region as tokenization.
       const classification = this.classifyFromPositions(lineStart, lineEnd);
 
+      // ── Slice line text for ScanLineResult.text ────────────────
+      // Hoisted above tokenization (rather than after, as originally) so the
+      // raw-line-pattern check below can test the exact substring a plugin
+      // registered via `LexerVocabulary.rawLinePatterns` — see reset()/
+      // tokenizeAll() for the single-expression-string equivalent of this
+      // same check.
+      const lineText = input.slice(lineStart, lineEnd);
+
       // ── Tokenize non-skipped lines ────────────────────────────────
       let tokens: Token[] = [];
       if (!classification.skip) {
-        // Scope tokenization to just this line by temporarily restricting len.
-        // The [Symbol.iterator]() generator captures `this.len` at call time,
-        // so creating the iterator AFTER setting this.len = lineEnd ensures
-        // tokenization stops at the line boundary. After tokenization,
-        // this.pos will be at lineEnd (the newline position).
-        const savedLen = this.len;
-        this.len = lineEnd;
-        tokens = Array.from(this);
-        this.len = savedLen;
-        // this.pos is now at lineEnd — advance past newline below
+        const rawToken = this.pluginRawLinePatterns.length > 0 ? this.matchRawLine(lineText) : null;
+        if (rawToken) {
+          tokens = [rawToken];
+        } else {
+          // Scope tokenization to just this line by temporarily restricting len.
+          // The [Symbol.iterator]() generator captures `this.len` at call time,
+          // so creating the iterator AFTER setting this.len = lineEnd ensures
+          // tokenization stops at the line boundary. After tokenization,
+          // this.pos will be at lineEnd (the newline position).
+          const savedLen = this.len;
+          this.len = lineEnd;
+          tokens = Array.from(this);
+          this.len = savedLen;
+          // this.pos is now at lineEnd — advance past newline below
+        }
       }
-
-      // ── Slice line text for ScanLineResult.text ────────────────
-      const lineText = input.slice(lineStart, lineEnd);
 
       // ── Detect inline solves ──────────────────────────────────────
       // Two data sources are merged:
@@ -653,6 +770,10 @@ export class ExpressionLexer {
    *  - 0-char and 1-char fast paths
    */
   tokenizeAll(): Token[] {
+    if (this.pendingRawLineToken) {
+      this._inlineSolveSpans = [];
+      return [this.pendingRawLineToken];
+    }
     return Array.from(this);
   }
 

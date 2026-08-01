@@ -5,6 +5,18 @@ import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { TokenLookup } from "@solve-js/lexer/TokenClassRegistry";
 
+/**
+ * Public tokenizer wrapper around {@link ExpressionLexer}.
+ *
+ * `ExpressionLexer` does the actual character-by-character scanning;
+ * `Lexer` adds a materialized-token-array streaming interface
+ * (`next()`/`peek()`) plus line-classification state (`reset()`) so
+ * callers can iterate a line's tokens without re-scanning on each peek.
+ *
+ * Each `ExpressionEngine` instance owns its own `Lexer`, and packages
+ * extend it via {@link registerVocabulary} (keywords, operators, units) —
+ * see `IEnginePackage.lexerVocabulary`.
+ */
 export class Lexer {
   /** Expression-mode lexer (Phase A: V8-optimized, replaces moo) */
   private expressionLexer: ExpressionLexer;

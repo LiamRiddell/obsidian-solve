@@ -1,4 +1,16 @@
 import { OpCode } from "@solve-js/parser/OpCode";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+
+/**
+ * `BytecodeProgram.opcodes` is a `Uint8Array` — every operand written into
+ * it (including constant-pool indices from {@link BytecodeBuilder.emitNumber}/
+ * {@link BytecodeBuilder.emitString}) is truncated to a single byte on
+ * `build()`. Exceeding this silently wraps the index (e.g. entry 300 reads
+ * back as entry 44), producing a wrong result with no error — see
+ * {@link BytecodeBuilder.emitNumber} for the guard that turns this into a
+ * thrown error instead.
+ */
+const MAX_CONSTANT_POOL_INDEX = 255;
 
 /**
  * Compiled bytecode program produced by {@link BytecodeBuilder}.
@@ -34,6 +46,7 @@ export class BytecodeBuilder {
 	private stringIndex = new Map<string, number>();
 	private _hasAsync = false;
 
+	/** Emit an {@link OpCode} instruction. */
 	emitOpcode(op: OpCode): void {
 		this.opcodes.push(op);
 		if (op === OpCode.CALL_PLUGIN) {
@@ -41,34 +54,80 @@ export class BytecodeBuilder {
 		}
 	}
 
+	/**
+	 * Emit a numeric literal: appends `n` to the program's constant pool and
+	 * writes its index into the opcode stream (read back by the VM as e.g.
+	 * `PUSH_NUMBER <idx>`).
+	 *
+	 * Numeric constants are NOT deduplicated (unlike {@link emitString}) —
+	 * every call appends a new entry, so an expression with more than
+	 * {@link MAX_CONSTANT_POOL_INDEX}+1 distinct numeric-literal occurrences
+	 * throws rather than silently wrapping the index (see
+	 * `MAX_CONSTANT_POOL_INDEX`'s doc for what that would otherwise do).
+	 *
+	 * @throws If the constant pool would exceed 256 entries.
+	 */
 	emitNumber(n: number): void {
 		const idx = this.numbers.length;
+		if (idx > MAX_CONSTANT_POOL_INDEX) {
+			throw ErrorFactory.parsing(
+				"TOO_MANY_NUMERIC_CONSTANTS",
+				`Expression has more than ${MAX_CONSTANT_POOL_INDEX + 1} numeric literals, exceeding the bytecode constant pool's limit.`,
+				{ limit: MAX_CONSTANT_POOL_INDEX + 1 }
+			);
+		}
 		this.numbers.push(n);
 		this.opcodes.push(idx);
 	}
 
+	/**
+	 * Emit a string literal: interns `s` into the program's string pool
+	 * (deduplicated via `stringIndex`) and writes its index into the opcode
+	 * stream. Subject to the same constant-pool bound as {@link emitNumber},
+	 * but since strings ARE deduplicated, only distinct string values count
+	 * against the limit.
+	 *
+	 * @throws If the string pool would exceed 256 distinct entries.
+	 */
 	emitString(s: string): void {
 		let idx = this.stringIndex.get(s);
 		if (idx === undefined) {
 			idx = this.strings.length;
+			if (idx > MAX_CONSTANT_POOL_INDEX) {
+				throw ErrorFactory.parsing(
+					"TOO_MANY_STRING_CONSTANTS",
+					`Expression has more than ${MAX_CONSTANT_POOL_INDEX + 1} distinct string literals, exceeding the bytecode constant pool's limit.`,
+					{ limit: MAX_CONSTANT_POOL_INDEX + 1 }
+				);
+			}
 			this.strings.push(s);
 			this.stringIndex.set(s, idx);
 		}
 		this.opcodes.push(idx);
 	}
 
+	/**
+	 * Emit a raw numeric operand (0-255) following an opcode — e.g. a
+	 * plugin-function index for `CALL_PLUGIN`, or an argument count. Unlike
+	 * {@link emitOpcode}, this does not go through the `OpCode` enum, so
+	 * package authors use this (not an unsafe cast to `OpCode`) to push
+	 * operands their own opcode handler expects to read positionally.
+	 */
 	emitIndex(idx: number): void {
 		this.opcodes.push(idx);
 	}
 
+	/** Emit a raw byte (0-255) — used for fixed small operands like argument counts. */
 	emitByte(b: number): void {
 		this.opcodes.push(b);
 	}
 
+	/** Number of opcodes/operands emitted so far — used to compute jump targets before {@link patchJump}. */
 	get currentLength(): number {
 		return this.opcodes.length;
 	}
 
+	/** Overwrite a previously-emitted placeholder operand at `position` with the real jump `target`, once known. */
 	patchJump(position: number, target: number): void {
 		this.opcodes[position] = target;
 	}

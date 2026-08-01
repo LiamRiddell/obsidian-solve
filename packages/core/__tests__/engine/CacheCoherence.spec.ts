@@ -473,4 +473,38 @@ describe("Cache Coherence", () => {
 			});
 		});
 	});
+
+	// Regression for a bug found during release hardening: config.performance
+	// .defaultCacheSize was documented (see PerformanceConfig's JSDoc) as
+	// controlling cache eviction, but ExpressionEngine's bytecode cache read
+	// a hardcoded constant instead and never consulted it — the config value
+	// had zero effect no matter what a host set it to.
+	describe("bytecode cache size respects config.performance.defaultCacheSize", () => {
+		test("cache never grows past the configured limit — oldest entries are evicted", () => {
+			const engine = new ExpressionEngine("en", false, {
+				performance: { defaultCacheSize: 3, maxDocumentLines: 10000, parseTimeoutMs: 5000, executionTimeoutMs: 10000 },
+			});
+
+			// 5 distinct expressions against a cache capped at 3 entries.
+			for (const expr of ["1 + 1", "2 + 2", "3 + 3", "4 + 4", "5 + 5"]) {
+				engine.compileExpression(expr);
+			}
+
+			expect(engine.getBytecodeCache().size).toBe(3);
+		});
+
+		test("a larger configured limit actually retains more entries than the old hardcoded default would have allowed", () => {
+			const engine = new ExpressionEngine("en", false, {
+				performance: { defaultCacheSize: 10, maxDocumentLines: 10000, parseTimeoutMs: 5000, executionTimeoutMs: 10000 },
+			});
+
+			for (let i = 0; i < 10; i++) {
+				engine.compileExpression(`${i} + ${i}`);
+			}
+
+			// All 10 survive because the configured cap (10) accommodates them —
+			// proving the value flows through, not just that eviction exists.
+			expect(engine.getBytecodeCache().size).toBe(10);
+		});
+	});
 });

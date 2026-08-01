@@ -21,12 +21,36 @@ export const knownUnits = new Set([
   "inch", "inches", "foot", "feet", "yard", "yards", "mile", "miles",
   // Mass
   "g", "kg", "lb", "oz", "mcg", "mg", "t",
+  // Mass -- full-word/plural forms, added for the cooking package's
+  // source-unit position (e.g. "300 grams butter in cups"); all are
+  // real names the `convert` npm package already accepts directly.
+  "gram", "grams", "pound", "pounds", "ounce", "ounces",
   // Volume
   "ml", "l", "cl", "dl", "gal", "cup", "pnt", "qt",
+  // Volume -- plural/full-word forms, added for the cooking package
+  // (packages/uom/) so e.g. "10 cups olive oil in grams" lexes "cups"
+  // as a real UNIT token (needed for the NUMBER+UNIT literal path to
+  // fire at all -- see uom/normalizer/IngredientNameNormalizerRule.ts).
+  // US Customary only -- see CookingPluginFunctions.ts's scope note.
+  "cups", "tbsp", "tsp", "tablespoon", "tablespoons", "teaspoon", "teaspoons",
   // Time
   "s", "min", "h", "d",
   "day", "days", "week", "weeks", "month", "months", "year", "years",
   "hour", "hours", "minute", "minutes", "second", "seconds",
+  // "workday"/"workdays" — a business day (Mon-Fri), backing the datetime
+  // package's `<date> + N workdays` arithmetic and `$X/workday` Rate
+  // literals (packages/datetime/). NOT a real unit the `convert` package
+  // knows about (a business day has no fixed physical duration — it
+  // depends on which calendar dates are weekends) — see
+  // uom/UomConverter.ts's isWorkdayUnit()/workday shim, which handles
+  // conversion to/from other Time-measure units via a fixed 7/5 ratio
+  // (5 workdays per 7-day week) for RATE-MATH purposes only. Registering
+  // it here (rather than a bespoke IDENT-matching normalizer rule, the
+  // "fps"/"am"/"pm" approach used elsewhere in this codebase) is safe re:
+  // the ":name = expr" variable-name collision policy — VariableParselet.ts
+  // explicitly accepts UNIT-typed tokens as variable names (e.g. ":b = 5"
+  // already works for the "b" bits unit), so ":workday = 5" keeps working.
+  "workday", "workdays",
   // Temperature (uppercase: C=Celsius ≠ c=centiliter)
   "C", "F", "K",
   // Frequency

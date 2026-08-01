@@ -46,9 +46,23 @@ export class GlobalVariableStore {
 	 * returning — so that ThreeTierEvaluator's dirty-marking (a listener)
 	 * and GlobalVariableAsyncResolver's first-write promise (also a
 	 * listener) both observe the new value immediately, no microtask delay.
+	 *
+	 * A write that does not CHANGE the stored value notifies nobody. This
+	 * is not just an optimisation — it is what stops a re-evaluation cycle
+	 * from sustaining itself. Every listener re-runs work in response to a
+	 * write (ThreeTierEvaluator marks dependent lines dirty; the playground
+	 * worker refreshes other documents), and those re-runs re-execute the
+	 * very STORE_GLOBAL_VAR opcode that produced this write. Re-evaluating
+	 * an unchanged `global :x = 5` line therefore used to re-notify, which
+	 * re-triggered the listeners, which re-evaluated... — bounded only by
+	 * MAX_NOTIFY_DEPTH below, and only in DEPTH, so with more than one
+	 * writer the work per keystroke grew exponentially. Nothing observable
+	 * changed, so there is nothing for a listener to react to.
 	 */
 	set(name: string, value: Value): void {
+		const previous = this.values.get(name);
 		this.values.set(name, value);
+		if (previous !== undefined && sameValue(previous, value)) return;
 		this.notify(name, value);
 	}
 
@@ -87,6 +101,35 @@ export class GlobalVariableStore {
 		this.listeners.clear();
 		this.notifyDepth = 0;
 	}
+}
+
+/**
+ * Structural equality for two stored globals, used by `set()` to decide
+ * whether a write is worth notifying about. Deliberately NOT identity:
+ * VM.ts stores `persistentValue(val)` — a fresh object — on every
+ * STORE_GLOBAL_VAR while the arena is active, so two writes of the same
+ * literal are never the same object.
+ *
+ * `Object.is` rather than `===` so a global holding NaN compares equal to
+ * itself; otherwise `global :x = 0/0` would re-notify on every
+ * re-evaluation, which is exactly the cycle `set()` is trying to break.
+ */
+function sameValue(a: Value, b: Value): boolean {
+	if (a.type !== b.type) return false;
+	if (a.unit !== b.unit) return false;
+	if ((a.timedOut ?? false) !== (b.timedOut ?? false)) return false;
+
+	const av = a.value;
+	const bv = b.value;
+	if (Array.isArray(av) || Array.isArray(bv)) {
+		if (!Array.isArray(av) || !Array.isArray(bv)) return false;
+		if (av.length !== bv.length) return false;
+		for (let i = 0; i < av.length; i++) {
+			if (!Object.is(av[i], bv[i])) return false;
+		}
+		return true;
+	}
+	return Object.is(av, bv);
 }
 
 export type GlobalVariableListener = (name: string, value: Value) => void;

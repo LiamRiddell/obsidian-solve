@@ -9,6 +9,7 @@ import { registerDiceParselets } from "@solve-js/packages/dice/parselets/index";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
+import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -138,5 +139,65 @@ describe("Dice Parselets", () => {
   test("roll between 1 and 1 always returns 1", () => {
     const result = parseAndExecute("roll between 1 and 1");
     expect(result.toNumber()).toBe(1);
+  });
+
+  // ── Bare hyphen range: "roll 4-8" (wiki: Dice — no keyword, no parens) ──
+  // Previously unsupported: DiceRollParselet only recognized BETWEEN/FROM
+  // keywords or a leading LPAREN, so "roll 4-8" threw a parse error
+  // ("Expected token type LPAREN but got NUMBER").
+
+  test("roll 4-8 returns a number between 4 and 8", () => {
+    for (let i = 0; i < 20; i++) {
+      const result = parseAndExecute("roll 4-8");
+      expect(result.type).toBe(ValueType.Number);
+      const val = result.toNumber();
+      expect(val).toBeGreaterThanOrEqual(4);
+      expect(val).toBeLessThanOrEqual(8);
+    }
+  });
+
+  test("roll 0-7 returns a number between 0 and 7", () => {
+    for (let i = 0; i < 20; i++) {
+      const result = parseAndExecute("roll 0-7");
+      const val = result.toNumber();
+      expect(val).toBeGreaterThanOrEqual(0);
+      expect(val).toBeLessThanOrEqual(7);
+    }
+  });
+
+  test("roll 5-5 always returns 5", () => {
+    const result = parseAndExecute("roll 5-5");
+    expect(result.toNumber()).toBe(5);
+  });
+
+  test("roll 4-8 in expression: roll 4-8 + 10", () => {
+    for (let i = 0; i < 10; i++) {
+      const result = parseAndExecute("roll 4-8 + 10");
+      const val = result.toNumber();
+      expect(val).toBeGreaterThanOrEqual(14);
+      expect(val).toBeLessThanOrEqual(18);
+    }
+  });
+});
+
+describe("DICE_PACKAGE — real engine wiring", () => {
+  test("roll 4-8 works via the real, default-constructed ExpressionEngine", () => {
+    const engine = new ExpressionEngine("en");
+    for (let i = 0; i < 10; i++) {
+      const [value] = engine.evaluateExpression("roll 4-8");
+      const val = value.toNumber();
+      expect(val).toBeGreaterThanOrEqual(4);
+      expect(val).toBeLessThanOrEqual(8);
+    }
+  });
+
+  test("roll(1, 6) and roll between 1 and 6 still work via the real engine", () => {
+    const engine = new ExpressionEngine("en");
+    const [a] = engine.evaluateExpression("roll(1, 6)");
+    expect(a.toNumber()).toBeGreaterThanOrEqual(1);
+    expect(a.toNumber()).toBeLessThanOrEqual(6);
+    const [b] = engine.evaluateExpression("roll between 1 and 6");
+    expect(b.toNumber()).toBeGreaterThanOrEqual(1);
+    expect(b.toNumber()).toBeLessThanOrEqual(6);
   });
 });

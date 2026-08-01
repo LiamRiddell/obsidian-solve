@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
-import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { ExpressionEngine } from "@solve/core/engine";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import type UserSettings from "@app/settings/UserSettings";
 
@@ -83,15 +83,14 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
 
   // ── Low maxStackDepth ────────────────────────────────────────────────
   //
-  // NOTE: In the hot-path executeBytecode(), the VM uses a direct stack
-  // reference (vm.getStack()) and Array.push/pop directly, bypassing the
-  // VM.push() bounds check for performance. The bytecode compiler
-  // guarantees stack balance, so the maxStackDepth limit does not restrict
-  // the hot loop (see comment in VM.ts). The following tests verify that
-  // the mapped value is present in engine.getConfig() — its enforcement
-  // applies only to external VM.push() calls, not to bytecode execution.
+  // executeBytecode()'s hot loop checks `stack.length > maxStackDepth`
+  // once per instruction (see VM.ts) — this used to be dead code (the
+  // bounds check only lived in the rarely-used VM.push() wrapper, never
+  // called from the hot loop), but is now real enforcement. The following
+  // tests verify both that the mapped value is present in
+  // engine.getConfig() AND that it actually restricts bytecode execution.
 
-  test("low maxStackDepth is present in engine config even if bytecode execution bypasses it", () => {
+  test("low maxStackDepth via mapper throws once an expression needs more than 1 stack slot", () => {
     const settings = createMockSettings({ maxStackDepth: 1, maxInstructions: 100 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
@@ -100,10 +99,10 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     // The mapped maxStackDepth=1 is present in config
     expect(engine.getConfig().vm.maxStackDepth).toBe(1);
 
-    // The hot path bypasses the push() bounds check, so expressions
-    // that need >1 stack slots still work correctly.
-    expect(engine.evaluateLine(1, "2 + 3")[0].toNumber()).toBe(5);
-    expect(engine.evaluateLine(1, "max(1, 2, 3)")[0].toNumber()).toBe(3);
+    // "2 + 3" needs 2 stack slots at once (both operands pushed before
+    // ADD reduces them to 1) — exceeds maxStackDepth=1.
+    expect(() => engine.evaluateLine(1, "2 + 3")).toThrow(/maximum stack depth of 1/i);
+    expect(() => engine.evaluateLine(1, "max(1, 2, 3)")).toThrow(/maximum stack depth of 1/i);
   });
 
   test("generous maxStackDepth via mapper allows complex expressions", () => {
@@ -183,7 +182,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     expect(() => engine.evaluateLine(1, "42")).toThrow(/maximum of 0 instructions/i);
   });
 
-  test("zero maxStackDepth is present in config but does not restrict bytecode hot path", () => {
+  test("zero maxStackDepth throws on a multi-instruction expression", () => {
     const settings = createMockSettings({ maxStackDepth: 0, maxInstructions: 100 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
@@ -192,8 +191,14 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     // The mapped value is present in config
     expect(engine.getConfig().vm.maxStackDepth).toBe(0);
 
-    // The hot path bypasses the push() bounds check, so even maxStackDepth=0
-    // doesn't prevent expressions from evaluating correctly.
-    expect(engine.evaluateLine(1, "42")[0].toNumber()).toBe(42);
+    // The depth check runs once per instruction and catches stack growth
+    // left over from the PREVIOUS instruction (a bounded one-instruction
+    // delay, by design — see the comment above VM.ts's check). A single
+    // bare literal like "42" compiles to exactly one opcode with nothing
+    // after it, so the loop never runs a second iteration to notice the
+    // resulting stack size — it can slip through even at maxStackDepth=0.
+    // A multi-instruction expression like "1 + 1" cannot: the check fires
+    // on the instruction that follows the pushes.
+    expect(() => engine.evaluateLine(1, "1 + 1")).toThrow(/maximum stack depth of 0/i);
   });
 });

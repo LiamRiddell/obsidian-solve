@@ -44,7 +44,6 @@ describe("Bug: currency conversion always failed due to API response shape misma
     let originalFetch: typeof global.fetch;
 
     afterEach(() => {
-      fx.destroy();
       global.fetch = originalFetch;
     });
 

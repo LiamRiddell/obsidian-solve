@@ -1,7 +1,20 @@
+/**
+ * Named precedence levels for the Pratt parser, from loosest (`Lowest`) to
+ * tightest (`Call`) binding. A custom infix parselet compares its own
+ * binding power against the current expression's to decide whether to
+ * consume the next operator (higher power binds tighter, e.g. `*` over `+`).
+ *
+ * Package authors reference these when registering an infix parselet via
+ * `IPackageRegistry.registerInfixParselet` — see the built-in packages for
+ * examples of picking an appropriate level (e.g. arithmetic `+`/`-` use
+ * `Sum`, `*`/`/` use `Product`).
+ */
 export const BindingPower = {
   Lowest: 0,
   Assignment: 10,
-  Conditional: 20,
+  LogicalOr: 12,   // `or`, `||` — loosest of the boolean-logic operators
+  LogicalAnd: 14,  // `&&` — binds tighter than `or` ("a or b and c" = "a or (b and c)")
+  Conditional: 20, // comparisons (`==`, `<`, `>=`, ...) — tighter than and/or, looser than arithmetic
   Sum: 30,
   BitwiseXor: 35,
   Product: 40,

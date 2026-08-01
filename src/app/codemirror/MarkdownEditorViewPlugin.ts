@@ -2,19 +2,21 @@ import { ExpressionResultWidget } from "@app/codemirror/widgets/ExpressionResult
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
-import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { Value, ValueType } from "@solve-js/vm/Value";
-import { formatValue } from "@solve-js/format/FormatEngine";
+import {
+	ExpressionEngine,
+	DocumentModel,
+	ThreeTierEvaluator,
+	findInlineSolvesInLine,
+} from "@solve/core/engine";
+import type { ViewportRange, LineChange, AsyncResolutionEvent } from "@solve/core/engine";
+import { Value, ValueType } from "@solve/core/vm";
+import { VMCheckpointer } from "@solve/core/vm";
+import { formatValue } from "@solve/core/format";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
-import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
-import { DocumentModel, ViewportRange, LineChange } from "@solve-js/engine/DocumentModel";
-import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
-import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
-import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
-import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
-import { LanguageService } from "@solve-js/language/LanguageService";
-import { categoryClassName, completionItemToOption } from "@solve-js/language/adapters/codemirror";
+import { abortLogger } from "@solve/core/utilities";
+import { LanguageService } from "@solve/core/language";
+import { categoryClassName, completionItemToOption } from "@solve/core/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,

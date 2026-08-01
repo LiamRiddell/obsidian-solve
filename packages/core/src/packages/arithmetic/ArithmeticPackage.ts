@@ -6,7 +6,9 @@ import { PrefixOpParselet } from "./parselets/PrefixOpParselet";
 import { BinaryOpParselet } from "./parselets/BinaryOpParselet";
 import { GroupParselet } from "./parselets/GroupParselet";
 import { ConstantParselet } from "./parselets/ConstantParselet";
+import { largeNumberSuffixNormalizerRule } from "./normalizer/LargeNumberSuffixNormalizerRule";
 
+/** Core arithmetic: numbers, `()` grouping, `pi`/`e` constants, `+ - * / % ^`, bitwise `<< >> & | ^`, and their `*_by` word forms. */
 export const ARITHMETIC_PACKAGE: IEnginePackage = {
   name: "solve-arithmetic",
   prefixParselets: [
@@ -33,4 +35,5 @@ export const ARITHMETIC_PACKAGE: IEnginePackage = {
     { tokenType: "BIT_OR", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.BIT_OR) },
     { tokenType: "BIT_XOR", parselet: new BinaryOpParselet(BindingPower.BitwiseXor, OpCode.BIT_XOR) },
   ],
+  normalizerRules: [largeNumberSuffixNormalizerRule()],
 };

@@ -186,8 +186,17 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
  * - Table separator rows (|---|)
  * - Horizontal rules (---, ***, ___)
  * - Standalone wikilinks / embeds ([[...]], ![[...]])
+ * - Whole-line comments (a line whose first non-whitespace characters are `//`)
  *
  * Lines containing inline solves (s\`...\`) are never considered empty.
+ *
+ * Note: a trailing `#`/`//` comment in the MIDDLE of an otherwise-evaluable
+ * line does NOT make isEmptyLine() return true — that line is still an
+ * "expression" line (skip: false). The comment is instead stripped at
+ * tokenization time (ExpressionLexer's HASH/`//` handling emits a COMMENT
+ * token for the rest of the line) and then filtered out of the token
+ * stream by ExpressionEngine.prepareExpression() before parsing, so
+ * `<expr> // note` evaluates identically to `<expr>` alone.
  */
 export function isEmptyLine(lineText: string): boolean {
     const classification = sharedLexer.classifyLine(lineText);
