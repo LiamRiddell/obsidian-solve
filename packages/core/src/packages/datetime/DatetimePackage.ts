@@ -16,6 +16,7 @@ import {
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
 import { dateLiteralNormalizerRule } from "./normalizer/DateLiteralNormalizerRule";
+import { dailyNoteLinkNormalizerRule } from "./normalizer/DailyNoteLinkNormalizerRule";
 import { formatIso8601Local } from "./Iso8601";
 
 /**
@@ -105,6 +106,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     untilSinceNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
     dateLiteralNormalizerRule(),
+    dailyNoteLinkNormalizerRule(),
   ],
   pluginFunctions: [
     { index: WORKDAYS_IN_FN_IDX, handler: workdaysInDuration },
