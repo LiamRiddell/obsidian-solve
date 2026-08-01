@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": {
+      "@solve-js/*": ["src/*"],
+      "@solve-js-examples/*": ["examples/*"],
+      "@tools/*": ["tools/*"],
+      "test/*": ["__tests__/*"]
+    },
+    "target": "ES6",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "strictNullChecks": true,
+    "allowJs": true,
+    "noImplicitAny": true,
+    "isolatedModules": true,
+    "importHelpers": true,
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "skipLibCheck": true
+  },
+  "exclude": ["node_modules"]
+}
