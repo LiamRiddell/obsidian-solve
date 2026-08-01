@@ -224,6 +224,37 @@ describe("ExpressionLexer — numbers", () => {
     expect(t).toEqual([["NUMBER", "0B"]]);
   });
 
+  // ── Octal literals ────────────────────────────────────────────────────
+
+  test("octal lowercase", () => {
+    expect(tokenPairs("0o17")).toEqual([["NUMBER", "0o17"]]);
+  });
+
+  test("octal uppercase", () => {
+    expect(tokenPairs("0O17")).toEqual([["NUMBER", "0O17"]]);
+  });
+
+  test("octal zero", () => {
+    expect(tokenPairs("0o0")).toEqual([["NUMBER", "0o0"]]);
+  });
+
+  test("octal stops at first non-octal digit (8 or 9)", () => {
+    // "0o178" -- "17" is valid octal, "8" isn't an octal digit, so the
+    // number scan stops there, leaving "8" as a separate token (matches
+    // hex/binary's same stop-at-first-invalid-digit behavior above).
+    expect(tokenPairs("0o178")).toEqual([["NUMBER", "0o17"], ["NUMBER", "8"]]);
+  });
+
+  test("bare 0o emits single NUMBER token", () => {
+    const t = tokenPairs("0o");
+    expect(t).toEqual([["NUMBER", "0o"]]);
+  });
+
+  test("bare 0O emits single NUMBER token", () => {
+    const t = tokenPairs("0O");
+    expect(t).toEqual([["NUMBER", "0O"]]);
+  });
+
   // ── BigInt suffix ─────────────────────────────────────────────────────
 
   test("BigInt with lowercase n", () => {

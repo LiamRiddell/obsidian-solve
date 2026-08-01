@@ -318,6 +318,9 @@ const EXPRESSION_INDICATOR_CODES = (() => {
   set.add(36);   // $
   set.add(0x00A3); // £
   set.add(0x20AC); // €
+  set.add(0x00A5); // ¥
+  set.add(0x20BD); // ₽
+  set.add(0x20A9); // ₩
   // Backtick (inline solve)
   set.add(96);   // `
   // Dot (could be decimal)
@@ -886,6 +889,36 @@ export class ExpressionLexer {
           } else if (c0 === 0x20AC) {  // €
             yield new LexerToken('EURO', tokenTypeId('EURO'), '\u20AC', '\u20AC', 0, 0, 1, 1);
             tokenIndex++;
+          } else if (c0 === 0x00A5) {  // ¥
+            yield new LexerToken('YEN', tokenTypeId('YEN'), '¥', '¥', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20BD) {  // ₽
+            yield new LexerToken('RUBLE', tokenTypeId('RUBLE'), '₽', '₽', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20A9) {  // ₩
+            yield new LexerToken('WON', tokenTypeId('WON'), '₩', '₩', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20B9) {  // ₹ (Indian rupee) — see uom/CurrencyAliases.ts
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₹', '₹', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20BA) {  // ₺ (Turkish lira)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₺', '₺', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20B4) {  // ₴ (Ukrainian hryvnia)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₴', '₴', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20AA) {  // ₪ (Israeli new shekel)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₪', '₪', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20AB) {  // ₫ (Vietnamese dong)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₫', '₫', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20A6) {  // ₦ (Nigerian naira)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₦', '₦', 0, 0, 1, 1);
+            tokenIndex++;
+          } else if (c0 === 0x20B1) {  // ₱ (Philippine peso)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₱', '₱', 0, 0, 1, 1);
+            tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode — treat as IDENT for forward compatibility
             yield new LexerToken('IDENT', tokenTypeId('IDENT'), this.input, this.input, 0, 0, 1, 1);
@@ -1036,6 +1069,46 @@ export class ExpressionLexer {
             yield new LexerToken('EURO', tokenTypeId('EURO'), '\u20AC', '\u20AC', this.pos, 0, this.line, col);
             this.pos++;
             tokenIndex++;
+          } else if (c0 === 0x00A5) {  // ¥
+            yield new LexerToken('YEN', tokenTypeId('YEN'), '¥', '¥', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20BD) {  // ₽
+            yield new LexerToken('RUBLE', tokenTypeId('RUBLE'), '₽', '₽', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20A9) {  // ₩
+            yield new LexerToken('WON', tokenTypeId('WON'), '₩', '₩', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20B9) {  // ₹ (Indian rupee) — see uom/CurrencyAliases.ts
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₹', '₹', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20BA) {  // ₺ (Turkish lira)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₺', '₺', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20B4) {  // ₴ (Ukrainian hryvnia)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₴', '₴', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20AA) {  // ₪ (Israeli new shekel)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₪', '₪', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20AB) {  // ₫ (Vietnamese dong)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₫', '₫', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20A6) {  // ₦ (Nigerian naira)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₦', '₦', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x20B1) {  // ₱ (Philippine peso)
+            yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₱', '₱', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode — treat as IDENT for forward compatibility.
             // tokenizeIdentifier() now includes cc >= 128 in its reading loop,
@@ -1058,8 +1131,8 @@ export class ExpressionLexer {
    * Character-by-character number parsing.
    *
    * Supports: integers, floats, scientific notation (1.5e10, 1.5e-10),
-   * hex (0xFF), binary (0b1010), BigInt suffix (123n), thousands
-   * separators (1,234 or 1.234.567).
+   * hex (0xFF), binary (0b1010), octal (0o17), BigInt suffix (123n),
+   * thousands separators (1,234 or 1.234.567).
    *
    * Returns a LexerToken and advances `this.pos` past the number.
    */
@@ -1091,6 +1164,16 @@ export class ExpressionLexer {
       if (next === 0x62 || next === 0x42) {  // 'b' or 'B'
         pos += 2;
         while (pos < len && ((cc = input.charCodeAt(pos)), cc === 48 || cc === 49)) {
+          pos++;
+        }
+        const text = input.slice(start, pos);
+        this.pos = pos;
+        return new LexerToken('NUMBER', tokenTypeId('NUMBER'), text, text, start, 0, this.line, startCol);
+      }
+      // ── Octal literal: 0o / 0O ───────────────────────────────────────
+      if (next === 0x6F || next === 0x4F) {  // 'o' or 'O'
+        pos += 2;
+        while (pos < len && ((cc = input.charCodeAt(pos)), cc >= 48 && cc <= 55)) {
           pos++;
         }
         const text = input.slice(start, pos);
@@ -1407,9 +1490,10 @@ export class ExpressionLexer {
       if (indicatorCodes.has(cc)) return true;
       // Unicode math/currency symbols (≥ 128, not in the 128-byte table)
       if (cc >= 128) {
-        // ×, ÷, ≠, £, € — common expression symbols
+        // ×, ÷, ≠, £, €, ¥, ₽, ₩ — common expression symbols
         if (cc === 0x00D7 || cc === 0x00F7 || cc === 0x2260 ||
-            cc === 0x00A3 || cc === 0x20AC) {
+            cc === 0x00A3 || cc === 0x20AC ||
+            cc === 0x00A5 || cc === 0x20BD || cc === 0x20A9) {
           return true;
         }
       }

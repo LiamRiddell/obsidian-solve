@@ -53,6 +53,9 @@ export const TokenTypes = {
   DOLLAR: "DOLLAR",
   POUND: "POUND",
   EURO: "EURO",
+  YEN: "YEN",
+  RUBLE: "RUBLE",
+  WON: "WON",
   QUESTION: "QUESTION",
   BANG: "BANG",
   BIT_AND: "BIT_AND",
@@ -73,6 +76,17 @@ export const TokenTypes = {
   OF: "OF",
   INCREASE_BY: "INCREASE_BY",
   DECREASE_BY: "DECREASE_BY",
+  // Percentage solve-for-unknown (packages/percentage/) — "N% of what is
+  // X" solves N% * base = X for base. Fused as a full 3-word phrase (see
+  // PercentagePackage.ts's `phrases` field) rather than a bare "what"
+  // keyword — "what" is common enough as a variable name to be worth the
+  // same phrase-fusion treatment this codebase gives "total"/"average"/etc.
+  OF_WHAT_IS: "OF_WHAT_IS",
+  // Sibling solve-for-unknown forms accounting for a +/-1 offset — "N% on
+  // what is X" (increase) / "N% off what is X" (decrease). Same
+  // phrase-fusion reasoning as OF_WHAT_IS above.
+  ON_WHAT_IS: "ON_WHAT_IS",
+  OFF_WHAT_IS: "OFF_WHAT_IS",
   NOW: "NOW",
   TODAY: "TODAY",
   TOMORROW: "TOMORROW",
@@ -254,6 +268,14 @@ export const TokenTypes = {
   // previously dormant/unproduced despite being anticipated by name here
   // and in TokenNormalizer.ts's NON_WORD_NAMES.
   AT: "AT",
+  // Generic token for every currency symbol added AFTER the original
+  // DOLLAR/POUND/EURO/YEN/RUBLE/WON set (each of which kept its own
+  // specific token type for backward compatibility) — see
+  // uom/CurrencyAliases.ts's CURRENCY_SYMBOL_ALIASES and
+  // ExpressionLexer.ts's dispatch for the full symbol list. One shared
+  // type avoids needing a new TokenTypes entry + TokenCategoryMap entry +
+  // CurrencyPackage.ts prefixParselets entry per additional symbol.
+  CURRENCY_SYMBOL: "CURRENCY_SYMBOL",
 } as const;
 
 export type TokenType = (typeof TokenTypes)[keyof typeof TokenTypes];

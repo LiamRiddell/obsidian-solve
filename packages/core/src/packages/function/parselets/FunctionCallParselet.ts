@@ -10,6 +10,10 @@ const builtinNameToIndex: Record<string, number> = {
   sqrt: 0, abs: 1, sin: 2, cos: 3, tan: 4, log: 5,
   ceil: 6, floor: 7, round: 8, min: 9, max: 10,
   asin: 11, acos: 12, atan: 13, atan2: 14,
+  // Long-form trig-function-inverse aliases (Numi/older-calculator naming
+  // convention) -- same indices as their short forms above, not a separate
+  // implementation.
+  arcsin: 11, arccos: 12, arctan: 13,
   sinh: 15, cosh: 16, tanh: 17,
   asinh: 18, acosh: 19, atanh: 20,
   cbrt: 21, clz32: 22, expm1: 23, exp: 24,
@@ -39,6 +43,11 @@ const builtinNameToIndex: Record<string, number> = {
   // future-value projection are pluginFunctions instead, not reachable
   // via this map -- see InflationPluginFunctions.ts.
   inflationadjust: 60,
+  // root(n, x) -- the n-th root of x. cbrt(x) above already covers n=3
+  // specifically; this is the general form (Numi: `root n (x)`).
+  root: 61,
+  // fact(n) / factorial(n) -- both names accepted, same implementation.
+  fact: 62, factorial: 62,
 };
 
 export class FunctionCallParselet implements PrefixParselet {

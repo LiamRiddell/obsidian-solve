@@ -333,6 +333,11 @@ export class PrecedenceParser {
           if (Number.isNaN(v)) {
             throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid binary literal: "${raw}"`, { raw });
           }
+        } else if (raw.startsWith("0o") || raw.startsWith("0O")) {
+          v = parseInt(raw.slice(2), 8);
+          if (Number.isNaN(v)) {
+            throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid octal literal: "${raw}"`, { raw });
+          }
         } else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
           // The lexer accepts "." as a thousands-group separator
           // independent of locale (ExpressionLexer's number-scanning

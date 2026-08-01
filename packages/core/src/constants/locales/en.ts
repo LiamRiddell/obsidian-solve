@@ -30,9 +30,16 @@ export const enLocale: ILocale = {
     sqrt: "FUNC", abs: "FUNC", sin: "FUNC", cos: "FUNC", tan: "FUNC",
     log: "FUNC", ceil: "FUNC", floor: "FUNC", round: "FUNC", min: "FUNC", max: "FUNC",
     asin: "FUNC", acos: "FUNC", atan: "FUNC", atan2: "FUNC",
+    // Long-form aliases for asin/acos/atan (Numi/older-calculator naming
+    // convention) — same FunctionCallParselet indices, not new behavior.
+    arcsin: "FUNC", arccos: "FUNC", arctan: "FUNC",
     sinh: "FUNC", cosh: "FUNC", tanh: "FUNC",
     asinh: "FUNC", acosh: "FUNC", atanh: "FUNC",
     cbrt: "FUNC", clz32: "FUNC", expm1: "FUNC", exp: "FUNC",
+    // root(n, x) -- n-th root; fact/factorial(n) -- factorial. Bare FUNC
+    // keywords, matching gcd/lcm/cbrt's precedent above (technical,
+    // call-syntax-only names, not plausible :variableName choices).
+    root: "FUNC", fact: "FUNC", factorial: "FUNC",
     fround: "FUNC", hypot: "FUNC", imul: "FUNC",
     log10: "FUNC", log1p: "FUNC", log2: "FUNC",
     pow: "FUNC", random: "FUNC", sign: "FUNC", trunc: "FUNC",

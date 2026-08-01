@@ -115,6 +115,9 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	EQUALS: "operator",
 	INCREASE_BY: "operator",
 	DECREASE_BY: "operator",
+	OF_WHAT_IS: "keyword",
+	ON_WHAT_IS: "keyword",
+	OFF_WHAT_IS: "keyword",
 	TIMES_BY: "operator",
 	MULTIPLY_BY: "operator",
 	DIVIDE_BY: "operator",
@@ -160,6 +163,10 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	TO: "unit",
 	POUND: "unit",
 	EURO: "unit",
+	YEN: "unit",
+	RUBLE: "unit",
+	WON: "unit",
+	CURRENCY_SYMBOL: "unit",
 
 	// Datetime literals/durations
 	DATETIME_LITERAL: "datetime",

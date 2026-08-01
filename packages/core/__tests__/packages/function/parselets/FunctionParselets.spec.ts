@@ -97,6 +97,21 @@ describe("Function Parselets", () => {
     expect(parseAndExecute("atan2(1, 1)")).toBeCloseTo(Math.PI / 4);
   });
 
+  // "arc"-prefixed long-form aliases (Numi/older-calculator naming
+  // convention) -- same builtin index as the short form, not a separate
+  // implementation.
+  test("arcsin(0) aliases asin", () => {
+    expect(parseAndExecute("arcsin(0)")).toBeCloseTo(0);
+  });
+
+  test("arccos(1) aliases acos", () => {
+    expect(parseAndExecute("arccos(1)")).toBeCloseTo(0);
+  });
+
+  test("arctan(0) aliases atan", () => {
+    expect(parseAndExecute("arctan(0)")).toBeCloseTo(0);
+  });
+
   test("sinh(0)", () => {
     expect(parseAndExecute("sinh(0)")).toBeCloseTo(0);
   });
@@ -123,6 +138,26 @@ describe("Function Parselets", () => {
 
   test("cbrt(27)", () => {
     expect(parseAndExecute("cbrt(27)")).toBe(3);
+  });
+
+  test("root(2, 16) -- square root via the general n-th-root form", () => {
+    expect(parseAndExecute("root(2, 16)")).toBeCloseTo(4);
+  });
+
+  test("root(3, 27) -- cube root, matches cbrt(27)", () => {
+    expect(parseAndExecute("root(3, 27)")).toBeCloseTo(3);
+  });
+
+  test("fact(5) -- factorial", () => {
+    expect(parseAndExecute("fact(5)")).toBe(120);
+  });
+
+  test("fact(0) -- factorial of zero is 1", () => {
+    expect(parseAndExecute("fact(0)")).toBe(1);
+  });
+
+  test("factorial(5) -- full-word alias for fact", () => {
+    expect(parseAndExecute("factorial(5)")).toBe(120);
   });
 
   test("clz32(1)", () => {

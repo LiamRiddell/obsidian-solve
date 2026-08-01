@@ -65,7 +65,13 @@ export const knownUnits = new Set([
   "deg", "rad", "grad",
   // Data storage (uppercase = bytes, lowercase = bits)
   "b", "bit", "kb", "mb", // bits (lowercase)
-  "B", "KB", "MB", "GB", "TB", // bytes (uppercase)
+  "B", "KB", "MB", "GB", "TB", // bytes (uppercase, decimal/SI: 1000^n)
+  // Binary-prefix (IEC) byte units — 1024^n, distinct from the decimal
+  // KB/MB/GB/TB above (e.g. 1 GiB = 1073741824 B, 1 GB = 1000000000 B).
+  // The `convert` npm package already recognizes these exact casings
+  // natively (confirmed via its generated type union) — this was purely a
+  // lexer allowlist gap, not a conversion-logic one.
+  "KiB", "MiB", "GiB", "TiB", "PiB",
   // Area
   "m2", "ft2",
   // Speed — custom measure, `convert` package has no MeasureKind for this
@@ -119,6 +125,20 @@ export const knownUnits = new Set([
   // e.g. `1 BTC to USD` failed at tokenization with "Undefined variable: BTC"
   // before ever reaching the currency service that could have handled it.
   "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "DOT",
+  // Currency WORD forms (singular/plural, lowercase only — no aliasing
+  // policy applies here too) — resolved to their canonical ISO code by
+  // UomLiteralParselet.ts via uom/CurrencyAliases.ts's
+  // CURRENCY_WORD_ALIASES, same table that doc-comments every ambiguous
+  // choice (peso->MXN, franc->CHF, krona->SEK, etc.) and explains why
+  // "pound"/"pounds" is deliberately EXCLUDED (already claimed above by
+  // the Mass category, matching "lb") rather than remapped to GBP.
+  "dollar", "dollars", "euro", "euros", "yen",
+  "ruble", "rubles", "rouble", "roubles", "won",
+  "rupee", "rupees", "yuan", "renminbi", "franc", "francs", "rand",
+  "krona", "kronor", "krone", "kroner", "real", "reais", "peso", "pesos",
+  "shekel", "shekels", "lira", "hryvnia", "hryvnias", "zloty", "zlotys",
+  "forint", "koruna", "dirham", "dirhams", "riyal", "riyals", "rial", "rials",
+  "ringgit", "rupiah", "baht", "dong", "naira",
 ]);
 
 /** Units are case-sensitive to eliminate ambiguity (e.g. C=Celsius ≠ c=centiliter). */

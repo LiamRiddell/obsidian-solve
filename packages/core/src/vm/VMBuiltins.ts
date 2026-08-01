@@ -403,6 +403,37 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const result = amount * ratio;
         return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
     },
+
+    // root(n, x) -- the n-th root of x (Numi's `root n (x)` phrasing maps
+    // to this same call-style form; see FunctionCallParselet's name map).
+    // No native Math.root exists (unlike Math.cbrt for n=3 specifically),
+    // so this is Math.pow(x, 1/n) directly -- exact for n=2/n=3 modulo the
+    // usual floating-point pow() rounding, same precision class as every
+    // other builtin here.
+    61: (args) => {
+        const n = args[0].toNumber();
+        const x = args[1].toNumber();
+        return numberValue(Math.pow(x, 1 / n));
+    },
+
+    // fact(n) / factorial(n) -- integer factorial. Deliberately rejects
+    // negative or non-integer input (factorial isn't defined for either
+    // without a gamma-function generalization this engine doesn't need) and
+    // caps at 170 -- Number.MAX_VALUE overflows to Infinity at 171!, so
+    // returning a silently-wrong (or silently-infinite) result past that
+    // point would be worse than a clear error.
+    62: (args) => {
+        const n = args[0].toNumber();
+        if (!Number.isInteger(n) || n < 0) {
+            return errorValue("INVALID_FACTORIAL_INPUT", `fact: ${n} is not a non-negative integer`);
+        }
+        if (n > 170) {
+            return errorValue("FACTORIAL_OVERFLOW", `fact: ${n}! exceeds the maximum representable double (170! is the largest finite factorial)`);
+        }
+        let result = 1;
+        for (let i = 2; i <= n; i++) result *= i;
+        return numberValue(result);
+    },
 };
 
 /**

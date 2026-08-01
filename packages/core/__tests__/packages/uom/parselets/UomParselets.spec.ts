@@ -174,6 +174,42 @@ describe("UoM Lexer", () => {
     }
     expect(types).toEqual(["POUND", "NUMBER"]);
   });
+
+  // ¥/₽/₩ — Numbr's documented currency-symbol set includes these three
+  // beyond $/£/€, which this engine had no lexer support for at all before
+  // this pass (they'd fall through to the generic "unknown unicode" IDENT
+  // path instead of a real currency token).
+  test("¥ lexed as YEN token", () => {
+    const lexer = new Lexer();
+    lexer.reset("¥");
+    const t = lexer.next();
+    expect(t!.type).toBe("YEN");
+  });
+
+  test("₽ lexed as RUBLE token", () => {
+    const lexer = new Lexer();
+    lexer.reset("₽");
+    const t = lexer.next();
+    expect(t!.type).toBe("RUBLE");
+  });
+
+  test("₩ lexed as WON token", () => {
+    const lexer = new Lexer();
+    lexer.reset("₩");
+    const t = lexer.next();
+    expect(t!.type).toBe("WON");
+  });
+
+  test("'¥1000' lexes as YEN then NUMBER", () => {
+    const lexer = new Lexer();
+    lexer.reset("¥1000");
+    const types: string[] = [];
+    for (const t of lexer) {
+      if (t.type === "WS") continue;
+      types.push(t.type);
+    }
+    expect(types).toEqual(["YEN", "NUMBER"]);
+  });
 });
 
 describe("UomLiteralParselet (infix UNIT)", () => {
@@ -351,6 +387,16 @@ describe("ConvertParselet with currency", () => {
     expect(result).toBeGreaterThan(0);
     expect(result).toBeLessThan(100);
   });
+
+  // ¥ symbol — new lexer support (see the "YEN token" tests above) routes
+  // through the exact same CurrencySymbolParselet -> UOM_CONVERT path as
+  // $/£/€, just mapped to JPY (see symbolToCurrency's doc comment on why
+  // JPY was chosen over CNY for the ambiguous ¥ glyph).
+  test("¥1000 to USD works the same as '1000 JPY to USD'", () => {
+    const result = parseNum("¥1000 to USD");
+    expect(result).toBeGreaterThan(5);
+    expect(result).toBeLessThan(10);
+  });
 });
 
 describe("ConvertParselet without TO (just tag)", () => {
@@ -490,6 +536,16 @@ describe("Regression: UoM Ohm grammar coverage", () => {
 
   test("convert 2000 MB to GB yields 2", () => {
     expect(parseNum("convert 2000 MB to GB")).toBeCloseTo(2, 1);
+  });
+
+  // Binary-prefix (IEC) data conversions — distinct from the decimal
+  // GB/MB above (1 GiB = 1024 MiB, not 1000).
+  test("convert 1 GiB to MiB yields 1024", () => {
+    expect(parseNum("convert 1 GiB to MiB")).toBeCloseTo(1024, 0);
+  });
+
+  test("convert 1 GiB to GB yields ~1.074 (binary vs decimal prefix)", () => {
+    expect(parseNum("convert 1 GiB to GB")).toBeCloseTo(1.073741824, 5);
   });
 
   // Area conversions (convert package supports m2/ft2 natively)

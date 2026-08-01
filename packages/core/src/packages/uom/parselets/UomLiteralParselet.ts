@@ -5,16 +5,28 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { isKnownUnit } from "@solve-js/lexer/units";
+import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
+
+/**
+ * Resolve `rawUnit` to its canonical ISO 4217 code if it's a recognized
+ * currency WORD alias (e.g. "euros" -> "EUR"); otherwise return it
+ * unchanged. Every other unit (km, grams, workdays, ...) passes straight
+ * through untouched — this only ever fires for the specific word list in
+ * `uom/CurrencyAliases.ts`'s `CURRENCY_WORD_ALIASES`.
+ */
+function resolveUnitAlias(rawUnit: string): string {
+  return resolveCurrencyAlias(rawUnit) ?? rawUnit;
+}
 
 export class UomLiteralParselet implements InfixParselet {
 	readonly category = "UoM";
 	readonly bindingPower = BindingPower.Postfix;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    const unit = token.value;
+    const unit = resolveUnitAlias(token.value);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(unit);
-    
+
     // Check if the next token is "to" or "in"
     if (parser.peek()?.type === "TO" || parser.peek()?.type === "IN") {
       parser.consume(); // consume TO or IN
@@ -24,7 +36,7 @@ export class UomLiteralParselet implements InfixParselet {
       if (targetToken?.type === "UNIT" || targetToken?.type === "IN") {
         parser.consume();
         builder.emitOpcode(OpCode.PUSH_STRING);
-        builder.emitString(targetToken.value);
+        builder.emitString(resolveUnitAlias(targetToken.value));
         builder.emitOpcode(OpCode.UOM_CONVERT_TO);
         return;
       }
