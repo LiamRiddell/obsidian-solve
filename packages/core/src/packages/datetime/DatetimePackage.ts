@@ -8,12 +8,14 @@ import { WeekdayOnParselet } from "./parselets/WeekdayOnParselet";
 import { CurrentTimestampParselet } from "./parselets/CurrentTimestampParselet";
 import { ToDateParselet } from "./parselets/ToDateParselet";
 import { ToTimestampParselet } from "./parselets/ToTimestampParselet";
+import { DateLiteralParselet } from "./parselets/DateLiteralParselet";
 import {
   WORKDAYS_IN_FN_IDX, WEEKDAY_ON_FN_IDX, TO_DATE_FN_IDX, TO_TIMESTAMP_FN_IDX,
   workdaysInDuration, weekdayOnDate, toDateFromAny, toTimestampFromAny,
 } from "./parselets/DatetimeTimestampPluginFunctions";
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
+import { dateLiteralNormalizerRule } from "./normalizer/DateLiteralNormalizerRule";
 import { formatIso8601Local } from "./Iso8601";
 
 /**
@@ -41,6 +43,13 @@ import { formatIso8601Local } from "./Iso8601";
  *   or unix timestamp> to date` — see `CurrentTimestampParselet.ts` /
  *   `ToTimestampParselet.ts` / `ToDateParselet.ts` and
  *   `DatetimeTimestampPluginFunctions.ts`.
+ * - Bare numeric date literals — `25/12/2023` (European DD/MM/YYYY),
+ *   `12-25-2023` (US MM-DD-YYYY), `2023-12-25` (ISO YYYY-MM-DD), and
+ *   `25.12.2023` (dot-separated DD.MM.YYYY) — fused into a single
+ *   `DATETIME_LITERAL` token by `dateLiteralNormalizerRule()` and pushed by
+ *   `DateLiteralParselet`. Ported from the sibling `feat/safety-limits-datetime-literals`
+ *   branch referenced in `Iso8601.ts`'s and the Stocks package's
+ *   `DatePhrase.ts`'s doc comments — this is that work, now merged.
  * - `<date/time> as iso8601` — registered below via `asConverters`
  *   (the `Converters` package's `<expr> as <type>` extension point, see
  *   `api/PackageRegistry.ts`'s doc comment) rather than a new opcode or a
@@ -86,6 +95,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     { tokenType: "WORKDAYS_IN", parselet: new WorkdaysInParselet() },
     { tokenType: "WEEKDAY_ON", parselet: new WeekdayOnParselet() },
     { tokenType: "CURRENT_TIMESTAMP", parselet: new CurrentTimestampParselet() },
+    { tokenType: "DATETIME_LITERAL", parselet: new DateLiteralParselet() },
   ],
   infixParselets: [
     { tokenType: "TO_DATE", parselet: new ToDateParselet() },
@@ -94,6 +104,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
   normalizerRules: [
     untilSinceNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
+    dateLiteralNormalizerRule(),
   ],
   pluginFunctions: [
     { index: WORKDAYS_IN_FN_IDX, handler: workdaysInDuration },

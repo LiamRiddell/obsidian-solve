@@ -1052,6 +1052,9 @@ export function executeBytecode(
         case OpCode.DATE_NOW:
           stack.push(datetimeValue(Date.now()));
           break;
+        case OpCode.DATE_LITERAL:
+          stack.push(datetimeValue(numbers[opcodes[ip++]]));
+          break;
         case OpCode.DATE_ADD: {
           const durValue = stack.pop()!, dtValue = stack.pop()!;
           stack.push(datetimeValue(dtValue.toNumber() + extractDurationMs(durValue)));

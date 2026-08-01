@@ -6,6 +6,7 @@ export { WeekdayOnParselet } from "./WeekdayOnParselet";
 export { CurrentTimestampParselet } from "./CurrentTimestampParselet";
 export { ToDateParselet } from "./ToDateParselet";
 export { ToTimestampParselet } from "./ToTimestampParselet";
+export { DateLiteralParselet } from "./DateLiteralParselet";
 
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { NowParselet } from "./NowParselet";
@@ -16,6 +17,7 @@ import { WeekdayOnParselet } from "./WeekdayOnParselet";
 import { CurrentTimestampParselet } from "./CurrentTimestampParselet";
 import { ToDateParselet } from "./ToDateParselet";
 import { ToTimestampParselet } from "./ToTimestampParselet";
+import { DateLiteralParselet } from "./DateLiteralParselet";
 
 /**
  * Registers this package's parselets directly against a bare
@@ -43,4 +45,5 @@ export function registerDatetimeParselets(registry: ParseletRegistry): void {
   registry.registerPrefix("CURRENT_TIMESTAMP", new CurrentTimestampParselet());
   registry.registerInfix("TO_DATE", new ToDateParselet());
   registry.registerInfix("TO_TIMESTAMP", new ToTimestampParselet());
+  registry.registerPrefix("DATETIME_LITERAL", new DateLiteralParselet());
 }

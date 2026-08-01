@@ -3,19 +3,17 @@
  * `<ISO8601 string> to date` and `<date/time> as iso8601` features.
  *
  * SCOPE DECISION: only QUOTED STRING literals (e.g.
- * `"2019-04-01T15:30:00+11:00" to date`) are supported as input — there is
- * no bare/unquoted ISO8601 date-literal recognition at the lexer level.
- * This codebase's `feat/safety-limits` lineage has no existing bare
- * calendar-date-literal infrastructure at all (the `DATETIME_LITERAL`
- * token type in lexer/Token.ts is declared but not yet wired to any actual
- * lexer production — that work landed on a sibling branch,
- * `feat/safety-limits-datetime-literals`, not this one), and an unquoted
- * `2019-04-01T15:30:00+11:00` is genuinely ambiguous with arithmetic
- * (`2019 - 04 - 01 ...` reads as three subtractions) without a much larger,
- * dedicated lexer change to disambiguate a bare date-shaped literal from a
- * chain of minus signs. A quoted STRING literal already lexes unambiguously
- * today, so that's the supported input shape for this pass — easy to
- * extend to a bare literal later once (if) that lexer-level work lands.
+ * `"2019-04-01T15:30:00+11:00" to date`) are supported as input here —
+ * time-of-day and UTC-offset suffixes are NOT covered by the bare numeric
+ * date literal support in `normalizer/DateLiteralNormalizerRule.ts`
+ * (`DATETIME_LITERAL`, ported from the former `feat/safety-limits-datetime-literals`
+ * branch), which is date-only (`YYYY-MM-DD`, no `THH:MM:SS` suffix) — an
+ * unquoted `2019-04-01T15:30:00+11:00` is still genuinely ambiguous with
+ * arithmetic (`2019 - 04 - 01 ...` reads as three subtractions) without a
+ * much larger, dedicated lexer change to disambiguate a bare date-shaped
+ * literal from a chain of minus signs AND parse the time/offset suffix. A
+ * quoted STRING literal already lexes unambiguously today, so that's the
+ * supported input shape for the full date-TIME case.
  */
 
 /**

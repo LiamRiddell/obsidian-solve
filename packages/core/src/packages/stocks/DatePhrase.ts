@@ -5,32 +5,33 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  * Self-contained date-phrase parser for the Stocks package's `on <date>`
  * suffix (`stock(AAPL) on April 12, 2005`, `AAPL close on 2005-04-12`, ...).
  *
- * This does NOT reuse (or wait on) `packages/core`'s not-yet-ported
- * `DATETIME_LITERAL` work (date-only numeric literals in DD/MM/YYYY,
- * MM-DD-YYYY, YYYY-MM-DD, DD.MM.YYYY — implemented on a sibling branch,
- * `feat/safety-limits-datetime-literals`, not merged here) — it's a
- * smaller, independent grammar scoped to exactly what a stock-history
- * query needs: month-name dates (the task's own worked example, "April
- * 12, 2005") plus SLASH/MINUS-separated numeric dates. Two DELIBERATE
- * differences from that sibling branch's design, both narrowing scope
- * rather than risking a subtle bug:
+ * This does NOT reuse `packages/core`'s general-purpose `DATETIME_LITERAL`
+ * work (date-only numeric literals in DD/MM/YYYY, MM-DD-YYYY, YYYY-MM-DD,
+ * DD.MM.YYYY — `packages/datetime/normalizer/DateLiteralNormalizerRule.ts`,
+ * ported from the former `feat/safety-limits-datetime-literals` branch) —
+ * this is a smaller, independent grammar scoped to exactly what a
+ * stock-history query needs: month-name dates (the task's own worked
+ * example, "April 12, 2005") plus SLASH/MINUS-separated numeric dates. Two
+ * DELIBERATE differences from that general-purpose rule's design, both
+ * narrowing scope rather than risking a subtle bug:
  *
- * - **4-digit years only.** No 2-digit-year pivot logic (the sibling
- *   branch's `strptime("%y")`-style 00-68/69-99 split) — a stock
- *   historical lookup realistically always names a 4-digit year, and
- *   skipping the pivot removes a whole class of ambiguity to test.
- * - **SLASH is MM/DD/YYYY (US), not DD/MM/YYYY (European).** The sibling
- *   branch picked European for its general-purpose date literal; this
- *   package is scoped to US-listed tickers (NASDAQ/NYSE), so US-style
- *   slash dates match user expectation better here. Documented explicitly
- *   because it's the OPPOSITE convention from the other branch — do not
- *   assume they agree if this is ever unified with that work.
+ * - **4-digit years only.** No 2-digit-year pivot logic (the general rule's
+ *   `strptime("%y")`-style 00-68/69-99 split) — a stock historical lookup
+ *   realistically always names a 4-digit year, and skipping the pivot
+ *   removes a whole class of ambiguity to test.
+ * - **SLASH is MM/DD/YYYY (US), not DD/MM/YYYY (European).** The
+ *   general-purpose rule picked European for `packages/core`'s date
+ *   literal; this package is scoped to US-listed tickers (NASDAQ/NYSE), so
+ *   US-style slash dates match user expectation better here. Documented
+ *   explicitly because it's the OPPOSITE convention from the other rule —
+ *   do not assume they agree if this is ever unified with that work.
  *
  * MINUS follows the same "4-digit first group -> ISO, else US" rule the
- * sibling branch used, and every candidate is validated by constructing a
- * real `Date` and checking the components didn't roll over (e.g. a
- * claimed "Feb 30") — same lesson as that branch's memory note: this is
- * what makes the parse safe against malformed input, not a decoration.
+ * general-purpose rule uses, and every candidate is validated by
+ * constructing a real `Date` and checking the components didn't roll over
+ * (e.g. a claimed "Feb 30") — same lesson as that rule's own doc comment:
+ * this is what makes the parse safe against malformed input, not a
+ * decoration.
  */
 
 const MONTH_NAMES: Record<string, number> = {

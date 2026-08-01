@@ -84,6 +84,7 @@ export enum OpCode {
 	DATE_SUB = 92,
 	DATE_NEXT_WEEKDAY = 93,  // "next <Weekday>" — the next occurrence strictly after now
 	DATE_LAST_WEEKDAY = 94,  // "last <Weekday>" — the previous occurrence strictly before now
+	DATE_LITERAL = 95,       // Push a datetime literal whose epoch-ms was already resolved at parse time (see DateLiteralParselet)
 
 	// Rate — "quantity per unit of something" ($99/week, 30 fps). See
 	// vm/Value.ts's rateValue()/isRateUnit()/splitRateUnit() for the
