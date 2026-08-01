@@ -1,0 +1,10 @@
+{
+  "name": "@solve/playground-bridge",
+  "description": "Shared engine-communication layer (worker multiplexing, debug-result shaping, example library) consumed by both the Vue devtool playground and the React webapp. Internal, workspace-only — never published.",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "devDependencies": {
+    "typescript": "5.1.6"
+  }
+}

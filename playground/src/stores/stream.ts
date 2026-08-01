@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { DiagnosticEventInfo } from '../engine.js';
+import type { DiagnosticEventInfo } from '@bridge/engine';
 
 export const useStreamStore = defineStore('stream', () => {
   /* ── State ──────────────────────────────────────────────── */

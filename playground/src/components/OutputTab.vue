@@ -129,7 +129,7 @@ import { ref, watch, computed } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { useTokensStore } from '../stores/tokens.js';
 import { usePipelineStore } from '../stores/pipeline.js';
-import type { Token, LineResult } from '../engine.js';
+import type { Token, LineResult } from '@bridge/engine';
 
 const dr = useDiagnosticReportStore();
 const tokens = useTokensStore();

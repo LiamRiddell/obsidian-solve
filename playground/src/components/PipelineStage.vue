@@ -86,7 +86,7 @@
 //#region ─── Imports ──────────────────────────────────────────────────────────
 
 import { computed } from "vue";
-import { stageIcon } from "../utils.js";
+import { stageIcon } from '@bridge/utils';
 
 //#endregion
 //#region ─── Props ────────────────────────────────────────────────────────────

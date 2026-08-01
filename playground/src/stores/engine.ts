@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia';
-import type { DebugResult, DiagnosticEventInfo } from '../engine.js';
+import type { DebugResult, DiagnosticEventInfo } from '@bridge/engine';
 import { useStreamStore } from './stream.js';
 import { useWorkersStore } from './workers.js';
 import { useDiagnosticReportStore } from './diagnosticReport.js';
 import { usePipelineStore } from './pipeline.js';
 import { useTabsStore } from './tabsStore.js';
-import EngineWorker from '../engine.worker.ts?worker';
+import EngineWorker from '@bridge/engine.worker.ts?worker';
 
 export const useEngineStore = defineStore('engine', () => {
   /* ── Engine Worker — ONE instance shared by every open tab ─── */

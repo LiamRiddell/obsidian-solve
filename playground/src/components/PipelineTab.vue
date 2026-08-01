@@ -141,15 +141,15 @@ import { useDiagnosticReportStore } from "../stores/diagnosticReport.js";
 import { usePipelineStore } from "../stores/pipeline.js";
 import { useUiStore } from "../stores/ui.js";
 import { useStreamStore } from "../stores/stream.js";
-import { fmt } from "../utils.js";
+import { fmt } from '@bridge/utils';
 import PipelineStage from "./PipelineStage.vue";
 import ConstantsExplorer from "./shared/ConstantsExplorer.vue";
 import VariablesChips from "./shared/VariablesChips.vue";
 import TimingWaterfall from "./shared/TimingWaterfall.vue";
-import type { Token } from "../engine.js";
+import type { Token } from '@bridge/engine';
 import type {
   PipelineStageResult,
-} from "@/solve-js/src/types/DiagnosticPipelineResult";
+} from "@solve-js/types/DiagnosticPipelineResult";
 
 //#endregion
 //#region ─── Store Access ─────────────────────────────────────────────────────

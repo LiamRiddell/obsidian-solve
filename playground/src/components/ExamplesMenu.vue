@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type Directive } from 'vue';
 import { useEditorStore } from '../stores/editor.js';
-import { exampleData, fullDocumentExamples } from '../examples.js';
+import { exampleData, fullDocumentExamples } from '@bridge/examples';
 import ExampleCategory from './ExampleCategory.vue';
 
 const editor = useEditorStore();

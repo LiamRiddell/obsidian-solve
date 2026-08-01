@@ -24,16 +24,18 @@ import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
-import { SolveLanguageService } from '@solve-js/language/SolveLanguageService';
+import { LanguageService } from '@solve-js/language/LanguageService';
 import { categoryClassName, completionItemToOption } from '@solve-js/language/adapters/codemirror';
+import { BUILTIN_PACKAGES } from '@solve-js/packages/builtins';
+import { OSRS_PACKAGE } from '@solve-js-examples/osrs/OsrsPackage';
 import { useEngineStore } from '../stores/engine.js';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { useEditorStore } from '../stores/editor.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 import { useUiStore } from '../stores/ui.js';
 import { useTabsStore } from '../stores/tabsStore.js';
-import type { LineResult } from '../engine.js';
-import { prepareEvaluationInput } from '../engineShared.js';
+import type { LineResult } from '@bridge/engine';
+import { prepareEvaluationInput } from '@bridge/engineShared';
 import ExamplesMenu from './ExamplesMenu.vue';
 import TabBar from './TabBar.vue';
 
@@ -162,7 +164,7 @@ const inlineSolveField = ViewPlugin.fromClass(InlineSolvePluginValue, {
 interface TabEditor {
   view: EditorView;
   highlightEngine: ExpressionEngine;
-  languageService: SolveLanguageService;
+  languageService: LanguageService;
 }
 
 const tabEditors = new Map<string, TabEditor>();
@@ -178,7 +180,7 @@ const EDITOR_THEME = EditorView.theme({
  * tab's own languageService instance (see TabEditor above for why this
  * can't be a single shared plugin definition).
  */
-function createHighlightPlugin(languageService: SolveLanguageService) {
+function createHighlightPlugin(languageService: LanguageService) {
   class SolveHighlightPluginValue {
     decorations: DecorationSet;
 
@@ -231,10 +233,11 @@ function createHighlightPlugin(languageService: SolveLanguageService) {
  * highlighting engine/language service (see TabEditor doc comment).
  */
 function createTabEditor(tabId: string, container: HTMLElement, initialDoc: string): TabEditor {
-  // BUILTIN_PACKAGES-only (the playground doesn't register OSRS or any
-  // other opt-in package anywhere — confirmed via grep); keep this in sync
-  // if that ever changes.
-  const highlightEngine = new ExpressionEngine('en', false);
+  // OSRS is an example package, not a built-in — registered explicitly
+  // alongside BUILTIN_PACKAGES so "osrs"/game-item tokens still highlight
+  // correctly. Keep this in sync with engine.ts's PLAYGROUND_PACKAGES if
+  // that ever changes.
+  const highlightEngine = new ExpressionEngine('en', false, undefined, undefined, [...BUILTIN_PACKAGES, OSRS_PACKAGE]);
   // highlightEngine never evaluates anything, so its own DAG is always
   // empty — read variable names from the real evaluation engine's
   // already-computed DAG snapshot instead. Deliberately reads dr.dagSnapshot
@@ -244,7 +247,7 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
   // protocol just for invisible tabs' highlighting isn't worth the
   // complexity this pass is deliberately avoiding (see the lightweight
   // multi-tab scope this was built to).
-  const languageService = new SolveLanguageService(highlightEngine, {
+  const languageService = new LanguageService(highlightEngine, {
     variableNameSource: () => {
       const snap = dr.dagSnapshot;
       if (!snap) return [];

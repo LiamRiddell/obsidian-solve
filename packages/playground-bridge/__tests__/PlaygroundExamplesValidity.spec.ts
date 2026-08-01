@@ -2,7 +2,7 @@ import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ValueType } from "@solve-js/vm/Value";
-import { exampleData, fullDocumentExamples } from "../../../../playground/src/examples";
+import { exampleData, fullDocumentExamples } from "@bridge/examples";
 
 /**
  * Validates every example the playground ships (the single-line snippet

@@ -72,8 +72,8 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useStreamStore } from '../stores/stream.js';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
-import { fmt } from '../utils.js';
-import type { DiagnosticEventInfo } from '../engine.js';
+import { fmt } from '@bridge/utils';
+import type { DiagnosticEventInfo } from '@bridge/engine';
 
 const stream = useStreamStore();
 const dr = useDiagnosticReportStore();

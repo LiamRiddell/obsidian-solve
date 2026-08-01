@@ -196,8 +196,8 @@
 import { computed, ref } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { usePipelineStore } from '../stores/pipeline.js';
-import type { PipelineStageResult, NormalizerOutput, LexerOutput } from '@/solve-js/src/types/DiagnosticPipelineResult';
-import type { Token } from '@/solve-js/src/lexer/Token';
+import type { PipelineStageResult, NormalizerOutput, LexerOutput } from '@solve-js/types/DiagnosticPipelineResult';
+import type { Token } from '@solve-js/lexer/Token';
 import ContextHeader from './shared/ContextHeader.vue';
 import EmptyState from './shared/EmptyState.vue';
 

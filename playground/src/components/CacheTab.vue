@@ -248,8 +248,8 @@ import { ref, computed } from 'vue';
 import { useNow } from '@vueuse/core';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import type { CacheHistoryEntry } from '../stores/diagnosticReport.js';
-import type { PageHeatmapEntry, QueryCacheEntry } from '../engine.js';
-import { formatDuration } from '../utils.js';
+import type { PageHeatmapEntry, QueryCacheEntry } from '@bridge/engine';
+import { formatDuration } from '@bridge/utils';
 import EmptyState from './shared/EmptyState.vue';
 
 const dr = useDiagnosticReportStore();

@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { ExampleCategory as ExampleCategoryType } from '../examples.js';
+import type { ExampleCategory as ExampleCategoryType } from '@bridge/examples';
 
 const props = defineProps<{ category: ExampleCategoryType; forceExpanded?: boolean }>();
 defineEmits<{ select: [expression: string] }>();

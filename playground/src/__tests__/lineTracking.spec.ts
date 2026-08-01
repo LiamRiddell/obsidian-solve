@@ -1,6 +1,6 @@
 import { test, expect, describe } from "@jest/globals";
-import { runEngine } from "../engine";
-import { prepareEvaluationInput } from "../engineShared";
+import { runEngine } from "@bridge/engine";
+import { prepareEvaluationInput } from "@bridge/engineShared";
 
 /**
  * Line/result tracking robustness — adversarial coverage.

@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { fmt } from "../../utils.js";
+import { fmt } from '@bridge/utils';
 
 export interface WaterfallSegment {
   /** Stable identifier — echoed back on `segment-click`. */

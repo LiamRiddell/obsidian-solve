@@ -1,5 +1,5 @@
 import { test, expect, describe } from "@jest/globals";
-import { sumLineStats, buildDocumentStats, extractStageTimings, extractLineTimings } from "../engineShared";
+import { sumLineStats, buildDocumentStats, extractStageTimings, extractLineTimings } from "@bridge/engineShared";
 
 /**
  * Regression coverage for the Perf tab's "Total" figure.

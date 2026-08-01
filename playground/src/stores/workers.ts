@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, reactive, computed } from 'vue';
-import type { DebugResult, QueryClientConfig } from '../engine.js';
+import type { DebugResult, QueryClientConfig } from '@bridge/engine';
 
 /** Worker activity log entry. */
 export interface WorkerLogEntry {

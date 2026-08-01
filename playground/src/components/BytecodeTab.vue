@@ -55,8 +55,8 @@
 import { computed, ref } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { usePipelineStore } from '../stores/pipeline.js';
-import { describeOpcode } from '../utils.js';
-import type { OpcodeInfo, ConstantInfo } from '../engine.js';
+import { describeOpcode } from '@bridge/utils';
+import type { OpcodeInfo, ConstantInfo } from '@bridge/engine';
 import ContextHeader from './shared/ContextHeader.vue';
 import EmptyState from './shared/EmptyState.vue';
 import ConstantsExplorer from './shared/ConstantsExplorer.vue';

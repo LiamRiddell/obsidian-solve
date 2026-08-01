@@ -17,7 +17,7 @@
 
 <script setup lang="ts">
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
-import { fmt } from '../utils.js';
+import { fmt } from '@bridge/utils';
 
 const dr = useDiagnosticReportStore();
 </script>

@@ -30,6 +30,10 @@
  * - `{ id, tabId, expression }` — one-shot evaluation.
  * - `{ id, tabId, expression, stream: true }` — streaming evaluation with events.
  * - `{ tabId, abort: true }` — cancel the current streaming session for that tab.
+ * - `{ tabId, close: true }` — the tab was closed; drop every per-tab
+ *   structure held for it. The main thread MUST send this on tab close, or
+ *   the document's text stays in `tabDocuments` for the lifetime of the
+ *   page and keeps being re-evaluated by the cross-tab refresh below.
  *
  * Message protocol — outgoing:
  * - `{ id, tabId, result }` — serialized evaluation result.
@@ -118,6 +122,38 @@ const tabDocuments = new Map<string, string>();
  * previous (now-superseded) refresh.
  */
 const refreshAbortControllers = new Map<string, AbortController>();
+
+/**
+ * The tab whose evaluation is currently ON THE STACK, if any.
+ *
+ * A `global :x = ...` line writes its value from inside the VM, i.e. from
+ * deep inside a `runEngine*()` call, and the store notifies listeners
+ * synchronously. Without knowing which tab is mid-evaluation, the
+ * cross-tab refresh below would queue a refresh for the very document that
+ * is already being evaluated with its current text — the self-sustaining
+ * edge of the cycle described in `scheduleRefreshDrain()`.
+ */
+let evaluatingTabId: string | null = null;
+
+/** Tabs that need a background refresh once the current evaluation unwinds. */
+const pendingRefreshTabs = new Set<string>();
+
+/** True while a drain is already queued — keeps N writes collapsing into ONE pass. */
+let refreshScheduled = false;
+
+/**
+ * How many drains have run back-to-back without the system going quiet.
+ * Reset to 0 as soon as a drain settles (see `drainRefreshQueue`).
+ */
+let refreshGeneration = 0;
+
+/**
+ * Cap on consecutive refresh generations. Documents that genuinely cycle
+ * (A writes x, B reads x and writes y, A reads y and writes x, ...) would
+ * otherwise never settle. Four passes is far more than any legitimate
+ * propagation chain needs; past that we stop rather than spin.
+ */
+const MAX_REFRESH_GENERATIONS = 4;
 //#endregion
 
 //#region Cross-tab global-variable propagation
@@ -141,61 +177,146 @@ const refreshAbortControllers = new Map<string, AbortController>();
  * — the same lineUpdate mechanism the interactive path already uses.
  */
 sharedGlobalVariableStore.subscribe((_name, _value) => {
-    for (const [tabId, text] of tabDocuments) {
-        const previousRefresh = refreshAbortControllers.get(tabId);
-        if (previousRefresh) previousRefresh.abort();
+    for (const tabId of tabDocuments.keys()) {
+        // Never queue the document that is mid-evaluation right now: it is
+        // already running against its current text, and re-running it is
+        // what closed the loop into a cycle.
+        if (tabId === evaluatingTabId) continue;
+        pendingRefreshTabs.add(tabId);
+    }
+    scheduleRefreshDrain();
+});
 
-        const refreshController = new AbortController();
-        refreshAbortControllers.set(tabId, refreshController);
+/**
+ * Queue a refresh pass instead of running one inline.
+ *
+ * This listener fires from inside the VM, part-way through an evaluation.
+ * Refreshing synchronously from here — as this code originally did — meant
+ * every refresh re-ran `STORE_GLOBAL_VAR`, which re-entered this listener,
+ * which refreshed again. `GlobalVariableStore.MAX_NOTIFY_DEPTH` bounded the
+ * recursion's DEPTH at 64 but never its BREADTH, so the work per keystroke
+ * was O((tabs × global-writes)^64): a single-tab document with one `global`
+ * line cost 65 full engine runs, and two tabs ran past 5,000 before being
+ * cut off — each one also posting a fully-serialized DebugResult (tokens,
+ * opcodes, VM trace, per-line pipeline stages) to the main thread. The main
+ * thread could not drain that queue faster than the worker filled it, so
+ * the retained messages grew without bound until the tab was OOM-killed.
+ *
+ * Deferring to a macrotask fixes it structurally: the drain runs only after
+ * the in-flight evaluation has fully unwound, so a refresh can never nest
+ * inside the evaluation that triggered it. That also keeps the module-level
+ * ValueArena toggle sound — `enableValueArena`/`disableValueArena` is a
+ * single non-reentrant flag, and a nested evaluation used to reset the
+ * arena out from under the still-running outer one (the same hazard
+ * ThreeTierEvaluator's own subscriber documents and avoids by never
+ * evaluating synchronously).
+ */
+function scheduleRefreshDrain(): void {
+    if (refreshScheduled || pendingRefreshTabs.size === 0) return;
+    if (refreshGeneration >= MAX_REFRESH_GENERATIONS) {
+        // A genuine write cycle between documents. Stop propagating rather
+        // than spin; the stored values are correct either way, and the next
+        // user edit resets the counter and re-propagates.
+        pendingRefreshTabs.clear();
+        return;
+    }
+    refreshScheduled = true;
+    setTimeout(drainRefreshQueue, 0);
+}
 
+/** Run one refresh pass for every tab queued since the last drain. */
+function drainRefreshQueue(): void {
+    refreshScheduled = false;
+
+    const tabIds = [...pendingRefreshTabs];
+    pendingRefreshTabs.clear();
+    if (tabIds.length === 0) {
+        refreshGeneration = 0;
+        return;
+    }
+    refreshGeneration++;
+
+    for (const tabId of tabIds) {
+        const text = tabDocuments.get(tabId);
+        // Skip tabs closed between being queued and being drained.
+        if (text === undefined) continue;
+        refreshTab(tabId, text);
+    }
+
+    // Refreshing writes globals of its own, which re-queues via the
+    // subscriber above. An empty queue here means the system settled, so
+    // the next unrelated write starts from a clean generation budget.
+    if (pendingRefreshTabs.size === 0) refreshGeneration = 0;
+    else scheduleRefreshDrain();
+}
+
+/** Silently re-evaluate one background tab and post its fresh result. */
+function refreshTab(tabId: string, text: string): void {
+    const previousRefresh = refreshAbortControllers.get(tabId);
+    if (previousRefresh) previousRefresh.abort();
+
+    const refreshController = new AbortController();
+    refreshAbortControllers.set(tabId, refreshController);
+
+    try {
+        // Marked as evaluating for the whole SYNCHRONOUS body of
+        // runEngineWithStreaming — that is the window in which this
+        // document's own STORE_GLOBAL_VAR opcodes fire the subscriber.
+        const previousEvaluatingTabId = evaluatingTabId;
+        evaluatingTabId = tabId;
+        let result, stream;
         try {
-            const { result, stream } = runEngineWithStreaming(text, refreshController.signal);
-            const serialized = serializeResult(result);
-            self.postMessage({ tabId, result: serialized, unsolicited: true });
+            ({ result, stream } = runEngineWithStreaming(text, refreshController.signal));
+        } finally {
+            evaluatingTabId = previousEvaluatingTabId;
+        }
 
-            const reader = stream.getReader();
-            (async () => {
-                try {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        if (value.lineUpdate) {
-                            self.postMessage({ tabId, streamEvent: value, unsolicited: true });
-                        }
-                    }
-                } catch {
-                    // Aborted by a newer write to the same tab, or the
-                    // stream's own natural cancellation — expected.
-                } finally {
-                    reader.releaseLock();
-                    if (refreshAbortControllers.get(tabId) === refreshController) {
-                        refreshAbortControllers.delete(tabId);
+        const serialized = serializeResult(result);
+        self.postMessage({ tabId, result: serialized, unsolicited: true });
+
+        const reader = stream.getReader();
+        (async () => {
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    if (value.lineUpdate) {
+                        self.postMessage({ tabId, streamEvent: value, unsolicited: true });
                     }
                 }
-            })();
-        } catch (error) {
-            self.postMessage({ tabId, error: error instanceof Error ? error.message : String(error), unsolicited: true });
-        }
+            } catch {
+                // Aborted by a newer write to the same tab, or the
+                // stream's own natural cancellation — expected.
+            } finally {
+                reader.releaseLock();
+                if (refreshAbortControllers.get(tabId) === refreshController) {
+                    refreshAbortControllers.delete(tabId);
+                }
+            }
+        })();
+    } catch (error) {
+        self.postMessage({ tabId, error: error instanceof Error ? error.message : String(error), unsolicited: true });
     }
-});
+}
 //#endregion
 
 //#region Message Handler — Inbound command dispatcher
 /**
  * Handle inbound messages from the main thread.
  *
- * Supports three message types identified by the `data` shape:
+ * Supports four message types identified by the `data` shape:
  * 1. **`{ tabId, abort: true }`** — cancels the current streaming session for that tab.
- * 2. **`{ id, tabId, expression, stream: true }`** — starts a streaming evaluation.
- * 3. **`{ id, tabId, expression }`** — runs a one-shot evaluation (default).
+ * 2. **`{ tabId, close: true }`** — the tab was closed; drop all state held for it.
+ * 3. **`{ id, tabId, expression, stream: true }`** — starts a streaming evaluation.
+ * 4. **`{ id, tabId, expression }`** — runs a one-shot evaluation (default).
  *
  * One-shot and streaming are mutually exclusive per message; the worker
  * resets that tab's abort controller before processing each inbound message.
  *
  * @param e - The `MessageEvent` from the main thread.
  */
-self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: string; stream?: boolean; abort?: boolean }>) => {
-    const { id, tabId, expression, stream, abort } = e.data;
+self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: string; stream?: boolean; abort?: boolean; close?: boolean }>) => {
+    const { id, tabId, expression, stream, abort, close } = e.data;
 
     // ── Handle explicit abort message (e.g., user cleared expression) ──
     if (abort) {
@@ -204,6 +325,20 @@ self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: strin
             controller.abort();
             abortControllers.delete(tabId);
         }
+        return;
+    }
+
+    // ── Tab closed — release every per-tab structure. Without this,
+    // `tabDocuments` grew for the lifetime of the page and every closed
+    // document kept being re-evaluated by the cross-tab refresh above,
+    // forever. ──
+    if (close) {
+        abortControllers.get(tabId)?.abort();
+        abortControllers.delete(tabId);
+        refreshAbortControllers.get(tabId)?.abort();
+        refreshAbortControllers.delete(tabId);
+        tabDocuments.delete(tabId);
+        pendingRefreshTabs.delete(tabId);
         return;
     }
 
@@ -219,13 +354,24 @@ self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: strin
     // refresh above, regardless of one-shot vs streaming mode.
     tabDocuments.set(tabId, expression);
 
+    // A fresh user action — allow cross-tab propagation a full generation
+    // budget again, even if a previous cascade exhausted it.
+    refreshGeneration = 0;
+
     if (stream) {
         // ── Streaming mode: keep engine alive for async resolution events ──
         try {
             const abortController = new AbortController();
             abortControllers.set(tabId, abortController);
 
-            const { result, stream: eventStream } = runEngineWithStreaming(expression, abortController.signal);
+            const previousEvaluatingTabId = evaluatingTabId;
+            evaluatingTabId = tabId;
+            let result, eventStream;
+            try {
+                ({ result, stream: eventStream } = runEngineWithStreaming(expression, abortController.signal));
+            } finally {
+                evaluatingTabId = previousEvaluatingTabId;
+            }
 
             // If aborted during synchronous evaluation, don't send stale result
             if (abortController.signal.aborted) {
@@ -261,7 +407,14 @@ self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: strin
     } else {
         // ── One-shot mode: evaluate once and return (original behavior) ──
         try {
-            const result = runEngine(expression);
+            const previousEvaluatingTabId = evaluatingTabId;
+            evaluatingTabId = tabId;
+            let result;
+            try {
+                result = runEngine(expression);
+            } finally {
+                evaluatingTabId = previousEvaluatingTabId;
+            }
             const serialized = serializeResult(result);
             self.postMessage({ id, tabId, result: serialized });
         } catch (error) {

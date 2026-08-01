@@ -17,9 +17,11 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["../src/*"],
-      "@solve-js/*": ["../src/solve-js/src/*"],
+      "@solve-js/*": ["../packages/core/src/*"],
+      "@solve-js-examples/*": ["../packages/core/examples/*"],
+      "@bridge/*": ["../packages/playground-bridge/src/*"],
       "@app/*": ["../src/app/*"],
-      "@tools/*": ["../src/solve-js/tools/*"]
+      "@tools/*": ["../packages/core/tools/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.vue"],

@@ -9,9 +9,9 @@
  * runtime import cycle even though engine.ts imports functions from here.
  */
 
-import type { ExpressionEngine } from '@/solve-js/src/engine/ExpressionEngine';
-import { formatValue } from '@/solve-js/src/format/FormatEngine';
-import { Value, ValueType } from '@/solve-js/src/vm/Value';
+import type { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
+import { formatValue } from '@solve-js/format/FormatEngine';
+import { Value, ValueType } from '@solve-js/vm/Value';
 import type {
 	PerformanceStats,
 	LineStats,

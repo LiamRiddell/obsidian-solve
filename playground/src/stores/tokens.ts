@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { Token } from '../engine.js';
+import type { Token } from '@bridge/engine';
 
 export const useTokensStore = defineStore('tokens', () => {
   /* ── State ──────────────────────────────────────────────── */

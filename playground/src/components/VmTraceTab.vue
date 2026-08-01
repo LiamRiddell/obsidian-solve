@@ -77,8 +77,8 @@
 import { computed, ref } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { usePipelineStore } from '../stores/pipeline.js';
-import { formatStackValue, stackValueTypeClass, fmt } from '../utils.js';
-import type { VmTraceStep, CheckpointSnapshot } from '../engine.js';
+import { formatStackValue, stackValueTypeClass, fmt } from '@bridge/utils';
+import type { VmTraceStep, CheckpointSnapshot } from '@bridge/engine';
 import ContextHeader from './shared/ContextHeader.vue';
 import EmptyState from './shared/EmptyState.vue';
 

@@ -138,7 +138,7 @@
 import { computed } from 'vue';
 import { useWorkersStore } from '../stores/workers.js';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
-import { formatDuration } from '../utils.js';
+import { formatDuration } from '@bridge/utils';
 
 const ws = useWorkersStore();
 const dr = useDiagnosticReportStore();

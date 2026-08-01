@@ -56,7 +56,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { ConstantInfo } from '../../engine.js';
+import type { ConstantInfo } from '@bridge/engine';
 
 const props = defineProps<{
   constants: ConstantInfo[];

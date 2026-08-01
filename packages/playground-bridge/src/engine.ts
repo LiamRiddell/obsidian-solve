@@ -1,16 +1,21 @@
-import { ExpressionEngine } from "@/solve-js/src/engine/ExpressionEngine";
-import type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo } from "@/solve-js/src/engine/ExpressionEngine";
+import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo } from "@solve-js/engine/ExpressionEngine";
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo };
-import type { DagSnapshot } from "@/solve-js/src/vm/DependencyGraph";
+import type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
 export type { DagSnapshot };
-import type { Token } from "@/solve-js/src/lexer/Token";
-import type { AsyncResolutionEvent } from "@/solve-js/src/engine/AsyncResolutionBatcher";
-import { getOpCodeName, OpCode } from "@/solve-js/src/parser/OpCode";
-import type { DiagnosticPipelineResult, PipelineStageResult } from "@/solve-js/src/types/DiagnosticPipelineResult";
-import type { ParseletInfo } from "@/solve-js/src/types/ParsingResult";
-import { Value, ValueType, enableValueArena, disableValueArena } from "@/solve-js/src/vm/Value";
-import { AllocationTracker } from "@/solve-js/src/telemetry/AllocationTracker";
-import type { PipelineTelemetry } from "@/solve-js/src/telemetry/AllocationTracker";
+import type { Token } from "@solve-js/lexer/Token";
+import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
+import { getOpCodeName, OpCode } from "@solve-js/parser/OpCode";
+import type { DiagnosticPipelineResult, PipelineStageResult } from "@solve-js/types/DiagnosticPipelineResult";
+import type { ParseletInfo } from "@solve-js/types/ParsingResult";
+import { Value, ValueType, enableValueArena, disableValueArena } from "@solve-js/vm/Value";
+import { AllocationTracker } from "@solve-js/telemetry/AllocationTracker";
+import type { PipelineTelemetry } from "@solve-js/telemetry/AllocationTracker";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
+import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
+
+/** OSRS is an example package (not a built-in) demonstrating the packages framework — registered here so the playground demo keeps working. */
+const PLAYGROUND_PACKAGES = [...BUILTIN_PACKAGES, OSRS_PACKAGE];
 export type { ParseletInfo, Token };
 import {
 	buildDocumentStats,
@@ -177,6 +182,21 @@ export interface DiagnosticEventInfo {
 		 * per-line stage data the Pipeline tab reads.
 		 */
 		stages?: PipelineStageResult[];
+	};
+	/**
+	 * Present on "async_resolved" events: a fresh cache/query-cache snapshot
+	 * taken AFTER the resolving re-evaluation. `lineUpdate` above only
+	 * refreshes the editor's displayed value — the Cache tab's Async
+	 * Resolver Cache and Query Cache (TanStack) panels read `cacheSnapshot`/
+	 * `queryCache` off the diagnostic report, which is otherwise only ever
+	 * populated once from the INITIAL synchronous `result` (still showing
+	 * "fetching" / in-flight, since that snapshot was taken before the async
+	 * data resolved) and never refreshed again for the lifetime of the
+	 * streaming session.
+	 */
+	cacheUpdate?: {
+		cacheSnapshot: CacheSnapshot;
+		queryCache: QueryCacheEntry[];
 	};
 }
 export interface MarkdownNode {
@@ -521,7 +541,7 @@ export function runEngineWithStreaming(
 			try {
 				engine = new ExpressionEngine("en", true, {
 					diagnostic: { enabled: true, vmTraceEnabled: true },
-				});
+				}, undefined, PLAYGROUND_PACKAGES);
 				// ── Pipe batcher events through a TransformStream to convert
 				// AsyncResolutionEvent → DiagnosticEventInfo, eliminating the
 				// manual async IIFE reader loop. The pipeline uses Web Streams
@@ -548,6 +568,13 @@ export function runEngineWithStreaming(
 								const resultValue = reResult.error
 									? reResult.error
 									: formatLineResultValue(reResult.value);
+								// Re-read the query cache from the (still-alive) engine and
+								// take the fresh cacheSnapshot off this re-evaluation's own
+								// diagnostic result — both now reflect the just-resolved
+								// data, unlike the closure-level `cacheSnapshot`/`queryCache`
+								// captured once before this async value existed.
+								const { queryCache: freshQueryCache } = buildQueryCacheState(eng);
+								const freshCacheSnapshot = reResult.diagnostic?.cacheSnapshot ?? cacheSnapshot;
 								transformController.enqueue({
 									type: "async_resolved",
 									timestamp: Date.now(),
@@ -571,10 +598,20 @@ export function runEngineWithStreaming(
 												timedOut: (reResult.value as any).timedOut ?? false,
 												stages: reResult.diagnostic?.stages,
 										  },
+									// See DiagnosticEventInfo.cacheUpdate — without this the
+									// Cache tab's Async Resolver Cache / Query Cache panels
+									// stay frozen showing "fetching" / in-flight forever.
+									cacheUpdate: {
+										cacheSnapshot: freshCacheSnapshot,
+										queryCache: freshQueryCache,
+									},
 								});
-								// Also update the closure-level map so the initial synchronous result snapshot (if read again) and any later logic sees the fresh stages.
+								// Also update the closure-level map/snapshot so the initial
+								// synchronous result (if read again) and any later logic
+								// sees the fresh stages and cache state.
 								if (reResult.diagnostic) {
 									pipelineStagesByLine[ln] = reResult.diagnostic.stages;
+									cacheSnapshot = freshCacheSnapshot;
 								}
 							} catch {
 								transformController.enqueue({
@@ -863,16 +900,36 @@ export function runEngineWithStreaming(
 		listenerCount: 0,
 	};
 	const pageHeatmap = extractPageHeatmap(cacheSnapshot, allLines.length);
-	const pipelineTelemetry = engine
-		? engine.getLastTelemetry()
+	// Capture into a stable local first — `engine` is a mutable `let` that
+	// closures elsewhere in this function (e.g. `abortHandler`) also
+	// reassign, which some type-checker configurations narrow less
+	// precisely across a `let` than a `const` (same reasoning as the
+	// existing `const eng = engine` a few lines up).
+	const engineRef = engine;
+	const pipelineTelemetry = engineRef
+		? engineRef.getLastTelemetry()
 		: null;
 
-	// ── Capture arena stats ──
+	// ── Capture arena stats, then release the arena ──
 	const arenaStats: ArenaStats = arena ? {
 		enabled: true,
 		usage: arena.usage,
 		capacity: arena.capacity,
 	} : { enabled: false, usage: 0, capacity: 0 };
+
+	// All synchronous evaluation is done by this point; everything below is
+	// formatting. Unlike runEngine(), this path used to return with the
+	// module-level arena still ACTIVE, which leaked in two ways. The arena
+	// is only ever rewound by enableValueArena()'s reset() — i.e. on the
+	// next keystroke — so every async re-evaluation in the TransformStream
+	// above (an OSRS price or currency rate settling, potentially for as
+	// long as the document stays open) kept bump-allocating past the end of
+	// the block, and ValueArena.acquire() grows its backing array on
+	// overflow and never shrinks. An idle document resolving async values
+	// therefore grew the arena without bound. It also meant the NEXT run's
+	// reset() recycled Value objects out from under the still-live previous
+	// run, since the arena is a single non-reentrant module-level block.
+	disableValueArena();
 
 	const result: DebugResult = {
 		tokens: rawTokens,
@@ -902,7 +959,7 @@ export function runEngineWithStreaming(
 		batcherMetrics,
 		pageHeatmap,
 		arenaStats,
-		parseletRegistry: engine ? engine.getParseletRegistry() : undefined,
+		parseletRegistry: engineRef ? engineRef.getParseletRegistry() : undefined,
 	};
 
 	// ── Return the stream directly — no tee() needed.
@@ -961,7 +1018,7 @@ export function runEngine(expression: string): DebugResult {
 
 		const engine = new ExpressionEngine("en", true, {
 			diagnostic: { enabled: true, vmTraceEnabled: true },
-		});
+		}, undefined, PLAYGROUND_PACKAGES);
 
 		markdownOutline = generateMarkdownOutline(expression);
 		const allLines = expression.split("\n");

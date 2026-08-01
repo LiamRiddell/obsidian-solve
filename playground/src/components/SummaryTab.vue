@@ -100,9 +100,9 @@ import { computed } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { usePipelineStore } from '../stores/pipeline.js';
 import { useUiStore } from '../stores/ui.js';
-import { fmt, STAGE_COLORS } from '../utils.js';
+import { fmt, STAGE_COLORS } from '@bridge/utils';
 import EmptyState from './shared/EmptyState.vue';
-import type { LineResult } from '../engine.js';
+import type { LineResult } from '@bridge/engine';
 
 const dr = useDiagnosticReportStore();
 const pipeline = usePipelineStore();

@@ -109,7 +109,7 @@ import EmptyState from './shared/EmptyState.vue';
 import { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
 import { formatValue } from '@solve-js/format/FormatEngine';
 import { ValueType } from '@solve-js/vm/Value';
-import { exampleData } from '../examples.js';
+import { exampleData } from '@bridge/examples';
 import { useQaStore, detectExpectation, type QaResult } from '../stores/qa.js';
 
 const qa = useQaStore();

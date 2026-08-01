@@ -241,8 +241,8 @@
 import { computed, ref } from 'vue';
 import { useDiagnosticReportStore } from '../stores/diagnosticReport.js';
 import { usePipelineStore } from '../stores/pipeline.js';
-import { fmt, computeOverhead, getDominantStage, STAGE_COLORS, TELEMETRY_STAGE_COLORS } from '../utils.js';
-import type { ArenaStats } from '../engine.js';
+import { fmt, computeOverhead, getDominantStage, STAGE_COLORS, TELEMETRY_STAGE_COLORS } from '@bridge/utils';
+import type { ArenaStats } from '@bridge/engine';
 import EmptyState from './shared/EmptyState.vue';
 import TimingWaterfall from './shared/TimingWaterfall.vue';
 
