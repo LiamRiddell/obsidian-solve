@@ -119,16 +119,6 @@ export enum OpCode {
 	TO_OCTAL = 144,          // Number -> String, base-8 display ("10" -> "0o12")
 	CALL_AS_CONVERTER = 145, // (value, name) -> runtime asConverterRegistry lookup + call
 
-	// Array (unified Vector/Array type — was VEC_ADD/VEC_SUB/etc.)
-	ARR_NEW = 100,
-	ARR_ADD = 101,
-	ARR_SUB = 102,
-	ARR_DOT = 103,
-	ARR_CROSS = 104,
-	ARR_SCALE = 105,
-	ARR_MAGNITUDE = 106,
-	ARR_NORMALIZE = 107,
-
 	// User-defined, parameterized, reusable functions (f(x) = expr, then
 	// f(5) — see parser/PrecedenceParser.ts's IDENT_ID case,
 	// parser/BytecodeBuilder.ts's UserFunctionDef/emitUserFunctionBody, and
@@ -139,6 +129,20 @@ export enum OpCode {
 	// call frame before the flat variable store (see VM.getVar()).
 	DEFINE_USER_FUNCTION = 150, // (operand = index into bytecode.userFunctionBodies) -> register name/params/program into vm.userFunctions. Registration happens at VM-EXECUTION time, not parse time, so a diagnostic/lookahead parse that compiles but never executes a definition line has no side effect on the shared registry.
 	CALL_USER_FUNCTION = 151,   // (N arg values already on stack) -> pop N args, bind by NAME into a new call frame, execute the named function's stored body (reentrant executeBytecode), push its result
+
+	// Matrix (Calca-parity — replaces the old ARR_* vector-only opcodes,
+	// which were never emitted by any registered parselet; see
+	// vm/MatrixOps.ts for the shared column-major storage helpers this band
+	// operates on, and vm/Value.ts's MatrixData for the representation).
+	MAT_NEW = 152,      // (rows, cols operands; rows*cols values already on stack, ROW-MAJOR push order) -> pop rows*cols values, transpose to column-major, push a Matrix
+	MAT_INDEX1 = 153,   // (matrix, index already on stack) -> column-major single-index read `a[i]`
+	MAT_INDEX2 = 154,   // (matrix, row, col already on stack) -> `a[row, col]` read
+	MAT_SLICE = 155,    // (matrix, rowRange, colRange already on stack) -> sub-matrix via two Range values
+	RANGE_NEW = 156,    // (min, max already on stack) -> push a Range value `min:max`
+	MAP_INVOKE = 157,   // map(...) — see parser/BytecodeBuilder.ts's `anonymousBodies` side-table
+	REDUCE_INVOKE = 158, // reduce(...) — same anonymousBodies mechanism as MAP_INVOKE
+	THEREFORE_SOLVE = 159, // `=>` — symbolic-algebra solve/simplify operator
+	STORE_EQUATION_OR_ASSIGNMENT = 160, // bare (colon-less) `lhs = rhs` — ordinary assignment if concrete, a stored symbolic equation otherwise
 
 }
 

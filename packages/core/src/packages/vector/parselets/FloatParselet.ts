@@ -10,7 +10,10 @@ export class FloatParselet implements PrefixParselet {
 		parser.consume("LPAREN");
 		parser.parseExpression(0, builder);
 		parser.consume("RPAREN");
-		builder.emitOpcode(OpCode.ARR_NEW);
+		// A 1x1 Matrix — see VectorParselet.ts's comment on why this legacy
+		// sugar emits MAT_NEW rather than being removed.
+		builder.emitOpcode(OpCode.MAT_NEW);
+		builder.emitIndex(1);
 		builder.emitIndex(1);
 	}
 }

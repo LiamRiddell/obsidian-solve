@@ -1,6 +1,7 @@
-import { Value, ValueType, numberValue, stringValue, uomValue, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, uomValue, errorValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
+import { transpose, determinant, inverse, matrixMultiply } from "@solve-js/vm/MatrixOps";
 // Type-only — VM.ts imports pluginFunctionRegistry FROM this file, so a
 // runtime import the other direction would be circular; `import type` is
 // erased before compilation and doesn't create that problem.
@@ -39,7 +40,10 @@ function toBinPrefixedString(n: number): string {
 export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // ── Populated below ──
     0: (args) => numberValue(Math.sqrt(args[0].toNumber())),
-    1: (args) => numberValue(Math.abs(args[0].toNumber())),
+    // abs(a): for a Matrix, "|a|" (Calca's determinant-pipe notation) is a
+    // valid alias for det(a) (index 64) — reusing the SAME implementation,
+    // not a separate one. Plain-number abs is unaffected.
+    1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(Math.abs(args[0].toNumber())),
     2: (args) => numberValue(Math.sin(args[0].toNumber())),
     3: (args) => numberValue(Math.cos(args[0].toNumber())),
     4: (args) => numberValue(Math.tan(args[0].toNumber())),
@@ -438,6 +442,45 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         let result = 1;
         for (let i = 2; i <= n; i++) result *= i;
         return numberValue(result);
+    },
+
+    // ── Matrix (packages/matrix/) ────────────────────────────────────────
+    // transpose(a)/det(a)/inv(a)/dot(a,b) — reachable both via ordinary
+    // function-call syntax (this map) and via operator syntax (`^T`, `^-1`
+    // — see PrecedenceParser.ts's CARET special-casing, which emits these
+    // SAME indices) and `|a|` (abs()'s Matrix branch, index 1 above).
+    // Real linear-algebra work lives in vm/MatrixOps.ts, shared by both
+    // entry points rather than duplicated.
+
+    // transpose(a) — for a Matrix, swaps rows/cols. A plain Number is its
+    // own transpose (a 1x1 "matrix" transposed is itself) — matches this
+    // engine's existing convention of treating a scalar as a trivial 1x1
+    // matrix (see Value.ts's toNumber()/isNaN() 1x1 special case).
+    63: (args) => args[0].type === ValueType.Matrix ? transpose(args[0].value as MatrixData) : args[0],
+    // det(a) — determinant. A plain Number's "determinant" is itself (the
+    // determinant of a 1x1 matrix [x] is x).
+    64: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(args[0].toNumber()),
+    // inv(a) — matrix inverse for a Matrix; for a plain Number, `1/x`
+    // (byte-identical to `Math.pow(x, -1)`, which is what `x^-1` computed
+    // before this feature existed — see PrecedenceParser.ts's `^-1`
+    // special-case doc comment for why this must stay exact).
+    65: (args) => {
+        if (args[0].type === ValueType.Matrix) return inverse(args[0].value as MatrixData);
+        return numberValue(1 / args[0].toNumber());
+    },
+    // dot(a, b) — matrix product / scalar-broadcast, the SAME dispatch as
+    // the `*` operator between two matrices (vm/VM.ts's MUL case). Plain
+    // Number operands multiply directly; a Number mixed with a Matrix
+    // promotes the Number to a 1x1 Matrix first, so it broadcasts exactly
+    // like matrixMultiply()'s own 1x1-scalar case.
+    66: (args) => {
+        const [a, b] = args;
+        if (a.type === ValueType.Number && b.type === ValueType.Number) {
+            return numberValue(a.toNumber() * b.toNumber());
+        }
+        const toMatrix = (v: Value): MatrixData =>
+            v.type === ValueType.Matrix ? (v.value as MatrixData) : { rows: 1, cols: 1, data: [v.toNumber()], hasSymbolic: false };
+        return matrixMultiply(toMatrix(a), toMatrix(b));
     },
 };
 

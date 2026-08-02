@@ -1,5 +1,6 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
 
 /**
  * Fuses a video-timecode literal — `HH:MM:SS:FF`, always THREE colons —
@@ -25,6 +26,9 @@ export function videoTimecodeNormalizerRule(priority = 75): NormalizerRule {
     name: "time:video-timecode",
     priority,
     match(tokens, pos): NormalizerMatch | null {
+      // See ClockTimeNormalizerRule's identical guard — a video timecode
+      // inside `[...]` has no legitimate meaning; reserved for matrix ranges.
+      if (isInsideRangeContext(tokens, pos)) return null;
       const h = tokens[pos];
       const c1 = tokens[pos + 1];
       const m = tokens[pos + 2];

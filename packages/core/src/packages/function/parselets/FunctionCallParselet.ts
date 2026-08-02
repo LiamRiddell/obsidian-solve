@@ -6,7 +6,16 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
-const builtinNameToIndex: Record<string, number> = {
+/**
+ * Exported so `packages/mapreduce/`'s parselets can resolve a bare
+ * function-name argument (`map(cos, ...)`) to its builtin index AT PARSE
+ * TIME — the same map this file's own `FunctionCallParselet` uses for
+ * ordinary `sqrt(x)`-style calls. A name NOT found here is deferred to
+ * runtime as a possible user-defined-function reference instead (resolved
+ * dynamically via `vm.getUserFunction()`, mirroring `CALL_USER_FUNCTION`'s
+ * own forward-reference philosophy) — see `MapParselet`/`ReduceParselet`.
+ */
+export const builtinNameToIndex: Record<string, number> = {
   sqrt: 0, abs: 1, sin: 2, cos: 3, tan: 4, log: 5,
   ceil: 6, floor: 7, round: 8, min: 9, max: 10,
   asin: 11, acos: 12, atan: 13, atan2: 14,
@@ -48,6 +57,11 @@ const builtinNameToIndex: Record<string, number> = {
   root: 61,
   // fact(n) / factorial(n) -- both names accepted, same implementation.
   fact: 62, factorial: 62,
+  // Matrix (packages/matrix/) -- transpose/det/inv/dot. Also reachable via
+  // operator syntax (`^T`, `^-1` -- PrecedenceParser.ts's CARET special-
+  // casing emits these SAME indices) and `|a|` (abs()'s Matrix branch,
+  // index 1 above) -- see VMBuiltins.ts's own comment on indices 63-66.
+  transpose: 63, det: 64, inv: 65, dot: 66,
 };
 
 export class FunctionCallParselet implements PrefixParselet {

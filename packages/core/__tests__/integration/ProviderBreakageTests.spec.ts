@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { ValueType } from "@solve-js/vm/Value";
+import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 
 describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
@@ -296,8 +296,8 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Array);
-      expect(value.value as number[]).toEqual([4, 6]);
+      expect(value.type).toBe(ValueType.Matrix);
+      expect((value.value as MatrixData).data).toEqual([4, 6]);
     });
 
     test("vec3(1, 2, 3) * 2 should return array [2, 4, 6]", () => {
@@ -307,8 +307,8 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Array);
-      expect(value.value as number[]).toEqual([2, 4, 6]);
+      expect(value.type).toBe(ValueType.Matrix);
+      expect((value.value as MatrixData).data).toEqual([2, 4, 6]);
     });
 
     test("vec2(10, 20) / vec2(2, 5) should return array [5, 4]", () => {
@@ -318,8 +318,8 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Array);
-      expect(value.value as number[]).toEqual([5, 4]);
+      expect(value.type).toBe(ValueType.Matrix);
+      expect((value.value as MatrixData).data).toEqual([5, 4]);
     });
   });
 
@@ -453,8 +453,8 @@ s\`:x + :y\``;
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Array);
-      expect(value.value as number[]).toEqual([15, 7]);
+      expect(value.type).toBe(ValueType.Matrix);
+      expect((value.value as MatrixData).data).toEqual([15, 7]);
     });
   });
 });

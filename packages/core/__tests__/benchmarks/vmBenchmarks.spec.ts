@@ -47,7 +47,7 @@ const programs: Array<{ name: string; bytecode: BytecodeProgram }> = [
   {
     name: "vector_creation",
     bytecode: makeBytecode(
-      [OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.ARR_NEW, 3, OpCode.HALT],
+      [OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.MAT_NEW, 1, 3, OpCode.HALT],
       [1, 2, 3]
     ),
   },

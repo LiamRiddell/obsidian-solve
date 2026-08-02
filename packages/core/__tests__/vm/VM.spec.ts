@@ -4,7 +4,7 @@
  * Verifies each opcode handler in isolation via hand-crafted bytecode:
  * - Stack ops: PUSH_NUMBER, PUSH_STRING, PUSH_BOOLEAN, PUSH_BIGINT, PUSH_HEX
  * - Arithmetic: ADD, SUB, MUL, DIV, MOD, EXP, NEG, POS
- * - Array/vector: ARR_NEW
+ * - Matrix: MAT_NEW
  * - Variable: LOAD_VAR, STORE_VAR
  * - Builtins: CALL_BUILTIN (sqrt, abs, min, max, diceRoll)
  * - Control: HALT, NOP, DATE_NOW
@@ -14,7 +14,7 @@ import { describe, expect, test } from "@jest/globals";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { ValueType } from "@solve-js/vm/Value";
+import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 
 function bc(ops: number[], numbers: number[] = [], strings: string[] = []): { opcodes: Uint8Array; numbers: Float64Array; strings: string[] } {
   return {
@@ -127,11 +127,11 @@ describe("VM executeBytecode", () => {
     }
   });
 
-  test("ARR_NEW creates array from components", () => {
+  test("MAT_NEW creates a 1x3 row-vector matrix from components", () => {
     const vm = createVM(sharedOpRegistry);
-    const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.ARR_NEW, 3, OpCode.HALT], [10, 20, 30]), vm);
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([10, 20, 30]);
+    const result = executeBytecode(bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.MAT_NEW, 1, 3, OpCode.HALT], [10, 20, 30]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([10, 20, 30]);
   });
 
   test("LOAD_VAR and STORE_VAR round-trip", () => {

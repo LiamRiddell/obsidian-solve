@@ -157,6 +157,21 @@ export const TokenTypes = {
   // Matches this codebase's existing accepted risk for "between"/"from"/
   // "next"/"last"/"best" — also bare, also can't be used as `:name`.
   CLAMP: "CLAMP",
+  // map/reduce/sum/prod (packages/mapreduce/) — bare single-word keywords,
+  // each with its own dedicated parselet (custom argument grammar: a bare
+  // builtin/user-function name, an inline transform expression, or
+  // `name=collection` zipped pairs — none of which fit the ordinary
+  // FunctionCallParselet path, so these can't just reuse the generic FUNC
+  // token type the way sqrt/abs/... do).
+  MAP: "MAP",
+  REDUCE: "REDUCE",
+  SUM_FN: "SUM_FN",
+  PROD_FN: "PROD_FN",
+  // `=>` — "therefore"/solve operator (symbolic algebra, packages/symbolic/).
+  // A genuine 2-char lexer token (ExpressionLexer.ts's TWO_CHAR_OPS table),
+  // same mechanism as ==/!=/>=/<=, not a normalizer-level fusion — "=" then
+  // ">" is the opposite char order from GTE's ">=", so there's no collision.
+  THEREFORE: "THEREFORE",
   // Timezone query phrases (see TimePackage.ts's `phrases` field) — same
   // phrase-fusion reasoning as above: "time"/"date"/"difference" are
   // common variable names, so the fused trigger is the full phrase.

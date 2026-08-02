@@ -1,6 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import { formatValue } from "@solve-js/format/FormatEngine";
-import { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, arrayValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, rowVectorValue } from "@solve-js/vm/Value";
 
 describe("FormatEngine Fuzz", () => {
   const valueTypes: Array<{ name: string; value: Value }> = [
@@ -18,8 +18,8 @@ describe("FormatEngine Fuzz", () => {
     { name: "uom_negative", value: uomValue(-5, "kg") },
     { name: "uom_zero", value: uomValue(0, "m") },
     { name: "uom_large", value: uomValue(1e6, "km") },
-    { name: "vector_empty", value: arrayValue([]) },
-    { name: "vector_large", value: arrayValue([1e10, 2e10, 3e10]) },
+    { name: "vector_empty", value: rowVectorValue([]) },
+    { name: "vector_large", value: rowVectorValue([1e10, 2e10, 3e10]) },
     { name: "boolean_true", value: new Value(ValueType.Boolean, true) },
     { name: "boolean_false", value: new Value(ValueType.Boolean, false) },
     { name: "datetime_epoch", value: new Value(ValueType.Datetime, 0) },

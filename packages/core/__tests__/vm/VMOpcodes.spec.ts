@@ -2,7 +2,7 @@ import { describe, expect, test, afterEach } from "@jest/globals";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry, OpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, enableValueArena, disableValueArena, numberValue, bigIntValue, uomValue, arrayValue, percentageValue, datetimeValue, stringValue } from "@solve-js/vm/Value";
+import { Value, ValueType, enableValueArena, disableValueArena, numberValue, bigIntValue, uomValue, rowVectorValue, percentageValue, datetimeValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { VM } from "@solve-js/vm/OpRegistry";
 
@@ -142,22 +142,22 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("ADD Number + Vector (vector scaling)", () => {
     const vm = freshVM();
-    pushValues(vm, numberValue(10), arrayValue([1, 2]));
+    pushValues(vm, numberValue(10), rowVectorValue([1, 2]));
     // Stack: [Number(10), Vector[1,2]]; ADD pops r=Vector, l=Number
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
     // binaryOp: l=Number, r=Vector → rv.map(v => op(lv, v)) → [10+1, 10+2]
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([11, 12]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([11, 12]);
   });
 
   test("ADD Vector + Number (vector scaling)", () => {
     const vm = freshVM();
-    pushValues(vm, arrayValue([1, 2]), numberValue(10));
+    pushValues(vm, rowVectorValue([1, 2]), numberValue(10));
     // Stack: [Vector[1,2], Number(10)]; ADD pops r=Number, l=Vector
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
     // binaryOp: l=Vector, r=Number → lv.map(v => op(v, rv)) → [1+10, 2+10]
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([11, 12]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([11, 12]);
   });
 
   test("ADD BigInt + Number", () => {
@@ -208,18 +208,18 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("SUB Vector - Number", () => {
     const vm = freshVM();
-    pushValues(vm, arrayValue([10, 20]), numberValue(3));
+    pushValues(vm, rowVectorValue([10, 20]), numberValue(3));
     const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([7, 17]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([7, 17]);
   });
 
   test("SUB Number - Vector", () => {
     const vm = freshVM();
-    pushValues(vm, numberValue(10), arrayValue([1, 2]));
+    pushValues(vm, numberValue(10), rowVectorValue([1, 2]));
     const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([9, 8]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([9, 8]);
   });
 
   // ── MUL: mixed-type fallback ────────────────────────────────────────
@@ -234,28 +234,28 @@ describe("VM — binaryOp fallback paths", () => {
 
   test("MUL Vector * Number", () => {
     const vm = freshVM();
-    pushValues(vm, arrayValue([2, 3]), numberValue(4));
+    pushValues(vm, rowVectorValue([2, 3]), numberValue(4));
     const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([8, 12]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([8, 12]);
   });
 
   test("MUL Number * Vector", () => {
     const vm = freshVM();
-    pushValues(vm, numberValue(4), arrayValue([2, 3]));
+    pushValues(vm, numberValue(4), rowVectorValue([2, 3]));
     const result = executeBytecode(bc([OpCode.MUL, OpCode.HALT]), vm);
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([8, 12]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([8, 12]);
   });
 
   // ── DIV/MOD: mixed-type fallback (always go through binaryOp) ──────
 
   test("DIV Vector / Number", () => {
     const vm = freshVM();
-    pushValues(vm, arrayValue([10, 20]), numberValue(2));
+    pushValues(vm, rowVectorValue([10, 20]), numberValue(2));
     const result = executeBytecode(bc([OpCode.DIV, OpCode.HALT]), vm);
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([5, 10]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([5, 10]);
   });
 
   test("MOD BigInt % Number", () => {
@@ -266,22 +266,23 @@ describe("VM — binaryOp fallback paths", () => {
     expect(unwrapEvalResult(result).value).toEqual(BigInt(1));
   });
 
-  // ── VEC_ADD/VEC_SUB: always delegate to binaryOp (no inlined fast path) ─
+  // ── Matrix scalar broadcast via ADD/SUB: always delegates to binaryOp
+  //    (no dedicated vector-add opcode — see vm/VMConversion.ts) ──────────
 
-  test("ARR_ADD Vector + Number", () => {
+  test("ADD Matrix + Number (scalar broadcast)", () => {
     const vm = freshVM();
-    pushValues(vm, arrayValue([5, 10]), numberValue(3));
-    const result = executeBytecode(bc([OpCode.ARR_ADD, OpCode.HALT]), vm);
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([8, 13]);
+    pushValues(vm, rowVectorValue([5, 10]), numberValue(3));
+    const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([8, 13]);
   });
 
-  test("ARR_SUB Vector - Number", () => {
+  test("SUB Matrix - Number (scalar broadcast)", () => {
     const vm = freshVM();
-    pushValues(vm, arrayValue([5, 10]), numberValue(3));
-    const result = executeBytecode(bc([OpCode.ARR_SUB, OpCode.HALT]), vm);
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([2, 7]);
+    pushValues(vm, rowVectorValue([5, 10]), numberValue(3));
+    const result = executeBytecode(bc([OpCode.SUB, OpCode.HALT]), vm);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([2, 7]);
   });
 });
 
@@ -391,38 +392,38 @@ describe("VM — Dice roll", () => {
   });
 });
 
-describe("VM — Array operations", () => {
-  test("ARR_NEW creates a 2-component array", () => {
+describe("VM — Matrix operations", () => {
+  test("MAT_NEW creates a 1x2 row-vector matrix", () => {
     const vm = freshVM();
     const result = executeBytecode(
-      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.ARR_NEW, 2, OpCode.HALT], [10, 20]),
+      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.MAT_NEW, 1, 2, OpCode.HALT], [10, 20]),
       vm
     );
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([10, 20]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([10, 20]);
   });
 
-  test("ARR_NEW creates a 4-component array", () => {
+  test("MAT_NEW creates a 1x4 row-vector matrix", () => {
     const vm = freshVM();
     const result = executeBytecode(
-      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.PUSH_NUMBER, 3, OpCode.ARR_NEW, 4, OpCode.HALT], [1, 2, 3, 4]),
+      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.PUSH_NUMBER, 2, OpCode.PUSH_NUMBER, 3, OpCode.MAT_NEW, 1, 4, OpCode.HALT], [1, 2, 3, 4]),
       vm
     );
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Array);
-    expect(unwrapEvalResult(result).value).toEqual([1, 2, 3, 4]);
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Matrix);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([1, 2, 3, 4]);
   });
 
-  test("ARR_ADD adds two arrays", () => {
+  test("ADD adds two same-shape matrices element-wise", () => {
     const vm = freshVM();
     const result = executeBytecode(
       bc([
-        OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.ARR_NEW, 2, // [1, 2]
-        OpCode.PUSH_NUMBER, 2, OpCode.PUSH_NUMBER, 3, OpCode.ARR_NEW, 2, // [3, 4]
-        OpCode.ARR_ADD, OpCode.HALT,
+        OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.MAT_NEW, 1, 2, // [1, 2]
+        OpCode.PUSH_NUMBER, 2, OpCode.PUSH_NUMBER, 3, OpCode.MAT_NEW, 1, 2, // [3, 4]
+        OpCode.ADD, OpCode.HALT,
       ], [1, 2, 3, 4]),
       vm
     );
-    expect(unwrapEvalResult(result).value).toEqual([4, 6]);
+    expect((unwrapEvalResult(result).value as MatrixData).data).toEqual([4, 6]);
   });
 });
 

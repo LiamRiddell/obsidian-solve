@@ -1,6 +1,7 @@
 //#region 📦 Imports
 
-import { VM } from "@solve-js/vm/OpRegistry";
+import { VM, type EquationDef } from "@solve-js/vm/OpRegistry";
+import { matrixMultiply, inverse } from "@solve-js/vm/MatrixOps";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { ScopeManager } from "@solve-js/vm/ScopeManager";
@@ -13,7 +14,7 @@ import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { pluginFunctionRegistry, registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
-import { Value, numberValue, pendingValue, freezeIfDev, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { checkPackageCompatibility } from "@solve-js/api/PackageCompatibility";
@@ -680,6 +681,12 @@ export class ExpressionEngine {
      * Sets up AbortController → VM for stale-data prevention.
      * Cleans up the VM stack after execution (success or pending).
      * Fires async resolution via fire-and-forget for pending results.
+     *
+     * `tracePipeline`/`traceExpression`, when given, are passed straight
+     * through to `executeBytecode()`'s own optional VM-step-tracing
+     * parameters — used ONLY by {@link evaluateExpressionWithDiagnostic}
+     * when `vmTraceEnabled` is on. Omitted by every other caller, with zero
+     * behavior change (identical to today's hardcoded `undefined, undefined`).
      */
     private executeAndStore(
         program: BytecodeProgram,
@@ -688,6 +695,8 @@ export class ExpressionEngine {
         reads: string[],
         writes: string[],
         packageId: string,
+        tracePipeline?: DiagnosticPipeline,
+        traceExpression?: string,
     ): Value {
         const stackBefore = this.vm.getStack().length;
 
@@ -715,7 +724,7 @@ export class ExpressionEngine {
         };
 
         setActiveQueryClient(this.queryClient);
-        const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber));
+        const result = executeBytecode(program, this.vm, tracePipeline, traceExpression, this.makeLineContext(lineNumber));
 
         // Single stack cleanup (replaces 10 occurrences)
         while (this.vm.getStack().length > stackBefore) {
@@ -1118,6 +1127,233 @@ export class ExpressionEngine {
         }
     }
 
+    //#region Symbolic algebra — `=>` and bare equation-statement grammar
+
+    /**
+     * Compiles a standalone token list into a fresh, independent
+     * `BytecodeProgram` — used for a `=>`-triggered expression and for a
+     * bare equation's own right-hand side. Reuses {@link parseExpression}
+     * (the SAME "compile a token list into a builder, then check for
+     * leftover trailing tokens" logic every ordinary line already goes
+     * through), just with a throwaway builder instead of the pooled one
+     * (this grammar is rare — a per-call allocation here is a non-issue).
+     */
+    private compileAdHoc(tokens: Token[]): BytecodeProgram {
+        const builder = new BytecodeBuilder();
+        this.parseExpression(builder, tokens);
+        return builder.build();
+    }
+
+    /**
+     * Executes an already-compiled program in symbolic-tolerant mode (an
+     * undefined variable becomes a `Symbolic` placeholder instead of
+     * throwing `UNDEFINED_VARIABLE` — see `vm/VM.ts`'s `executeBytecode()`
+     * doc comment on its own `symbolicTolerant` parameter). Used by both
+     * the "just simplify this" `=>` mode and bare equation evaluation
+     * (a bare assignment's RHS, and an equation's own RHS at solve time)
+     * — every one of these needs forward-tolerant reads of not-yet-defined
+     * names, which ordinary evaluation deliberately never allows.
+     */
+    private executeSymbolicTolerant(program: BytecodeProgram): Value {
+        const result = executeBytecode(program, this.vm, undefined, undefined, undefined, true);
+        if (result.type === 'error') throw result.error;
+        if (result.type === 'pending') {
+            throw ErrorFactory.execution(
+                'THEREFORE_ASYNC_UNSUPPORTED',
+                `"=>" doesn't support expressions that call an async operation (weather/stocks/currency).`,
+            );
+        }
+        return result.value;
+    }
+
+    /** Compiles and executes `tokens` in symbolic-tolerant mode — the "just simplify this" `=>` fallback when there's no stored equation to solve. */
+    private simplifySymbolically(tokens: Token[]): Value {
+        return this.executeSymbolicTolerant(this.compileAdHoc(tokens));
+    }
+
+    /**
+     * Parses a bare (colon-less) equation's left-hand side — `factor1 *
+     * factor2 * ... * variable` — into an ordered list of bare names, or
+     * `null` if `tokens` isn't EXACTLY that shape (an alternating
+     * `IDENT/UNIT`, `STAR`, `IDENT/UNIT`, `STAR`, ... sequence with no
+     * other token types). Returning `null` means "don't intercept this
+     * line at all" — it falls through to whatever the ordinary expression
+     * grammar already does with a bare `=` in it (today: a clear parse
+     * error), so this pattern-match can only ever ADD a new capability,
+     * never take one away.
+     *
+     * Requiring `IDENT`/`UNIT` at every name position is what keeps this
+     * safe from the reserved-keyword collision risk `VariableParselet.ts`
+     * guards against for the colon-prefixed form: a genuinely reserved
+     * word (`clamp`, `global`, ...) always lexes as ITS OWN token type,
+     * never `IDENT`/`UNIT`, so it can never satisfy this pattern — the
+     * same protection, for free, without a duplicated keyword list.
+     */
+    private parseFactorChain(tokens: Token[]): string[] | null {
+        if (tokens.length === 0 || tokens.length % 2 === 0) return null;
+        const names: string[] = [];
+        for (let i = 0; i < tokens.length; i++) {
+            if (i % 2 === 0) {
+                if (tokens[i].type !== 'IDENT' && tokens[i].type !== 'UNIT') return null;
+                names.push(tokens[i].value);
+            } else {
+                if (tokens[i].type !== 'STAR') return null;
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Solves a stored equation — `variable = inv(factor1*factor2*...) *
+     * rhs`. Every step is symbolic-aware (`vm/MatrixOps.ts`'s
+     * `matrixMultiply()`/`inverse()`), so a factor whose OWN cells are
+     * still-unassigned free variables (`s = [sx,0,0;...]`) solves
+     * correctly, producing a Matrix whose cells are algebraic formulas
+     * rather than plain numbers. Errors (a missing factor, a non-Matrix
+     * factor/RHS, a singular combined matrix) are returned as `Error`-typed
+     * Values, not thrown — matching this engine's established "matrix
+     * errors propagate as values" convention (DIMENSION_MISMATCH,
+     * SINGULAR_MATRIX, ...).
+     */
+    private solveEquation(equation: EquationDef): Value {
+        const factorValues: Value[] = [];
+        for (const name of equation.factorNames) {
+            const v = this.vm.getVar(name);
+            if (v === undefined) {
+                return errorValue(
+                    'EQUATION_FACTOR_UNDEFINED',
+                    `Cannot solve for "${equation.variable}": "${name}" is not yet defined.`,
+                );
+            }
+            if (v.type !== ValueType.Matrix) {
+                return errorValue(
+                    'EQUATION_FACTOR_NOT_MATRIX',
+                    `Cannot solve for "${equation.variable}": "${name}" must be a Matrix (got a different value type).`,
+                );
+            }
+            factorValues.push(v);
+        }
+
+        let combined = factorValues[0].value as MatrixData;
+        for (let i = 1; i < factorValues.length; i++) {
+            const product = matrixMultiply(combined, factorValues[i].value as MatrixData);
+            if (product.type === ValueType.Error) return product;
+            combined = product.value as MatrixData;
+        }
+
+        const inv = inverse(combined);
+        if (inv.type === ValueType.Error) return inv;
+
+        const rhsValue = this.executeSymbolicTolerant(equation.rhsProgram);
+        if (rhsValue.type !== ValueType.Matrix) {
+            return errorValue(
+                'EQUATION_RHS_NOT_MATRIX',
+                `Cannot solve for "${equation.variable}": the right-hand side must be a Matrix.`,
+            );
+        }
+
+        return matrixMultiply(inv.value as MatrixData, rhsValue.value as MatrixData);
+    }
+
+    /**
+     * Detects and handles this session's two new symbolic-algebra grammar
+     * shapes on `normalizedTokens`, returning the computed result directly
+     * (bypassing ordinary bytecode compilation/caching entirely, since
+     * BOTH shapes have effects — a stored equation, a direct variable
+     * assignment — that a cached bytecode program can't represent) or
+     * `null` if neither shape matches (meaning ordinary processing should
+     * proceed exactly as it did before this feature existed):
+     *
+     * 1. `<bareIdent> =>` or `<expr> =>` — trailing `THEREFORE`. A bare
+     *    identifier with a STORED equation solves it (see
+     *    {@link solveEquation}); anything else (including a bare
+     *    identifier with NO stored equation) runs in symbolic-tolerant
+     *    mode and simplifies (see {@link simplifySymbolically}) — a
+     *    near-free "just simplify this" mode.
+     * 2. `factor1*factor2*...*variable = rhs` — a bare (colon-less), NOT
+     *    already colon/global-prefixed, top-level `EQUALS` whose LHS
+     *    matches {@link parseFactorChain}'s narrow pattern. A single bare
+     *    name (`s = [sx,0,0;...]`) is an ORDINARY (colon-less) assignment
+     *    — its RHS is ALWAYS evaluated symbolic-tolerantly (so a matrix
+     *    literal with still-unassigned entries assigns successfully,
+     *    carrying those free variables as real symbolic cells) and stored
+     *    via `vm.setVar()`. Two or more names (`s*t*v = rhs`) stores a
+     *    genuine equation keyed by the LAST name (`v`), solved later via
+     *    shape 1 above.
+     *
+     * This is a deliberately narrow pattern match, not a general equation
+     * solver — see `OpRegistry.ts`'s `EquationDef` doc comment and this
+     * session's own Phase H.2 scope decision (full symbolic MATRICES, not
+     * a general CAS).
+     */
+    private trySymbolicGrammar(normalizedTokens: Token[]): Value | null {
+        if (normalizedTokens.length === 0) return null;
+
+        const last = normalizedTokens[normalizedTokens.length - 1];
+        if (last.type === 'THEREFORE') {
+            const beforeTokens = normalizedTokens.slice(0, -1);
+            if (beforeTokens.length === 0) {
+                throw ErrorFactory.parsing('THEREFORE_REQUIRES_EXPRESSION', `"=>" needs an expression or variable name before it.`);
+            }
+            if (beforeTokens.length === 1 && (beforeTokens[0].type === 'IDENT' || beforeTokens[0].type === 'UNIT')) {
+                const equation = this.vm.getEquation(beforeTokens[0].value);
+                if (equation) {
+                    return this.solveEquation(equation);
+                }
+            }
+            return this.simplifySymbolically(beforeTokens);
+        }
+
+        // Already the colon-prefixed (`:name = value`) or `global :name`
+        // grammar — completely untouched, don't even attempt to match.
+        if (normalizedTokens[0].type === 'COLON' || normalizedTokens[0].type === 'GLOBAL') return null;
+
+        const eqIdx = normalizedTokens.findIndex(t => t.type === 'EQUALS');
+        if (eqIdx === -1) return null;
+
+        const names = this.parseFactorChain(normalizedTokens.slice(0, eqIdx));
+        if (names === null) return null;
+
+        const rhsTokens = normalizedTokens.slice(eqIdx + 1);
+
+        if (names.length === 1) {
+            const result = this.simplifySymbolically(rhsTokens);
+            this.vm.setVar(names[0], result);
+            return result;
+        }
+
+        const freeVar = names[names.length - 1];
+        const factorNames = names.slice(0, -1);
+        this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens));
+        return stringValue(`${freeVar} stored as an equation — solve with "${freeVar} =>"`);
+    }
+
+    //#endregion
+
+    /**
+     * Lex an expression via `resetExpression` (skips `classifyLine` —
+     * callers already know this is an expression), filtering out COMMENT
+     * tokens (they have no parselet) and tracking whether any paren was
+     * seen. Shared by every lex-then-{@link prepareExpression} call site:
+     * {@link compileExpression}, {@link tryCompileExpression}, and
+     * {@link evaluateExpressionWithDiagnostic}. `onToken`, when given, is
+     * called once per emitted (already-filtered) token — used ONLY by the
+     * diagnostic path to fire its per-token `TokenEmitted` events; every
+     * other caller omits it.
+     */
+    private lexToTokens(expression: string, onToken?: (t: Token) => void): { tokens: Token[]; hasParens: boolean } {
+        const tokens: Token[] = [];
+        let hasParens = false;
+        this.lexer.resetExpression(expression);
+        for (const t of this.lexer) {
+            if (t.type === 'COMMENT') continue;
+            if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
+            tokens.push(t);
+            onToken?.(t);
+        }
+        return { tokens, hasParens };
+    }
+
     /**
      * Shared pipeline front-half: safety checks → COMMENT filter →
      * normalize → complexity → read/write extraction → bytecode cache
@@ -1140,15 +1376,45 @@ export class ExpressionEngine {
      * "errors are verbose and easy to understand" goal. Callers should
      * generally just `throw prep.error` (see {@link evaluateWithTokens},
      * {@link compileExpression}) rather than wrapping it again.
+     *
+     * `onFusion`, when given, is passed straight through to the normalizer's
+     * own optional per-fusion callback — used ONLY by
+     * {@link evaluateExpressionWithDiagnostic} to observe individual token
+     * fusions for its `normalizer` diagnostic stage. Omitted by every other
+     * caller, with zero behavior change (identical to not passing a 2nd
+     * argument to `normalizer.normalize()` at all).
+     *
+     * The `'error'` variant's `normalizedTokens` is populated whenever
+     * normalization already ran before the failure (`'complexity'`/`'parse'`
+     * stages), `undefined` when it failed before tokens were even considered
+     * (`'length'` stage) — lets {@link evaluateExpressionWithDiagnostic}
+     * reconstruct its own diagnostic-stage payloads (which need the
+     * normalized tokens to recompute a display-only complexity score) without
+     * re-deriving them by hand.
+     *
+     * The `'ready'` (uncached) variant's `parserAlloc` is the
+     * `AllocationTracker.track('parser', ...)` result for JUST the actual
+     * parse+build call (`null` whenever `AllocationTracker.isEnabled()` is
+     * false, or on a cache hit — no parsing happened). This has to be
+     * measured HERE, not reconstructed by a caller after the fact: unlike
+     * every other diagnostic field, a heap-delta measurement only means
+     * anything over the EXACT span it's wrapped around — wrapping the
+     * whole `prepareExpression()` call from the outside (as
+     * {@link evaluateExpressionWithDiagnostic} briefly did) widens that span
+     * to also cover normalize/complexity-check/cache-lookup, which measurably
+     * produced negative-allocation readings (a GC sweep landing inside the
+     * wider window) in `AllocationTracker.spec.ts` well over half the time.
      */
     private prepareExpression(
         expression: string,
         tokens: Token[],
         hasParens: boolean | undefined,
+        onFusion?: (fusion: TokenFusion) => void,
     ):
         | { kind: 'empty' }
-        | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; error: EngineError; reads?: string[]; writes?: string[] }
-        | { kind: 'ready'; normalizedTokens: Token[]; reads: string[]; writes: string[]; program: BytecodeProgram; cached: boolean } {
+        | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; error: EngineError; reads?: string[]; writes?: string[]; normalizedTokens?: Token[] }
+        | { kind: 'ready'; normalizedTokens: Token[]; reads: string[]; writes: string[]; program: BytecodeProgram; cached: boolean; parserAlloc?: StageAllocation | null }
+        | { kind: 'symbolic-solve'; normalizedTokens: Token[]; value: Value } {
         // ══ SAFETY CHECK 1: Expression length limit ══
         const lengthCheck = checkExpressionLength(expression, this.config.validation);
         if (!lengthCheck.passed) {
@@ -1163,12 +1429,21 @@ export class ExpressionEngine {
 
         // ══ NORMALIZER ══
         // Phrase fusion, implicit multiply, domain token merging.
-        const normalizedTokens = this.normalizer.normalize(exprTokens);
+        const normalizedTokens = this.normalizer.normalize(exprTokens, onFusion);
 
         // ══ SAFETY CHECK 2: Complexity scoring ══
         const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
         if (!complexityCheck.passed) {
-            return { kind: 'error', stage: 'complexity', error: complexityCheck.engineError! };
+            return { kind: 'error', stage: 'complexity', error: complexityCheck.engineError!, normalizedTokens };
+        }
+
+        // ══ SYMBOLIC ALGEBRA: `=>` / bare equation-statement grammar ══
+        // Bypasses bytecode caching entirely — both shapes have effects
+        // (a stored equation, a direct vm.setVar()) a cached program can't
+        // represent. See trySymbolicGrammar()'s own doc comment.
+        const symbolicResult = this.trySymbolicGrammar(normalizedTokens);
+        if (symbolicResult !== null) {
+            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult };
         }
 
         const { reads, writes } = extractReadsAndWrites(normalizedTokens);
@@ -1182,8 +1457,20 @@ export class ExpressionEngine {
         // Get a pooled builder — avoids 4 heap allocations per expression
         const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
         builder.reset();
+        let program: BytecodeProgram;
+        let parserAlloc: StageAllocation | null = null;
         try {
-            this.parseExpression(builder, normalizedTokens, hasParens);
+            // build() allocates TypedArrays directly from builder arrays —
+            // a single copy (builder → TypedArray). Wrapped together with
+            // parseExpression() under one 'parser' allocation measurement,
+            // matching the exact span this file's diagnostic path has always
+            // measured (see this method's own doc comment on `parserAlloc`).
+            const parseResult = AllocationTracker.track('parser', () => {
+                this.parseExpression(builder, normalizedTokens, hasParens);
+                return builder.build();
+            });
+            program = parseResult.result;
+            parserAlloc = parseResult.alloc;
         } catch (e) {
             // reads/writes were already extracted above from the full token
             // list (independent of whether parsing succeeds) — returned
@@ -1193,57 +1480,50 @@ export class ExpressionEngine {
             // registration, via compileExpression()'s merge below) still
             // learn what this line references and can re-evaluate it once
             // those variables become defined.
-            return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes };
+            return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
         }
 
-        // build() allocates TypedArrays directly from builder arrays —
-        // a single copy (builder → TypedArray).
-        const program = builder.build();
         this.cacheBytecode(expression, program);
-        return { kind: 'ready', normalizedTokens, reads, writes, program, cached: false };
+        return { kind: 'ready', normalizedTokens, reads, writes, program, cached: false, parserAlloc };
     }
 
     /**
-     * Evaluate an expression using already-lexed tokens.
+     * Shared async-resolver preflight check, run before VM execution.
      *
-     * This is the shared core of both evaluateLine (which lexes via
-     * resetExpression) and evaluateLineWithPreTokenized() (which uses
-     * tokens from scanDocument). Delegates the front-half to
-     * {@link prepareExpression}, then runs async preflight + VM execution.
+     * O(1) guard: skips the O(n) resolver scan when the bytecode has no
+     * async opcodes AND no resolvers are registered. Either condition alone
+     * is enough to warrant a preflight scan:
+     *   - program.hasAsync: bytecode contains CALL_PLUGIN (async VM path)
+     *   - resolverRegistry.size > 0: resolvers may intercept any expression
+     * For purely sync expressions (e.g., `2 + 2`) with no resolvers, this is
+     * an O(1) fast-path that bypasses the resolver scan entirely.
+     *
+     * If any registered resolver says "data not ready", registers a DAG
+     * data-source dependency, stores a Pending result, and fires async
+     * resolution (fire-and-forget — resolves later, re-evaluates on
+     * completion) — the caller should skip VM execution entirely and return
+     * the pending Value as-is. Otherwise the caller should proceed to
+     * {@link executeAndStore}.
+     *
+     * Used by both {@link evaluateWithTokens} and
+     * {@link evaluateExpressionWithDiagnostic} — previously each carried its
+     * own copy of this exact sequence (differing only in a cosmetic
+     * abortLogger label), which is how the `=>` grammar shipped silently
+     * dead on the diagnostic path earlier this session: a future top-level
+     * grammar addition can no longer be wired into only one of the two.
      */
-    private evaluateWithTokens(
+    private preflightAsync(
+        normalizedTokens: Token[],
+        program: BytecodeProgram,
         lineNumber: number,
         expression: string,
-        tokens: Token[],
-        hasParens?: boolean
-    ): Value {
-        const prep = this.prepareExpression(expression, tokens, hasParens);
-
-        if (prep.kind === 'empty') {
-            const v = numberValue(0);
-            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null), expression);
-            return v;
-        }
-        if (prep.kind === 'error') {
-            // Re-throw the original error as-is — its own code/category
-            // (EXPRESSION_TOO_LONG/EXPRESSION_TOO_COMPLEX/whatever the
-            // parser actually threw) and expected/found/suggestion detail
-            // are more specific and useful than the generic EVALUATION_ERROR
-            // wrapper this used to construct around just the message.
-            throw prep.error;
+        reads: string[],
+        writes: string[],
+    ): { kind: 'pending'; value: Value } | { kind: 'proceed' } {
+        if (!(program.hasAsync || this.resolverRegistry.size > 0)) {
+            return { kind: 'proceed' };
         }
 
-        const { normalizedTokens, reads, writes, program } = prep;
-
-        // ══ PRE-FLIGHT ASYNC CHECK ══
-        // O(1) guard: skip the O(n) resolver scan when the bytecode has no
-        // async opcodes AND no resolvers are registered. Either condition
-        // alone is enough to warrant a preflight scan:
-        //   - program.hasAsync: bytecode contains CALL_PLUGIN (async VM path)
-        //   - resolverRegistry.size > 0: resolvers may intercept any expression
-        // For purely sync expressions (e.g., `2 + 2`) with no resolvers, this
-        // is an O(1) fast-path that bypasses the resolver scan entirely.
-        if (program.hasAsync || this.resolverRegistry.size > 0) {
         // Check all registered async resolvers BEFORE VM execution.
         // If any resolver says "data not ready", skip VM and return Pending.
         // Link the preflight AbortController to the keystroke signal so
@@ -1252,9 +1532,9 @@ export class ExpressionEngine {
         const abortPreflight = () => preflightController.abort();
         this.keystrokeSignal?.addEventListener('abort', abortPreflight, { once: true });
 
-        abortLogger.localControllerCreated("evaluateWithTokens preflight");
+        abortLogger.localControllerCreated("preflightAsync");
         if (this.keystrokeSignal) {
-            abortLogger.signalLinked("evaluateWithTokens preflight");
+            abortLogger.signalLinked("preflightAsync");
         }
 
         const preflightSignal = preflightController.signal;
@@ -1280,12 +1560,70 @@ export class ExpressionEngine {
 
             const pending = pendingValue(asyncCheck.queryKey);
             this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
-            return pending;
+            return { kind: 'pending', value: pending };
         }
         // Sync path — no async resolution started, so the preflight
         // controller is inert. Unhook its keystroke listener.
         this.keystrokeSignal?.removeEventListener('abort', abortPreflight);
-        } // end preflight guard
+        return { kind: 'proceed' };
+    }
+
+    /**
+     * Evaluate an expression using already-lexed tokens.
+     *
+     * The lean, non-diagnostic-instrumented path — used by
+     * {@link evaluateLineWithPreTokenized} (tokens from `scanDocument()`)
+     * and, via {@link compileExpression}/{@link tryCompileExpression},
+     * compile-only callers. NOT used by `evaluateLine()`/
+     * `evaluateExpression()` — those route through
+     * {@link evaluateExpressionWithDiagnostic} instead (evaluateLine ->
+     * evaluateLineDetailed -> evaluateLineWithDebug ->
+     * evaluateExpressionWithDiagnostic), which does its own lexing and its
+     * own diagnostic-instrumented front-half, delegating to the SAME
+     * {@link prepareExpression} this method calls. Delegates the front-half
+     * to {@link prepareExpression}, then runs async preflight (via
+     * {@link preflightAsync}) + VM execution (via {@link executeAndStore}).
+     */
+    private evaluateWithTokens(
+        lineNumber: number,
+        expression: string,
+        tokens: Token[],
+        hasParens?: boolean
+    ): Value {
+        const prep = this.prepareExpression(expression, tokens, hasParens);
+
+        if (prep.kind === 'empty') {
+            const v = numberValue(0);
+            this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null), expression);
+            return v;
+        }
+        if (prep.kind === 'error') {
+            // Re-throw the original error as-is — its own code/category
+            // (EXPRESSION_TOO_LONG/EXPRESSION_TOO_COMPLEX/whatever the
+            // parser actually threw) and expected/found/suggestion detail
+            // are more specific and useful than the generic EVALUATION_ERROR
+            // wrapper this used to construct around just the message.
+            throw prep.error;
+        }
+        if (prep.kind === 'symbolic-solve') {
+            // No DAG registration — a stored equation/bare-assignment's
+            // effect (vm.equations, vm.setVar) isn't reads/writes-trackable
+            // the same way ordinary bytecode is, so this line won't
+            // auto-re-evaluate if some unrelated line later changes one of
+            // its factor variables. A disclosed limitation of this
+            // narrow, bounded grammar (see trySymbolicGrammar()'s own doc
+            // comment), not an oversight.
+            this.storeLineResult(lineNumber, prep.value, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], [], expression);
+            return prep.value;
+        }
+
+        const { normalizedTokens, reads, writes, program } = prep;
+
+        // ══ PRE-FLIGHT ASYNC CHECK ══
+        const preflight = this.preflightAsync(normalizedTokens, program, lineNumber, expression, reads, writes);
+        if (preflight.kind === 'pending') {
+            return preflight.value;
+        }
 
         // Execute and handle result — no try/catch needed.
         // executeBytecode now returns EvalResult (discriminated union).
@@ -1462,6 +1800,21 @@ export class ExpressionEngine {
      * When disabled (production), `track()` is a zero-overhead passthrough
      * that returns the result directly.
      *
+     * The stages above describe OBSERVABLE shape, not a second implementation
+     * of the underlying work: normalize/complexity-check/symbolic-grammar/
+     * readwrite/cache-lookup/parse/compile are delegated to
+     * {@link prepareExpression} (the SAME method the lean
+     * {@link evaluateWithTokens} path calls), async preflight to
+     * {@link preflightAsync}, and VM execution to {@link executeAndStore} —
+     * every stage/event below is reconstructed from what those shared
+     * methods return, not fired from inside a second hand-duplicated copy
+     * of their logic. This matters: a new top-level grammar shape wired
+     * into `prepareExpression()` is automatically reachable from BOTH
+     * `evaluateLine()`/`evaluateExpression()` (this method) and the lean
+     * path — previously they were two independent implementations that had
+     * already drifted once (the `=>`/equation-statement grammar shipped
+     * dead on this, the real path, until a dedicated test caught it).
+     *
      * @param expression - The raw expression string to evaluate.
      * @param lineNumber - 1-based line number for DAG and LineCache entries.
      * @param inputType - Input type hint (default `"expression"`), passed to
@@ -1497,8 +1850,6 @@ export class ExpressionEngine {
             return { ...lengthCheck.error!, debug: undefined, diagnostic: undefined };
         }
 
-        const tokens: Token[] = [];
-
         // Pipeline event: start + structured stage
         if (hasCollectors) {
             pipeline.firePipelineStart({
@@ -1519,37 +1870,29 @@ export class ExpressionEngine {
         }
 
         // ══ LEXER STAGE ══
-        // Lexing with token emission events — use resetExpression to skip
-        // redundant classifyLine (caller already knows this is an expression).
-        // COMMENT tokens are filtered — they have no parselet and would cause
-        // "No prefix parselet found" errors at the parser.
-        const lexResult = AllocationTracker.track('lexer', () => {
-            this.lexer.resetExpression(expression);
-            let tokenIndex = 0;
-            let hasParens = false;
-            for (const t of this.lexer) {
-                if (t.type === 'COMMENT') continue;
-                if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
-                tokens.push(t);
-
-                if (hasCollectors) {
-                    pipeline.fireTokenEmitted({
-                        type: DiagnosticEventType.TokenEmitted,
-                        elapsedNs: 0, // zero-cost placeholder (timeline collector overrides)
-                        expression,
-                        token: {
-                            type: t.type,
-                            value: t.value,
-                            offset: t.offset || 0,
-                            line: t.line || lineNumber,
-                            col: t.col || 0,
-                        },
-                    });
-                }
-                tokenIndex++;
-            }
-            return { hasParens };
-        });
+        // Lexing with token emission events — this file's shared
+        // lexToTokens() (also used by compileExpression/
+        // tryCompileExpression) skips redundant classifyLine (caller
+        // already knows this is an expression) and filters COMMENT tokens
+        // (they have no parselet and would cause "No prefix parselet
+        // found" errors at the parser); `onToken` fires the per-token
+        // TokenEmitted diagnostic event, genuinely specific to this path.
+        const onToken = hasCollectors ? (t: Token) => {
+            pipeline.fireTokenEmitted({
+                type: DiagnosticEventType.TokenEmitted,
+                elapsedNs: 0, // zero-cost placeholder (timeline collector overrides)
+                expression,
+                token: {
+                    type: t.type,
+                    value: t.value,
+                    offset: t.offset || 0,
+                    line: t.line || lineNumber,
+                    col: t.col || 0,
+                },
+            });
+        } : undefined;
+        const lexResult = AllocationTracker.track('lexer', () => this.lexToTokens(expression, onToken));
+        const tokens = lexResult.result.tokens;
         const hasParens = lexResult.result.hasParens;
         if (trackEnabled && lexResult.alloc) stageAllocs.push(lexResult.alloc);
 
@@ -1621,41 +1964,85 @@ export class ExpressionEngine {
             return { value: v, tokens, program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, debug: undefined, diagnostic: undefined };
         }
 
-        // ══ NORMALIZER STAGE ══
-        // Post-lexer token normalization: phrase fusion, implicit multiply, etc.
-        // Normalized tokens replace raw tokens for parsing and safety checks.
-        let normalizedTokens: Token[] = tokens;
+        // ══ FRONT-HALF DELEGATION ══
+        // normalize -> complexity -> symbolic-grammar -> readwrite -> cache
+        // lookup/parse/compile, all via the SAME prepareExpression() the
+        // lean path (evaluateWithTokens/compileExpression/
+        // tryCompileExpression) already calls. This is the actual fix for
+        // the bug found earlier this session (a new top-level grammar
+        // shape silently dead on THIS, the real evaluateLine()/
+        // evaluateExpression() path): a future addition wired into
+        // prepareExpression() now automatically covers both paths, since
+        // there is only one implementation left of "what does this line
+        // mean." Every stage below is reconstructed from
+        // prepareExpression()'s return value — plus a couple of cheap,
+        // pure, side-effect-free recomputations for display-only fields it
+        // doesn't itself carry (the complexity score) — instead of being
+        // fired from inside a second, hand-duplicated copy of its logic.
+        let fusionCount = 0;
         const normalizerFusions: TokenFusion[] = [];
         const normalizerRuleCounts = new Map<string, number>();
-        if (this.normalizer.ruleCount > 0) {
-            if (hasCollectors) {
-                pipeline.fireNormalizerStart({
-                    type: DiagnosticEventType.NormalizerStart,
-                    elapsedNs: 0,
-                    expression,
-                    inputTokenCount: tokens.length,
-                });
-            }
-
-            let fusionCount = 0;
-            normalizedTokens = this.normalizer.normalize(tokens, (fusion) => {
-                if (hasCollectors) {
-                    fusionCount++;
-                    normalizerFusions.push(fusion);
-                    normalizerRuleCounts.set(fusion.rule, (normalizerRuleCounts.get(fusion.rule) || 0) + 1);
-                    pipeline.fireTokenFused({
-                        type: DiagnosticEventType.TokenFused,
-                        elapsedNs: 0,
-                        expression,
-                        ruleName: fusion.rule,
-                        sourceTokenCount: fusion.sourceTokens.length,
-                        fusedTokenType: fusion.fusedToken.type,
-                        fusedTokenValue: fusion.fusedToken.value,
-                    });
-                }
+        const onFusion = hasCollectors ? (fusion: TokenFusion) => {
+            fusionCount++;
+            normalizerFusions.push(fusion);
+            normalizerRuleCounts.set(fusion.rule, (normalizerRuleCounts.get(fusion.rule) || 0) + 1);
+            pipeline.fireTokenFused({
+                type: DiagnosticEventType.TokenFused,
+                elapsedNs: 0,
+                expression,
+                ruleName: fusion.rule,
+                sourceTokenCount: fusion.sourceTokens.length,
+                fusedTokenType: fusion.fusedToken.type,
+                fusedTokenValue: fusion.fusedToken.value,
             });
+        } : undefined;
 
-            if (hasCollectors) {
+        if (hasCollectors && this.normalizer.ruleCount > 0) {
+            pipeline.fireNormalizerStart({
+                type: DiagnosticEventType.NormalizerStart,
+                elapsedNs: 0,
+                expression,
+                inputTokenCount: tokens.length,
+            });
+        }
+
+        // Peeked BEFORE calling prepareExpression() so hit/miss is already
+        // known for the stage/event construction below, and so the
+        // parser's diagnostic-pipeline reference is only linked when a real
+        // parse attempt is actually about to happen — a cache hit never
+        // reaches parseExpression() at all, matching the original's own
+        // cache-miss-only gating of this same call.
+        const cachedBefore = this.bytecodeCache.get(expression);
+        if (hasCollectors && !cachedBefore) {
+            this.parser.setDiagnosticPipeline(pipeline, expression);
+        }
+
+        // NOT wrapped in AllocationTracker.track('parser', ...) here —
+        // prepareExpression() already measures its OWN internal parse+build
+        // call under that exact label internally (see its own doc comment
+        // on `parserAlloc`) and reports the result back on its 'ready'
+        // variant below. Wrapping the whole call from out here would widen
+        // the measured span to also cover normalize/complexity-check/cache-
+        // lookup, which measurably produced negative-allocation readings (a
+        // GC sweep landing inside the wider window) well over half the time.
+        const prep = this.prepareExpression(expression, tokens, hasParens, onFusion);
+        if (trackEnabled && prep.kind === 'ready' && prep.parserAlloc) {
+            stageAllocs.push(prep.parserAlloc);
+        }
+
+        if (hasCollectors && !cachedBefore) {
+            this.parser.setDiagnosticPipeline(undefined, "");
+        }
+
+        // From here on, `prep.normalizedTokens` is always defined — the two
+        // variants that lack it ('empty', and 'error' at the 'length'
+        // stage) are provably unreachable from this call site: the
+        // safety-length check and the raw-tokens-empty check above already
+        // handled both cases before prepareExpression() was ever invoked.
+        const normalizedTokens: Token[] = prep.kind === 'empty' ? tokens : (prep.normalizedTokens ?? tokens);
+
+        if (hasCollectors) {
+            if (this.normalizer.ruleCount > 0) {
                 pipeline.fireNormalizerEnd({
                     type: DiagnosticEventType.NormalizerEnd,
                     elapsedNs: 0,
@@ -1672,22 +2059,57 @@ export class ExpressionEngine {
                     tokens: [...normalizedTokens],
                     phrases: this.normalizer.getPhrases(),
                 });
+            } else {
+                this.addDiagnosticStage(stages, 'normalizer', 'Normalizer', '🔄', 'normalizer', 4, zeroElapsed, true, {
+                    type: 'normalizer',
+                    inputTokenCount: tokens.length,
+                    outputTokenCount: tokens.length,
+                    fusions: [],
+                    rulesApplied: [],
+                    tokens: [...tokens],
+                    phrases: this.normalizer.getPhrases(),
+                });
             }
-        } else if (hasCollectors) {
-            this.addDiagnosticStage(stages, 'normalizer', 'Normalizer', '🔄', 'normalizer', 4, zeroElapsed, true, {
-                type: 'normalizer',
-                inputTokenCount: tokens.length,
-                outputTokenCount: tokens.length,
-                fusions: [],
-                rulesApplied: [],
-                tokens: [...tokens],
-                phrases: this.normalizer.getPhrases(),
-            });
         }
 
-        // === SAFETY CHECK 2: Complexity scoring ===
+        // ══ 'empty' / 'error'-at-'length' outcomes ══
+        // Provably unreachable from this call site (see comment above) —
+        // handled only so the discriminated union stays exhaustively
+        // covered.
+        if (prep.kind === 'empty' || (prep.kind === 'error' && prep.stage === 'length')) {
+            if (hasCollectors) {
+                pipeline.firePipelineEnd({
+                    type: DiagnosticEventType.PipelineEnd,
+                    elapsedNs: 0,
+                    expression,
+                    success: prep.kind === 'empty',
+                    totalTokens: tokens.length,
+                    totalOpcodes: 0,
+                });
+            }
+            if (prep.kind === 'empty') {
+                const v = numberValue(0);
+                this.lineCache.set(lineNumber, new LineCacheEntry(v, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], null), expression);
+                return { value: v, tokens, program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, debug: undefined, diagnostic: undefined };
+            }
+            return {
+                value: numberValue(0),
+                tokens: [],
+                program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
+                error: prep.error.message,
+                engineError: prep.error,
+                debug: undefined,
+                diagnostic: undefined,
+            };
+        }
+
+        // Recompute the complexity score for display — cheap, pure,
+        // side-effect-free; prepareExpression() already made the actual
+        // pass/fail DECISION, this is purely for the diagnostic stage's own
+        // display fields it doesn't itself return.
         const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
-        if (!complexityCheck.passed) {
+
+        if (prep.kind === 'error' && prep.stage === 'complexity') {
             if (hasCollectors) {
                 this.addDiagnosticStage(stages, 'safety_complexity', 'Safety: Complexity', '🛡️', 'validate', 5, zeroElapsed, false, {
                     type: 'safety_complexity',
@@ -1735,9 +2157,34 @@ export class ExpressionEngine {
             });
         }
 
-        const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+        if (prep.kind === 'symbolic-solve') {
+            if (hasCollectors) {
+                pipeline.firePipelineEnd({
+                    type: DiagnosticEventType.PipelineEnd,
+                    elapsedNs: 0,
+                    expression,
+                    success: true,
+                    totalTokens: tokens.length,
+                    totalOpcodes: 0,
+                });
+            }
+            const emptyProgram: BytecodeProgram = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false };
+            this.storeLineResult(lineNumber, prep.value, emptyProgram, [], [], expression);
+            return {
+                value: prep.value,
+                tokens: normalizedTokens,
+                program: emptyProgram,
+                debug: undefined,
+                diagnostic: undefined,
+            };
+        }
 
-        // Structured: read/write extraction
+        // From here, prep.kind is 'ready' or 'error' at the 'parse' stage —
+        // both carry `reads`/`writes` (extracted before the cache lookup/
+        // parse attempt).
+        const reads = prep.reads ?? [];
+        const writes = prep.writes ?? [];
+
         if (hasCollectors) {
             this.addDiagnosticStage(stages, 'readwrite', 'Read/Write', '📋', 'readwrite', 6, zeroElapsed, false, {
                 type: 'readwrite',
@@ -1745,197 +2192,117 @@ export class ExpressionEngine {
                 writes,
                 isAssignment: writes.length > 0,
             });
+            this.addDiagnosticStage(stages, 'cache_check', 'Cache Check', '💾', 'cache', 7, zeroElapsed, false, {
+                type: 'cache_check',
+                hit: !!cachedBefore,
+                cacheSize: this.bytecodeCache.size,
+                cacheKey: expression,
+            });
+            if (cachedBefore) {
+                pipeline.fireCacheHit({ type: DiagnosticEventType.CacheHit, elapsedNs: 0, expression, cache: "bytecode", key: expression });
+            } else {
+                pipeline.fireCacheMiss({ type: DiagnosticEventType.CacheMiss, elapsedNs: 0, expression, cache: "bytecode", key: expression });
+            }
         }
 
-        let program: BytecodeProgram;
-
-        // Check bytecode cache
-        const cachedProgram = this.bytecodeCache.get(expression);
-        if (cachedProgram) {
-            program = cachedProgram;
-
-            // Structured: cache check - hit
+        if (prep.kind === 'error' && prep.stage === 'parse') {
+            // No 'parser'/'compiler' stage — the parse attempt itself is
+            // where this failed, matching the original's exact shape (it
+            // only ever got as far as the cache_check stage above before
+            // the parse threw).
             if (hasCollectors) {
-                this.addDiagnosticStage(stages, 'cache_check', 'Cache Check', '💾', 'cache', 7, zeroElapsed, false, {
-                    type: 'cache_check',
-                    hit: true,
-                    cacheSize: this.bytecodeCache.size,
-                    cacheKey: expression,
-                });
-                // Parser + Compiler skipped (cache hit)
-                this.addDiagnosticStage(stages, 'parser', 'Parser', '🌳', 'parser', 8, zeroElapsed, true, {
-                    type: 'parser',
-                    parselets: [],
-                    uniqueParseletTypes: [],
-                    astDepth: 0,
-                });
-                this.addDiagnosticStage(stages, 'compiler', 'Compiler', '⚙️', 'compiler', 9, zeroElapsed, true, {
-                    type: 'compiler',
-                    opcodeCount: program.opcodes.length,
-                    numberConstants: program.numbers.length,
-                    stringConstants: program.strings.length,
-                    hasAsync: program.hasAsync,
-                    cached: true,
-                });
-
-                pipeline.fireCacheHit({
-                    type: DiagnosticEventType.CacheHit,
+                pipeline.firePipelineEnd({
+                    type: DiagnosticEventType.PipelineEnd,
                     elapsedNs: 0,
                     expression,
-                    cache: "bytecode",
-                    key: expression,
-                });
-
-                pipeline.fireBytecodeBuilt({
-                    type: DiagnosticEventType.BytecodeBuilt,
-                    elapsedNs: 0,
-                    expression,
-                    opcodesLength: program.opcodes.length,
-                    numbersLength: program.numbers.length,
-                    stringsLength: program.strings.length,
-                    isCached: true,
+                    success: false,
+                    totalTokens: tokens.length,
+                    totalOpcodes: 0,
                 });
             }
-        } else {
-            if (hasCollectors) {
-                this.addDiagnosticStage(stages, 'cache_check', 'Cache Check', '💾', 'cache', 7, zeroElapsed, false, {
-                    type: 'cache_check',
-                    hit: false,
-                    cacheSize: this.bytecodeCache.size,
-                    cacheKey: expression,
-                });
-                pipeline.fireCacheMiss({
-                    type: DiagnosticEventType.CacheMiss,
-                    elapsedNs: 0,
-                    expression,
-                    cache: "bytecode",
-                    key: expression,
-                });
-            }
+            return {
+                value: numberValue(0),
+                tokens: normalizedTokens,
+                program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
+                error: prep.error.message,
+                engineError: prep.error,
+                debug: undefined,
+                diagnostic: undefined,
+            };
+        }
 
-            // Parselet matching event: inject into parser via pipeline
-            if (hasCollectors) {
-                this.parser.setDiagnosticPipeline(pipeline, expression);
-            }
+        if (prep.kind !== 'ready') {
+            // Unreachable: every other variant ('empty', 'error' at any
+            // stage, 'symbolic-solve') was already returned above. Kept
+            // only so TypeScript's discriminated-union narrowing (which
+            // doesn't always simplify a chain of `kind === X || (kind ===
+            // Y && stage === Z)` guards perfectly) treats `prep.program`
+            // below as definitely accessible, without an `as` cast.
+            throw ErrorFactory.internal({
+                code: "UNEXPECTED_ERROR",
+                message: "Internal error: prepareExpression() returned an unexpected variant after all other cases were handled",
+            });
+        }
+        const program = prep.program;
 
-            // ══ PARSER STAGE ══
-            // Get a pooled builder — avoids 4 heap allocations per expression
-            const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
-            builder.reset();
-            try {
-                const parseResult = AllocationTracker.track('parser', () => {
-                    this.parseExpression(builder, normalizedTokens, hasParens);
-                    return builder.build();
-                });
-                if (trackEnabled && parseResult.alloc) stageAllocs.push(parseResult.alloc);
-                program = parseResult.result;
-            } catch (e) {
-                const engineError = normalizeUnknownError(e);
-
-                if (hasCollectors) {
-                    pipeline.firePipelineEnd({
-                        type: DiagnosticEventType.PipelineEnd,
-                        elapsedNs: 0,
-                        expression,
-                        success: false,
-                        totalTokens: tokens.length,
-                        totalOpcodes: 0,
-                    });
-                }
-
-                return {
-                    value: numberValue(0),
-                    tokens: normalizedTokens,
-                    program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
-                    error: engineError.message,
-                    engineError,
-                    debug: undefined,
-                    diagnostic: undefined,
-                };
-            }
-
-            // Structured: parser stage
-            if (hasCollectors) {
-                this.addDiagnosticStage(stages, 'parser', 'Parser', '🌳', 'parser', 8, zeroElapsed, false, {
-                    type: 'parser',
-                    parselets: [],
-                    uniqueParseletTypes: [],
-                    astDepth: 0,
-                });
-            }
-
-            this.cacheBytecode(expression, program);
-
-            if (hasCollectors) {
-                this.addDiagnosticStage(stages, 'compiler', 'Compiler', '⚙️', 'compiler', 9, zeroElapsed, false, {
-                    type: 'compiler',
-                    opcodeCount: program.opcodes.length,
-                    numberConstants: program.numbers.length,
-                    stringConstants: program.strings.length,
-                    hasAsync: program.hasAsync,
-                    cached: false,
-                });
-
-                pipeline.fireBytecodeBuilt({
-                    type: DiagnosticEventType.BytecodeBuilt,
-                    elapsedNs: 0,
-                    expression,
-                    opcodesLength: program.opcodes.length,
-                    numbersLength: program.numbers.length,
-                    stringsLength: program.strings.length,
-                    isCached: false,
-                });
-            }
-
-            // Clear parser pipeline reference to avoid holding refs
-            this.parser.setDiagnosticPipeline(undefined, "");
+        if (hasCollectors) {
+            this.addDiagnosticStage(stages, 'parser', 'Parser', '🌳', 'parser', 8, zeroElapsed, !!cachedBefore, {
+                type: 'parser',
+                parselets: [],
+                uniqueParseletTypes: [],
+                astDepth: 0,
+            });
+            this.addDiagnosticStage(stages, 'compiler', 'Compiler', '⚙️', 'compiler', 9, zeroElapsed, !!cachedBefore, {
+                type: 'compiler',
+                opcodeCount: program.opcodes.length,
+                numberConstants: program.numbers.length,
+                stringConstants: program.strings.length,
+                hasAsync: program.hasAsync,
+                cached: !!cachedBefore,
+            });
+            pipeline.fireBytecodeBuilt({
+                type: DiagnosticEventType.BytecodeBuilt,
+                elapsedNs: 0,
+                expression,
+                opcodesLength: program.opcodes.length,
+                numbersLength: program.numbers.length,
+                stringsLength: program.strings.length,
+                isCached: !!cachedBefore,
+            });
         }
 
         // ══ PRE-FLIGHT ASYNC CHECK ══
-        // O(1) guard: skip the O(n) resolver scan when the bytecode has no
-        // async opcodes AND no resolvers are registered.
-        const hasAsync = program.hasAsync || this.resolverRegistry.size > 0;
-        if (hasAsync) {
-        // Check all registered async resolvers BEFORE VM execution.
-        const preflightController = new AbortController();
-        const abortPreflight = () => preflightController.abort();
-        this.keystrokeSignal?.addEventListener('abort', abortPreflight, { once: true });
+        const hasAsyncGuard = program.hasAsync || this.resolverRegistry.size > 0;
+        const preflight = this.preflightAsync(normalizedTokens, program, lineNumber, expression, reads, writes);
 
-        abortLogger.localControllerCreated("diagnostic preflight");
-        if (this.keystrokeSignal) {
-            abortLogger.signalLinked("diagnostic preflight");
-        }
-
-        const preflightSignal = preflightController.signal;
-        const asyncCheck = this.resolverRegistry.preflightAll(
-            normalizedTokens, program, '_engine', preflightSignal, this.queryClient
-        );
-        if (asyncCheck) {
-            void this.resolveAsync({
-                type: 'pending',
-                queryKey: asyncCheck.queryKey,
-                resolver: asyncCheck.resolver,
-                packageId: asyncCheck.packageId || '_engine',
-                signal: asyncCheck.signal,
-            });
-
-            this.dag.registerLineDataSourceDependency(
-                lineNumber,
-                asyncCheck.packageId || '_engine',
-                [asyncCheck.queryKey]
-            );
-
-            const pending = pendingValue(asyncCheck.queryKey);
-            this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
-
-            if (hasCollectors) {
+        if (hasCollectors) {
+            if (preflight.kind === 'pending') {
                 this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, false, {
                     type: 'async_preflight',
                     path: 'pending',
-                    pendingQueryKey: asyncCheck.queryKey,
+                    pendingQueryKey: preflight.value.value as string,
                     resolverCount: this.resolverRegistry.size,
                     skippedGuard: true,
                 });
+            } else if (hasAsyncGuard) {
+                this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, false, {
+                    type: 'async_preflight',
+                    path: 'sync',
+                    resolverCount: this.resolverRegistry.size,
+                    skippedGuard: false,
+                });
+            } else {
+                this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, true, {
+                    type: 'async_preflight',
+                    path: 'sync',
+                    resolverCount: 0,
+                    skippedGuard: true,
+                });
+            }
+        }
+
+        if (preflight.kind === 'pending') {
+            if (hasCollectors) {
                 pipeline.firePipelineEnd({
                     type: DiagnosticEventType.PipelineEnd,
                     elapsedNs: 0,
@@ -1945,97 +2312,36 @@ export class ExpressionEngine {
                     totalOpcodes: program.opcodes.length,
                 });
             }
-
             return {
-                value: pending,
+                value: preflight.value,
                 tokens: normalizedTokens,
                 program,
                 debug: undefined,
-                diagnostic: hasCollectors ? this.buildDiagnosticResult(stages, pending, normalizedTokens, program, null) : undefined,
+                diagnostic: hasCollectors ? this.buildDiagnosticResult(stages, preflight.value, normalizedTokens, program, null) : undefined,
             };
         }
 
-        // Sync path — unhook the inert preflight controller's keystroke listener.
-        this.keystrokeSignal?.removeEventListener('abort', abortPreflight);
-
-        // Structured: async preflight - sync path
-        if (hasCollectors) {
-            this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, false, {
-                type: 'async_preflight',
-                path: 'sync',
-                resolverCount: this.resolverRegistry.size,
-                skippedGuard: false,
-            });
-        }
-        } else if (hasCollectors) {
-            // Structured: async preflight - skipped (no async opcodes, no resolvers)
-            this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, true, {
-                type: 'async_preflight',
-                path: 'sync',
-                resolverCount: 0,
-                skippedGuard: true,
-            });
-        }
-
         // ══ VM STAGE ══
+        // Delegates to executeAndStore() — the SAME method the lean path
+        // calls — which already handles the AbortController/keystroke-
+        // signal linking, stack cleanup, and resolveAsync/DAG-registration/
+        // storeLineResult side effects internally. executeAndStore()
+        // throws on a VM runtime error (matching the lean path's own
+        // contract); caught here and converted to a soft `error` return,
+        // exactly as this method's own inline VM-execution block used to
+        // do directly, so a caller evaluating a whole multi-line document
+        // one line at a time still doesn't have one bad line abort every
+        // subsequent line.
         const emitVmTrace = hasCollectors && this.config.diagnostic.vmTraceEnabled === true;
-        const stackBefore = this.vm.getStack().length;
-
-        // Set up AbortController for VM execution
-        // ── Link to keystroke signal (One AbortController Per Keystroke) ──
-        const controller = new AbortController();
-        const abortLocal = () => controller.abort();
-        this.keystrokeSignal?.addEventListener('abort', abortLocal, { once: true });
-
-        abortLogger.localControllerCreated("diagnostic vm");
-        if (this.keystrokeSignal) {
-            abortLogger.signalLinked("diagnostic vm");
-        }
-
-        this.vm.activeSignal = controller.signal;
-        this.vm.abortCurrent = () => {
-            abortLogger.signalUnlinked("diagnostic vm");
-            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
-            controller.abort();
-        };
-
-        setActiveQueryClient(this.queryClient);
-
-        let evalResult: EvalResult;
+        let result: Value;
         try {
             const vmResult = AllocationTracker.track('vm', () => {
-                return executeBytecode(
-                    program,
-                    this.vm,
-                    emitVmTrace ? pipeline : undefined,
-                    expression,
-                    this.makeLineContext(lineNumber)
-                );
-            }, { cacheHit: !!cachedProgram });
-            evalResult = vmResult.result;
+                return this.executeAndStore(program, lineNumber, expression, reads, writes, '_engine', emitVmTrace ? pipeline : undefined, expression);
+            }, { cacheHit: !!cachedBefore });
+            result = vmResult.result;
             if (trackEnabled && vmResult.alloc) stageAllocs.push(vmResult.alloc);
-            if (evalResult.type === 'error') {
-                // executeBytecode()'s outer try/catch now returns internal
-                // invariant violations as DATA ({type:'error'}) instead of
-                // throwing them — re-throw here so this SAME catch block
-                // still converts it into the soft `error` return field
-                // below, exactly as it already does for every other VM
-                // failure. Without this, an internal-invariant failure
-                // would silently bypass this catch entirely and reach
-                // `evalResult.value` further down with no value to read.
-                throw evalResult.error;
-            }
         } catch (e) {
-            // A VM runtime error (e.g. an undefined variable reference)
-            // previously propagated straight out of evaluateExpressionWithDiagnostic
-            // uncaught — for a caller evaluating a whole multi-line document
-            // one line at a time (the playground), that abandoned every
-            // subsequent line's evaluation instead of just failing this one
-            // line, matching how the parser stage above already handles its
-            // own failures (catch, return a soft `error` instead of throwing).
-            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
             const engineError = normalizeUnknownError(e);
-
             if (hasCollectors) {
                 pipeline.firePipelineEnd({
                     type: DiagnosticEventType.PipelineEnd,
@@ -2046,7 +2352,6 @@ export class ExpressionEngine {
                     totalOpcodes: program.opcodes.length,
                 });
             }
-
             return {
                 value: numberValue(0),
                 tokens: normalizedTokens,
@@ -2058,44 +2363,22 @@ export class ExpressionEngine {
             };
         }
 
-        // Stack cleanup
-        while (this.vm.getStack().length > stackBefore) {
-            this.vm.pop();
-        }
+        const isPending = result.type === ValueType.Pending;
 
-        // Structured: VM Execute stage
-        // (evalResult is already narrowed to 'value' | 'pending' here — the
-        // try block above re-throws on 'error' so this same function's
-        // catch block handles it, same as any other VM failure.)
         if (hasCollectors) {
-            const resultValue = evalResult.type === 'pending'
-                ? 'pending'
-                : String(evalResult.value.value ?? '');
-            const resultType = evalResult.type === 'pending'
-                ? 'Pending'
-                : (evalResult.value.unit ? 'Uom' : 'Number');
+            const resultValue = isPending ? 'pending' : String(result.value ?? '');
+            const resultType = isPending ? 'Pending' : (result.unit ? 'Uom' : 'Number');
             this.addDiagnosticStage(stages, 'vm_execute', 'VM Execute', '⚡', 'vm', 11, zeroElapsed, false, {
                 type: 'vm_execute',
                 totalInstructions: program.opcodes.length,
                 stackDepth: this.vm.getStack().length,
                 resultType,
                 resultValue,
-                isPending: evalResult.type === 'pending',
+                isPending,
             });
         }
 
-        if (evalResult.type === 'pending') {
-            void this.resolveAsync(evalResult);
-
-            this.dag.registerLineDataSourceDependency(
-                lineNumber,
-                evalResult.packageId || '_engine',
-                [evalResult.queryKey]
-            );
-
-            const pending = pendingValue(evalResult.queryKey);
-            this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
-
+        if (isPending) {
             if (hasCollectors) {
                 pipeline.firePipelineEnd({
                     type: DiagnosticEventType.PipelineEnd,
@@ -2106,30 +2389,21 @@ export class ExpressionEngine {
                     totalOpcodes: program.opcodes.length,
                 });
             }
-
             return {
-                value: pending,
+                value: result,
                 tokens: normalizedTokens,
                 program,
                 debug: undefined,
-                diagnostic: hasCollectors ? this.buildDiagnosticResult(stages, pending, normalizedTokens, program, null) : undefined,
+                diagnostic: hasCollectors ? this.buildDiagnosticResult(stages, result, normalizedTokens, program, null) : undefined,
             };
         }
-
-        // Sync completion — unhook the keystroke listener (see executeAndStore).
-        this.keystrokeSignal?.removeEventListener('abort', abortLocal);
-
-        const result = evalResult.value;
-
-        this.dag.registerLine(lineNumber, reads, writes);
-        this.storeLineResult(lineNumber, result, program, reads, writes, expression);
 
         // ══ BUILD TELEMETRY ══
         if (trackEnabled && stageAllocs.length > 0) {
             this.lastTelemetry = AllocationTracker.createTelemetry(
                 expression,
                 stageAllocs,
-                !!cachedProgram
+                !!cachedBefore
             );
         }
 
@@ -2171,7 +2445,7 @@ export class ExpressionEngine {
                 success: true,
                 totalTokens: tokens.length,
                 totalOpcodes: program.opcodes.length,
-                cacheHit: !!cachedProgram,
+                cacheHit: !!cachedBefore,
             });
 
             pipeline.firePipelineEnd({
@@ -2234,16 +2508,16 @@ export class ExpressionEngine {
                 };
             }
             return {
-                value: result!,
+                value: result,
                 tokens: normalizedTokens,
                 program,
                 debug,
-                diagnostic: this.buildDiagnosticResult(stages, result!, normalizedTokens, program, null),
+                diagnostic: this.buildDiagnosticResult(stages, result, normalizedTokens, program, null),
             };
         }
 
         return {
-            value: result!,
+            value: result,
             tokens: normalizedTokens,
             program,
         };
@@ -2618,16 +2892,7 @@ export class ExpressionEngine {
 		reads: string[];
 		writes: string[];
 	} {
-		// Lexing — skip classifyLine overhead since caller knows this is an
-		// expression. COMMENT tokens are filtered — they have no parselet.
-		const tokens: Token[] = [];
-		let hasParens = false;
-		this.lexer.resetExpression(expression);
-		for (const t of this.lexer) {
-			if (t.type === 'COMMENT') continue;
-			if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
-			tokens.push(t);
-		}
+		const { tokens, hasParens } = this.lexToTokens(expression);
 
 		// Shared front-half: safety → normalize → complexity → cache/compile.
 		const prep = this.prepareExpression(expression, tokens, hasParens);
@@ -2667,6 +2932,21 @@ export class ExpressionEngine {
 			}
 			throw prep.error;
 		}
+		if (prep.kind === 'symbolic-solve') {
+			// No real bytecode representation for a `=>`/bare-equation line
+			// (its effect — a stored equation, a direct vm.setVar() — was
+			// already fully computed inside prepareExpression() itself) —
+			// same "nothing to compile" shape as the 'empty' case above.
+			// External tooling asking for the compiled program of a `=>`
+			// line gets an empty one; a disclosed limitation of this
+			// narrow grammar, not an oversight.
+			return {
+				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
+				tokens: prep.normalizedTokens,
+				reads: [],
+				writes: [],
+			};
+		}
 
 		return { program: prep.program, tokens, reads: prep.reads, writes: prep.writes };
 	}
@@ -2698,15 +2978,7 @@ export class ExpressionEngine {
 	 * is out of scope here.
 	 */
 	tryCompileExpression(expression: string): boolean {
-		const tokens: Token[] = [];
-		let hasParens = false;
-		this.lexer.resetExpression(expression);
-		for (const t of this.lexer) {
-			if (t.type === 'COMMENT') continue;
-			if (t.type === "LPAREN" || t.type === "RPAREN") hasParens = true;
-			tokens.push(t);
-		}
-
+		const { tokens, hasParens } = this.lexToTokens(expression);
 		const prep = this.prepareExpression(expression, tokens, hasParens);
 		return prep.kind !== 'error';
 	}

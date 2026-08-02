@@ -1,5 +1,8 @@
 
 
+import type { MatrixData, RangeData } from "@solve-js/vm/Value";
+import type { SymbolicNode } from "@solve-js/vm/Symbolic";
+
 /**
  * Diagnostic event types as string constants (not const enum — for cross-module compatibility with isolatedModules)
  */
@@ -70,7 +73,7 @@ export interface VmStepEvent extends BaseEvent {
   readonly instructionNumber: number;
   readonly stack: ReadonlyArray<{
     readonly type: number;
-    readonly value: number | bigint | string | boolean | number[];
+    readonly value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode;
     readonly unit?: string;
   }>;
 }
@@ -80,7 +83,7 @@ export interface VmHaltEvent extends BaseEvent {
   readonly type: "vm_halt";
   readonly result?: {
     readonly type: number;
-    readonly value: number | bigint | string | boolean | number[];
+    readonly value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode;
     readonly unit?: string;
   };
 }

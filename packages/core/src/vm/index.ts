@@ -1,6 +1,7 @@
 export { DependencyGraph } from "./DependencyGraph";
 export { ScopeManager } from "./ScopeManager";
-export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, arrayValue } from "./Value";
+export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, matrixValue, rowVectorValue, colVectorValue, rangeValue } from "./Value";
+export type { MatrixData, MatrixEntry, RangeData } from "./Value";
 export { createVM, executeBytecode } from "./VM";
 export type { Bytecode } from "./VM";
 export { VMCheckpointer } from "./VMCheckpoints";

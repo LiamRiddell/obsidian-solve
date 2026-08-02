@@ -177,7 +177,7 @@ interface TwoCharOpMap {
   [firstChar: number]: { [secondChar: number]: string };
 }
 const TWO_CHAR_OPS: TwoCharOpMap = {
-  61: { 61: 'EQUALITY' },  // ==
+  61: { 61: 'EQUALITY', 62: 'THEREFORE' },  // ==, => (opposite char order from >='s GTE below — no collision)
   33: { 61: 'NEQ' },       // !=
   62: { 61: 'GTE' },       // >=
   60: { 61: 'LTE' },       // <=

@@ -3,6 +3,36 @@ import type { BytecodeProgram, UserFunctionDef } from "@solve-js/parser/Bytecode
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
+ * A stored bare (colon-less) equation of the shape `factor1*factor2*...*
+ * variable = rhs` (e.g. `a*x = [60;70]`, or `s*t*v = [vx;vy;1]`) —
+ * registered when that line is EXECUTED (mirroring `UserFunctionDef`'s own
+ * execution-time registration, not parse-time), and consulted when
+ * `<variable> =>` is later evaluated. Solving is `variable =
+ * inv(factor1*factor2*...) * rhs` (`vm/VM.ts`'s THEREFORE-handling code,
+ * `vm/MatrixOps.ts`'s `matrixMultiply()`/`inverse()` — both symbolic-aware,
+ * so a factor whose OWN cells are still-unassigned free variables, e.g.
+ * `s = [sx,0,0;...]`, solves correctly too).
+ *
+ * `factorNames` are looked up via `vm.getVar()` at solve time (ordinary,
+ * ALREADY-evaluated Matrix values — ordinary ("bare") assignment always
+ * evaluates its RHS eagerly, even when that RHS itself contains
+ * unassigned names, via symbolic-tolerant evaluation, so by solve time
+ * each factor is already a genuine, possibly-partially-symbolic Matrix
+ * Value sitting in the variable store) — NOT re-compiled bytecode, since
+ * this pattern only ever allows bare identifiers as factors (see
+ * `ExpressionEngine.ts`'s own equation-detection doc comment for why this
+ * stays a narrow, disclosed pattern rather than a general expression).
+ * `rhsProgram` IS a real compiled program (the right-hand side can be an
+ * arbitrary expression, e.g. `[vx;vy;1]`), evaluated in symbolic-tolerant
+ * mode at solve time.
+ */
+export interface EquationDef {
+	variable: string;
+	factorNames: string[];
+	rhsProgram: BytecodeProgram;
+}
+
+/**
  * Handler function for plugin-registered opcodes via CALL_PLUGIN (opcode 50).
  * No longer dispatched directly from the VM switch — plugins register
  * functions in pluginFunctionRegistry instead.
@@ -128,6 +158,10 @@ export interface VM {
 	defineUserFunction(name: string, params: string[], program: BytecodeProgram): void;
 	getUserFunction(name: string): UserFunctionDef | undefined;
 	hasUserFunction(name: string): boolean;
+	/** Register (or redefine) a bare equation (`a*x = rhs`), keyed by its free variable — see {@link EquationDef}. */
+	defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram): void;
+	getEquation(variable: string): EquationDef | undefined;
+	hasEquation(variable: string): boolean;
 	reset(): void;
 	getMaxInstructions(): number;
 	getMaxStackDepth(): number;

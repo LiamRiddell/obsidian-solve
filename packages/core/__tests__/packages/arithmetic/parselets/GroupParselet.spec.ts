@@ -19,7 +19,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { ValueType, Value } from "@solve-js/vm/Value";
+import { ValueType, Value, type MatrixData } from "@solve-js/vm/Value";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -74,31 +74,31 @@ describe("GroupParselet — plain grouping (regression)", () => {
 describe("GroupParselet — bare-tuple vector literal", () => {
   test("(1, 2) produces a 2-component array", () => {
     const result = parseAndExecute("(1, 2)");
-    expect(result.isVector()).toBe(true);
-    expect(result.value as number[]).toEqual([1, 2]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([1, 2]);
   });
 
   test("(1, 2, 3) produces a 3-component array", () => {
     const result = parseAndExecute("(1, 2, 3)");
-    expect(result.isVector()).toBe(true);
-    expect(result.value as number[]).toEqual([1, 2, 3]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([1, 2, 3]);
   });
 
   test("(1, 2, 3, 4) produces a 4-component array", () => {
     const result = parseAndExecute("(1, 2, 3, 4)");
-    expect(result.isVector()).toBe(true);
-    expect(result.value as number[]).toEqual([1, 2, 3, 4]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([1, 2, 3, 4]);
   });
 
   test("components may be full expressions: (1 + 2, 3 * 4)", () => {
     const result = parseAndExecute("(1 + 2, 3 * 4)");
-    expect(result.isVector()).toBe(true);
-    expect(result.value as number[]).toEqual([3, 12]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([3, 12]);
   });
 
   test("components may be unary/exponent expressions: (-3, 2^3)", () => {
     const result = parseAndExecute("(-3, 2^3)");
-    expect(result.isVector()).toBe(true);
-    expect(result.value as number[]).toEqual([-3, 8]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([-3, 8]);
   });
 });

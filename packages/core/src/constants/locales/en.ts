@@ -65,6 +65,16 @@ export const enLocale: ILocale = {
     taxadd: "FUNC", taxremove: "FUNC",
     // Inflation-adjusted value function-call form (packages/finance/).
     inflationadjust: "FUNC",
+    // Matrix (packages/matrix/) function-call forms -- also reachable via
+    // `^T`/`^-1` operator syntax and `|a|` (see FunctionCallParselet.ts's
+    // builtinNameToIndex comment for indices 63-66).
+    transpose: "FUNC", det: "FUNC", inv: "FUNC", dot: "FUNC",
+    // map/reduce/sum/prod (packages/mapreduce/) are NOT bare keywordMap
+    // entries — see packages/mapreduce/normalizer/MapReduceCallNormalizerRule.ts,
+    // which fuses them ONLY when immediately followed by "(" (same
+    // "conditional-on-LPAREN" pattern as packages/lines/'s own
+    // sum(/total(/average( fusion), so `:map = [...]`/`:sum = 100`/etc.
+    // keep working as ordinary variable names.
     clamp: "CLAMP",
     convert: "CONVERT", to: "TO", best: "BEST", in: "IN",
     next: "NEXT", last: "LAST", until: "UNTIL", since: "SINCE",

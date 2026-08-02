@@ -1,4 +1,41 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import type { SymbolicNode } from "@solve-js/vm/Symbolic";
+
+/**
+ * A single matrix cell. `boolean` covers element-wise comparison results
+ * (`[1,6;3,8] < [5,2;7,4]` produces a Matrix of booleans, not numbers). A
+ * `SymbolicNode` cell is a free-variable algebraic entry — e.g. `s =
+ * [sx,0,0;0,sy,0;0,0,1]` where `sx`/`sy` are never assigned, so those
+ * cells store a real `SymbolicNode` (a bare `var` node initially) rather
+ * than degrading to `0`. See `MatrixOps.ts`'s `entryToSymbolic()`/
+ * `symbolicToEntry()` for the two-way conversion every symbolic-aware
+ * matrix op (multiply, inverse, determinant) uses.
+ */
+export type MatrixEntry = number | boolean | SymbolicNode;
+
+/**
+ * A general rows×cols matrix — a vector is just a 1×N (row) or N×1 (column)
+ * matrix. `data` is COLUMN-MAJOR (`data[row + col*rows]`), matching the
+ * spec's own `a[index]` column-major indexing semantics directly (no
+ * translation needed for single-index reads). `hasSymbolic` lets every
+ * numeric matrix op fast-path the all-numeric case with one boolean check,
+ * mirroring `binaryOp()`'s existing Number+Number fast path — computed by
+ * `matrixValue()` itself (true the moment any cell is a `SymbolicNode`
+ * object rather than a plain number/boolean), not something callers set
+ * by hand.
+ */
+export interface MatrixData {
+	readonly rows: number;
+	readonly cols: number;
+	readonly data: readonly MatrixEntry[];
+	readonly hasSymbolic: boolean;
+}
+
+/** A first-class integer range `min:max`, both bounds inclusive. */
+export interface RangeData {
+	readonly min: number;
+	readonly max: number;
+}
 
 /**
  * Discriminated union tag for {@link Value} objects.
@@ -16,8 +53,12 @@ export enum ValueType {
 	Datetime = 4,
 	Percentage = 5,
 	Uom = 6,
-	/** Unified array type (any-length vectors, nested arrays). Value is `number[]`. */
-	Array = 7,
+	/** General rows×cols matrix (a vector is a 1×N or N×1 matrix). Value is {@link MatrixData}. */
+	Matrix = 7,
+	/** A first-class integer range `min:max`, both inclusive. Value is {@link RangeData}. */
+	Range = 8,
+	/** A symbolic/algebraic expression tree (free-variable formula, not a concrete number). Value is a `SymbolicNode` (`@solve-js/vm/Symbolic`). */
+	Symbolic = 9,
 	/** Boolean true/false. Value is `boolean`. */
 	Boolean = 10,
 	/** Unit of measurement token (lexer only, not a runtime value). */
@@ -55,7 +96,7 @@ export class ValueArena {
 	}
 
 	/** Bump-allocate a recycled Value. Falls back to allocation only for overflow. */
-	acquire(type: ValueType, value: number | bigint | string | boolean | number[], unit?: string): Value {
+	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode, unit?: string): Value {
 		if (this.index < this.arena.length) {
 			const v = this.arena[this.index++];
 			v.recycle(type, value, unit);
@@ -172,14 +213,14 @@ export class Value {
 	// recycle() which overwrites all fields. External code should treat Values
 	// as immutable after construction (arena handles mutation internally).
 	public type: ValueType;
-	public value: number | bigint | string | boolean | number[];
+	public value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode;
 	public unit?: string;
 	/** Set by async resolvers when a fetch timed out — the result is a fallback (typically 0). */
 	public timedOut?: boolean;
 
 	constructor(
 		type: ValueType,
-		value: number | bigint | string | boolean | number[],
+		value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode,
 		unit?: string
 	) {
 		this.type = type;
@@ -196,7 +237,7 @@ export class Value {
 	 * Phase 5.3: Reset all fields for arena reuse.
 	 * Called by ValueArena.acquire() — zero allocation, just field assignment.
 	 */
-	recycle(type: ValueType, value: number | bigint | string | boolean | number[], unit?: string): void {
+	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode, unit?: string): void {
 		this.type = type;
 		this.value = value;
 		this.unit = unit;
@@ -223,14 +264,49 @@ export class Value {
 		return this.type === ValueType.String;
 	}
 
-	isVector(): this is Value & { value: number[] } {
-		return this.type === ValueType.Array;
+	isMatrix(): this is Value & { value: MatrixData } {
+		return this.type === ValueType.Matrix;
+	}
+
+	/** A Matrix shaped like a vector — 1×N (row) or N×1 (column). */
+	isVectorShape(): boolean {
+		if (this.type !== ValueType.Matrix) return false;
+		const m = this.value as MatrixData;
+		return m.rows === 1 || m.cols === 1;
+	}
+
+	isRange(): this is Value & { value: RangeData } {
+		return this.type === ValueType.Range;
+	}
+
+	isSymbolic(): this is Value & { value: SymbolicNode } {
+		return this.type === ValueType.Symbolic;
 	}
 
 	toNumber(): number {
-		// Pending and Error values have no numeric representation
+		// Pending/Error have no numeric representation at all — 0 (established
+		// convention). A genuinely multi-cell Matrix has no single numeric
+		// representation either (real callers branch on `.isMatrix()` BEFORE
+		// reaching this fallback — see e.g. VM.ts's MUL/comparison dispatch),
+		// but a 1x1 Matrix — the shape `float(x)`'s legacy sugar produces, see
+		// packages/vector/parselets/FloatParselet.ts — IS a scalar in every
+		// meaningful sense, so it degrades to that single cell's numeric value
+		// rather than 0 (this exact case used to work "by accident" pre-Matrix,
+		// since `parseFloat([2].toString())` happened to yield `2`).
 		if (this.type === ValueType.Pending) return 0;
 		if (this.type === ValueType.Error) return 0;
+		if (this.type === ValueType.Matrix) {
+			const m = this.value as MatrixData;
+			if (m.rows === 1 && m.cols === 1 && typeof m.data[0] === "number") return m.data[0];
+			return 0;
+		}
+		if (this.type === ValueType.Range) return 0;
+		// A symbolic expression has no single concrete numeric value by
+		// definition (it's a free-variable formula) — 0, matching the
+		// Pending/Error/Range convention. Real callers branch on
+		// `.isSymbolic()` BEFORE reaching this fallback (see
+		// `VMConversion.ts`'s `binaryOp()`).
+		if (this.type === ValueType.Symbolic) return 0;
 
 		if (this._cachedNumber !== undefined) return this._cachedNumber;
 
@@ -247,6 +323,13 @@ export class Value {
 	isNaN(): boolean {
 		if (this.type === ValueType.Pending) return false;
 		if (this.type === ValueType.Error) return false;
+		if (this.type === ValueType.Matrix) {
+			const m = this.value as MatrixData;
+			if (m.rows === 1 && m.cols === 1 && typeof m.data[0] === "number") return isNaN(m.data[0]);
+			return false;
+		}
+		if (this.type === ValueType.Range) return false;
+		if (this.type === ValueType.Symbolic) return false;
 		if (typeof this.value === 'number') return isNaN(this.value);
 		if (typeof this.value === 'bigint') return false;
 		return isNaN(parseFloat(this.value as string));
@@ -376,12 +459,43 @@ export function timecodeFps(unit: string): number {
 }
 
 /**
- * Create an Array value — any-length vectors and nested arrays.
- * Replaces the old vectorValue() which selected Vec2/Vec3/Vec4 based on length.
+ * Create a Matrix value from an explicit shape + column-major data array.
+ * `data.length` must equal `rows*cols` — callers building a matrix from
+ * row-major source syntax (e.g. the `[1,2;3,4]` literal) must transpose
+ * into column-major order before calling this; see `MatrixOps.ts`'s
+ * `rowMajorToColumnMajor()`.
  */
-export function arrayValue(v: number[]): Value {
-	if (_arenaActive && _arena) return _arena.acquire(ValueType.Array, v);
-	return new Value(ValueType.Array, v);
+export function matrixValue(rows: number, cols: number, data: readonly MatrixEntry[]): Value {
+	// A SymbolicNode cell is the only object-typed MatrixEntry variant
+	// (number/boolean are primitives) — a cheap, always-correct way to
+	// derive hasSymbolic without asking every caller to track it by hand.
+	const hasSymbolic = data.some(cell => typeof cell === "object" && cell !== null);
+	const m: MatrixData = { rows, cols, data, hasSymbolic };
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Matrix, m);
+	return new Value(ValueType.Matrix, m);
+}
+
+/** A 1×N row-vector Matrix — row-major and column-major storage are identical for a single row. */
+export function rowVectorValue(data: readonly number[]): Value {
+	return matrixValue(1, data.length, data);
+}
+
+/** An N×1 column-vector Matrix — row-major and column-major storage are identical for a single column. */
+export function colVectorValue(data: readonly number[]): Value {
+	return matrixValue(data.length, 1, data);
+}
+
+/** Create a Range value — a first-class integer range `min:max`, both bounds inclusive. */
+export function rangeValue(min: number, max: number): Value {
+	const r: RangeData = { min, max };
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Range, r);
+	return new Value(ValueType.Range, r);
+}
+
+/** Create a Symbolic value — a free-variable algebraic expression tree (`vm/Symbolic.ts`'s `SymbolicNode`), not a concrete number. */
+export function symbolicValue(node: SymbolicNode): Value {
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Symbolic, node);
+	return new Value(ValueType.Symbolic, node);
 }
 
 

@@ -3,7 +3,8 @@
  *
  * Full-pipeline tests for the vector package (vec2, vec3, vec4).
  * Verifies:
- * - ARR_NEW opcode produces ValueType.Array with correct dimensions
+ * - MAT_NEW opcode produces a 1xN ValueType.Matrix (legacy vector-sugar
+ *   construction, kept working after the Calca-parity Matrix rewrite)
  * - Nested arithmetic expressions inside vector components
  * - Unary operators and exponentiation in components
  */
@@ -20,7 +21,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { Value } from "@solve-js/vm/Value";
+import { Value, type MatrixData } from "@solve-js/vm/Value";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -53,60 +54,65 @@ function parseAndExecute(input: string): Value {
   return unwrapEvalResult(result);
 }
 
+function matData(v: Value): MatrixData {
+  return v.value as MatrixData;
+}
+
 describe("Vector Parselets", () => {
   test("vec2(1, 2)", () => {
     const result = parseAndExecute("vec2(1, 2)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[]).length).toBe(2);
-    expect((result.value as number[])[0]).toBe(1);
-    expect((result.value as number[])[1]).toBe(2);
+    expect(result.isMatrix()).toBe(true);
+    expect(matData(result).rows).toBe(1);
+    expect(matData(result).cols).toBe(2);
+    expect(matData(result).data[0]).toBe(1);
+    expect(matData(result).data[1]).toBe(2);
   });
 
   test("vec2 with expressions: vec2(1 + 2, 3 * 4)", () => {
     const result = parseAndExecute("vec2(1 + 2, 3 * 4)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])[0]).toBe(3);
-    expect((result.value as number[])[1]).toBe(12);
+    expect(result.isMatrix()).toBe(true);
+    expect(matData(result).data[0]).toBe(3);
+    expect(matData(result).data[1]).toBe(12);
   });
 
   test("vec3: vec3(1, 2, 3)", () => {
     const result = parseAndExecute("vec3(1, 2, 3)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[]).length).toBe(3);
+    expect(result.isMatrix()).toBe(true);
+    expect(matData(result).cols).toBe(3);
   });
 
   test("vec4: vec4(1, 2, 3, 4)", () => {
     const result = parseAndExecute("vec4(1, 2, 3, 4)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[]).length).toBe(4);
+    expect(result.isMatrix()).toBe(true);
+    expect(matData(result).cols).toBe(4);
   });
 
   test("nested arithmetic", () => {
     const result = parseAndExecute("vec2(10 * 2 / 4, 2)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])[0]).toBe(5);
-    expect((result.value as number[])[1]).toBe(2);
+    expect(result.isMatrix()).toBe(true);
+    expect(matData(result).data[0]).toBe(5);
+    expect(matData(result).data[1]).toBe(2);
   });
 
   test("vec2 with unary: vec2(-3, +5)", () => {
     const result = parseAndExecute("vec2(-3, +5)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])[0]).toBe(-3);
-    expect((result.value as number[])[1]).toBe(5);
+    expect(result.isMatrix()).toBe(true);
+    expect(matData(result).data[0]).toBe(-3);
+    expect(matData(result).data[1]).toBe(5);
   });
 
   test("vec2 with exponent: vec2(3^2, 2^3)", () => {
     const result = parseAndExecute("vec2(3^2, 2^3)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])[0]).toBe(9);
-    expect((result.value as number[])[1]).toBe(8);
+    expect(result.isMatrix()).toBe(true);
+    expect(matData(result).data[0]).toBe(9);
+    expect(matData(result).data[1]).toBe(8);
   });
 
   test("vec3 with arithmetic: vec3(1+2, 3*4, 10/2)", () => {
     const result = parseAndExecute("vec3(1+2, 3*4, 10/2)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])[0]).toBe(3);
-    expect((result.value as number[])[1]).toBe(12);
-    expect((result.value as number[])[2]).toBe(5);
+    expect(result.isMatrix()).toBe(true);
+    expect(matData(result).data[0]).toBe(3);
+    expect(matData(result).data[1]).toBe(12);
+    expect(matData(result).data[2]).toBe(5);
   });
 });

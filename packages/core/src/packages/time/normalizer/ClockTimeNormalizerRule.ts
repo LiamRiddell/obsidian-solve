@@ -1,5 +1,6 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
 
 /**
  * Converts an hour[:minute] + optional am/pm marker into total
@@ -48,6 +49,10 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
     name: "time:clock-time",
     priority,
     match(tokens, pos): NormalizerMatch | null {
+      // A clock time inside `[...]` (matrix literal/index/slice) has no
+      // legitimate meaning — reserve bare `NUMBER:NUMBER` there for a
+      // matrix range instead (see isInsideRangeContext's own doc comment).
+      if (isInsideRangeContext(tokens, pos)) return null;
       const hourToken = tokens[pos];
       if (hourToken.type !== "NUMBER") return null;
       const hour = parseInt(hourToken.value, 10);

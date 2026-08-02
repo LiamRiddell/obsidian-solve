@@ -1,6 +1,8 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, arrayValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps } from "@solve-js/vm/Value";
-import type { VM, OpRegistry } from "@solve-js/vm/OpRegistry";
+import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } from "@solve-js/vm/Symbolic";
+import { rowMajorToColumnMajor, matrixMultiply, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
+import type { VM, OpRegistry, EquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
@@ -9,7 +11,7 @@ import { builtinFunctions, pluginFunctionRegistry, asConverterRegistry } from "@
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
-import type { BytecodeProgram, UserFunctionDef } from "@solve-js/parser/BytecodeBuilder";
+import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -50,6 +52,10 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
     // cross-instance-isolation item already tracks for pluginFunctionRegistry
     // et al. — this VM-scoped design simply doesn't inherit it).
     const userFunctions = new Map<string, UserFunctionDef>();
+    // Bare (colon-less) equations (`a*x = rhs`), keyed by their free
+    // variable — see OpRegistry.ts's EquationDef doc comment. Same
+    // VM-instance scoping reasoning as userFunctions above.
+    const equations = new Map<string, EquationDef>();
 
     return {
       push(v: Value) {
@@ -93,11 +99,17 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
       },
       getUserFunction(name: string) { return userFunctions.get(name); },
       hasUserFunction(name: string) { return userFunctions.has(name); },
+      defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram) {
+        equations.set(variable, { variable, factorNames, rhsProgram });
+      },
+      getEquation(variable: string) { return equations.get(variable); },
+      hasEquation(variable: string) { return equations.has(variable); },
       reset() {
         stack.length = 0;
         variables.clear();
         callFrames.length = 0;
         userFunctions.clear();
+        equations.clear();
         instructionCount = 0;
         // Abort any in-flight async work for the previous expression
         if (abortCurrent) { abortCurrent(); abortCurrent = undefined; }
@@ -132,6 +144,8 @@ export interface Bytecode {
     strings: string[];
     /** User-defined-function bodies compiled alongside this program — see `parser/BytecodeBuilder.ts`'s `BytecodeProgram.userFunctionBodies`. */
     userFunctionBodies?: UserFunctionDef[];
+    /** map/reduce anonymous transform bodies — see `parser/BytecodeBuilder.ts`'s `BytecodeProgram.anonymousBodies`. */
+    anonymousBodies?: AnonymousBodyDef[];
 }
 
 /**
@@ -224,6 +238,63 @@ function safePop(stack: Value[]): Value {
         });
     }
     return stack.pop()!;
+}
+
+/**
+ * Reentrantly executes a `map`/`reduce` transform body — either an
+ * anonymous inline expression (`10*x` in `map(10*x, [...])`) or a real
+ * user-defined function's own body (`map(f, ...)`) — with a fresh call
+ * frame binding `params[i] -> args[i]`. Mirrors `CALL_USER_FUNCTION`'s own
+ * reentrant-`executeBytecode()` pattern exactly (see its case below for
+ * the full reasoning on why this is safe); factored out here so
+ * `MAP_INVOKE`/`REDUCE_INVOKE` don't each duplicate it twice (once per
+ * transform kind that needs a call frame — the builtin-function kind
+ * needs no frame at all, so it's handled inline at each call site
+ * instead).
+ *
+ * `symbolicTolerant` (H.3) is threaded straight through from the
+ * ENCLOSING `executeBytecode()` call's own flag (see MAP_INVOKE/
+ * REDUCE_INVOKE below) — not hardcoded true — so a map/reduce transform
+ * body only tolerates an undefined variable (e.g. the free `b` in
+ * `reduce(acc+x+b,[1,2,3])=>2b+6`) when the OUTER expression is itself
+ * running in a `=>` solve/simplify context; ordinary (non-`=>`)
+ * map/reduce usage keeps today's exact behavior — a genuinely undefined
+ * variable inside the transform body still hard-throws.
+ */
+function invokeFrameBody(
+    params: string[],
+    program: BytecodeProgram,
+    args: Value[],
+    vm: VM,
+    pipeline: DiagnosticPipeline | undefined,
+    expression: string | undefined,
+    context: LineExecutionContext | undefined,
+    symbolicTolerant: boolean,
+): Value {
+    const frame = new Map<string, Value>();
+    for (let i = 0; i < params.length; i++) frame.set(params[i], args[i]);
+    vm.pushCallFrame(frame);
+    let bodyResult: EvalResult;
+    try {
+        bodyResult = executeBytecode(program, vm, pipeline, expression, context, symbolicTolerant);
+    } finally {
+        vm.popCallFrame();
+    }
+    if (bodyResult.type === "pending") {
+        // Same v1 scope decision as CALL_USER_FUNCTION's own async body
+        // rejection — propagating a 'pending' result up through a
+        // reentrant executeBytecode() call would need the OUTER
+        // expression's own bytecode position/stack state to also be
+        // resumable later, which isn't implemented.
+        throw ErrorFactory.execution(
+            "MAP_REDUCE_ASYNC_UNSUPPORTED",
+            `map/reduce transform bodies calling an async operation (weather, stocks, currency, ...) aren't supported`,
+        );
+    }
+    if (bodyResult.type === "error") {
+        throw bodyResult.error;
+    }
+    return bodyResult.value;
 }
 
 /** Extract milliseconds from a duration Value (UoM time unit or plain number).
@@ -450,9 +521,18 @@ export function executeBytecode(
     vm: VM,
     pipeline?: DiagnosticPipeline | undefined,
     expression?: string,
-    context?: LineExecutionContext
+    context?: LineExecutionContext,
+    // Symbolic-tolerant mode (default false — every existing evaluation
+    // path is completely unchanged): when true, LOAD_VAR pushes a
+    // Symbolic placeholder (vm/Symbolic.ts) for an undefined variable
+    // instead of throwing UNDEFINED_VARIABLE. Set only by the `=>`
+    // solve/simplify path (H.2) and map/reduce's own reentrant calls when
+    // folding a symbolic accumulator (H.3) — never by top-level
+    // evaluation, so the hard UNDEFINED_VARIABLE throw stays exactly as-is
+    // for ordinary expressions.
+    symbolicTolerant?: boolean
 ): EvalResult {
-    const { opcodes, numbers, strings, userFunctionBodies } = bytecode;
+    const { opcodes, numbers, strings, userFunctionBodies, anonymousBodies } = bytecode;
     let ip = 0;
     let localInstructionCount = 0;
     const maxInstructions = vm.getMaxInstructions();
@@ -616,7 +696,7 @@ export function executeBytecode(
             // timecode" — see combineTimecode()'s doc comment above.
             stack.push(combineTimecode(l, r, 1));
           } else {
-            stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b));
+            stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b, "add"));
           }
           break;
         }
@@ -645,7 +725,7 @@ export function executeBytecode(
             // see combineTimecode()'s doc comment above.
             stack.push(combineTimecode(l, r, -1));
           } else {
-            stack.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b));
+            stack.push(binaryOp(l, r, (a, b) => a - b, (a, b) => a - b, "sub"));
           }
           break;
         }
@@ -653,6 +733,12 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) * (r.value as number)));
+          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+            // Genuinely different from +/-/comparisons (which stay
+            // element-wise, via binaryOp() below) — scalar broadcast vs.
+            // real matrix product, disambiguated by shape. Must run BEFORE
+            // binaryOp(), which only ever does element-wise Matrix math.
+            stack.push(matrixMultiply(l.value as MatrixData, r.value as MatrixData));
           } else if (l.type === ValueType.Uom && isRateUnit(l.unit) && r.type === ValueType.Uom && r.unit) {
             // "30 fps × 3 minutes" -> "5,400 frames" via plain "×"/"*" —
             // no package needs to route through RATE_MUL explicitly.
@@ -661,7 +747,7 @@ export function executeBytecode(
             // Commutative: "3 minutes × 30 fps" too.
             stack.push(multiplyRateByMatchingUom(r, l));
           } else {
-            stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b));
+            stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
           }
           break;
         }
@@ -687,7 +773,7 @@ export function executeBytecode(
               stack.push(rateValue(lv / rv, l.unit!, r.unit!));
             }
           } else {
-            stack.push(binaryOp(l, r, (a, b) => a / b, (a, b) => a / b));
+            stack.push(binaryOp(l, r, (a, b) => a / b, (a, b) => a / b, "div"));
           }
           break;
         }
@@ -792,6 +878,8 @@ export function executeBytecode(
           } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
             const { lv, rv, sameMeasure } = unifyUom(l, r);
             stack.push(boolValue(sameMeasure && lv === rv));
+          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a === b));
           } else {
             stack.push(boolValue(l.toNumber() === r.toNumber()));
           }
@@ -804,6 +892,8 @@ export function executeBytecode(
           } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
             const { lv, rv, sameMeasure } = unifyUom(l, r);
             stack.push(boolValue(!sameMeasure || lv !== rv));
+          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a !== b));
           } else {
             stack.push(boolValue(l.toNumber() !== r.toNumber()));
           }
@@ -813,6 +903,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) < (r.value as number)));
+          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a < b));
           } else {
             stack.push(boolValue(l.toNumber() < r.toNumber()));
           }
@@ -822,6 +914,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) <= (r.value as number)));
+          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a <= b));
           } else {
             stack.push(boolValue(l.toNumber() <= r.toNumber()));
           }
@@ -831,6 +925,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) > (r.value as number)));
+          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a > b));
           } else {
             stack.push(boolValue(l.toNumber() > r.toNumber()));
           }
@@ -840,6 +936,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) >= (r.value as number)));
+          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a >= b));
           } else {
             stack.push(boolValue(l.toNumber() >= r.toNumber()));
           }
@@ -1018,6 +1116,8 @@ export function executeBytecode(
           const val = vm.getVar(varName);
           if (val !== undefined) {
             stack.push(val);
+          } else if (symbolicTolerant) {
+            stack.push(symbolicValue(varSymbolicNode(varName)));
           } else {
             throw ErrorFactory.execution(
               "UNDEFINED_VARIABLE",
@@ -1340,79 +1440,303 @@ export function executeBytecode(
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // §10 Array / Vector  (OpCode 100–108)
-        //     Unified Array type replaces Vec2/Vec3/Vec4. Stores number[].
+        // §10 Matrix  (OpCode 152+, see parser/OpCode.ts's Matrix band)
+        //     Replaces the old ARR_* vector-only opcodes (100-107), which
+        //     were never emitted by any registered parselet in production —
+        //     confirmed dead code, deleted outright rather than repurposed.
+        //     See vm/Value.ts's MatrixData and vm/MatrixOps.ts's shared
+        //     column-major storage helpers.
         // ═══════════════════════════════════════════════════════════════
-        case OpCode.ARR_NEW: {
-          const count = opcodes[ip++];
-          const components: number[] = [];
-          for (let i = 0; i < count; i++) components.unshift(safePop(stack).toNumber());
-          stack.push(arrayValue(components));
-          break;
-        }
-        case OpCode.ARR_ADD: {
-          const r = safePop(stack), l = safePop(stack);
-          stack.push(binaryOp(l, r, (a, b) => a + b));
-          break;
-        }
-        case OpCode.ARR_SUB: {
-          const r = safePop(stack), l = safePop(stack);
-          stack.push(binaryOp(l, r, (a, b) => a - b));
-          break;
-        }
-        case OpCode.ARR_DOT: {
-          const r = safePop(stack), l = safePop(stack);
-          const lv = l.value as number[], rv = r.value as number[];
-          const len = Math.min(lv.length, rv.length);
-          let sum = 0;
-          for (let i = 0; i < len; i++) sum += lv[i] * rv[i];
-          stack.push(numberValue(sum));
-          break;
-        }
-        case OpCode.ARR_CROSS: {
-          const r = safePop(stack), l = safePop(stack);
-          const lv = l.value as number[], rv = r.value as number[];
-          if (lv.length >= 3 && rv.length >= 3) {
-            stack.push(arrayValue([
-              lv[1] * rv[2] - lv[2] * rv[1],
-              lv[2] * rv[0] - lv[0] * rv[2],
-              lv[0] * rv[1] - lv[1] * rv[0],
-            ]));
-          } else {
-            stack.push(arrayValue([0, 0, 0]));
+        case OpCode.MAT_NEW: {
+          const rows = opcodes[ip++];
+          const cols = opcodes[ip++];
+          const count = rows * cols;
+          // Cells were pushed in ROW-MAJOR reading order (matching how a
+          // literal like `[1,2;3,4]` is textually written) — pop in
+          // reverse to restore that order, then transpose once into the
+          // column-major storage MatrixData actually uses.
+          const rowMajor = new Array<MatrixEntry>(count);
+          for (let i = count - 1; i >= 0; i--) {
+            const cellVal = safePop(stack);
+            rowMajor[i] = cellVal.type === ValueType.Boolean ? (cellVal.value as boolean)
+              : cellVal.type === ValueType.Symbolic ? (cellVal.value as SymbolicNodeType)
+              : cellVal.toNumber();
           }
+          stack.push(matrixValue(rows, cols, rowMajorToColumnMajor(rows, cols, rowMajor)));
           break;
         }
-        case OpCode.ARR_SCALE: {
-          const scalar = safePop(stack).toNumber();
-          const arr = safePop(stack);
-          const av = arr.value as number[];
-          const result = new Array(av.length);
-          for (let i = 0; i < av.length; i++) result[i] = av[i] * scalar;
-          stack.push(arrayValue(result));
-          break;
-        }
-        case OpCode.ARR_MAGNITUDE: {
-          const arr = safePop(stack);
-          const av = arr.value as number[];
-          let sumSq = 0;
-          for (let i = 0; i < av.length; i++) sumSq += av[i] * av[i];
-          stack.push(numberValue(Math.sqrt(sumSq)));
-          break;
-        }
-        case OpCode.ARR_NORMALIZE: {
-          const arr = safePop(stack);
-          const av = arr.value as number[];
-          let sumSq = 0;
-          for (let i = 0; i < av.length; i++) sumSq += av[i] * av[i];
-          const mag = Math.sqrt(sumSq);
-          if (mag === 0) {
-            stack.push(arrayValue(new Array(av.length).fill(0)));
-          } else {
-            const result = new Array(av.length);
-            for (let i = 0; i < av.length; i++) result[i] = av[i] / mag;
-            stack.push(arrayValue(result));
+
+        case OpCode.MAT_INDEX1: {
+          const indexVal = safePop(stack), matrixVal = safePop(stack);
+          if (matrixVal.type === ValueType.Error) { stack.push(matrixVal); break; }
+          if (indexVal.type === ValueType.Error) { stack.push(indexVal); break; }
+          if (matrixVal.type !== ValueType.Matrix) {
+            stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot index a non-matrix value with "[...]".`));
+            break;
           }
+          const m = matrixVal.value as MatrixData;
+          const index = Math.trunc(indexVal.toNumber());
+          if (index < 0 || index >= m.data.length) {
+            stack.push(errorValue(
+              "MATRIX_INDEX_OUT_OF_BOUNDS",
+              `Index ${index} is out of bounds for a ${m.rows}x${m.cols} matrix (valid range: 0-${m.data.length - 1}).`,
+            ));
+            break;
+          }
+          const cell = matIndex(m, index);
+          stack.push(matrixEntryToValue(cell));
+          break;
+        }
+
+        case OpCode.MAT_INDEX2: {
+          const colVal = safePop(stack), rowVal = safePop(stack), matrixVal = safePop(stack);
+          if (matrixVal.type === ValueType.Error) { stack.push(matrixVal); break; }
+          if (rowVal.type === ValueType.Error) { stack.push(rowVal); break; }
+          if (colVal.type === ValueType.Error) { stack.push(colVal); break; }
+          if (matrixVal.type !== ValueType.Matrix) {
+            stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot index a non-matrix value with "[...]".`));
+            break;
+          }
+          const m = matrixVal.value as MatrixData;
+          const row = Math.trunc(rowVal.toNumber());
+          const col = Math.trunc(colVal.toNumber());
+          if (!inBounds(m, row, col)) {
+            stack.push(errorValue(
+              "MATRIX_INDEX_OUT_OF_BOUNDS",
+              `[${row}, ${col}] is out of bounds for a ${m.rows}x${m.cols} matrix.`,
+            ));
+            break;
+          }
+          const cell = matAt(m, row, col);
+          stack.push(matrixEntryToValue(cell));
+          break;
+        }
+
+        case OpCode.RANGE_NEW: {
+          const maxVal = safePop(stack), minVal = safePop(stack);
+          if (minVal.type === ValueType.Error) { stack.push(minVal); break; }
+          if (maxVal.type === ValueType.Error) { stack.push(maxVal); break; }
+          if (minVal.type !== ValueType.Number || maxVal.type !== ValueType.Number) {
+            stack.push(errorValue("INVALID_RANGE_BOUND", `A range's bounds must be plain numbers (e.g. "0:3").`));
+            break;
+          }
+          const min = minVal.value as number;
+          const max = maxVal.value as number;
+          if (!Number.isInteger(min) || !Number.isInteger(max)) {
+            stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${min}:${max}".`));
+            break;
+          }
+          if (min > max) {
+            stack.push(errorValue(
+              "DESCENDING_RANGE",
+              `A range's min (${min}) cannot be greater than its max (${max}) — did you mean "${max}:${min}"?`,
+            ));
+            break;
+          }
+          stack.push(rangeValue(min, max));
+          break;
+        }
+
+        case OpCode.MAT_SLICE: {
+          const colRangeVal = safePop(stack), rowRangeVal = safePop(stack), matrixVal = safePop(stack);
+          if (matrixVal.type === ValueType.Error) { stack.push(matrixVal); break; }
+          if (rowRangeVal.type === ValueType.Error) { stack.push(rowRangeVal); break; }
+          if (colRangeVal.type === ValueType.Error) { stack.push(colRangeVal); break; }
+          if (matrixVal.type !== ValueType.Matrix) {
+            stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot slice a non-matrix value with "[...]".`));
+            break;
+          }
+          if (rowRangeVal.type !== ValueType.Range || colRangeVal.type !== ValueType.Range) {
+            stack.push(errorValue("INVALID_MATRIX_SLICE_BOUND", `Matrix slicing needs range bounds (e.g. "a[0:1, 1:2]").`));
+            break;
+          }
+          const m = matrixVal.value as MatrixData;
+          const rowRange = rowRangeVal.value as RangeData;
+          const colRange = colRangeVal.value as RangeData;
+          if (rowRange.min < 0 || rowRange.max >= m.rows || colRange.min < 0 || colRange.max >= m.cols) {
+            stack.push(errorValue(
+              "MATRIX_INDEX_OUT_OF_BOUNDS",
+              `Slice [${rowRange.min}:${rowRange.max}, ${colRange.min}:${colRange.max}] is out of bounds for a ${m.rows}x${m.cols} matrix.`,
+            ));
+            break;
+          }
+          const newRows = rowRange.max - rowRange.min + 1;
+          const newCols = colRange.max - colRange.min + 1;
+          const data = new Array<MatrixEntry>(newRows * newCols);
+          for (let r = 0; r < newRows; r++) {
+            for (let c = 0; c < newCols; c++) {
+              data[r + c * newRows] = matAt(m, rowRange.min + r, colRange.min + c);
+            }
+          }
+          stack.push(matrixValue(newRows, newCols, data));
+          break;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // §11 map/reduce  (OpCode 157-158, see parser/OpCode.ts's Matrix
+        //     band). See packages/mapreduce/ for the parselets that decide
+        //     `kind` (0=inline anonymous body, 1=builtin function,
+        //     2=user-defined function) at parse time, and
+        //     `BytecodeBuilder.ts`'s AnonymousBodyDef doc comment for why
+        //     kind-0 bodies are a SEPARATE side-table from userFunctionBodies.
+        // ═══════════════════════════════════════════════════════════════
+        case OpCode.MAP_INVOKE: {
+          const kind = opcodes[ip++];
+          const ref = opcodes[ip++];
+          const collectionCount = opcodes[ip++];
+
+          // Collections were pushed in declared param order — pop in
+          // reverse to restore that order (same convention as MAT_NEW's
+          // row-major restore).
+          const rawCollections: Value[] = new Array(collectionCount);
+          for (let i = collectionCount - 1; i >= 0; i--) rawCollections[i] = safePop(stack);
+
+          let paramNames: string[] = [];
+          let program: BytecodeProgram | undefined;
+          if (kind === 0) {
+            const def = anonymousBodies?.[ref];
+            if (!def) {
+              throw ErrorFactory.internal(
+                "INTERNAL_MISSING_ANONYMOUS_BODY",
+                `Internal error: MAP_INVOKE referenced missing anonymous body index ${ref}`,
+                { ref },
+              );
+            }
+            paramNames = def.params;
+            program = def.program;
+          } else if (kind === 2) {
+            const name = strings[ref];
+            const fn = vm.getUserFunction(name);
+            if (!fn) {
+              stack.push(errorValue("UNDEFINED_FUNCTION", `map: undefined function "${name}"`));
+              break;
+            }
+            if (fn.params.length !== collectionCount) {
+              stack.push(errorValue(
+                "FUNCTION_ARITY_MISMATCH",
+                `map: "${name}" expects ${fn.params.length} argument(s) but ${collectionCount} collection(s) were given`,
+              ));
+              break;
+            }
+            paramNames = fn.params;
+            program = fn.program;
+          }
+
+          // Resolve every collection into a flat array of per-cell Values
+          // (a Matrix's own cells, or a materialized Range) — all must
+          // agree on length (this is a ZIP, not a cartesian product).
+          let collectionLength = -1;
+          const cellArrays: Value[][] = new Array(collectionCount);
+          let mapEarlyError: Value | undefined;
+          for (let i = 0; i < collectionCount; i++) {
+            const resolved = collectionToValues(rawCollections[i]);
+            if (!Array.isArray(resolved)) { mapEarlyError = resolved; break; }
+            if (collectionLength === -1) {
+              collectionLength = resolved.length;
+            } else if (resolved.length !== collectionLength) {
+              mapEarlyError = errorValue(
+                "MAP_COLLECTION_LENGTH_MISMATCH",
+                `map: all collections must have the same length (got ${collectionLength} and ${resolved.length}).`,
+              );
+              break;
+            }
+            cellArrays[i] = resolved;
+          }
+          if (mapEarlyError) { stack.push(mapEarlyError); break; }
+
+          const resultData: MatrixEntry[] = new Array(collectionLength);
+          let mapError: Value | undefined;
+          for (let i = 0; i < collectionLength; i++) {
+            const args: Value[] = new Array(collectionCount);
+            for (let j = 0; j < collectionCount; j++) args[j] = cellArrays[j][i];
+
+            const resultVal = kind === 1
+              ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `map: unknown builtin function index ${ref}`))
+              : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
+
+            if (resultVal.type === ValueType.Error) { mapError = resultVal; break; }
+            resultData[i] = resultVal.type === ValueType.Boolean ? (resultVal.value as boolean)
+              : resultVal.type === ValueType.Symbolic ? (resultVal.value as SymbolicNodeType)
+              : resultVal.toNumber();
+          }
+          if (mapError) { stack.push(mapError); break; }
+
+          stack.push(matrixValue(1, collectionLength, resultData));
+          break;
+        }
+
+        case OpCode.REDUCE_INVOKE: {
+          const kind = opcodes[ip++];
+          const ref = opcodes[ip++];
+          const hasInitial = opcodes[ip++];
+
+          // Pushed in textual order (collection, then optional initial) —
+          // pop in reverse.
+          const initialVal = hasInitial ? safePop(stack) : undefined;
+          const collectionVal = safePop(stack);
+
+          let paramNames: string[] = [];
+          let program: BytecodeProgram | undefined;
+          if (kind === 0) {
+            const def = anonymousBodies?.[ref];
+            if (!def) {
+              throw ErrorFactory.internal(
+                "INTERNAL_MISSING_ANONYMOUS_BODY",
+                `Internal error: REDUCE_INVOKE referenced missing anonymous body index ${ref}`,
+                { ref },
+              );
+            }
+            paramNames = def.params;
+            program = def.program;
+          } else if (kind === 2) {
+            const name = strings[ref];
+            const fn = vm.getUserFunction(name);
+            if (!fn) {
+              stack.push(errorValue("UNDEFINED_FUNCTION", `reduce: undefined function "${name}"`));
+              break;
+            }
+            if (fn.params.length !== 2) {
+              stack.push(errorValue(
+                "FUNCTION_ARITY_MISMATCH",
+                `reduce: "${name}" must take exactly 2 arguments (accumulator, element), got ${fn.params.length}`,
+              ));
+              break;
+            }
+            paramNames = fn.params;
+            program = fn.program;
+          }
+
+          const cells = collectionToValues(collectionVal);
+          if (!Array.isArray(cells)) { stack.push(cells); break; }
+
+          let acc: Value;
+          let startIdx: number;
+          if (initialVal !== undefined) {
+            if (initialVal.type === ValueType.Error) { stack.push(initialVal); break; }
+            acc = initialVal;
+            startIdx = 0;
+          } else {
+            if (cells.length === 0) {
+              stack.push(errorValue("REDUCE_EMPTY_COLLECTION", `reduce: cannot reduce an empty collection without an initial value.`));
+              break;
+            }
+            acc = cells[0];
+            startIdx = 1;
+          }
+
+          let reduceError: Value | undefined;
+          for (let i = startIdx; i < cells.length; i++) {
+            const args = [acc, cells[i]];
+            const resultVal = kind === 1
+              ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `reduce: unknown builtin function index ${ref}`))
+              : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
+
+            if (resultVal.type === ValueType.Error) { reduceError = resultVal; break; }
+            acc = resultVal;
+          }
+          if (reduceError) { stack.push(reduceError); break; }
+
+          stack.push(acc);
           break;
         }
 

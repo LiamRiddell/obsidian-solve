@@ -96,11 +96,14 @@ export class CurrencyAsyncResolver implements IAsyncResolver {
 				case OpCode.PUSH_STRING: case OpCode.PUSH_BOOLEAN:
 				case OpCode.LOAD_VAR: case OpCode.STORE_VAR:
 				case OpCode.LOAD_GLOBAL_VAR: case OpCode.STORE_GLOBAL_VAR:
+				case OpCode.DEFINE_USER_FUNCTION:
 					i += 2; break;
-				case OpCode.CALL_PLUGIN: case OpCode.CALL_BUILTIN:
+				case OpCode.CALL_PLUGIN: case OpCode.CALL_BUILTIN: case OpCode.CALL_USER_FUNCTION:
 					i += 3; break;
-				case OpCode.ARR_NEW:
-					i += 2; break;
+				case OpCode.MAT_NEW:
+					i += 3; break;
+				case OpCode.MAP_INVOKE: case OpCode.REDUCE_INVOKE:
+					i += 4; break;
 				default:
 					i++; break;
 			}

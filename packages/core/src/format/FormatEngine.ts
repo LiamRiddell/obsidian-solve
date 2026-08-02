@@ -1,8 +1,10 @@
-import { Value, ValueType } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData } from "@solve-js/vm/Value";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat } from "@solve-js/utilities/Number";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
+import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
+import { formatSymbolic, type SymbolicNode } from "@solve-js/vm/Symbolic";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings): string {
   const dp = settings.floatResult.decimalPlaces;
@@ -116,8 +118,37 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   return `= ${formatted} ${unitLabel}`.trim();
 }
 
-function formatVector(values: number[], locale: ILocale): string {
-  return `= [${values.join(", ")}]`;
+function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): string {
+  if (typeof entry === "boolean") return entry ? "true" : "false";
+  if (typeof entry === "object" && entry !== null) return formatSymbolic(entry);
+  const dp = settings.floatResult.decimalPlaces;
+  const sep = settings.floatResult.enableSeperator;
+  const loc = settings.numberResult.decimalSeparatorLocale;
+  return autoFormatIntegerOrFloat(entry, dp, sep, loc);
+}
+
+/**
+ * Renders a Matrix matching its own literal syntax: a single row (1xN,
+ * including plain vectors) as `[a, b, c]`, a single column (Nx1) as
+ * `[a; b; c]`, and a general shape as `[r0c0, r0c1; r1c0, r1c1]` — row-major
+ * textual output read back out of the column-major storage
+ * (`columnMajorToRowMajor()`), matching how `[1,2;3,4]` is written.
+ */
+function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettings): string {
+  const rowMajor = columnMajorToRowMajor(m);
+  const rows: string[] = [];
+  for (let r = 0; r < m.rows; r++) {
+    const cells: string[] = [];
+    for (let c = 0; c < m.cols; c++) {
+      cells.push(formatMatrixEntry(rowMajor[r * m.cols + c], settings));
+    }
+    rows.push(cells.join(", "));
+  }
+  return `${locale.display.resultPrefix}[${rows.join("; ")}]`;
+}
+
+function formatRange(min: number, max: number, locale: ILocale): string {
+  return `${locale.display.resultPrefix}${min}:${max}`;
 }
 
 function formatPercentage(value: number, locale: ILocale, settings: FormattingSettings): string {
@@ -138,7 +169,7 @@ function formatUnit(value: number, unit: string | undefined): string {
 /**
  * Render an evaluated {@link Value} as a display string, dispatching on
  * `value.type` to the type-specific formatter (number, hex, datetime, unit
- * of measurement, vector, percentage, ...).
+ * of measurement, matrix, range, percentage, ...).
  *
  * Most branches produce a `"= "`-prefixed result string (matching the
  * plugin's inline-result convention); `ValueType.Error` is the one
@@ -174,8 +205,14 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       return formatDatetime(value.value as number, locale);
     case ValueType.Uom:
       return formatUom(value.value as number, value.unit, locale, us);
-    case ValueType.Array:
-      return formatVector(value.value as number[], locale);
+    case ValueType.Matrix:
+      return formatMatrix(value.value as MatrixData, locale, us);
+    case ValueType.Range: {
+      const r = value.value as RangeData;
+      return formatRange(r.min, r.max, locale);
+    }
+    case ValueType.Symbolic:
+      return formatSymbolic(value.value as SymbolicNode);
     case ValueType.Percentage:
       return formatPercentage(value.value as number, locale, us);
     case ValueType.Unit:

@@ -307,7 +307,13 @@ export function reconstructValue(result: ExecuteResult): Value {
 			return percentageValue(result.value);
 		case ValueType.Uom:
 			return uomValue(result.value, result.unit ?? "");
-		case ValueType.Array:
+		case ValueType.Matrix:
+			// Pre-existing simplification carried over from the old Array
+			// type: the worker-pool's {valueType, value, unit} serialization
+			// has no slot for MatrixData's rows/cols/data shape, so a Matrix
+			// result degrades to a plain number here rather than round-
+			// tripping intact. Not fixed as part of Matrix support — this
+			// gap already existed for vectors before this rename.
 			return numberValue(result.value);
 		case ValueType.Boolean:
 			return boolValue(result.value !== 0);

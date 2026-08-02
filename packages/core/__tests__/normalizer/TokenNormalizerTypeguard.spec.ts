@@ -682,7 +682,7 @@ describe("Uint8Array IIFE — lookup table construction", () => {
 	/**
 	 * Tests that verify the {@link NON_WORD_TABLE} IIFE builds correctly:
 	 *
-	 * 1. All 25 non-word type name strings resolve to unique numeric IDs.
+	 * 1. All 26 non-word type name strings resolve to unique numeric IDs.
 	 * 2. The table is sized to `max(id) + 1`, covering every registered typeId.
 	 * 3. In-bounds word-type indices have value 0 (pass through to trie).
 	 * 4. In-bounds non-word indices have value 1 (skip trie).
@@ -705,11 +705,11 @@ describe("Uint8Array IIFE — lookup table construction", () => {
 
 	// ── §11.1  Cardinality & uniqueness ──────────────────────────────────
 
-	test("NON_WORD_NAMES contains exactly 25 type names", () => {
-		expect(NON_WORD_NAMES).toHaveLength(25);
+	test("NON_WORD_NAMES contains exactly 26 type names", () => {
+		expect(NON_WORD_NAMES).toHaveLength(26);
 	});
 
-	test("all 25 non-word type names resolve to valid, unique numeric IDs", () => {
+	test("all 26 non-word type names resolve to valid, unique numeric IDs", () => {
 		const ids = NON_WORD_NAMES.map(n => tokenTypeId(n));
 
 		// Every name mapped to a finite integer ≥ 0
@@ -784,7 +784,7 @@ describe("Uint8Array IIFE — lookup table construction", () => {
 
 	// ── §11.5  Table integrity — no stray 1s ────────────────────────────
 
-	test("NON_WORD_TABLE has exactly 25 positions set to 1", () => {
+	test("NON_WORD_TABLE has exactly 26 positions set to 1", () => {
 		let count = 0;
 		for (let i = 0; i < NON_WORD_TABLE.length; i++) {
 			if (NON_WORD_TABLE[i] === 1) count++;

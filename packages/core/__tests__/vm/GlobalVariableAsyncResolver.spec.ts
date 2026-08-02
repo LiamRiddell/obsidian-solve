@@ -157,6 +157,42 @@ describe("GlobalVariableAsyncResolver", () => {
 		expect(result!.queryKey).toBe("global:c");
 	});
 
+	// The next two tests deliberately set DEFINE_USER_FUNCTION's bodyIdx /
+	// CALL_USER_FUNCTION's nameIdx to 51 (OpCode.CALL_BUILTIN's own numeric
+	// value) rather than an arbitrary small index like 0 or 1. This isn't
+	// cosmetic: if the operand byte is "boring" (doesn't collide with any
+	// OTHER opcode's value), the buggy `default: i++` path still ends up
+	// walking the exact right number of bytes one at a time and silently
+	// self-heals — so a naive test with small indices passes whether or not
+	// the fix is present, and proves nothing. Setting the operand to a real
+	// multi-byte opcode's value forces the (buggy) scanner to misinterpret
+	// it as THAT opcode and jump by ITS width instead, which — given the
+	// exact byte layout below — jumps clean over LOAD_GLOBAL_VAR and
+	// permanently loses it, since scanning only ever moves forward.
+	test("DEFINE_USER_FUNCTION is skipped at its correct 2-byte width, not misread as the next opcode", () => {
+		const resolver = new GlobalVariableAsyncResolver();
+		const program = bc(
+			[OpCode.DEFINE_USER_FUNCTION, OpCode.CALL_BUILTIN, OpCode.LOAD_GLOBAL_VAR, 0, OpCode.HALT],
+			["x"]
+		);
+
+		const result = resolver.preflight(NO_TOKENS, program, "_engine", NO_SIGNAL, FAKE_QUERY_CLIENT);
+		expect(result).not.toBeNull();
+		expect(result!.queryKey).toBe("global:x");
+	});
+
+	test("CALL_USER_FUNCTION is skipped at its correct 3-byte width, not misread as the next opcode", () => {
+		const resolver = new GlobalVariableAsyncResolver();
+		const program = bc(
+			[OpCode.CALL_USER_FUNCTION, OpCode.CALL_BUILTIN, 1, OpCode.LOAD_GLOBAL_VAR, 0, OpCode.HALT],
+			["x"]
+		);
+
+		const result = resolver.preflight(NO_TOKENS, program, "_engine", NO_SIGNAL, FAKE_QUERY_CLIENT);
+		expect(result).not.toBeNull();
+		expect(result!.queryKey).toBe("global:x");
+	});
+
 	test("destroy() clears the in-flight cache without throwing", () => {
 		const resolver = new GlobalVariableAsyncResolver();
 		const program = bc([OpCode.LOAD_GLOBAL_VAR, 0, OpCode.HALT], ["x"]);

@@ -50,6 +50,8 @@ export const CoreErrorCodes = {
   FUNCTION_BODY_MUST_BE_SYNCHRONOUS: "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
   /** `BytecodeBuilder`'s `userFunctionBodies` side-table exceeding its capacity — same class as `TOO_MANY_NUMERIC_CONSTANTS`/`TOO_MANY_STRING_CONSTANTS` below. */
   TOO_MANY_FUNCTION_DEFINITIONS: "TOO_MANY_FUNCTION_DEFINITIONS",
+  /** `BytecodeBuilder`'s `anonymousBodies` side-table (map/reduce inline transform bodies) exceeding its capacity — same class as `TOO_MANY_FUNCTION_DEFINITIONS` above. */
+  TOO_MANY_ANONYMOUS_BODIES: "TOO_MANY_ANONYMOUS_BODIES",
 
   // ── VM (vm/VM.ts, vm/OpRegistry.ts, vm/VMBuiltins.ts) ──
   EVALUATION_ERROR: "EVALUATION_ERROR",
@@ -67,15 +69,23 @@ export const CoreErrorCodes = {
   UNDEFINED_FUNCTION: "UNDEFINED_FUNCTION",
   FUNCTION_ARITY_MISMATCH: "FUNCTION_ARITY_MISMATCH",
   USER_FUNCTION_ASYNC_UNSUPPORTED: "USER_FUNCTION_ASYNC_UNSUPPORTED",
+  /** A map/reduce transform body (inline expression or user-defined function) calling an async plugin — same v1 scope restriction as `USER_FUNCTION_ASYNC_UNSUPPORTED` above, enforced both at parse time (`MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS`, packages/mapreduce/) and as a defense-in-depth runtime backstop here. */
+  MAP_REDUCE_ASYNC_UNSUPPORTED: "MAP_REDUCE_ASYNC_UNSUPPORTED",
   /** `pushCallFrame()`'s recursion guard — a nested `CALL_USER_FUNCTION` re-enters `executeBytecode()`, so `maxInstructions` alone can't catch e.g. `f(x) = f(x)`; this is the dedicated backstop. `recoverable: true` (the default for `.execution()`) — ordinary user-written infinite recursion, not an engine bug; the guard exists precisely so it surfaces as a clear error instead of overflowing the native call stack uncatchably. */
   FUNCTION_RECURSION_LIMIT_EXCEEDED: "FUNCTION_RECURSION_LIMIT_EXCEEDED",
   /** `DEFINE_USER_FUNCTION`'s body-index lookup failing — a compiler/VM invariant violation (the opcode stream referenced a `userFunctionBodies` slot that doesn't exist), never a user-input error. */
   INTERNAL_MISSING_FUNCTION_BODY: "INTERNAL_MISSING_FUNCTION_BODY",
+  /** `MAP_INVOKE`/`REDUCE_INVOKE`'s anonymous-body-index lookup failing — same class as `INTERNAL_MISSING_FUNCTION_BODY` above, for the `anonymousBodies` side-table instead of `userFunctionBodies`. */
+  INTERNAL_MISSING_ANONYMOUS_BODY: "INTERNAL_MISSING_ANONYMOUS_BODY",
 
   // ── Engine (engine/ExpressionEngine.ts, engine/ExpressionEngineSafety.ts, engine/AsyncResolutionBatcher.ts) ──
   EXPRESSION_TOO_LONG: "EXPRESSION_TOO_LONG",
   EXPRESSION_TOO_COMPLEX: "EXPRESSION_TOO_COMPLEX",
   NORMALIZED_TOKEN_LIMIT_EXCEEDED: "NORMALIZED_TOKEN_LIMIT_EXCEEDED",
+  /** `"=>"` with nothing before it — needs an expression or variable name to solve/simplify. */
+  THEREFORE_REQUIRES_EXPRESSION: "THEREFORE_REQUIRES_EXPRESSION",
+  /** A `"=>"`-triggered expression called an async plugin (weather/stocks/currency) — same v1 scope restriction as user-function/map-reduce bodies. */
+  THEREFORE_ASYNC_UNSUPPORTED: "THEREFORE_ASYNC_UNSUPPORTED",
 
   // ── Config (constants/Configuration.ts) ──
   CONFIG_PATH_NOT_FOUND: "CONFIG_PATH_NOT_FOUND",

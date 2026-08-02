@@ -1,6 +1,13 @@
-import { Value, ValueType, numberValue, bigIntValue, uomValue, arrayValue, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, bigIntValue, uomValue, matrixValue, errorValue, symbolicValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
+import { sameShape } from "@solve-js/vm/MatrixOps";
+import { type SymbolicNode, constNode, simplifySymbolic } from "@solve-js/vm/Symbolic";
+
+/** Converts a Value into a SymbolicNode — its own tree if already Symbolic, else a `const` node wrapping its numeric value. */
+function toSymbolicNode(v: Value): SymbolicNode {
+    return v.type === ValueType.Symbolic ? (v.value as SymbolicNode) : constNode(v.toNumber());
+}
 
 /**
  * Unify two Value operands that may carry units of measurement.
@@ -38,12 +45,20 @@ export function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: st
 
 /**
  * Apply a numeric binary operation with type-aware dispatch.
- * Handles BigInt, UoM, Vector, and plain Number operands.
+ * Handles BigInt, UoM, Vector, Symbolic, and plain Number operands.
+ *
+ * @param symbolicOp - which SymbolicNode kind to build when either operand
+ *   is Symbolic (`vm/Symbolic.ts`). Only ADD/SUB/MUL/DIV pass this (the
+ *   "four arithmetic opcodes" the symbolic-algebra phase scopes itself
+ *   to) — MOD's own call site passes nothing, so a Symbolic operand there
+ *   falls through to the ordinary numeric path (`toNumber()` -> 0), an
+ *   explicit, disclosed scope boundary rather than an oversight.
  */
 export function binaryOp(
     l: Value, r: Value,
     op: (a: number, b: number) => number,
-    bigOp?: (a: bigint, b: bigint) => bigint
+    bigOp?: (a: bigint, b: bigint) => bigint,
+    symbolicOp?: "add" | "sub" | "mul" | "div"
 ): Value {
     // Error/Pending short-circuit — MUST run before any other branch.
     // Value.toNumber() returns 0 for both Error and Pending (see
@@ -63,6 +78,18 @@ export function binaryOp(
     if (r.type === ValueType.Error) return r;
     if (l.type === ValueType.Pending) return l;
     if (r.type === ValueType.Pending) return r;
+
+    // Symbolic dispatch — either operand carries a free-variable formula.
+    // Builds the corresponding SymbolicNode (the non-symbolic side, if
+    // any, becomes a `const` node via its own numeric value), simplifies
+    // it (vm/Symbolic.ts's deliberately bounded rule set), and wraps the
+    // result back as Symbolic. `symbolicOp` is undefined for opcodes that
+    // don't support this (currently just MOD) — those fall through to the
+    // ordinary numeric path below unchanged.
+    if (symbolicOp && (l.type === ValueType.Symbolic || r.type === ValueType.Symbolic)) {
+        const node: SymbolicNode = { kind: symbolicOp, left: toSymbolicNode(l), right: toSymbolicNode(r) };
+        return symbolicValue(simplifySymbolic(node));
+    }
 
     // Fast path: both operands are plain numbers — skip all type checks.
     // This is the overwhelmingly common case (90%+ of all binary ops).
@@ -106,31 +133,37 @@ export function binaryOp(
         return uomValue(op(lv, rv), unit!);
     }
 
-    if (l.type === ValueType.Array && r.type === ValueType.Array) {
-        const lv = l.value as number[];
-        const rv = r.value as number[];
-        if (lv.length !== rv.length) {
-            // Silently truncating to the shorter vector via Math.min() used
-            // to drop components with no indication — "vec2(1,2) +
-            // vec3(1,2,3)" produced "[2,4]", quietly discarding the third
-            // component instead of surfacing the dimension mismatch.
-            return errorValue("DIMENSION_MISMATCH", `Cannot combine vectors of different dimensions: ${lv.length} and ${rv.length}`);
+    // Element-wise Matrix dispatch (ADD/SUB/DIV/MOD land here; MUL's real
+    // scalar-vs-matrix-product disambiguation happens in VM.ts's own MUL
+    // case BEFORE falling through to binaryOp() at all, so this generic
+    // path only ever needs to handle the always-element-wise ops).
+    if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+        const lm = l.value as MatrixData;
+        const rm = r.value as MatrixData;
+        if (!sameShape(lm, rm)) {
+            // Silently truncating/broadcasting a shape mismatch used to
+            // drop components with no indication (the old flat-Array
+            // Math.min() truncation bug) — surface it instead.
+            return errorValue("DIMENSION_MISMATCH", `Cannot combine matrices of different shapes: ${lm.rows}x${lm.cols} and ${rm.rows}x${rm.cols}`);
         }
-        const result: number[] = [];
-        for (let i = 0; i < lv.length; i++) result.push(op(lv[i], rv[i]));
-        return arrayValue(result);
+        const result: MatrixEntry[] = new Array(lm.data.length);
+        for (let i = 0; i < lm.data.length; i++) result[i] = op(lm.data[i] as number, rm.data[i] as number);
+        return matrixValue(lm.rows, lm.cols, result);
     }
 
-    if (l.type === ValueType.Array) {
-        const lv = l.value as number[];
-        const result = lv.map(v => op(v, r.toNumber()));
-        return arrayValue(result);
+    if (l.type === ValueType.Matrix) {
+        // Scalar broadcast: [1,2,3]/10 => [0.1,0.2,0.3] — preserves shape.
+        const lm = l.value as MatrixData;
+        const scalar = r.toNumber();
+        const result: MatrixEntry[] = lm.data.map(v => op(v as number, scalar));
+        return matrixValue(lm.rows, lm.cols, result);
     }
 
-    if (r.type === ValueType.Array) {
-        const rv = r.value as number[];
-        const result = rv.map(v => op(l.toNumber(), v));
-        return arrayValue(result);
+    if (r.type === ValueType.Matrix) {
+        const rm = r.value as MatrixData;
+        const scalar = l.toNumber();
+        const result: MatrixEntry[] = rm.data.map(v => op(scalar, v as number));
+        return matrixValue(rm.rows, rm.cols, result);
     }
 
     const lNum = l.toNumber();

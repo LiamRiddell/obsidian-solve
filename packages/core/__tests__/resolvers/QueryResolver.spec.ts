@@ -35,6 +35,48 @@ function liveSignal(): AbortSignal {
   return new AbortController().signal;
 }
 
+/**
+ * Hand-built bytecode for a CALL_USER_FUNCTION immediately followed by the
+ * PUSH_STRING(query)/CALL_PLUGIN(fnIdx, 1) pair preflight() scans for —
+ * models a document line that calls a user function (`f(5)`) before the
+ * query call.
+ *
+ * Uses raw arrays instead of BytecodeBuilder because this test needs exact
+ * control over two specific operand VALUES, not just correct shape:
+ *
+ * - nameIdx is set to OpCode.CALL_BUILTIN's own numeric value (51) rather
+ *   than an arbitrary small index. If CALL_USER_FUNCTION's case were
+ *   missing from the operand-width switch, the (buggy) scanner misreads
+ *   this byte as an actual CALL_BUILTIN opcode and jumps by ITS width
+ *   instead of just stepping past it — a "boring" nameIdx like 0 or 1
+ *   wouldn't collide with anything, and the buggy 1-byte-at-a-time walk
+ *   would silently re-land on the right spot anyway (proving nothing).
+ * - strIdx (query's string-pool index) is likewise set to 10 —
+ *   OpCode.PUSH_NUMBER's value — so that if the first collision alone
+ *   didn't already skip past CALL_PLUGIN, this second one compounds the
+ *   drift far enough that it definitely does. That requires the string
+ *   pool to have 10 filler entries ahead of the real query string.
+ *
+ * Verified by hand-tracing both scanners: pre-fix, this permanently skips
+ * past the real CALL_PLUGIN (scanning only ever moves forward, so once
+ * skipped it's never revisited) and preflight() incorrectly returns null;
+ * post-fix, the scan lands exactly on it as intended.
+ */
+function buildQueryBytecodeAfterUserFunctionCall(query: string, fnIdx: number) {
+  const strings = new Array(10).fill("_filler_");
+  const strIdx = strings.length; // 10 — see comment above
+  strings.push(query);
+
+  const opcodes = new Uint8Array([
+    OpCode.CALL_USER_FUNCTION, OpCode.CALL_BUILTIN, 1,
+    OpCode.PUSH_STRING, strIdx,
+    OpCode.CALL_PLUGIN, fnIdx, 1,
+    OpCode.HALT,
+  ]);
+
+  return { opcodes, numbers: new Float64Array([]), strings, hasAsync: false };
+}
+
 describe("createQueryResolver", () => {
   let qc: QueryClient;
 
@@ -164,5 +206,19 @@ describe("createQueryResolver", () => {
     const result = resolver.preflight!([], bytecode, "test-pkg", liveSignal(), qc);
     const resolved = await result!.resolver;
     expect(resolved.toNumber()).toBe(42);
+  });
+
+  test("preflight still detects CALL_PLUGIN after a CALL_USER_FUNCTION call (operand-width regression)", async () => {
+    const { resolver } = createQueryResolver({
+      namespace: "test-weather",
+      pluginFunctionIndex: TEST_FN_IDX,
+      fetchQuery: async (query) => stringValue(`weather-for-${query}`),
+    });
+
+    const bytecode = buildQueryBytecodeAfterUserFunctionCall("london", TEST_FN_IDX);
+    const result = resolver.preflight!([], bytecode, "test-pkg", liveSignal(), qc);
+    expect(result).not.toBeNull();
+    const resolved = await result!.resolver;
+    expect(resolved.value).toBe("weather-for-london");
   });
 });

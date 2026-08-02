@@ -17,7 +17,7 @@ import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 
 
 import { TokenTypes } from "@solve-js/lexer/Token";
-import { Value } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData } from "@solve-js/vm/Value";
 import { currencyExchangeService } from "@solve-js/uom/CurrencyExchange";
 
 // Mock fetch and setup test environment
@@ -93,32 +93,32 @@ function evalNum(input: string): number {
 describe("Mixed arithmetic: vector + scalar (component-wise)", () => {
   test("vec2(10, 2) + 5", () => {
     const result = evalFull("vec2(10, 2) + 5");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([15, 7]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([15, 7]);
   });
 
   test("vec2(3, 4) + vec2(1, 2)", () => {
     const result = evalFull("vec2(3, 4) + vec2(1, 2)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([4, 6]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([4, 6]);
   });
 
   test("vec3(1, 2, 3) * 2", () => {
     const result = evalFull("vec3(1, 2, 3) * 2");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([2, 4, 6]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([2, 4, 6]);
   });
 
   test("vec2(5, 10) - 3", () => {
     const result = evalFull("vec2(5, 10) - 3");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([2, 7]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([2, 7]);
   });
 
   test("vec2(4, 5) + vec2(1, 2) * 2", () => {
     const result = evalFull("vec2(4, 5) + vec2(1, 2) * 2");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([6, 9]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([6, 9]);
   });
 });
 
@@ -639,37 +639,50 @@ describe("Division of same-unit values yields scalar", () => {
 describe("Vector operations (proper component-wise)", () => {
   test("vec2(1, 2) + vec2(3, 4) = vec2(4, 6)", () => {
     const result = evalFull("vec2(1, 2) + vec2(3, 4)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([4, 6]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([4, 6]);
   });
 
   test("vec3(1, 2, 3) - vec3(1, 1, 1) = vec3(0, 1, 2)", () => {
     const result = evalFull("vec3(1, 2, 3) - vec3(1, 1, 1)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([0, 1, 2]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([0, 1, 2]);
   });
 
-  test("vec2(2, 3) * vec2(4, 5) = vec2(8, 15)", () => {
+  // `*` between two matrices is no longer element-wise (Hadamard) — that
+  // was a pre-Calca-parity bug, not a feature: two 1x2 row-vectors have no
+  // valid matrix product (inner dimensions 2 and 1 don't match), so this
+  // now correctly errors instead of silently returning a component-wise
+  // result. See MatrixOps.ts's matrixMultiply() and the real-product test
+  // just below for the actual Calca-parity `*` semantics.
+  test("vec2(2, 3) * vec2(4, 5) is a genuine dimension mismatch (real matrix product, not element-wise)", () => {
     const result = evalFull("vec2(2, 3) * vec2(4, 5)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([8, 15]);
+    expect(result.type).toBe(ValueType.Error);
+    expect(result.value).toBe("DIMENSION_MISMATCH");
   });
+
+  // The actual Calca-parity real-matrix-product case (row-vector times
+  // column-vector, e.g. [2,3] * [4;5] => a 1x1 product) needs the bracket
+  // matrix literal's `;` column syntax — see MatrixLiteral.spec.ts, which
+  // covers real multiplication once that literal syntax exists; vec2/vec3/
+  // vec4 sugar can only construct ROW vectors, so it can't express this
+  // case on its own.
 
   test("vec2(10, 20) / vec2(2, 5) = vec2(5, 4)", () => {
     const result = evalFull("vec2(10, 20) / vec2(2, 5)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([5, 4]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([5, 4]);
   });
 
   test("vec2(1, 2) * 5 = vec2(5, 10)", () => {
     const result = evalFull("vec2(1, 2) * 5");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([5, 10]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([5, 10]);
   });
 
   test("10 * vec2(1, 2) = vec2(10, 20)", () => {
     const result = evalFull("10 * vec2(1, 2)");
-    expect(result.isVector()).toBe(true);
-    expect((result.value as number[])).toEqual([10, 20]);
+    expect(result.isMatrix()).toBe(true);
+    expect((result.value as MatrixData).data).toEqual([10, 20]);
   });
 });

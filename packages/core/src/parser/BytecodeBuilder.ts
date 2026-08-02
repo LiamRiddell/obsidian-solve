@@ -37,6 +37,30 @@ export interface BytecodeProgram {
 	 * executes the definition line has no side effect on `vm.userFunctions`.
 	 */
 	userFunctionBodies?: UserFunctionDef[];
+	/**
+	 * Anonymous function bodies compiled alongside this program — one entry
+	 * per `map`/`reduce` inline transform expression (e.g. the `10*x` in
+	 * `map(10*x, [0,1,500])`) — see {@link BytecodeBuilder.emitAnonymousBody}.
+	 * Deliberately a SEPARATE side-table from `userFunctionBodies`, not
+	 * routed through `vm.userFunctions` at all: an inline body has no name
+	 * and must never leak into the persistent name-keyed registry the way
+	 * a real `f(x) = ...` definition does.
+	 */
+	anonymousBodies?: AnonymousBodyDef[];
+}
+
+/**
+ * An anonymous transform body for `map`/`reduce`'s inline-expression form
+ * (e.g. `10*x` in `map(10*x, [0,1,500])`, or `acc+x` in `reduce(acc+x,
+ * [1,2,3])`). Structurally identical to {@link UserFunctionDef} minus the
+ * `name` — see `OpCode.MAP_INVOKE`/`REDUCE_INVOKE` and
+ * `vm/VM.ts`'s handlers, which build a call frame from `params`/`args`
+ * exactly like `CALL_USER_FUNCTION` does, just without ever registering
+ * the body in `vm.userFunctions`.
+ */
+export interface AnonymousBodyDef {
+	params: string[];
+	program: BytecodeProgram;
 }
 
 /**
@@ -78,6 +102,7 @@ export class BytecodeBuilder {
 	private stringIndex = new Map<string, number>();
 	private _hasAsync = false;
 	private userFunctionBodies: UserFunctionDef[] = [];
+	private anonymousBodies: AnonymousBodyDef[] = [];
 
 	/** Emit an {@link OpCode} instruction. */
 	emitOpcode(op: OpCode): void {
@@ -184,6 +209,28 @@ export class BytecodeBuilder {
 		return idx;
 	}
 
+	/**
+	 * Register a compiled `map`/`reduce` anonymous transform body, returning
+	 * its index into this program's `anonymousBodies` side-table — the
+	 * caller emits that index as `MAP_INVOKE`/`REDUCE_INVOKE`'s operand via
+	 * {@link emitIndex}. Same {@link MAX_CONSTANT_POOL_INDEX} bound as
+	 * {@link emitUserFunctionBody}.
+	 *
+	 * @throws If more than 256 anonymous bodies are registered on one program.
+	 */
+	emitAnonymousBody(params: string[], program: BytecodeProgram): number {
+		const idx = this.anonymousBodies.length;
+		if (idx > MAX_CONSTANT_POOL_INDEX) {
+			throw ErrorFactory.parsing(
+				"TOO_MANY_ANONYMOUS_BODIES",
+				`More than ${MAX_CONSTANT_POOL_INDEX + 1} map/reduce transform expressions on one line, exceeding the bytecode constant pool's limit.`,
+				{ limit: MAX_CONSTANT_POOL_INDEX + 1 }
+			);
+		}
+		this.anonymousBodies.push({ params, program });
+		return idx;
+	}
+
 	/** Overwrite a previously-emitted placeholder operand at `position` with the real jump `target`, once known. */
 	patchJump(position: number, target: number): void {
 		this.opcodes[position] = target;
@@ -204,6 +251,7 @@ export class BytecodeBuilder {
 			constants: new Map(),
 			hasAsync: this._hasAsync,
 			userFunctionBodies: this.userFunctionBodies.length > 0 ? [...this.userFunctionBodies] : undefined,
+			anonymousBodies: this.anonymousBodies.length > 0 ? [...this.anonymousBodies] : undefined,
 		};
 	}
 
@@ -246,6 +294,7 @@ export class BytecodeBuilder {
 			constants: new Map(),
 			hasAsync: this._hasAsync,
 			userFunctionBodies: this.userFunctionBodies.length > 0 ? [...this.userFunctionBodies] : undefined,
+			anonymousBodies: this.anonymousBodies.length > 0 ? [...this.anonymousBodies] : undefined,
 		};
 	}
 
@@ -259,5 +308,6 @@ export class BytecodeBuilder {
 		this.stringIndex.clear();
 		this._hasAsync = false;
 		this.userFunctionBodies.length = 0;
+		this.anonymousBodies.length = 0;
 	}
 }

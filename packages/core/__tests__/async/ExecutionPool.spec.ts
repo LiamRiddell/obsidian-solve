@@ -176,8 +176,8 @@ describe("ExecutionPool — reconstructValue", () => {
 		expect(v.unit).toBe("");
 	});
 
-	test("Array → numberValue (lossy fallback)", () => {
-		const v = reconstructValue({ lineNumber: 1, valueType: ValueType.Array, value: 7, isPending: false });
+	test("Matrix → numberValue (lossy fallback — worker serialization has no shape/data slot)", () => {
+		const v = reconstructValue({ lineNumber: 1, valueType: ValueType.Matrix, value: 7, isPending: false });
 		expect(v.type).toBe(ValueType.Number);
 		expect(v.value).toBe(7);
 	});

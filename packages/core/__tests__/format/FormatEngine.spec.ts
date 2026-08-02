@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "@jest/globals";
 import { formatValue } from "@solve-js/format/FormatEngine";
-import { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, arrayValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, rowVectorValue } from "@solve-js/vm/Value";
 import { getLocale } from "@solve-js/constants/locales";
 
 describe("FormatEngine", () => {
@@ -39,13 +39,13 @@ describe("FormatEngine", () => {
   });
 
   it("formats vector2 values", () => {
-    const result = formatValue(arrayValue([1, 2]));
+    const result = formatValue(rowVectorValue([1, 2]));
     expect(result).toContain("1");
     expect(result).toContain("2");
   });
 
   it("formats vector3 values", () => {
-    const result = formatValue(arrayValue([1, 2, 3]));
+    const result = formatValue(rowVectorValue([1, 2, 3]));
     expect(result).toContain("1");
     expect(result).toContain("3");
   });

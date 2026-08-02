@@ -269,7 +269,9 @@ const VALUE_TYPE_NAMES: Record<number, string> = {
 	[ValueType.Datetime]: "Datetime",
 	[ValueType.Percentage]: "Percentage",
 	[ValueType.Uom]: "Uom",
-	[ValueType.Array]: "Array",
+	[ValueType.Matrix]: "Matrix",
+	[ValueType.Range]: "Range",
+	[ValueType.Symbolic]: "Symbolic",
 	[ValueType.Boolean]: "Boolean",
 	[ValueType.Unit]: "Unit",
 	[ValueType.Pending]: "Pending",
@@ -377,22 +379,37 @@ function generateMarkdownOutline(text: string): MarkdownNode[] {
  * Opcodes that carry a single operand (index into numbers/strings/variables):
  *   PUSH_NUMBER(10), PUSH_BIGINT(11), PUSH_HEX(12),
  *   PUSH_STRING(13), PUSH_BOOLEAN(14), PUSH_VARIABLE(15)
- *   LOAD_VAR(60), STORE_VAR(61)
- *   ARR_NEW(100) — element count
+ *   LOAD_VAR(60), STORE_VAR(61), LOAD_GLOBAL_VAR(62), STORE_GLOBAL_VAR(63)
+ *   DEFINE_USER_FUNCTION(150) — index into bytecode.userFunctionBodies
  *
- * Opcodes that carry TWO operands (registry index, then arg count) —
- * see VM.ts's CALL_PLUGIN/CALL_BUILTIN handlers, which read
- * `opcodes[ip++]` twice before popping args off the stack:
- *   CALL_PLUGIN(50), CALL_BUILTIN(51)
+ * Opcodes that carry TWO operands —
+ * see VM.ts's CALL_PLUGIN/CALL_BUILTIN/CALL_USER_FUNCTION handlers, which
+ * read `opcodes[ip++]` twice before popping args off the stack:
+ *   CALL_PLUGIN(50), CALL_BUILTIN(51) — (registry index, arg count)
+ *   CALL_USER_FUNCTION(151) — (name index, arg count)
+ *   MAT_NEW(152) — (rows, cols)
  *
- * All other opcodes (arithmetic, comparison, stack ops, etc.) have zero operands.
+ * Opcodes that carry THREE operands — see VM.ts's MAP_INVOKE/REDUCE_INVOKE
+ * handlers:
+ *   MAP_INVOKE(157) — (kind, ref, collectionCount)
+ *   REDUCE_INVOKE(158) — (kind, ref, hasInitial)
+ *
+ * All other opcodes (arithmetic, comparison, stack ops, MAT_INDEX1/2, etc.)
+ * have zero operands — every argument is already on the value stack.
  */
-function decodeOpcodeArgs(
+export function decodeOpcodeArgs(
 	op: number,
 	opcodeArray: Uint8Array,
 	ip: number
 ): number[] {
-	if (op === OpCode.CALL_PLUGIN || op === OpCode.CALL_BUILTIN) {
+	if (op === OpCode.MAP_INVOKE || op === OpCode.REDUCE_INVOKE) {
+		const args: number[] = [];
+		if (ip + 1 < opcodeArray.length) args.push(opcodeArray[ip + 1]);
+		if (ip + 2 < opcodeArray.length) args.push(opcodeArray[ip + 2]);
+		if (ip + 3 < opcodeArray.length) args.push(opcodeArray[ip + 3]);
+		return args;
+	}
+	if (op === OpCode.CALL_PLUGIN || op === OpCode.CALL_BUILTIN || op === OpCode.CALL_USER_FUNCTION || op === OpCode.MAT_NEW) {
 		const args: number[] = [];
 		if (ip + 1 < opcodeArray.length) args.push(opcodeArray[ip + 1]);
 		if (ip + 2 < opcodeArray.length) args.push(opcodeArray[ip + 2]);
@@ -401,8 +418,8 @@ function decodeOpcodeArgs(
 	// Opcodes that take exactly 1 operand (an index)
 	const hasOperand =
 		(op >= OpCode.PUSH_NUMBER && op <= OpCode.PUSH_VARIABLE) ||
-		(op >= OpCode.LOAD_VAR && op <= OpCode.STORE_VAR) ||
-		op === OpCode.ARR_NEW;
+		(op >= OpCode.LOAD_VAR && op <= OpCode.STORE_GLOBAL_VAR) ||
+		op === OpCode.DEFINE_USER_FUNCTION;
 	if (hasOperand && ip + 1 < opcodeArray.length) {
 		return [opcodeArray[ip + 1]];
 	}

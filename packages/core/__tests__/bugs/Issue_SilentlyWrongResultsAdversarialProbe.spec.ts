@@ -1,6 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { ValueType } from "@solve-js/vm/Value";
+import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 
 /**
  * A batch of confirmed bugs found via adversarial QA probing: each one
@@ -51,8 +51,8 @@ describe("Bugs: plausible-but-silently-wrong results found via adversarial probi
   test("vector addition with matching dimensions still works (regression guard)", () => {
     const engine = new ExpressionEngine("en", false);
     const [result] = engine.evaluateLine(1, "vec2(1,2) + vec2(3,4)");
-    expect(result.type).toBe(ValueType.Array);
-    expect(result.value).toEqual([4, 6]);
+    expect(result.type).toBe(ValueType.Matrix);
+    expect((result.value as MatrixData).data).toEqual([4, 6]);
   });
 
   test("roll() with a reversed range errors instead of returning values outside the range", () => {

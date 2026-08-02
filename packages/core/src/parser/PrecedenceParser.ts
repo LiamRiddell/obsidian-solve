@@ -261,6 +261,9 @@ export class PrecedenceParser {
           builder.emitOpcode(OpCode.PUSH_NUMBER);
           builder.emitNumber(100);
           builder.emitOpcode(OpCode.DIV);
+        } else if (typeId === PrecedenceParser.CARET_ID && this.tryEmitMatrixCaretOp(builder)) {
+          // `^T` (transpose) or `^-1` (inverse) — already fully handled,
+          // including consuming their own trailing tokens.
         } else {
           // Infix: parse right operand, then emit opcode.
           // Right-associative for CARET (^), left-associative for all others.
@@ -431,7 +434,10 @@ export class PrecedenceParser {
         }
         this.consume(TokenTypes.RPAREN);
         if (count > 1) {
-          builder.emitOpcode(OpCode.ARR_NEW);
+          // Legacy bare-tuple vector sugar — a 1xN row-vector Matrix (see
+          // packages/vector/parselets/VectorParselet.ts's comment).
+          builder.emitOpcode(OpCode.MAT_NEW);
+          builder.emitIndex(1);
           builder.emitIndex(count);
         }
         return;
@@ -468,6 +474,119 @@ export class PrecedenceParser {
     }
 
     prefixParselet.parse(this as any, token, builder);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // The "Tier-1 shape-exception" pattern
+  // ═══════════════════════════════════════════════════════════════════════════════
+  //
+  // Tier 1 exists purely for performance — avoid a Map lookup + parselet call
+  // on ~95% of tokens (see this file's own module doc comment above). A
+  // recurring consequence: any grammar shape tied to a Tier-1 token type can
+  // ONLY be implemented by hand-editing this switch, since a package-
+  // registered ParseletRegistry parselet for that same token type would
+  // simply never run in production (Tier 1 always wins over the registry
+  // fallback). Five confirmed instances of this tension exist in this file
+  // (plus one that had to move OUTSIDE it entirely):
+  //   1. NUMBER_ID — the full locale-aware number-literal parsing (hex/
+  //      binary/octal, chained-dot thousands grouping, decimal-separator
+  //      normalization) is inlined in parsePrefix() above; NumberParselet.ts's
+  //      own copy is dead code for real evaluation, kept registered only for
+  //      the "matched parselets" diagnostic view.
+  //   2. IDENT_ID — parseUserFunctionDefOrCall's lookahead (below) disambig-
+  //      uates a function DEFINITION from a CALL from a plain variable load.
+  //   3. LPAREN_ID — the bare-tuple vector-literal sugar ("(x,y[,z[,w]])" ->
+  //      MAT_NEW) is inlined in parsePrefix() above; GroupParselet.ts mirrors
+  //      it for introspection only and must be kept in sync by hand.
+  //   4. CARET_ID — the transpose/inverse suffix table just below.
+  //   5. PLUS_ID — the locale word "and" lexes as PLUS (Tier-1, fixed Sum
+  //      binding power), so a registry parselet can never intercept it the
+  //      way LogicalParselet.ts intercepts "or"/&&/||; unlike the other four,
+  //      there's no SHAPE to special-case on here (the token itself IS the
+  //      operator), so the workaround lives entirely outside this file, as a
+  //      runtime Boolean/Boolean type-check inside vm/VM.ts's OpCode.ADD
+  //      handler instead.
+  //
+  // Deliberate non-goal: none of this is exposed as an IEnginePackage
+  // extension point (unlike prefixParselets/infixParselets). Letting
+  // third-party packages register their own Tier-1 shape-matchers would put
+  // per-package matcher iteration on a genuinely hot path (every CARET/
+  // NUMBER/IDENT/LPAREN/PLUS token, matched or not) — a materially bigger,
+  // separate product decision than "make this one table more concise," and
+  // not one this pattern write-up makes.
+
+  /**
+   * A single `^`-suffix shape: `matches` peeks ahead (consuming nothing) to
+   * check whether this shape starts at the current position; `emit` is only
+   * called immediately after `matches` returned true for that SAME position,
+   * and is responsible for consuming that shape's own trailing tokens and
+   * emitting its bytecode.
+   */
+  private static readonly CARET_SUFFIX_RULES: ReadonlyArray<{
+    name: string;
+    matches(parser: PrecedenceParser): boolean;
+    emit(parser: PrecedenceParser, builder: BytecodeBuilder): void;
+  }> = [
+    {
+      name: "transpose (^T)",
+      matches: (p) => {
+        const next = p.peek();
+        return next?.type === TokenTypes.IDENT && next.value === "T";
+      },
+      emit: (p, builder) => {
+        p.advance();
+        builder.emitOpcode(OpCode.CALL_BUILTIN);
+        builder.emitIndex(63); // transpose — see VMBuiltins.ts
+        builder.emitIndex(1);
+      },
+    },
+    {
+      name: "inverse (^-1)",
+      matches: (p) => {
+        const next = p.peek();
+        if (next?.typeId !== PrecedenceParser.MINUS_ID) return false;
+        const afterMinus = p.peekAt(1);
+        return afterMinus?.type === TokenTypes.NUMBER && afterMinus.value === "1";
+      },
+      emit: (p, builder) => {
+        p.advance();
+        p.advance();
+        builder.emitOpcode(OpCode.CALL_BUILTIN);
+        builder.emitIndex(65); // inv — see VMBuiltins.ts
+        builder.emitIndex(1);
+      },
+    },
+  ];
+
+  /**
+   * After a `^` token (already consumed by the Tier-1 infix loop above),
+   * checks {@link CARET_SUFFIX_RULES} in order for a shape that means
+   * something other than ordinary exponentiation: `^T` (transpose) and `^-1`
+   * (matrix inverse — LITERALLY the integer exponent `-1`; `^-2`, `^-1.5`,
+   * etc. still mean ordinary exponentiation). On a match, the rule's `emit`
+   * consumes that shape's own tokens and this returns `true`. On no match,
+   * consumes NOTHING, returning `false` so the caller falls through to
+   * ordinary `EXP` parsing.
+   *
+   * Every rule dispatches purely on SHAPE, never on operand type (unknowable
+   * at parse time): `inv()`'s own handler (`VMBuiltins.ts` index 65) returns
+   * `1/x` for a plain Number — byte-identical to what `Math.pow(x, -1)`
+   * already computed for `x^-1` before this feature existed — and a real
+   * matrix inverse for a Matrix, so `5^-1` still means exactly what it always
+   * has; only a Matrix operand actually inverts.
+   *
+   * Adding a future `^`-suffix shape is a new table entry here, not a new
+   * if-block — see the "Tier-1 shape-exception" pattern write-up above for
+   * why this table can't instead be a package-registered parselet.
+   */
+  private tryEmitMatrixCaretOp(builder: BytecodeBuilder): boolean {
+    for (const rule of PrecedenceParser.CARET_SUFFIX_RULES) {
+      if (rule.matches(this)) {
+        rule.emit(this, builder);
+        return true;
+      }
+    }
+    return false;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════

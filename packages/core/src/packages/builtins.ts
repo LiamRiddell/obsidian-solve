@@ -24,6 +24,8 @@ import { VARIABLES_PACKAGE } from "./variables";
 import { UOM_PACKAGE } from "./uom";
 import { CURRENCY_PACKAGE } from "./currency";
 import { VECTOR_PACKAGE } from "./vector";
+import { MATRIX_PACKAGE } from "./matrix";
+import { MAPREDUCE_PACKAGE } from "./mapreduce";
 import { BIGINT_PACKAGE } from "./biginteger";
 import { CONDITIONALS_PACKAGE } from "./conditionals";
 import { CONVERTERS_PACKAGE } from "./converters";
@@ -45,6 +47,8 @@ export {
   UOM_PACKAGE,
   CURRENCY_PACKAGE,
   VECTOR_PACKAGE,
+  MATRIX_PACKAGE,
+  MAPREDUCE_PACKAGE,
   BIGINT_PACKAGE,
   CONDITIONALS_PACKAGE,
   CONVERTERS_PACKAGE,
@@ -85,6 +89,8 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   UOM_PACKAGE,
   CURRENCY_PACKAGE,
   VECTOR_PACKAGE,
+  MATRIX_PACKAGE,
+  MAPREDUCE_PACKAGE,
   BIGINT_PACKAGE,
   CONDITIONALS_PACKAGE,
   CONVERTERS_PACKAGE,

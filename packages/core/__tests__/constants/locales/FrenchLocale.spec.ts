@@ -11,6 +11,7 @@ import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
+import type { MatrixData } from "@solve-js/vm/Value";
 
 function displaySettings(localeCode: string) {
 	return { ...DEFAULT_FORMATTING_SETTINGS, numberResult: { ...DEFAULT_FORMATTING_SETTINGS.numberResult, decimalSeparatorLocale: localeCode } };
@@ -105,7 +106,7 @@ describe("French locale — input keywords", () => {
 	test("vec2/vec3/vec4 use the same spelling as English", () => {
 		const engine = new ExpressionEngine("fr");
 		const [value] = engine.evaluateExpression("vec2(1, 2)");
-		expect(value.value).toEqual([1, 2]);
+		expect((value.value as MatrixData).data).toEqual([1, 2]);
 	});
 
 	test("regression guard: German's pre-existing analogous gap (wurzel/root) is unaffected by this change, confirming it's a pre-existing architectural limitation, not something newly introduced", () => {

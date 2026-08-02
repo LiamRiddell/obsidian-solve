@@ -104,6 +104,67 @@ export function implicitMultiplyRule(
 }
 
 //#endregion
+//#region ─── isInsideRangeContext — Bracket/Call-Paren Context Guard ───────────
+
+/**
+ * Whether token `pos` sits inside a context where a bare `NUMBER:NUMBER`
+ * sequence means a Range, not a clock-time/laptime/video-timecode literal:
+ * a matrix literal/index/slice (`[1,2,3]`, `a[0:3]`), OR a `map`/`reduce`/
+ * `sum`/`prod` call's own argument-list parens (`map(f, 0:3)` — these
+ * accept a bare Range argument directly, per the Calca spec's own
+ * example). Scans backward from `pos` over the CURRENT pass's token array,
+ * tracking `[`/`(` nesting depth — the same "positional guard via
+ * backward scan" idiom already used elsewhere in this normalizer layer
+ * (e.g. `LineRefNormalizerRule`'s previous-token check), generalized to
+ * depth-tracking. An `LBRACKET` is unconditionally a range-safe opener; an
+ * `LPAREN` is range-safe ONLY when immediately preceded by MAP/REDUCE/
+ * SUM_FN/PROD_FN — an ordinary grouping/function-call paren is NOT, so
+ * `(9:00) + 5` still means a clock time, not a range.
+ *
+ * Needed because the clock-time/laptime/video-timecode rules each match a
+ * bare `NUMBER COLON NUMBER...` shape with ZERO context-awareness — a real
+ * collision discovered when adding Range support, since e.g. "0:3" is
+ * valid input to BOTH features. These contexts have no legitimate use for
+ * a clock-time/laptime/timecode literal, so the carve-out costs the time
+ * features nothing.
+ *
+ * IMPORTANT cross-pass-timing gotcha (a real bug found and fixed here,
+ * not a hypothetical): the `LPAREN`-opener check deliberately tests the
+ * RAW word text (`prev.value.toLowerCase()`), not `prev.type ===
+ * "MAP"/"REDUCE"/...`. The normalizer's multi-pass loop hands every rule
+ * the SAME frozen `tokens` snapshot for an entire pass — a rule scanning
+ * a LATER position in that pass cannot see a fusion `mapReduceCallNormalizerRule`
+ * performs at an EARLIER position in that SAME pass (fusion results only
+ * become visible to other rules starting the NEXT pass). Checking the
+ * fused token type here would miss exactly the case that matters most —
+ * `map(f, 0:3)` on its very first normalization pass — silently letting
+ * `0:3` fuse into a clock time before `map(`'s own fusion ever lands.
+ * Testing the raw word is immune to this: it's true from the very first
+ * pass, regardless of whether `mapReduceCallNormalizerRule` has run yet.
+ * (`LBRACKET` above has no equivalent issue — it's a genuine lexer token
+ * from the start, never itself the product of a fusion.)
+ */
+export function isInsideRangeContext(tokens: Token[], pos: number): boolean {
+  const safeStack: boolean[] = [];
+  for (let i = 0; i < pos; i++) {
+    const t = tokens[i];
+    if (t.type === "LBRACKET") {
+      safeStack.push(true);
+    } else if (t.type === "LPAREN") {
+      const prev = tokens[i - 1];
+      const opensMapReduceCall = !!prev && (
+        prev.type === "MAP" || prev.type === "REDUCE" || prev.type === "SUM_FN" || prev.type === "PROD_FN" ||
+        (prev.type === "IDENT" && (prev.value.toLowerCase() === "map" || prev.value.toLowerCase() === "reduce" || prev.value.toLowerCase() === "sum" || prev.value.toLowerCase() === "prod"))
+      );
+      safeStack.push(opensMapReduceCall);
+    } else if (t.type === "RBRACKET" || t.type === "RPAREN") {
+      safeStack.pop();
+    }
+  }
+  return safeStack.length > 0 && safeStack[safeStack.length - 1];
+}
+
+//#endregion
 //#region ─── createBuiltinNormalizerRules — All Built-in Rules ─────────────────
 
 /**
