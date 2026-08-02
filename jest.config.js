@@ -91,25 +91,16 @@ const config = {
 
 	// A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
 	moduleNameMapper: {
-		// packages/playground-bridge (and webapp) source uses ESM-style
-		// ".js"-suffixed relative imports (e.g. `from "./engineShared.js"`,
-		// resolved by Vite's bundler moduleResolution) — ts-jest's
-		// CommonJS resolution doesn't strip that suffix on its own, so a
-		// plain relative import to a same-named ".ts" file 404s under
-		// jest. Strip it generically so any such file can be imported by a
-		// test without needing its own per-file mapping entry.
-		"^(\\.{1,2}/.*)\\.js$": "$1",
 		"@/(.*)": "<rootDir>/src/$1",
 		"@app/(.*)": "<rootDir>/src/app/$1",
-		"@solve-js/workers/(.*)\\.worker$": "<rootDir>/packages/core/__tests__/__mocks__/worker-mock.ts",
-		"@solve-js-examples/(.*)": "<rootDir>/packages/core/examples/$1",
-		"@solve-js/(.*)": "<rootDir>/packages/core/src/$1",
-		"@bridge/(.*)": "<rootDir>/packages/playground-bridge/src/$1",
-		"@tools/(.*)": "<rootDir>/packages/core/tools/$1",
-		"test/(.*)": "<rootDir>/packages/core/__tests__/$1",
-		"^@codemirror/language$": "<rootDir>/packages/core/__tests__/__mocks__/codemirror-language.ts",
-		"^@lezer/common$": "<rootDir>/packages/core/__tests__/__mocks__/lezer-common.ts",
-		"^obsidian$": "<rootDir>/packages/core/__tests__/__mocks__/obsidian.ts",
+		// @solve/core resolves normally through node_modules (an npm-link
+		// symlink into the standalone solve-engine checkout during local
+		// dev) — no special mapping needed, unlike the old in-repo
+		// @solve-js/* deep-source alias this file used before the engine
+		// was extracted into its own repo.
+		"^@codemirror/language$": "<rootDir>/__tests__/__mocks__/codemirror-language.ts",
+		"^@lezer/common$": "<rootDir>/__tests__/__mocks__/lezer-common.ts",
+		"^obsidian$": "<rootDir>/__tests__/__mocks__/obsidian.ts",
 	},
 
 	// An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
@@ -146,13 +137,13 @@ const config = {
 	rootDir: ".",
 
 	// A list of paths to directories that Jest should use to search for files in
-	roots: ["<rootDir>", "packages/core/__tests__"],
+	roots: ["<rootDir>"],
 
 	// Allows you to use a custom runner instead of Jest's default test runner
 	// runner: "jest-runner",
 
 	// The paths to modules that run some code to configure or set up the testing environment before each test
-	setupFiles: ["<rootDir>/packages/core/__tests__/__mocks__/jest-setup.ts"],
+	setupFiles: ["<rootDir>/__tests__/__mocks__/jest-setup.ts"],
 
 	// A list of paths to modules that run some code to configure or set up the testing framework before each test
 	// setupFilesAfterEnv: [],
@@ -208,7 +199,7 @@ const config = {
 		"^.+\\.tsx?$": [
 			"ts-jest",
 			{
-				tsconfig: "./packages/core/__tests__/tsconfig.test.json",
+				tsconfig: "./__tests__/tsconfig.test.json",
 				skipLibCheck: true,
 				isolatedModules: true
 			},
