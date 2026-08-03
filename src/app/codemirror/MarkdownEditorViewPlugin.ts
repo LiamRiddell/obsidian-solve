@@ -7,16 +7,16 @@ import {
 	DocumentModel,
 	ThreeTierEvaluator,
 	findInlineSolvesInLine,
-} from "@solve/core/engine";
-import type { ViewportRange, LineChange, AsyncResolutionEvent } from "@solve/core/engine";
-import { Value, ValueType } from "@solve/core/vm";
-import { VMCheckpointer } from "@solve/core/vm";
-import { formatValue } from "@solve/core/format";
+} from "solve-engine/engine";
+import type { ViewportRange, LineChange, AsyncResolutionEvent } from "solve-engine/engine";
+import { Value, ValueType } from "solve-engine/vm";
+import { VMCheckpointer } from "solve-engine/vm";
+import { formatValue } from "solve-engine/format";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
-import { abortLogger } from "@solve/core/utilities";
-import { LanguageService } from "@solve/core/language";
-import { categoryClassName, completionItemToOption } from "@solve/core/language";
+import { abortLogger } from "solve-engine/utilities";
+import { LanguageService } from "solve-engine/language";
+import { categoryClassName, completionItemToOption } from "solve-engine/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,

@@ -1,4 +1,4 @@
-import type { TokenCategory } from "@solve/core/language";
+import type { TokenCategory } from "solve-engine/language";
 import type { SyntaxHighlightPresetName } from "@app/settings/definition/ISyntaxHighlightSettings";
 
 /**

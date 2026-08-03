@@ -1,4 +1,4 @@
-import { IVector3 } from "@solve/core/packages";
+import { IVector3 } from "solve-engine/packages";
 
 /**
  * Mathematical operations on 3D vectors.

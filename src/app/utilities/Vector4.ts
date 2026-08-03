@@ -1,4 +1,4 @@
-import { IVector4 } from "@solve/core/packages";
+import { IVector4 } from "solve-engine/packages";
 
 /**
  * Mathematical operations on 4D vectors (common in graphics and physics).

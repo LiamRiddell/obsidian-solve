@@ -3,7 +3,7 @@ import { FeatureFlagClass } from "@app/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { EPluginStatus } from "@app/constants/EPluginStatus";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
-import { packageRegistry } from "@solve/core";
+import { packageRegistry } from "solve-engine";
 import { EngineProvider } from "@app/engine/EngineProvider";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import { SettingTab } from "@app/settings/SettingsTab";

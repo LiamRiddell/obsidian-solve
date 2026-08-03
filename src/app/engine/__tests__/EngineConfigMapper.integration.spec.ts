@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
-import { ExpressionEngine } from "@solve/core/engine";
+import { ExpressionEngine } from "solve-engine/engine";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import type UserSettings from "@app/settings/UserSettings";
 
