@@ -4,17 +4,6 @@ import UserSettings from "@app/settings/UserSettings";
 export class PercentageResultSettings {
 	constructor(private parent: UserSettings) {}
 
-	get enableSeperator(): boolean {
-		return (
-			this.parent.settings.percentageResult.enableSeperator ??
-			DEFAULT_SETTINGS.percentageResult.enableSeperator
-		);
-	}
-
-	set enableSeperator(value: boolean) {
-		this.parent.settings.percentageResult.enableSeperator = value;
-	}
-
 	get decimalPlaces(): number {
 		return (
 			this.parent.settings.percentageResult.decimalPlaces ??

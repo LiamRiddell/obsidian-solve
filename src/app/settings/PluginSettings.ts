@@ -1,8 +1,5 @@
 import { EDatetimeParsingFormat } from "@app/constants/EDatetimeFormat";
 import { IPluginSettings } from "@app/settings/definition/IPluginSettings";
-// Use Obsidian's bundled moment instead of the npm package — the host app
-// already ships one, so importing our own would duplicate ~230KB in main.js.
-import { moment } from "obsidian";
 
 /**
  * Default plugin settings used as the baseline for `deepMerge`.
@@ -90,19 +87,12 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	numberResult: {
 		decimalSeparatorLocale: "en-US",
 	},
-	integerResult: {
-		enableSeperator: false,
-	},
 	floatResult: {
 		enableSeperator: false,
 		decimalPlaces: 2,
 	},
 	percentageResult: {
-		enableSeperator: false,
 		decimalPlaces: 2,
-	},
-	datetimeResult: {
-		format: moment.defaultFormat,
 	},
 	hexResult: {
 		enablePadding: false,
@@ -110,6 +100,5 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	},
 	unitOfMeasurementResult: {
 		decimalPlaces: 2,
-		unitNames: false,
 	},
 };

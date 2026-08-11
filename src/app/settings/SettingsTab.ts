@@ -48,10 +48,8 @@ export class SettingTab extends PluginSettingTab {
 
 		// Reuslts
 		this.displayNumberSettings();
-		this.displayIntegerSettings();
 		this.displayFloatSettings();
 		this.displayPercentageSettings();
-		this.displayDatetimeSettings();
 		this.displayHexSettings();
 		this.displayUnitOfMeasurementSettings();
 
@@ -605,28 +603,6 @@ export class SettingTab extends PluginSettingTab {
 			});
 	}
 
-	displayIntegerSettings() {
-		new Setting(this.containerEl).setName("Integer Result").setHeading();
-
-		new Setting(this.containerEl)
-			.setName("Display thousand separators")
-			.setDesc(
-				`Adds thousand separators to integer results. Default is ${DEFAULT_SETTINGS.integerResult.enableSeperator}`
-			)
-			.addToggle((toggle) => {
-				const value =
-					this.plugin.settings.integerResult.enableSeperator;
-
-				toggle.setValue(value);
-
-				toggle.onChange(async (value) => {
-					this.plugin.settings.integerResult.enableSeperator = value;
-
-					await this.plugin.saveSettings();
-				});
-			});
-	}
-
 	displayFloatSettings() {
 		new Setting(this.containerEl).setName("Float Result").setHeading();
 
@@ -670,25 +646,6 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Percentage Result").setHeading();
 
 		new Setting(this.containerEl)
-			.setName("Display thousand separators")
-			.setDesc(
-				`Adds thousand separators to percentage results. Default is ${DEFAULT_SETTINGS.percentageResult.enableSeperator}`
-			)
-			.addToggle((toggle) => {
-				const value =
-					this.plugin.settings.percentageResult.enableSeperator;
-
-				toggle.setValue(value);
-
-				toggle.onChange(async (value) => {
-					this.plugin.settings.percentageResult.enableSeperator =
-						value;
-
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(this.containerEl)
 			.setName("Decimal places")
 			.setDesc(
 				`Adjust the number of decimal places, setting to reveal more digits for accuracy or fewer digits for simplicity in number displays. Default is ${DEFAULT_SETTINGS.percentageResult.decimalPlaces}`
@@ -706,25 +663,6 @@ export class SettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
-	}
-
-	displayDatetimeSettings() {
-		new Setting(this.containerEl).setName("Datetime Result").setHeading();
-
-		new Setting(this.containerEl)
-			.setName("Format")
-			.setDesc(
-				`The format to use when displaying a date in the result. Default is ${DEFAULT_SETTINGS.datetimeResult.format}`
-			)
-			.addMomentFormat((control) =>
-				control
-					.setValue(this.plugin.settings.datetimeResult.format)
-					.onChange(async (value) => {
-						this.plugin.settings.datetimeResult.format = value;
-
-						await this.plugin.saveSettings();
-					})
-			);
 	}
 
 	displayHexSettings() {
@@ -787,24 +725,6 @@ export class SettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
-
-		new Setting(this.containerEl)
-			.setName("Show unit name")
-			.setDesc(
-				`Show the unit name in the result instead of the unit abbreviation. Default is ${DEFAULT_SETTINGS.unitOfMeasurementResult.unitNames}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(
-						this.plugin.settings.unitOfMeasurementResult.unitNames
-					)
-					.onChange(async (value) => {
-						this.plugin.settings.unitOfMeasurementResult.unitNames =
-							value;
-
-						await this.plugin.saveSettings();
-					})
-			);
 	}
 
 	displaySyntaxHighlightSettings() {

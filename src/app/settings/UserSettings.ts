@@ -3,14 +3,12 @@ import { IPluginSettings } from "@app/settings/definition/IPluginSettings";
 import { ArithmeticProviderSettings } from "@app/settings/properties/ArithmeticProviderSettings";
 import { BigIntegerArithmeticProviderSettings } from "@app/settings/properties/BigIntegerArithmeticProviderSettings";
 import { DatetimeProviderSettings } from "@app/settings/properties/DatetimeProviderSettings";
-import { DatetimeResultSettings } from "@app/settings/properties/DatetimeResultSettings";
 import { DiceProviderSettings } from "@app/settings/properties/DiceProviderSettings";
 import { EngineSettings } from "@app/settings/properties/EngineSettings";
 import { FloatResultSettings } from "@app/settings/properties/FloatResultSettings";
 import { FunctionArithmeticProviderSettings } from "@app/settings/properties/FunctionArithmeticProviderSettings";
 import { HexResultSettings } from "@app/settings/properties/HexResultSettings";
 import { InlineSolveSettings } from "@app/settings/properties/InlineSolveSettings";
-import { IntegerResultSettings } from "@app/settings/properties/IntegerResultSettings";
 import { InterfaceSettings } from "@app/settings/properties/InterfaceSettings";
 import { SyntaxHighlightSettings } from "@app/settings/properties/SyntaxHighlightSettings";
 import { CompletionSettings } from "@app/settings/properties/CompletionSettings";
@@ -52,10 +50,8 @@ export default class UserSettings {
 
 	// Result Settings
 	public readonly numberResult: NumberResultSettings;
-	public readonly integerResult: IntegerResultSettings;
 	public readonly floatResult: FloatResultSettings;
 	public readonly percentageResult: PercentageResultSettings;
-	public readonly datetimeResult: DatetimeResultSettings;
 	public readonly hexResult: HexResultSettings;
 	public readonly unitOfMeasurementResult: UnitOfMeasurementResultSettings;
 
@@ -89,10 +85,8 @@ export default class UserSettings {
 
 		// Results
 		this.numberResult = new NumberResultSettings(this);
-		this.integerResult = new IntegerResultSettings(this);
 		this.floatResult = new FloatResultSettings(this);
 		this.percentageResult = new PercentageResultSettings(this);
-		this.datetimeResult = new DatetimeResultSettings(this);
 		this.hexResult = new HexResultSettings(this);
 		this.unitOfMeasurementResult = new UnitOfMeasurementResultSettings(
 			this

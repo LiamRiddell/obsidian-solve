@@ -1,14 +1,12 @@
 import { IArithmeticProviderSettings } from "@app/settings/definition/IArithmeticProviderSettings";
 import { IBigIntegerArithmeticProviderSettings } from "@app/settings/definition/IBigIntegerArithmeticProviderSettings";
 import { IDatetimeProviderSettings } from "@app/settings/definition/IDatetimeProviderSettings";
-import { IDatetimeResultSettings } from "@app/settings/definition/IDatetimeResultSettings";
 import { IDiceProviderSettings } from "@app/settings/definition/IDiceProviderSettings";
 import { IEngineSettings } from "@app/settings/definition/IEngineSettings";
 import { IFloatResultSettings } from "@app/settings/definition/IFloatResultSettings";
 import { IFunctionArithmeticProviderSettings } from "@app/settings/definition/IFuntionArithmeticProviderSettings";
 import { IHexResultSettings } from "@app/settings/definition/IHexResultSettings";
 import { IInlineSolveSettings } from "@app/settings/definition/IInlineSolveSettings";
-import { IIntegerResultSettings } from "@app/settings/definition/IIntegerResultSettings";
 import { IInterfaceSettings } from "@app/settings/definition/IInterfaceSettings";
 import { ISyntaxHighlightSettings } from "@app/settings/definition/ISyntaxHighlightSettings";
 import { ICompletionSettings } from "@app/settings/definition/ICompletionSettings";
@@ -40,10 +38,8 @@ export interface IPluginSettings {
 
 	// Results
 	numberResult: INumberResultSettings;
-	integerResult: IIntegerResultSettings;
 	floatResult: IFloatResultSettings;
 	percentageResult: IPercentageResultSettings;
-	datetimeResult: IDatetimeResultSettings;
 	hexResult: IHexResultSettings;
 	unitOfMeasurementResult: IUnitOfMeasurementResultSettings;
 }

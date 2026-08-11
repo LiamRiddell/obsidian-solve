@@ -14,15 +14,4 @@ export class UnitOfMeasurementResultSettings {
 	set decimalPlaces(value: number) {
 		this.parent.settings.unitOfMeasurementResult.decimalPlaces = value;
 	}
-
-	get unitNames(): boolean {
-		return (
-			this.parent.settings.unitOfMeasurementResult.unitNames ??
-			DEFAULT_SETTINGS.unitOfMeasurementResult.unitNames
-		);
-	}
-
-	set unitNames(value: boolean) {
-		this.parent.settings.unitOfMeasurementResult.unitNames = value;
-	}
 }
