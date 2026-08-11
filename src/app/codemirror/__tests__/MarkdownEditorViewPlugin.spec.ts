@@ -1,6 +1,7 @@
 import { describe, expect, test, afterEach, jest } from "@jest/globals";
 import { MarkdownEditorViewPlugin } from "@app/codemirror/MarkdownEditorViewPlugin";
 import { EngineProvider } from "@app/engine/EngineProvider";
+import UserSettings from "@app/settings/UserSettings";
 import { ValueType } from "solve-engine/vm";
 
 /** Counts widget decorations (result badges) anywhere in a plugin's current decoration set. */
@@ -203,6 +204,47 @@ describe("MarkdownEditorViewPlugin with ThreeTierEvaluator", () => {
 		const docModel = (plugin as any).docModel;
 		expect(docModel.getLineAt(1).results[0][0].type).toBe(ValueType.Error);
 		expect(countResultWidgets(plugin)).toBe(0);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Explicit mode — only lines ending in "=" show a result
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("MarkdownEditorViewPlugin — explicit mode", () => {
+	afterEach(() => {
+		EngineProvider.reset();
+		// UserSettings is a singleton backed by the shared DEFAULT_SETTINGS
+		// object — restore it so this doesn't leak into other tests in this
+		// file/run.
+		UserSettings.getInstance().engine.explicitMode = false;
+	});
+
+	test("a line ending in '=' shows the result of the expression before it", () => {
+		UserSettings.getInstance().engine.explicitMode = true;
+		const view = createMockView(["5 + 5 ="]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		expect(countResultWidgets(plugin)).toBe(1);
+	});
+
+	test("a line NOT ending in '=' shows nothing, even though it evaluates fine", () => {
+		UserSettings.getInstance().engine.explicitMode = true;
+		const view = createMockView(["5 + 5"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		// Sanity check: this expression genuinely does evaluate — explicit
+		// mode is suppressing it, not a coincidental parse failure.
+		const docModel = (plugin as any).docModel;
+		expect(docModel.getLineAt(1).results[0][0].type).not.toBe(ValueType.Error);
+		expect(countResultWidgets(plugin)).toBe(0);
+	});
+
+	test("explicit mode off (default): a bare expression shows its result as usual", () => {
+		const view = createMockView(["5 + 5"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		expect(countResultWidgets(plugin)).toBe(1);
 	});
 });
 

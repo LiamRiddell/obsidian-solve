@@ -510,28 +510,67 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 						// evaluation render). Call engine directly as a one-off.
 						this.buildInlineSolveDecorationsFallback(line, inlineSolves, entries);
 					}
-				} else if (lineState && !lineState.isEmpty && lineState.results.length > 0 && lineState.results[0][0].type !== ValueType.Error) {
-					// Full-line expression result from evaluator. Error results
-					// are deliberately not rendered — most lines in a note are
-					// prose, not calculations, and a visible error badge under
-					// every non-expression line (or every half-typed one) would
-					// be far noisier than useful. Only a successful (or
-					// pending) result gets a widget.
-					const resultGroup = lineState.results[0];
-					const result = resultGroup[0];
-					const isPending = result.type === ValueType.Pending;
-					const formattedResult = isPending ? "" : formatValue(result);
-					const expression = lineState.expressions[0] ?? line.text.trim();
-					const queryKey = isPending ? (result.value as string) : null;
+				} else if (lineState && !lineState.isEmpty) {
+					if (this.userSettings.engine.explicitMode) {
+						// Explicit mode: only a line ending in "=" shows a
+						// result — everything else renders nothing, even if
+						// it would otherwise evaluate fine. DocumentModel/
+						// ThreeTierEvaluator evaluated the UNMODIFIED line
+						// (trailing "=" and all), which isn't valid syntax on
+						// its own and is just a parse error there — so the
+						// real expression is evaluated here as a one-off with
+						// the "=" stripped, the same "call the engine
+						// directly" pattern buildInlineSolveDecorationsFallback
+						// already uses.
+						const trimmed = line.text.trimEnd();
+						if (trimmed.endsWith("=")) {
+							const expression = trimmed.slice(0, -1).trimEnd();
+							if (expression) {
+								try {
+									const [result] = this.engine.evaluateLine(line.number, expression);
+									if (result && result.type !== ValueType.Error) {
+										const isPending = result.type === ValueType.Pending;
+										const formattedResult = isPending ? "" : formatValue(result);
+										const queryKey = isPending ? (result.value as string) : null;
 
-					entries.push({
-						from: line.to,
-						to: line.to,
-						deco: Decoration.widget({
-							widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey),
-							side: 1,
-						}),
-					});
+										entries.push({
+											from: line.to,
+											to: line.to,
+											deco: Decoration.widget({
+												widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey),
+												side: 1,
+											}),
+										});
+									}
+								} catch {
+									// Parse error on the stripped expression — render nothing.
+								}
+							}
+						}
+					} else if (lineState.results.length > 0 && lineState.results[0][0].type !== ValueType.Error) {
+						// Full-line expression result from evaluator. Error
+						// results are deliberately not rendered — most lines
+						// in a note are prose, not calculations, and a
+						// visible error badge under every non-expression
+						// line (or every half-typed one) would be far
+						// noisier than useful. Only a successful (or
+						// pending) result gets a widget.
+						const resultGroup = lineState.results[0];
+						const result = resultGroup[0];
+						const isPending = result.type === ValueType.Pending;
+						const formattedResult = isPending ? "" : formatValue(result);
+						const expression = lineState.expressions[0] ?? line.text.trim();
+						const queryKey = isPending ? (result.value as string) : null;
+
+						entries.push({
+							from: line.to,
+							to: line.to,
+							deco: Decoration.widget({
+								widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey),
+								side: 1,
+							}),
+						});
+					}
 				}
 				// (Empty/markdown-only lines with no inline solves and no
 				// result fall through with only their highlight marks, if any.)
