@@ -24,6 +24,13 @@ same note you're already writing in.
 > [syntax reference](https://liamriddell.github.io/solve-engine/syntax/cheatsheet/)
 > in place of the old wiki. See the [release notes](https://github.com/LiamRiddell/obsidian-solve/releases/tag/2.0.0)
 > for the full list of changes.
+>
+> Going forward, new syntax and engine features ship through
+> [solve-engine](https://github.com/LiamRiddell/solve-engine) — this repo
+> just consumes it as a dependency and updates automatically when a new
+> version is released. Engine feature requests and syntax questions belong
+> there; this repo is for the Obsidian integration itself (settings,
+> rendering, editor behaviour).
 
 <p align="center">
   <img width="100%" src="internal/screenshot.png"/>
