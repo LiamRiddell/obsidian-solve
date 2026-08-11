@@ -33,8 +33,11 @@ export class SettingTab extends PluginSettingTab {
 		this.displayIntroduction();
 		this.displayEngineSettings();
 		this.displayInterfaceSettings();
-		this.displaySyntaxHighlightSettings();
-		this.displayCompletionSettings();
+		// Hidden for now — not ready for user-facing configuration yet.
+		// The settings/features themselves still work off their defaults;
+		// this just hides the UI to change them. Uncomment to re-enable.
+		// this.displaySyntaxHighlightSettings();
+		// this.displayCompletionSettings();
 		this.displayInlineSolveSettings();
 		this.displayVariablesSettings();
 
