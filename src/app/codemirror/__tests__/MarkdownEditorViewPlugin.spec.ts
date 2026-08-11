@@ -13,6 +13,15 @@ function countResultWidgets(plugin: MarkdownEditorViewPlugin): number {
 	return count;
 }
 
+/** Returns the formatted result text of the first widget decoration found, or undefined if none. */
+function firstResultWidgetText(plugin: MarkdownEditorViewPlugin): string | undefined {
+	let text: string | undefined;
+	(plugin.decorations as any).between(0, 1e9, (_from: number, _to: number, deco: any) => {
+		if (text === undefined && deco?.spec?.widget) text = deco.spec.widget.result;
+	});
+	return text;
+}
+
 function createMockView(lines: string[]): any {
 	const text = lines.join("\n");
 	return {
@@ -519,5 +528,36 @@ describe("MarkdownEditorViewPlugin — highlighting and completions toggle indep
 		expect(invalidateSpy).toHaveBeenCalledTimes(1);
 		expect(invalidateSpy.mock.calls[0][0]).toEqual(new Set([1]));
 		invalidateSpy.mockRestore();
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Result formatting settings — confirms FormattingSettingsMapper actually
+// reaches formatValue(), not just that the settings exist in the UI.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("MarkdownEditorViewPlugin — result formatting settings are wired", () => {
+	afterEach(() => {
+		EngineProvider.reset();
+		UserSettings.getInstance().hexResult.enablePadding = false;
+		UserSettings.getInstance().hexResult.paddingZeros = 8;
+		UserSettings.getInstance().floatResult.decimalPlaces = 2;
+	});
+
+	test("hexResult.paddingZeros changes the padded width of a hex result (when enablePadding is on)", () => {
+		UserSettings.getInstance().hexResult.enablePadding = true;
+		UserSettings.getInstance().hexResult.paddingZeros = 4;
+		const view = createMockView(["10 as hex"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		expect(firstResultWidgetText(plugin)).toBe("= 0x000A");
+	});
+
+	test("floatResult.decimalPlaces changes how many decimals a result shows", () => {
+		UserSettings.getInstance().floatResult.decimalPlaces = 4;
+		const view = createMockView(["1 / 3"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		expect(firstResultWidgetText(plugin)).toBe("= 0.3333");
 	});
 });

@@ -1,5 +1,6 @@
 import { ExpressionResultWidget } from "@app/codemirror/widgets/ExpressionResultWidget";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
+import { FormattingSettingsMapper } from "@app/engine/FormattingSettingsMapper";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
 import {
@@ -329,7 +330,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					EPluginEvent.WriteResultToActiveDocumentLine,
 					line,
 					expression,
-					formatValue(value),
+					this.formatResult(value),
 					isInline
 				);
 				committed++;
@@ -530,7 +531,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 									const [result] = this.engine.evaluateLine(line.number, expression);
 									if (result && result.type !== ValueType.Error) {
 										const isPending = result.type === ValueType.Pending;
-										const formattedResult = isPending ? "" : formatValue(result);
+										const formattedResult = isPending ? "" : this.formatResult(result);
 										const queryKey = isPending ? (result.value as string) : null;
 
 										entries.push({
@@ -558,7 +559,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 						const resultGroup = lineState.results[0];
 						const result = resultGroup[0];
 						const isPending = result.type === ValueType.Pending;
-						const formattedResult = isPending ? "" : formatValue(result);
+						const formattedResult = isPending ? "" : this.formatResult(result);
 						const expression = lineState.expressions[0] ?? line.text.trim();
 						const queryKey = isPending ? (result.value as string) : null;
 
@@ -586,6 +587,16 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	}
 
 	/**
+	 * Format a Value using the user's configured result settings (decimal
+	 * places, thousand separators, hex padding, ...) — see
+	 * {@link FormattingSettingsMapper} for which settings actually have an
+	 * engine hook to map onto.
+	 */
+	private formatResult(value: Value): string {
+		return formatValue(value, FormattingSettingsMapper.toFormattingSettings(this.userSettings));
+	}
+
+	/**
 	 * Build decorations for inline solve expressions (s`...`) embedded in markdown text.
 	 * Results are read from {@link LineState.results} which was populated by the
 	 * ThreeTierEvaluator during Tier 1 evaluation — no more direct engine calls.
@@ -610,7 +621,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			// Errors aren't rendered — see the full-line branch above for why.
 			if (result.type === ValueType.Error) continue;
 			const isPending = result.type === ValueType.Pending;
-			const formattedResult = isPending ? "" : formatValue(result);
+			const formattedResult = isPending ? "" : this.formatResult(result);
 			const queryKey = isPending ? (result.value as string) : null;
 			const widgetPos = line.from + solve.start + solve.expression.length + 3;
 
@@ -645,7 +656,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			const [result] = engine.evaluateLine(line.number, solve.expression);
 				if (result !== null && result !== undefined && result.type !== ValueType.Error) {
 					const isPending = result.type === ValueType.Pending;
-					const formattedResult = isPending ? "" : formatValue(result);
+					const formattedResult = isPending ? "" : this.formatResult(result);
 					const queryKey = isPending ? (result.value as string) : null;
 					const widgetPos = line.from + solve.start + solve.expression.length + 3;
 
@@ -667,9 +678,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	// FIX #3: Activate evaluateLine() for on-demand evaluation
 	private evaluateLine(lineNumber: number, expression: string): string | undefined {
 		try {
-			const engine = this.engine;
-			const [value] = engine.evaluateLine(lineNumber, expression);
-			return formatValue(value);
+			const [value] = this.engine.evaluateLine(lineNumber, expression);
+			return this.formatResult(value);
 		} catch {
 			return undefined;
 		}
