@@ -39,10 +39,10 @@ export class SettingTab extends PluginSettingTab {
 		// this.displaySyntaxHighlightSettings();
 		// this.displayCompletionSettings();
 		this.displayInlineSolveSettings();
-		this.displayVariablesSettings();
+		// this.displayVariablesSettings(); — hidden for now, see note above.
 
 		// Providers Settings
-		this.displayProviderManagementSettings();
+		// this.displayProviderManagementSettings(); — hidden for now, see note above.
 		this.displayArithmeticProviderSettings();
 		this.displayDatetimeProviderSettings();
 
