@@ -16,7 +16,7 @@ import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
 import { abortLogger } from "solve-engine/utilities";
 import { LanguageService } from "solve-engine/language";
-import { categoryClassName, completionItemToOption } from "solve-engine/language";
+import { tokenClassName, completionItemToOption } from "solve-engine/language";
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
@@ -492,7 +492,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					entries.push({
 						from: line.from + token.from,
 						to: line.from + token.to,
-						deco: Decoration.mark({ class: categoryClassName(token.category) }),
+						deco: Decoration.mark({ class: tokenClassName(token.category) }),
 					});
 				}
 

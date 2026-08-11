@@ -93,11 +93,10 @@ const config = {
 	moduleNameMapper: {
 		"@/(.*)": "<rootDir>/src/$1",
 		"@app/(.*)": "<rootDir>/src/app/$1",
-		// @solve/core resolves normally through node_modules (an npm-link
-		// symlink into the standalone solve-engine checkout during local
-		// dev) — no special mapping needed, unlike the old in-repo
-		// @solve-js/* deep-source alias this file used before the engine
-		// was extracted into its own repo.
+		// solve-engine resolves normally through node_modules (the real
+		// npm package as of 1.0.0) — no special mapping needed, unlike the
+		// old in-repo @solve-js/* deep-source alias this file used before
+		// the engine was extracted into its own repo.
 		"^@codemirror/language$": "<rootDir>/__tests__/__mocks__/codemirror-language.ts",
 		"^@lezer/common$": "<rootDir>/__tests__/__mocks__/lezer-common.ts",
 		"^obsidian$": "<rootDir>/__tests__/__mocks__/obsidian.ts",

@@ -51,7 +51,11 @@ const baseConfig = {
 		...builtins,
 	],
 	format: "cjs",
-	target: "es2018",
+	// es2020 minimum: solve-engine's biginteger package uses native BigInt
+	// literals (1n, 2n, ...), which esbuild can't downlevel — it requires
+	// the target to actually support them. Obsidian's Electron/Capacitor
+	// runtimes have supported BigInt for years, well before minAppVersion.
+	target: "es2020",
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,

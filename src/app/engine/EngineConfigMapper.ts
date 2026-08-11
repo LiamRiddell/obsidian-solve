@@ -1,3 +1,4 @@
+import { DEFAULT_CONFIG } from "solve-engine/constants";
 import type { EngineConfig, ValidationConfig, VMConfig } from "solve-engine/constants";
 import type UserSettings from "@app/settings/UserSettings";
 
@@ -91,6 +92,13 @@ export class EngineConfigMapper {
         return {
             maxStackDepth: settings.engine.maxStackDepth,
             maxInstructions: settings.engine.maxInstructions,
+            // Collection/allocation/function-call limits — no Obsidian UI
+            // control yet, same "future config toggle" situation as
+            // autoBalanceParens above. Fall back to the engine's own
+            // defaults rather than inventing numbers here.
+            maxCollectionSize: DEFAULT_CONFIG.vm.maxCollectionSize,
+            maxAllocatedElements: DEFAULT_CONFIG.vm.maxAllocatedElements,
+            maxFunctionCalls: DEFAULT_CONFIG.vm.maxFunctionCalls,
         };
     }
 }

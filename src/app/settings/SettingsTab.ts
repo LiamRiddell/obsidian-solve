@@ -655,14 +655,8 @@ export class SettingTab extends PluginSettingTab {
 				slider.setLimits(0, 17, 1);
 				slider.setValue(value);
 
-				slider.sliderEl.addEventListener("mouseover", () => {
-					slider.showTooltip();
-				});
-
 				slider.onChange(async (value) => {
 					this.plugin.settings.floatResult.decimalPlaces = value;
-
-					slider.showTooltip();
 
 					await this.plugin.saveSettings();
 				});
@@ -703,14 +697,8 @@ export class SettingTab extends PluginSettingTab {
 				slider.setLimits(0, 17, 1);
 				slider.setValue(value);
 
-				slider.sliderEl.addEventListener("mouseover", () => {
-					slider.showTooltip();
-				});
-
 				slider.onChange(async (value) => {
 					this.plugin.settings.percentageResult.decimalPlaces = value;
-
-					slider.showTooltip();
 
 					await this.plugin.saveSettings();
 				});
@@ -764,14 +752,8 @@ export class SettingTab extends PluginSettingTab {
 				slider.setLimits(0, 32, 1);
 				slider.setValue(value);
 
-				slider.sliderEl.addEventListener("mouseover", () => {
-					slider.showTooltip();
-				});
-
 				slider.onChange(async (value) => {
 					this.plugin.settings.hexResult.paddingZeros = value;
-
-					slider.showTooltip();
 
 					await this.plugin.saveSettings();
 				});
@@ -795,15 +777,9 @@ export class SettingTab extends PluginSettingTab {
 				slider.setLimits(0, 17, 1);
 				slider.setValue(value);
 
-				slider.sliderEl.addEventListener("mouseover", () => {
-					slider.showTooltip();
-				});
-
 				slider.onChange(async (value) => {
 					this.plugin.settings.unitOfMeasurementResult.decimalPlaces =
 						value;
-
-					slider.showTooltip();
 
 					await this.plugin.saveSettings();
 				});
