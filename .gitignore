@@ -17,3 +17,12 @@ data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
+
+# Testing
+coverage/
+
+# V8 profiling logs
+isolate-*.log
+
+# Claude Code local state (worktrees, settings)
+.claude/

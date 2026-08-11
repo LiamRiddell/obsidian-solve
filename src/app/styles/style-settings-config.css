@@ -1,0 +1,154 @@
+/* @settings
+name: Solve
+id: obsidian-solve
+settings:
+	- 
+        id: solve-result-margin
+        title: Margin
+        type: variable-text
+        default: 0 0 0 4px
+    - 
+        id: solve-result-padding
+        title: Padding
+        type: variable-text
+        default: 0 0 0 4px			
+    - 
+        id: solve-result-text
+        title: Text Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#29ce99e8'
+        default-dark: '#29ce99e8'
+    -
+        id: solve-result-background
+        title: Background Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#22CE9900'
+        default-dark: '#22CE9900'
+	- 
+        id: solve-result-border-color
+        title: Border Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#00000000'
+        default-dark: '#00000000'
+	- 
+        id: solve-result-border-style
+        title: Border Style
+        type: variable-text
+        default: solid		
+	- 
+        id: solve-result-border-width
+        title: Border Width
+        type: variable-number
+        default: 0
+        format: px
+    - 
+        id: solve-result-border-radius
+        title: Border Radius
+        type: variable-number
+        default: 4
+        format: px
+    -
+        id: solve-result-hover-underline-color
+        title: Text Underline Hover Color
+        type: variable-themed-color
+        opacity: true
+        format: hex
+        default-light: '#00000000'
+        default-dark: '#00000000'
+    -
+        id: solve-hl-heading
+        title: Syntax Highlighting
+        type: heading
+        level: 1
+        collapsed: true
+    -
+        id: solve-hl-number
+        title: Number
+        type: variable-color
+        format: hex
+        default: '#61AFEF'
+    -
+        id: solve-hl-string
+        title: String
+        type: variable-color
+        format: hex
+        default: '#98C379'
+    -
+        id: solve-hl-keyword
+        title: Keyword
+        type: variable-color
+        format: hex
+        default: '#C678DD'
+    -
+        id: solve-hl-operator
+        title: Operator
+        type: variable-color
+        format: hex
+        default: '#ABB2BF'
+    -
+        id: solve-hl-comparison
+        title: Comparison
+        type: variable-color
+        format: hex
+        default: '#56B6C2'
+    -
+        id: solve-hl-bitwise
+        title: Bitwise
+        type: variable-color
+        format: hex
+        default: '#56B6C2'
+    -
+        id: solve-hl-function
+        title: Function
+        type: variable-color
+        format: hex
+        default: '#E5C07B'
+    -
+        id: solve-hl-variable
+        title: Variable
+        type: variable-color
+        format: hex
+        default: '#E06C75'
+    -
+        id: solve-hl-unit
+        title: Unit
+        type: variable-color
+        format: hex
+        default: '#56B6C2'
+    -
+        id: solve-hl-datetime
+        title: Datetime
+        type: variable-color
+        format: hex
+        default: '#D19A66'
+    -
+        id: solve-hl-vector
+        title: Vector
+        type: variable-color
+        format: hex
+        default: '#D19A66'
+    -
+        id: solve-hl-punctuation
+        title: Punctuation
+        type: variable-color
+        format: hex
+        default: '#5C6370'
+    -
+        id: solve-hl-error
+        title: Error
+        type: variable-color
+        format: hex
+        default: '#E06C75'
+    -
+        id: solve-hl-osrs-item
+        title: OSRS Item (plugin-contributed)
+        type: variable-color
+        format: hex
+        default: '#A6E22E'
+*/

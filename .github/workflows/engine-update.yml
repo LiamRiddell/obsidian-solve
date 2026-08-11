@@ -1,0 +1,83 @@
+name: Pick up a new solve-engine release
+
+# Two ways in:
+#   · repository_dispatch, fired by solve-engine's own publish workflow once
+#     a release has actually finished publishing to npm (see that repo's
+#     .github/workflows/publish.yml) — the normal path.
+#   · workflow_dispatch, for testing this workflow directly without needing
+#     a real solve-engine release. Leave `version` blank to pick up
+#     whatever's currently on the npm registry.
+#
+# Either way, this only ever gets as far as bumping obsidian-solve's own
+# version and pushing a tag if `npm run build` and the test suite both pass
+# against the newly-installed engine. If they don't, the job just fails —
+# nothing is committed, no tag is created, nothing reaches users. Publishing
+# the resulting draft release (created by release.yml, triggered by the tag
+# push below) is still a separate, manual, deliberate act.
+on:
+    repository_dispatch:
+        types: [solve-engine-released]
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "solve-engine version to install (blank = latest on npm)"
+                required: false
+
+permissions:
+    contents: write
+
+jobs:
+    update:
+        runs-on: ubuntu-24.04
+
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: main
+
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Resolve the target solve-engine version
+              id: engine
+              run: |
+                  version="${{ github.event.client_payload.version || inputs.version }}"
+                  if [ -z "$version" ]; then
+                    version="$(npm view solve-engine version)"
+                  fi
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
+
+            - run: npm ci
+
+            - name: Install the released solve-engine version
+              run: npm install "solve-engine@${{ steps.engine.outputs.version }}"
+
+            # ══ SAFETY GATE ══ Nothing past this point runs unless both of
+            # these succeed. A failure here means solve-engine shipped a
+            # breaking change obsidian-solve hasn't been updated for yet —
+            # exactly the class of issue today's manual migration surfaced
+            # (a rename, a widened config type, a build-target gap, a
+            # deprecated API removal). That needs a person, not an
+            # auto-merge.
+            - run: npm run build
+            - run: npm run test:ci
+
+            - name: Bump obsidian-solve's own version
+              run: npm version patch --no-git-tag-version
+
+            - name: Commit and tag
+              id: release
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+                  version="$(node -p "require('./package.json').version")"
+                  tag="$version"
+
+                  git add package.json package-lock.json manifest.json versions.json
+                  git commit -m "chore: update to solve-engine ${{ steps.engine.outputs.version }}"
+                  git tag "$tag"
+                  git push origin main
+                  git push origin "$tag"

@@ -66,14 +66,13 @@ const config = {
 	// globalTeardown: undefined,
 
 	// A set of global variables that need to be available in all test environments
-	globals: {
-		"ts-jest": {
-			tsconfig: "./test/tsconfig.test.json",
-		},
-	},
 
 	// The maximum amount of workers used to run your tests. Can be specified as % or a number. E.g. maxWorkers: 10% will use 10% of your CPU amount + 1 as the maximum worker number. maxWorkers: 2 will use a maximum of 2 workers.
-	// maxWorkers: "50%",
+	maxWorkers: 2,
+
+	// Force Jest to recycle workers when they exceed 512MB heap.
+	// Prevents OOM on memory-leak-prone test suites (e.g., LexerVocabularyFuzz).
+	workerIdleMemoryLimit: '512MB',
 
 	// An array of directory names to be searched recursively up from the requiring module's location
 	moduleDirectories: ["node_modules", "src"],
@@ -93,7 +92,14 @@ const config = {
 	// A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
 	moduleNameMapper: {
 		"@/(.*)": "<rootDir>/src/$1",
-		"test/(.*)": "<rootDir>/test/$1",
+		"@app/(.*)": "<rootDir>/src/app/$1",
+		// solve-engine resolves normally through node_modules (the real
+		// npm package as of 1.0.0) — no special mapping needed, unlike the
+		// old in-repo @solve-js/* deep-source alias this file used before
+		// the engine was extracted into its own repo.
+		"^@codemirror/language$": "<rootDir>/__tests__/__mocks__/codemirror-language.ts",
+		"^@lezer/common$": "<rootDir>/__tests__/__mocks__/lezer-common.ts",
+		"^obsidian$": "<rootDir>/__tests__/__mocks__/obsidian.ts",
 	},
 
 	// An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
@@ -130,13 +136,13 @@ const config = {
 	rootDir: ".",
 
 	// A list of paths to directories that Jest should use to search for files in
-	roots: ["<rootDir>", "src"],
+	roots: ["<rootDir>"],
 
 	// Allows you to use a custom runner instead of Jest's default test runner
 	// runner: "jest-runner",
 
 	// The paths to modules that run some code to configure or set up the testing environment before each test
-	// setupFiles: ["./test/setup.ts"],
+	setupFiles: ["<rootDir>/__tests__/__mocks__/jest-setup.ts"],
 
 	// A list of paths to modules that run some code to configure or set up the testing framework before each test
 	// setupFilesAfterEnv: [],
@@ -164,9 +170,13 @@ const config = {
 	// ],
 
 	// An array of regexp pattern strings that are matched against all test paths, matched tests are skipped
-	// testPathIgnorePatterns: [
-	//   "\\\\node_modules\\\\"
-	// ],
+	testPathIgnorePatterns: [
+		"\\\\node_modules\\\\",
+		"__mocks__",
+		// Claude Code agent worktrees are full checkouts — without this,
+		// every suite runs twice (once from the worktree copy).
+		"\\.claude[\\\\/]"
+	],
 
 	// The regexp pattern or array of patterns that Jest uses to detect test files
 	// testRegex: [],
@@ -178,15 +188,16 @@ const config = {
 	// testRunner: "jest-circus/runner",
 
 	// A map from regular expressions to paths to transformers
-	// NOTE: This is not working for me as off 2023/08/25
-	// transform: {
-	// 	"^.+\\.test.ts?$": [
-	// 		"ts-jest",
-	// 		{
-	// 			tsconfig: "tsconfig.test.json",
-	// 		},
-	// 	],
-	// },
+	transform: {
+		"^.+\\.tsx?$": [
+			"ts-jest",
+			{
+				tsconfig: "./__tests__/tsconfig.test.json",
+				skipLibCheck: true,
+				isolatedModules: true
+			},
+		],
+	},
 
 	// An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
 	// transformIgnorePatterns: [
