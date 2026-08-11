@@ -16,6 +16,15 @@ same note you're already writing in.
 
 </div>
 
+> **Solve 2.0 is here.** The engine has been rewritten from scratch —
+> replacing the old Ohm.js grammar with a lexer → parser → bytecode VM
+> pipeline, published separately as
+> [solve-engine](https://github.com/LiamRiddell/solve-engine). Faster,
+> more consistent results, and a proper
+> [syntax reference](https://liamriddell.github.io/solve-engine/syntax/cheatsheet/)
+> in place of the old wiki. See the [release notes](https://github.com/LiamRiddell/obsidian-solve/releases/tag/2.0.0)
+> for the full list of changes.
+
 <p align="center">
   <img width="100%" src="internal/screenshot.png"/>
 </p>
