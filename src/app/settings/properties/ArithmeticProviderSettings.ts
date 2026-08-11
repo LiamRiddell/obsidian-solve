@@ -14,16 +14,4 @@ export class ArithmeticProviderSettings {
 	set enabled(value: boolean) {
 		this.parent.settings.arithmeticProvider.enabled = value;
 	}
-
-	get renderEqualsBeforeResult() {
-		return (
-			this.parent.settings.arithmeticProvider.renderEqualsBeforeResult ??
-			DEFAULT_SETTINGS.arithmeticProvider.renderEqualsBeforeResult
-		);
-	}
-
-	set renderEqualsBeforeResult(value: boolean) {
-		this.parent.settings.arithmeticProvider.renderEqualsBeforeResult =
-			value;
-	}
 }

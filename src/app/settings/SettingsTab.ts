@@ -1,5 +1,4 @@
 import { ANIMATE_CSS_TRANSITIONS_OPTIONS } from "@app/constants/AnimateCssOptions";
-import { EDatetimeParsingFormat } from "@app/constants/EDatetimeFormat";
 import { FeatureFlagClass } from "@app/constants/EFeatureFlagClass";
 import { SUPPORTED_SEPARATOR_LOCALES } from "@app/constants/SupportedSeparators";
 import SolvePlugin from "@app/main";
@@ -43,8 +42,6 @@ export class SettingTab extends PluginSettingTab {
 
 		// Providers Settings
 		// this.displayProviderManagementSettings(); — hidden for now, see note above.
-		this.displayArithmeticProviderSettings();
-		this.displayDatetimeProviderSettings();
 
 		// Reuslts
 		this.displayNumberSettings();
@@ -502,76 +499,6 @@ export class SettingTab extends PluginSettingTab {
 
 				text.onChange(async (value) => {
 					this.plugin.settings.interface.animationDuration = value;
-					await this.plugin.saveSettings();
-				});
-			});
-	}
-
-	displayArithmeticProviderSettings() {
-		new Setting(this.containerEl)
-			.setName("Arithmetic Provider")
-			.setHeading();
-		new Setting(this.containerEl)
-			.setName("Show = before the result")
-			.setDesc(
-				`Adds the equals sign before arithmetic results to improve the natural reading of expressions. Default is ${DEFAULT_SETTINGS.arithmeticProvider.renderEqualsBeforeResult}`
-			)
-			.addToggle((toggle) => {
-				const value =
-					this.plugin.settings.arithmeticProvider
-						.renderEqualsBeforeResult;
-
-				toggle.setValue(value);
-
-				toggle.onChange(async (value) => {
-					this.plugin.settings.arithmeticProvider.renderEqualsBeforeResult =
-						value;
-
-					await this.plugin.saveSettings();
-				});
-			});
-	}
-
-	displayDatetimeProviderSettings() {
-		new Setting(this.containerEl).setName("Datetime Provider").setHeading();
-
-		new Setting(this.containerEl)
-			.setName("Parsing format")
-			.setDesc(
-				"Specify the format to be used for parsing datetime values."
-			)
-			.addDropdown((dropdown) => {
-				const value =
-					this.plugin.settings.datetimeProvider.parsingFormat;
-
-				dropdown.addOptions({
-					EU: "European DD/MM/YYYY",
-					US: "American - MM/DD/YYYY",
-				});
-
-				switch (value) {
-					case EDatetimeParsingFormat.EU:
-						dropdown.setValue("EU");
-						break;
-
-					case EDatetimeParsingFormat.US:
-						dropdown.setValue("US");
-						break;
-				}
-
-				dropdown.onChange(async (value) => {
-					switch (value) {
-						case "EU":
-							this.plugin.settings.datetimeProvider.parsingFormat =
-								EDatetimeParsingFormat.EU;
-							break;
-
-						case "US":
-							this.plugin.settings.datetimeProvider.parsingFormat =
-								EDatetimeParsingFormat.US;
-							break;
-					}
-
 					await this.plugin.saveSettings();
 				});
 			});

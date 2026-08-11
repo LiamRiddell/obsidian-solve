@@ -1,4 +1,3 @@
-import { EDatetimeParsingFormat } from "@app/constants/EDatetimeFormat";
 import { IPluginSettings } from "@app/settings/definition/IPluginSettings";
 
 /**
@@ -58,7 +57,6 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	// Providers
 	arithmeticProvider: {
 		enabled: true,
-		renderEqualsBeforeResult: true,
 	},
 	functionArithmeticProvider: {
 		enabled: true,
@@ -71,7 +69,6 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	},
 	datetimeProvider: {
 		enabled: true,
-		parsingFormat: EDatetimeParsingFormat.EU,
 	},
 	unitOfMeasurementProvider: {
 		enabled: true,
