@@ -1,6 +1,16 @@
 import { describe, expect, test, afterEach, jest } from "@jest/globals";
 import { MarkdownEditorViewPlugin } from "@app/codemirror/MarkdownEditorViewPlugin";
 import { EngineProvider } from "@app/engine/EngineProvider";
+import { ValueType } from "solve-engine/vm";
+
+/** Counts widget decorations (result badges) anywhere in a plugin's current decoration set. */
+function countResultWidgets(plugin: MarkdownEditorViewPlugin): number {
+	let count = 0;
+	(plugin.decorations as any).between(0, 1e9, (_from: number, _to: number, deco: any) => {
+		if (deco?.spec?.widget) count++;
+	});
+	return count;
+}
 
 function createMockView(lines: string[]): any {
 	const text = lines.join("\n");
@@ -169,6 +179,30 @@ describe("MarkdownEditorViewPlugin with ThreeTierEvaluator", () => {
 
 		// Decorations should remain valid
 		expect(plugin.decorations).toBeDefined();
+	});
+
+	test("a successful expression renders a result widget", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		const docModel = (plugin as any).docModel;
+		expect(docModel.getLineAt(1).results[0][0].type).not.toBe(ValueType.Error);
+		expect(countResultWidgets(plugin)).toBe(1);
+	});
+
+	test("an expression that evaluates to a graceful Error value renders no result widget", () => {
+		// An undefined-variable reference is a "recoverable" error the engine
+		// returns as an Error-type Value (not a thrown exception) — most
+		// lines in a note are prose, not calculations, so a visible error
+		// badge under every non-expression or half-typed line would be far
+		// noisier than useful. Only a successful (or pending) result gets a
+		// widget; see MarkdownEditorViewPlugin.ts's full-line result branch.
+		const view = createMockView(["thisVariableIsNeverDefined + 1"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		const docModel = (plugin as any).docModel;
+		expect(docModel.getLineAt(1).results[0][0].type).toBe(ValueType.Error);
+		expect(countResultWidgets(plugin)).toBe(0);
 	});
 });
 

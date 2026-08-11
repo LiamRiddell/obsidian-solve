@@ -510,8 +510,13 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 						// evaluation render). Call engine directly as a one-off.
 						this.buildInlineSolveDecorationsFallback(line, inlineSolves, entries);
 					}
-				} else if (lineState && !lineState.isEmpty && lineState.results.length > 0) {
-					// Full-line expression result from evaluator
+				} else if (lineState && !lineState.isEmpty && lineState.results.length > 0 && lineState.results[0][0].type !== ValueType.Error) {
+					// Full-line expression result from evaluator. Error results
+					// are deliberately not rendered — most lines in a note are
+					// prose, not calculations, and a visible error badge under
+					// every non-expression line (or every half-typed one) would
+					// be far noisier than useful. Only a successful (or
+					// pending) result gets a widget.
 					const resultGroup = lineState.results[0];
 					const result = resultGroup[0];
 					const isPending = result.type === ValueType.Pending;
@@ -563,6 +568,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			if (resultGroup === null || resultGroup === undefined || resultGroup.length === 0) continue;
 
 			const result = resultGroup[0];
+			// Errors aren't rendered — see the full-line branch above for why.
+			if (result.type === ValueType.Error) continue;
 			const isPending = result.type === ValueType.Pending;
 			const formattedResult = isPending ? "" : formatValue(result);
 			const queryKey = isPending ? (result.value as string) : null;
@@ -597,7 +604,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 			try {
 			const [result] = engine.evaluateLine(line.number, solve.expression);
-				if (result !== null && result !== undefined) {
+				if (result !== null && result !== undefined && result.type !== ValueType.Error) {
 					const isPending = result.type === ValueType.Pending;
 					const formattedResult = isPending ? "" : formatValue(result);
 					const queryKey = isPending ? (result.value as string) : null;
