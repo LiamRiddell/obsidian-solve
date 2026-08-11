@@ -29,7 +29,9 @@ class EngineProvider {
 		if (!this._instance || this._localeOverride !== locale) {
 			this._localeOverride = locale;
 		this._instance = new ExpressionEngine(locale, false,
-			EngineConfigMapper.toEngineConfig(settings)
+			EngineConfigMapper.toEngineConfig(settings),
+			undefined,
+			EngineConfigMapper.toPackages(settings)
 		);
 		logger.debug(`[EngineProvider] Created new ExpressionEngine (locale=${locale})`);
 		}

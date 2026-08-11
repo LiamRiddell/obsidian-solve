@@ -1,5 +1,16 @@
 import { DEFAULT_CONFIG } from "solve-engine/constants";
 import type { EngineConfig, ValidationConfig, VMConfig } from "solve-engine/constants";
+import {
+	BUILTIN_PACKAGES,
+	ARITHMETIC_PACKAGE,
+	FUNCTION_PACKAGE,
+	VECTOR_PACKAGE,
+	PERCENTAGE_PACKAGE,
+	DATETIME_PACKAGE,
+	UOM_PACKAGE,
+	DICE_PACKAGE,
+	BIGINT_PACKAGE,
+} from "solve-engine/packages";
 import type UserSettings from "@app/settings/UserSettings";
 
 /**
@@ -24,7 +35,9 @@ import type UserSettings from "@app/settings/UserSettings";
  * ```ts
  * import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
  * const engine = new ExpressionEngine(locale, false,
- *     EngineConfigMapper.toEngineConfig(UserSettings.getInstance())
+ *     EngineConfigMapper.toEngineConfig(UserSettings.getInstance()),
+ *     undefined,
+ *     EngineConfigMapper.toPackages(UserSettings.getInstance())
  * );
  * ```
  *
@@ -56,6 +69,41 @@ export class EngineConfigMapper {
         // engine falls through to DEFAULT_CONFIG via its merge logic.
 
         return partial;
+    }
+
+    /**
+     * Build the `packages` array to pass as `ExpressionEngine`'s 5th
+     * constructor argument, filtering out any built-in package whose
+     * "Provider Management" toggle is off.
+     *
+     * Not part of `toEngineConfig()`'s `EngineConfig` return value — package
+     * selection is a separate constructor parameter (`packages?:
+     * IEnginePackage[]`), documented by the engine itself as the mechanism
+     * for "selective disable of built-in packages" — not something
+     * `EngineConfig` covers at all. `EngineProvider` was constructing every
+     * engine with the default `packages` argument (i.e. `BUILTIN_PACKAGES`
+     * unfiltered), so every "Provider Management" toggle existed in the
+     * settings UI and did nothing.
+     *
+     * Only maps the 8 packages that already had a settings toggle before
+     * this. The engine ships several more built-ins (currency, matrix,
+     * map/reduce, symbolic algebra, variables, conditionals, converters,
+     * math phrases, finance, weather, lines) with no equivalent toggle —
+     * those stay unconditionally enabled, matching today's behavior for
+     * them.
+     */
+    static toPackages(settings: UserSettings): typeof BUILTIN_PACKAGES {
+        const disabled = new Set<(typeof BUILTIN_PACKAGES)[number]>();
+        if (!settings.arithmeticProvider.enabled) disabled.add(ARITHMETIC_PACKAGE);
+        if (!settings.functionArithmeticProvider.enabled) disabled.add(FUNCTION_PACKAGE);
+        if (!settings.vectorArithmeticProvider.enabled) disabled.add(VECTOR_PACKAGE);
+        if (!settings.percentageArithmeticProvider.enabled) disabled.add(PERCENTAGE_PACKAGE);
+        if (!settings.datetimeProvider.enabled) disabled.add(DATETIME_PACKAGE);
+        if (!settings.unitOfMeasurementProvider.enabled) disabled.add(UOM_PACKAGE);
+        if (!settings.diceProvider.enabled) disabled.add(DICE_PACKAGE);
+        if (!settings.bigIntegerArithmeticProvider.enabled) disabled.add(BIGINT_PACKAGE);
+
+        return BUILTIN_PACKAGES.filter((pkg) => !disabled.has(pkg));
     }
 
     // ── Private mapping helpers ──────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { ExpressionResultWidget } from "@app/codemirror/widgets/ExpressionResultWidget";
+import { ExpressionResultWidget, type ResultAnimationOptions } from "@app/codemirror/widgets/ExpressionResultWidget";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import { FormattingSettingsMapper } from "@app/engine/FormattingSettingsMapper";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
@@ -538,7 +538,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 											from: line.to,
 											to: line.to,
 											deco: Decoration.widget({
-												widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey),
+												widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey, this.resultAnimation()),
 												side: 1,
 											}),
 										});
@@ -567,7 +567,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 							from: line.to,
 							to: line.to,
 							deco: Decoration.widget({
-								widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey),
+								widget: new ExpressionResultWidget(line.number, false, expression, formattedResult, isPending, queryKey, this.resultAnimation()),
 								side: 1,
 							}),
 						});
@@ -594,6 +594,15 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	 */
 	private formatResult(value: Value): string {
 		return formatValue(value, FormattingSettingsMapper.toFormattingSettings(this.userSettings));
+	}
+
+	/** Reads the current animate-on-result settings for ExpressionResultWidget. */
+	private resultAnimation(): ResultAnimationOptions {
+		return {
+			enabled: this.userSettings.interface.animateResults,
+			className: this.userSettings.interface.animationClass,
+			duration: this.userSettings.interface.animationDuration,
+		};
 	}
 
 	/**
@@ -629,7 +638,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 				from: widgetPos,
 				to: widgetPos,
 				deco: Decoration.widget({
-					widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult, isPending, queryKey),
+					widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult, isPending, queryKey, this.resultAnimation()),
 					side: 1,
 				}),
 			});
@@ -664,7 +673,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 						from: widgetPos,
 						to: widgetPos,
 						deco: Decoration.widget({
-							widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult, isPending, queryKey),
+							widget: new ExpressionResultWidget(line.number, true, solve.expression, formattedResult, isPending, queryKey, this.resultAnimation()),
 							side: 1,
 						}),
 					});

@@ -14,6 +14,17 @@ import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import type UserSettings from "@app/settings/UserSettings";
 import { DEFAULT_CONFIG } from "solve-engine/constants";
+import {
+  BUILTIN_PACKAGES,
+  ARITHMETIC_PACKAGE,
+  FUNCTION_PACKAGE,
+  VECTOR_PACKAGE,
+  PERCENTAGE_PACKAGE,
+  DATETIME_PACKAGE,
+  UOM_PACKAGE,
+  DICE_PACKAGE,
+  BIGINT_PACKAGE,
+} from "solve-engine/packages";
 
 // Collection/allocation/function-call limits have no Obsidian UI control
 // yet — EngineConfigMapper always sources them from the engine's own
@@ -449,6 +460,149 @@ describe("EngineConfigMapper", () => {
         maxInstructions: 9999999,
         ...ENGINE_VM_DEFAULTS,
       });
+    });
+  });
+
+  describe("toPackages()", () => {
+    // ── Helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Create a minimal mock of UserSettings with the 8 provider `enabled`
+     * flags that toPackages() reads. All default to `true` (nothing
+     * disabled) unless overridden.
+     */
+    function createMockProviderSettings(overrides?: {
+      arithmeticProvider?: boolean;
+      functionArithmeticProvider?: boolean;
+      vectorArithmeticProvider?: boolean;
+      percentageArithmeticProvider?: boolean;
+      datetimeProvider?: boolean;
+      unitOfMeasurementProvider?: boolean;
+      diceProvider?: boolean;
+      bigIntegerArithmeticProvider?: boolean;
+    }): UserSettings {
+      return {
+        arithmeticProvider: { enabled: overrides?.arithmeticProvider ?? true },
+        functionArithmeticProvider: { enabled: overrides?.functionArithmeticProvider ?? true },
+        vectorArithmeticProvider: { enabled: overrides?.vectorArithmeticProvider ?? true },
+        percentageArithmeticProvider: { enabled: overrides?.percentageArithmeticProvider ?? true },
+        datetimeProvider: { enabled: overrides?.datetimeProvider ?? true },
+        unitOfMeasurementProvider: { enabled: overrides?.unitOfMeasurementProvider ?? true },
+        diceProvider: { enabled: overrides?.diceProvider ?? true },
+        bigIntegerArithmeticProvider: { enabled: overrides?.bigIntegerArithmeticProvider ?? true },
+      } as unknown as UserSettings;
+    }
+
+    test("returns every built-in package unfiltered when all providers are enabled", () => {
+      const settings = createMockProviderSettings();
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).toEqual(BUILTIN_PACKAGES);
+    });
+
+    test("excludes ARITHMETIC_PACKAGE when arithmeticProvider is disabled", () => {
+      const settings = createMockProviderSettings({ arithmeticProvider: false });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(ARITHMETIC_PACKAGE);
+      expect(packages.length).toBe(BUILTIN_PACKAGES.length - 1);
+    });
+
+    test("excludes FUNCTION_PACKAGE when functionArithmeticProvider is disabled", () => {
+      const settings = createMockProviderSettings({ functionArithmeticProvider: false });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(FUNCTION_PACKAGE);
+    });
+
+    test("excludes VECTOR_PACKAGE when vectorArithmeticProvider is disabled", () => {
+      const settings = createMockProviderSettings({ vectorArithmeticProvider: false });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(VECTOR_PACKAGE);
+    });
+
+    test("excludes PERCENTAGE_PACKAGE when percentageArithmeticProvider is disabled", () => {
+      const settings = createMockProviderSettings({ percentageArithmeticProvider: false });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(PERCENTAGE_PACKAGE);
+    });
+
+    test("excludes DATETIME_PACKAGE when datetimeProvider is disabled", () => {
+      const settings = createMockProviderSettings({ datetimeProvider: false });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(DATETIME_PACKAGE);
+    });
+
+    test("excludes UOM_PACKAGE when unitOfMeasurementProvider is disabled", () => {
+      const settings = createMockProviderSettings({ unitOfMeasurementProvider: false });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(UOM_PACKAGE);
+    });
+
+    test("excludes DICE_PACKAGE when diceProvider is disabled", () => {
+      const settings = createMockProviderSettings({ diceProvider: false });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(DICE_PACKAGE);
+    });
+
+    test("excludes BIGINT_PACKAGE when bigIntegerArithmeticProvider is disabled", () => {
+      const settings = createMockProviderSettings({ bigIntegerArithmeticProvider: false });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(BIGINT_PACKAGE);
+    });
+
+    test("excludes multiple packages when multiple providers are disabled", () => {
+      const settings = createMockProviderSettings({
+        arithmeticProvider: false,
+        datetimeProvider: false,
+        diceProvider: false,
+      });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      expect(packages).not.toContain(ARITHMETIC_PACKAGE);
+      expect(packages).not.toContain(DATETIME_PACKAGE);
+      expect(packages).not.toContain(DICE_PACKAGE);
+      expect(packages.length).toBe(BUILTIN_PACKAGES.length - 3);
+    });
+
+    test("leaves packages with no settings toggle (e.g. currency, variables) unconditionally enabled", () => {
+      const settings = createMockProviderSettings({
+        arithmeticProvider: false,
+        functionArithmeticProvider: false,
+        vectorArithmeticProvider: false,
+        percentageArithmeticProvider: false,
+        datetimeProvider: false,
+        unitOfMeasurementProvider: false,
+        diceProvider: false,
+        bigIntegerArithmeticProvider: false,
+      });
+      const packages = EngineConfigMapper.toPackages(settings);
+
+      // Every toggle-backed package should be gone...
+      expect(packages.length).toBe(BUILTIN_PACKAGES.length - 8);
+      // ...but every package without a toggle should still be present.
+      const untoggled = BUILTIN_PACKAGES.filter(
+        (pkg) =>
+          ![
+            ARITHMETIC_PACKAGE,
+            FUNCTION_PACKAGE,
+            VECTOR_PACKAGE,
+            PERCENTAGE_PACKAGE,
+            DATETIME_PACKAGE,
+            UOM_PACKAGE,
+            DICE_PACKAGE,
+            BIGINT_PACKAGE,
+          ].includes(pkg)
+      );
+      for (const pkg of untoggled) {
+        expect(packages).toContain(pkg);
+      }
     });
   });
 });

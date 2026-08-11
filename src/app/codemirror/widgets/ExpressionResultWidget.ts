@@ -2,6 +2,15 @@ import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
 import { EditorView, WidgetType } from "@codemirror/view";
 
+/** Animate.css class name + `--animate-duration` to apply on a fresh (non-pending) result. `enabled: false` applies neither. */
+export interface ResultAnimationOptions {
+	enabled: boolean;
+	className: string;
+	duration: string;
+}
+
+const NO_ANIMATION: ResultAnimationOptions = { enabled: false, className: "", duration: "0s" };
+
 export class ExpressionResultWidget extends WidgetType {
 	expression: string;
 	result: string;
@@ -11,6 +20,7 @@ export class ExpressionResultWidget extends WidgetType {
 	isPending: boolean;
 	/** The query key for deduplication and debug display. */
 	queryKey: string | null;
+	private animation: ResultAnimationOptions;
 
 	constructor(
 		lineNumber: number,
@@ -18,7 +28,8 @@ export class ExpressionResultWidget extends WidgetType {
 		expression: string,
 		result: string,
 		isPending = false,
-		queryKey: string | null = null
+		queryKey: string | null = null,
+		animation: ResultAnimationOptions = NO_ANIMATION
 	) {
 		super();
 		this.expression = expression;
@@ -27,6 +38,7 @@ export class ExpressionResultWidget extends WidgetType {
 		this.isInlineSolve = isInlineSolve;
 		this.isPending = isPending;
 		this.queryKey = queryKey;
+		this.animation = animation;
 	}
 
 	/**
@@ -85,6 +97,15 @@ export class ExpressionResultWidget extends WidgetType {
 
 		div.classList.add("os-result");
 		div.textContent = `${this.result}`;
+
+		// toDOM() only runs when eq() says this widget's content is genuinely
+		// new (CodeMirror reuses the existing node otherwise) — exactly the
+		// "this value just changed" moment an animation should mark, not a
+		// per-keystroke re-render.
+		if (this.animation.enabled && this.animation.className) {
+			div.classList.add(this.animation.className);
+			div.style.setProperty("--animate-duration", this.animation.duration);
+		}
 
 		return div;
 	}

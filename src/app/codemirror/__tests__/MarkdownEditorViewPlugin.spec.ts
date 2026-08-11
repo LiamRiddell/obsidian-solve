@@ -561,3 +561,53 @@ describe("MarkdownEditorViewPlugin — result formatting settings are wired", ()
 		expect(firstResultWidgetText(plugin)).toBe("= 0.3333");
 	});
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Result animation settings — confirms interface.animateResults/animationClass/
+// animationDuration actually reach the ExpressionResultWidget, not just that
+// the settings exist and animate.css is loaded.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Returns the first widget decoration found (not just its text), or undefined if none. */
+function firstResultWidget(plugin: MarkdownEditorViewPlugin): any {
+	let widget: any;
+	(plugin.decorations as any).between(0, 1e9, (_from: number, _to: number, deco: any) => {
+		if (widget === undefined && deco?.spec?.widget) widget = deco.spec.widget;
+	});
+	return widget;
+}
+
+describe("MarkdownEditorViewPlugin — result animation settings are wired", () => {
+	afterEach(() => {
+		EngineProvider.reset();
+		UserSettings.getInstance().interface.animateResults = true;
+		UserSettings.getInstance().interface.animationClass = "animate__pulse";
+		UserSettings.getInstance().interface.animationDuration = "200ms";
+	});
+
+	test("passes the configured animation class and duration to the result widget when animateResults is enabled", () => {
+		UserSettings.getInstance().interface.animateResults = true;
+		UserSettings.getInstance().interface.animationClass = "animate__flash";
+		UserSettings.getInstance().interface.animationDuration = "500ms";
+		const view = createMockView(["1 + 1"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		const widget = firstResultWidget(plugin);
+
+		expect((widget as any).animation).toEqual({
+			enabled: true,
+			className: "animate__flash",
+			duration: "500ms",
+		});
+	});
+
+	test("passes enabled: false to the result widget when animateResults is disabled", () => {
+		UserSettings.getInstance().interface.animateResults = false;
+		const view = createMockView(["1 + 1"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+
+		const widget = firstResultWidget(plugin);
+
+		expect((widget as any).animation.enabled).toBe(false);
+	});
+});
