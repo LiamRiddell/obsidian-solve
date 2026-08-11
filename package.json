@@ -41,9 +41,9 @@
 		"typescript": "5.1.6"
 	},
 	"dependencies": {
-		"solve-engine": "^1.0.0",
 		"@tanstack/query-core": "^5.100.10",
 		"animate.css": "^4.1.1",
-		"convert": "^7.0.0"
+		"convert": "^7.0.0",
+		"solve-engine": "1.0.1"
 	}
 }
