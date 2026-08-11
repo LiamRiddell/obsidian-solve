@@ -24,9 +24,5 @@ coverage/
 # V8 profiling logs
 isolate-*.log
 
-# Standalone profiler (not part of the project)
-benchmarks/preload-globals.cjs
-benchmarks/profile-vm.ts
-
 # Claude Code local state (worktrees, settings)
 .claude/

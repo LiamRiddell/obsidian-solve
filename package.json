@@ -9,9 +9,6 @@
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "node --expose-gc ./node_modules/.bin/jest --logHeapUsage",
 		"test:ci": "node --expose-gc ./node_modules/.bin/jest --no-coverage --logHeapUsage",
-		"test:engine": "node --expose-gc ./node_modules/.bin/jest --testPathPattern=\"packages/core/__tests__/engine\" --no-coverage --logHeapUsage",
-		"test:light": "node --expose-gc ./node_modules/.bin/jest --no-coverage --logHeapUsage --testPathIgnorePatterns=\"LexerVocabularyFuzz|Fuzz|BreakageTests|LongDocumentRobustness\"",
-		"test:oom": "node --expose-gc --max-old-space-size=4096 ./node_modules/.bin/jest --no-coverage --logHeapUsage --testPathPattern=\"BreakageTests\\.|LexerFuzz\\.|LongDocumentRobustness\\.\" --runInBand",
 		"test:watch": "jest --watch",
 		"test:debug": "node --expose-gc ./node_modules/.bin/jest --no-coverage --verbose --logHeapUsage",
 		"typecheck": "tsc --noEmit",
@@ -37,7 +34,6 @@
 		"prettier": "3.0.0",
 		"ts-jest": "^29.1.1",
 		"tslib": "2.6.1",
-		"tsup": "8.5.1",
 		"typescript": "5.1.6"
 	},
 	"dependencies": {

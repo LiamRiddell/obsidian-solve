@@ -175,13 +175,7 @@ const config = {
 		"__mocks__",
 		// Claude Code agent worktrees are full checkouts — without this,
 		// every suite runs twice (once from the worktree copy).
-		"\\.claude[\\\\/]",
-		// Heavy / stress tests — not part of the normal dev cycle
-		"heavy/",
-		"benchmarks/",
-		"LexerFuzz\\.spec\\.",
-		"LexerVocabularyFuzz\\.spec\\.",
-		"LongDocumentRobustness\\.spec\\."
+		"\\.claude[\\\\/]"
 	],
 
 	// The regexp pattern or array of patterns that Jest uses to detect test files
