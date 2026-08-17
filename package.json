@@ -1,6 +1,6 @@
 {
 	"name": "solve",
-	"version": "2.0.0",
+	"version": "2.0.1",
 	"description": "Supercharge your notes with real-time calculations without AI fuss. From dates ('Now + 20 days'), percentages ('10% of 120'), units of measurement ('100cm + 2m'), arithmetic ('10 + 5') and more!",
 	"main": "main.js",
 	"scripts": {
@@ -40,6 +40,6 @@
 		"@tanstack/query-core": "^5.100.10",
 		"animate.css": "^4.1.1",
 		"convert": "^7.0.0",
-		"solve-engine": "1.0.1"
+		"solve-engine": "1.0.2"
 	}
 }
