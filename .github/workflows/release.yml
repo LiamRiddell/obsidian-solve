@@ -1,5 +1,13 @@
 name: Release Obsidian plugin
 
+# Triggered by a tag push. Two things push tags here:
+#
+#   · engine-update.yml, after a new solve-engine release passed its build
+#     and test gate - the automatic path.
+#   · a maintainer, by hand, for a release that isn't an engine bump.
+#
+# Either way this is the only place that builds and publishes the release,
+# so the two paths cannot race to create the same one.
 on:
     push:
         tags:
@@ -26,6 +34,28 @@ jobs:
                   npm ci
                   npm run build
 
+            # manifest.json is what Obsidian actually reads, and a release
+            # whose tag disagrees with it installs as the wrong version. The
+            # tag is the one thing here a person can typo, so it is checked
+            # against the tree rather than trusted.
+            - name: Check the tag against manifest.json
+              run: |
+                  tag="${GITHUB_REF#refs/tags/}"
+                  manifest="$(node -p "require('./manifest.json').version")"
+
+                  if [ "$tag" != "$manifest" ]; then
+                    echo "::error::Tag $tag does not match manifest.json version $manifest."
+                    exit 1
+                  fi
+
+                  echo "Tag $tag matches manifest.json."
+
+            # Published rather than a draft. Obsidian's community plugin list
+            # and BRAT both read published releases only, so a draft ships to
+            # nobody and waits on somebody remembering to press a button.
+            # This is now reached automatically from engine-update.yml, and
+            # the build and test gate over there is what stands between a
+            # solve-engine release and users.
             - name: Create release
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -34,5 +64,5 @@ jobs:
 
                   gh release create "$tag" \
                     --title="$tag" \
-                    --draft \
+                    --latest \
                     main.js manifest.json styles.css

@@ -3,17 +3,21 @@ name: Pick up a new solve-engine release
 # Two ways in:
 #   · repository_dispatch, fired by solve-engine's own publish workflow once
 #     a release has actually finished publishing to npm (see that repo's
-#     .github/workflows/publish.yml) — the normal path.
+#     .github/workflows/publish.yml) - the normal path.
 #   · workflow_dispatch, for testing this workflow directly without needing
 #     a real solve-engine release. Leave `version` blank to pick up
 #     whatever's currently on the npm registry.
 #
-# Either way, this only ever gets as far as bumping obsidian-solve's own
-# version and pushing a tag if `npm run build` and the test suite both pass
-# against the newly-installed engine. If they don't, the job just fails —
-# nothing is committed, no tag is created, nothing reaches users. Publishing
-# the resulting draft release (created by release.yml, triggered by the tag
-# push below) is still a separate, manual, deliberate act.
+# This only gets as far as bumping obsidian-solve's own version and pushing
+# a tag if `npm run build` and the test suite both pass against the newly
+# installed engine. If they don't, the job fails, nothing is committed, no
+# tag is created, and nothing reaches users.
+#
+# Pushing the tag is where this hands off: release.yml triggers on tag
+# pushes, builds the plugin and publishes the GitHub Release that Obsidian
+# clients actually read. This workflow deliberately does not create that
+# release itself. If it did, both this job and release.yml would race to
+# create the same one and whichever lost would fail the run.
 on:
     repository_dispatch:
         types: [solve-engine-released]
@@ -23,8 +27,15 @@ on:
                 description: "solve-engine version to install (blank = latest on npm)"
                 required: false
 
+# Nothing here uses GITHUB_TOKEN to write. See the checkout step for why.
 permissions:
-    contents: write
+    contents: read
+
+# Two releases of solve-engine landing close together would otherwise have
+# two copies of this racing for the same version bump and the same tag.
+concurrency:
+    group: engine-update
+    cancel-in-progress: false
 
 jobs:
     update:
@@ -34,6 +45,28 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: main
+                  # Full history. The push below is rejected from a shallow
+                  # clone, and the tag has to be created against real history
+                  # rather than a single grafted commit.
+                  fetch-depth: 0
+                  # Not GITHUB_TOKEN. Three separate things on this repository
+                  # refuse that token, and each one fails at a different point:
+                  #
+                  #   · `main` requires a pull request. Admins are exempt
+                  #     (enforce_admins is off) but `github-actions[bot]` is
+                  #     not an admin, so the push is rejected with GH006.
+                  #   · the "Auto-imported tag create protections" ruleset
+                  #     allows tag creation only for the admin role, so the
+                  #     tag is rejected too.
+                  #   · a tag pushed with GITHUB_TOKEN does not start a new
+                  #     workflow run, by design. release.yml would never fire
+                  #     and no release would be built, silently.
+                  #
+                  # A personal access token belonging to an admin clears all
+                  # three. persist-credentials leaves it configured as the
+                  # push credential for the steps below.
+                  token: ${{ secrets.ENGINE_UPDATE_TOKEN }}
+                  persist-credentials: true
 
             - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
@@ -42,33 +75,56 @@ jobs:
 
             - name: Resolve the target solve-engine version
               id: engine
+              env:
+                  DISPATCH_VERSION: ${{ github.event.client_payload.version }}
+                  INPUT_VERSION: ${{ inputs.version }}
               run: |
-                  version="${{ github.event.client_payload.version || inputs.version }}"
+                  version="${DISPATCH_VERSION:-$INPUT_VERSION}"
                   if [ -z "$version" ]; then
                     version="$(npm view solve-engine version)"
                   fi
                   echo "version=$version" >> "$GITHUB_OUTPUT"
+                  echo "Target solve-engine version: $version"
 
             - run: npm ci
 
             - name: Install the released solve-engine version
               run: npm install "solve-engine@${{ steps.engine.outputs.version }}"
 
+            # Re-running this for a version already installed should do
+            # nothing rather than mint an empty commit, a duplicate tag and a
+            # second release. That happens on a workflow_dispatch retry, and
+            # on a redelivered dispatch.
+            - name: Stop if the engine version did not change
+              id: changed
+              run: |
+                  if git diff --quiet -- package.json package-lock.json; then
+                    echo "Already on solve-engine ${{ steps.engine.outputs.version }}. Nothing to do."
+                    echo "changed=false" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "changed=true" >> "$GITHUB_OUTPUT"
+                  fi
+
             # ══ SAFETY GATE ══ Nothing past this point runs unless both of
             # these succeed. A failure here means solve-engine shipped a
-            # breaking change obsidian-solve hasn't been updated for yet —
-            # exactly the class of issue today's manual migration surfaced
-            # (a rename, a widened config type, a build-target gap, a
-            # deprecated API removal). That needs a person, not an
-            # auto-merge.
-            - run: npm run build
-            - run: npm run test:ci
+            # breaking change obsidian-solve hasn't been updated for yet -
+            # exactly the class of issue the manual migration surfaced (a
+            # rename, a widened config type, a build-target gap, a deprecated
+            # API removal). That needs a person, not an auto-merge.
+            - if: steps.changed.outputs.changed == 'true'
+              run: npm run build
+
+            - if: steps.changed.outputs.changed == 'true'
+              run: npm run test:ci
 
             - name: Bump obsidian-solve's own version
+              if: steps.changed.outputs.changed == 'true'
               run: npm version patch --no-git-tag-version
 
             - name: Commit and tag
-              id: release
+              if: steps.changed.outputs.changed == 'true'
+              env:
+                  ENGINE_VERSION: ${{ steps.engine.outputs.version }}
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -76,8 +132,25 @@ jobs:
                   version="$(node -p "require('./package.json').version")"
                   tag="$version"
 
+                  # A tag that already exists means a previous run got this far
+                  # and something after it failed. Pushing main again is fine,
+                  # re-creating the tag is not.
+                  if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+                    echo "::error::Tag $tag already exists on the remote. Resolve by hand."
+                    exit 1
+                  fi
+
+                  # `npm version` ran the `version` lifecycle script, which is
+                  # `node version-bump.mjs && git add manifest.json versions.json`,
+                  # so those two are already staged.
                   git add package.json package-lock.json manifest.json versions.json
-                  git commit -m "chore: update to solve-engine ${{ steps.engine.outputs.version }}"
-                  git tag "$tag"
+                  git commit -m "chore: update to solve-engine ${ENGINE_VERSION}"
+
+                  # main first. If the tag went first and this were rejected,
+                  # there would be a tag pointing at a commit no branch
+                  # contains, and release.yml would already be building it.
                   git push origin main
+                  git tag "$tag"
                   git push origin "$tag"
+
+                  echo "Pushed $tag. release.yml takes it from here."
