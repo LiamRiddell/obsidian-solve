@@ -53,6 +53,7 @@ type CommitEvent = {
 	expression: string;
 	result: string;
 	isInlineSolve?: boolean;
+	sourceView?: unknown;
 };
 
 describe("MarkdownEditorViewPlugin.commitResults", () => {
@@ -62,9 +63,10 @@ describe("MarkdownEditorViewPlugin.commitResults", () => {
 		lineNumber: number,
 		expression: string,
 		result: string,
-		isInlineSolve?: boolean
+		isInlineSolve?: boolean,
+		sourceView?: unknown
 	) => {
-		captured.push({ lineNumber, expression, result, isInlineSolve });
+		captured.push({ lineNumber, expression, result, isInlineSolve, sourceView });
 	};
 
 	beforeEach(() => {
@@ -79,7 +81,8 @@ describe("MarkdownEditorViewPlugin.commitResults", () => {
 	});
 
 	test("commits an evaluated full-line expression", () => {
-		plugin = new MarkdownEditorViewPlugin(createMockView(["1 + 2"]));
+		const view = createMockView(["1 + 2"]);
+		plugin = new MarkdownEditorViewPlugin(view);
 
 		const committed = plugin.commitResults(1, 1);
 
@@ -90,6 +93,7 @@ describe("MarkdownEditorViewPlugin.commitResults", () => {
 		expect(captured[0].result.length).toBeGreaterThan(0);
 		expect(captured[0].result).toContain("3");
 		expect(captured[0].isInlineSolve).toBe(false);
+		expect(captured[0].sourceView).toBe(view);
 	});
 
 	test("returns 0 for lines without results (empty / markdown-only)", () => {

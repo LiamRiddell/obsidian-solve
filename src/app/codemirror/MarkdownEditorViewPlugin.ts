@@ -331,7 +331,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					line,
 					expression,
 					this.formatResult(value),
-					isInline
+					isInline,
+					this.view
 				);
 				committed++;
 			}

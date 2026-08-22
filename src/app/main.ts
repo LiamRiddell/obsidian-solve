@@ -260,13 +260,25 @@ export default class SolvePlugin extends Plugin {
 		lineNumber: number,
 		expression: string,
 		result: string,
-		isInlineSolve?: boolean
+		isInlineSolve?: boolean,
+		sourceView?: EditorView
 	) {
 		const lineNumberZeroIndexed = Math.max(0, lineNumber - 1);
+		const sourceLine = sourceView
+			? lineNumber >= 1 && lineNumber <= sourceView.state.doc.lines
+				? sourceView.state.doc.line(lineNumber)
+				: undefined
+			: undefined;
 
-		let lineText = this.app.workspace.activeEditor?.editor?.getLine(
-			lineNumberZeroIndexed
-		);
+		if (sourceView && !sourceLine) {
+			return;
+		}
+
+		let lineText = sourceLine
+			? sourceLine.text
+			: this.app.workspace.activeEditor?.editor?.getLine(
+					lineNumberZeroIndexed
+				);
 
 		if (typeof lineText === "undefined") {
 			return;
@@ -310,6 +322,17 @@ export default class SolvePlugin extends Plugin {
 			lineText = lineText.replace(`s\`${expression}\``, replacementText);
 		} else {
 			lineText = `${lineText?.trimEnd()} ${result}`;
+		}
+
+		if (sourceView && sourceLine) {
+			sourceView.dispatch({
+				changes: {
+					from: sourceLine.from,
+					to: sourceLine.to,
+					insert: lineText,
+				},
+			});
+			return;
 		}
 
 		this.app.workspace.activeEditor?.editor?.setLine(

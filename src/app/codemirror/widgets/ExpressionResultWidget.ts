@@ -91,7 +91,8 @@ export class ExpressionResultWidget extends WidgetType {
 				this.lineNumber,
 				this.expression,
 				this.result,
-				this.isInlineSolve
+				this.isInlineSolve,
+				view
 			);
 		});
 
