@@ -147,6 +147,10 @@ export class EngineConfigMapper {
             maxCollectionSize: DEFAULT_CONFIG.vm.maxCollectionSize,
             maxAllocatedElements: DEFAULT_CONFIG.vm.maxAllocatedElements,
             maxFunctionCalls: DEFAULT_CONFIG.vm.maxFunctionCalls,
+            // Added by solve-engine 1.1.0, which made it a required field on
+            // VMConfig. Bounds the goal-seek search; same treatment as the
+            // three above, so the engine stays the one place the number lives.
+            maxGoalSeekIterations: DEFAULT_CONFIG.vm.maxGoalSeekIterations,
         };
     }
 }

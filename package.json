@@ -40,6 +40,6 @@
 		"@tanstack/query-core": "^5.100.10",
 		"animate.css": "^4.1.1",
 		"convert": "^7.0.0",
-		"solve-engine": "1.0.2"
+		"solve-engine": "1.1.0"
 	}
 }
