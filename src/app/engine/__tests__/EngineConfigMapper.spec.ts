@@ -26,15 +26,21 @@ import {
   BIGINT_PACKAGE,
 } from "solve-engine/packages";
 
-// Collection/allocation/function-call limits have no Obsidian UI control
-// yet — EngineConfigMapper always sources them from the engine's own
+// Collection/allocation/function-call/goal-seek limits have no Obsidian UI
+// control yet — EngineConfigMapper always sources them from the engine's own
 // defaults regardless of settings, so every expectation below includes
-// this same fixed trio alongside whatever maxStackDepth/maxInstructions
+// this same fixed set alongside whatever maxStackDepth/maxInstructions
 // the individual test is actually exercising.
+//
+// Read from DEFAULT_CONFIG rather than written out, so an engine release that
+// changes one of these numbers does not need this file edited. A release that
+// adds a NEW required field still does, which is what solve-engine 1.1.0 and
+// its maxGoalSeekIterations did.
 const ENGINE_VM_DEFAULTS = {
   maxCollectionSize: DEFAULT_CONFIG.vm.maxCollectionSize,
   maxAllocatedElements: DEFAULT_CONFIG.vm.maxAllocatedElements,
   maxFunctionCalls: DEFAULT_CONFIG.vm.maxFunctionCalls,
+  maxGoalSeekIterations: DEFAULT_CONFIG.vm.maxGoalSeekIterations,
 };
 
 /**
