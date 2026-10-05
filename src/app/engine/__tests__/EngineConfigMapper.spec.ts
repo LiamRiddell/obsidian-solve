@@ -13,7 +13,6 @@ import { describe, expect, test } from "@jest/globals";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import type UserSettings from "@app/settings/UserSettings";
-import { DEFAULT_CONFIG } from "solve-engine/constants";
 import {
   BUILTIN_PACKAGES,
   ARITHMETIC_PACKAGE,
@@ -27,21 +26,10 @@ import {
 } from "solve-engine/packages";
 
 // Collection/allocation/function-call/goal-seek limits have no Obsidian UI
-// control yet — EngineConfigMapper always sources them from the engine's own
-// defaults regardless of settings, so every expectation below includes
-// this same fixed set alongside whatever maxStackDepth/maxInstructions
-// the individual test is actually exercising.
-//
-// Read from DEFAULT_CONFIG rather than written out, so an engine release that
-// changes one of these numbers does not need this file edited. A release that
-// adds a NEW required field still does, which is what solve-engine 1.1.0 and
-// its maxGoalSeekIterations did.
-const ENGINE_VM_DEFAULTS = {
-  maxCollectionSize: DEFAULT_CONFIG.vm.maxCollectionSize,
-  maxAllocatedElements: DEFAULT_CONFIG.vm.maxAllocatedElements,
-  maxFunctionCalls: DEFAULT_CONFIG.vm.maxFunctionCalls,
-  maxGoalSeekIterations: DEFAULT_CONFIG.vm.maxGoalSeekIterations,
-};
+// control, so EngineConfigMapper leaves them out of its override: solve-engine
+// 2.x merges each config section field by field, and the engine keeps its own
+// defaults for the fields it is not given. Each expectation below names only
+// the two VM fields the plugin sets.
 
 /**
  * Create a minimal mock of UserSettings with the engine properties
@@ -175,7 +163,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: 200,
         maxInstructions: 50000,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -207,7 +194,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: 500,
         maxInstructions: 100000,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -230,7 +216,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: 100,
         maxInstructions: 25000,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -260,7 +245,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: 50,
         maxInstructions: 50000,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -277,7 +261,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: 200,
         maxInstructions: 50000,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -328,7 +311,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: DEFAULT_SETTINGS.engine.vm.maxStackDepth,
         maxInstructions: DEFAULT_SETTINGS.engine.vm.maxInstructions,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -365,7 +347,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: DEFAULT_SETTINGS.engine.vm.maxStackDepth,
         maxInstructions: DEFAULT_SETTINGS.engine.vm.maxInstructions,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -404,7 +385,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: DEFAULT_SETTINGS.engine.vm.maxStackDepth,
         maxInstructions: DEFAULT_SETTINGS.engine.vm.maxInstructions,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -441,7 +421,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: 0,
         maxInstructions: 0,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
 
@@ -464,7 +443,6 @@ describe("EngineConfigMapper", () => {
       expect(config.vm).toEqual({
         maxStackDepth: 10000,
         maxInstructions: 9999999,
-        ...ENGINE_VM_DEFAULTS,
       });
     });
   });

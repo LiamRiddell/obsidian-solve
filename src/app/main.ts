@@ -3,7 +3,6 @@ import { FeatureFlagClass } from "@app/constants/EFeatureFlagClass";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { EPluginStatus } from "@app/constants/EPluginStatus";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
-import { packageRegistry } from "solve-engine";
 import { EngineProvider } from "@app/engine/EngineProvider";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import { SettingTab } from "@app/settings/SettingsTab";
@@ -61,7 +60,7 @@ export default class SolvePlugin extends Plugin {
 
 		await this.registerCommands();
 
-		pluginEventBus.emit(EPluginEvent.SolveEngineReady, packageRegistry);
+		pluginEventBus.emit(EPluginEvent.SolveEngineReady);
 		logger.debug(`[Solve] Fired: SolveEngineReady`);
 	}
 
@@ -161,7 +160,7 @@ export default class SolvePlugin extends Plugin {
 				}
 
 				try {
-				const [val] = engine.evaluateExpression(selectedText);
+					const val = engine.evaluateExpression(selectedText);
 					new Notice(`Solve: ${selectedText.trim()} = ${val.toNumber()}`);
 				} catch (err) {
 					new Notice(`Solve: Error — ${(err as Error).message}`);
