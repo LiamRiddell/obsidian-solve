@@ -14,6 +14,16 @@ export class InterfaceSettings {
 		this.parent.settings.interface.renderResultEndOfLine = value;
 	}
 
+	get showRefusals(): boolean {
+		return (
+			this.parent.settings.interface.showRefusals ??
+			DEFAULT_SETTINGS.interface.showRefusals
+		);
+	}
+	set showRefusals(value: boolean) {
+		this.parent.settings.interface.showRefusals = value;
+	}
+
 	get showStatusBarCompanion(): boolean {
 		return (
 			this.parent.settings.interface.showStatusBarCompanion ??

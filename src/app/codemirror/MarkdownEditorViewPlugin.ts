@@ -1,4 +1,5 @@
 import { ExpressionResultWidget, type ResultAnimationOptions } from "@app/codemirror/widgets/ExpressionResultWidget";
+import { RefusalMarkerWidget, refusalCode } from "@app/codemirror/widgets/RefusalMarkerWidget";
 import { createPluginEngine, engineSettingsKey } from "@app/engine/createPluginEngine";
 import { FormattingSettingsMapper } from "@app/engine/FormattingSettingsMapper";
 import { frontmatterLineCount, frontmatterResync, maskFrontmatter, maskLineChanges } from "@app/codemirror/Frontmatter";
@@ -206,10 +207,18 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		// engine when the settings it is built from changed, and only then: a
 		// reconfigure also follows unrelated settings, and an ordinary keystroke
 		// never reconfigures, so typing never pays for the comparison.
-		if (update.transactions?.some((tr) => tr.reconfigured) && engineSettingsKey(this.userSettings) !== this.engineKey) {
-			this.currentDoc = update.state.doc;
-			this.rebuildEngine(update.view);
-			return;
+		if (update.transactions?.some((tr) => tr.reconfigured)) {
+			if (engineSettingsKey(this.userSettings) !== this.engineKey) {
+				this.currentDoc = update.state.doc;
+				this.rebuildEngine(update.view);
+				return;
+			}
+			// A display setting (formatting, refusal markers) changed without
+			// changing the engine: redraw, so it applies to the open note now.
+			if (!update.docChanged && !update.viewportChanged) {
+				this.decorations = this.buildDecorations(update.view);
+				return;
+			}
 		}
 
 		// Detect document switch — clear this pane's engine to prevent
@@ -501,6 +510,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		// and users who disable highlighting pay zero cost for the
 		// mark-decoration pass below.
 		const highlightingEnabled = this.userSettings.syntaxHighlight.enabled;
+		const showRefusals = this.userSettings.interface.showRefusals;
 
 		const visibleRanges = view.visibleRanges;
 		const seenLines = new Set<number>();
@@ -627,6 +637,22 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 								side: 1,
 							}),
 						});
+					} else if (showRefusals && lineState.results.length > 0) {
+						// A named refusal gets a muted marker with its reason
+						// (#96); prose and half-typed lines carry the generic
+						// eval_failed and stay blank.
+						const error = lineState.results[0][0];
+						const code = refusalCode(error.errorCode);
+						if (code !== null) {
+							entries.push({
+								from: line.to,
+								to: line.to,
+								deco: Decoration.widget({
+									widget: new RefusalMarkerWidget(line.number, code, String(error.errorMessage ?? code)),
+									side: 1,
+								}),
+							});
+						}
 					}
 				}
 				// (Empty/markdown-only lines with no inline solves and no

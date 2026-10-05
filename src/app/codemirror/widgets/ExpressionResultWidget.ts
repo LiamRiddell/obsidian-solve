@@ -58,32 +58,45 @@ export class ExpressionResultWidget extends WidgetType {
 	}
 
 	toDOM(view: EditorView): HTMLElement {
-		const div = document.createElement("div");
-		// data attribute, not an id: ids must be document-unique, but the
-		// same line number renders in every split pane showing this note.
-		div.dataset.osrLine = String(this.lineNumber);
-
 		if (this.isPending) {
-			// Loading indicator for async results
-			div.classList.add("os-result", "os-result--pending");
+			// Loading indicator for async results. A status with a name, so a
+			// screen reader says what it is waiting for; the glyphs are
+			// decoration and hidden from it (#98).
+			const pending = document.createElement("span");
+			pending.dataset.osrLine = String(this.lineNumber);
+			pending.classList.add("os-result", "os-result--pending");
+			pending.setAttribute("role", "status");
+			pending.setAttribute("aria-label", "Waiting for live data");
 			if (this.queryKey) {
-				div.setAttribute("data-query-key", this.queryKey);
+				pending.setAttribute("data-query-key", this.queryKey);
 			}
 
 			const spinner = document.createElement("span");
 			spinner.classList.add("os-result__spinner");
+			spinner.setAttribute("aria-hidden", "true");
 			spinner.textContent = "⟳";
 
 			const label = document.createElement("span");
 			label.classList.add("os-result__pending-label");
+			label.setAttribute("aria-hidden", "true");
 			label.textContent = "...";
 
-			div.appendChild(spinner);
-			div.appendChild(label);
-			return div;
+			pending.appendChild(spinner);
+			pending.appendChild(label);
+			return pending;
 		}
 
-		div.title = "Click to commit this result";
+		// A button, so the result can be reached and activated from the
+		// keyboard (Enter and Space, natively) and a screen reader announces
+		// it as a control with a name, not as text (#98).
+		const div = document.createElement("button");
+		div.type = "button";
+		// data attribute, not an id: ids must be document-unique, but the
+		// same line number renders in every split pane showing this note.
+		div.dataset.osrLine = String(this.lineNumber);
+		const shown = this.result.replace(/^=\s*/, "");
+		div.setAttribute("aria-label", `Commit result ${shown}`);
+		div.title = "Commit this result into the line";
 
 		div.addEventListener("click", () => {
 			pluginEventBus.emit(
