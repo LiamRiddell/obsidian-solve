@@ -1,5 +1,5 @@
 import type { ExpressionEngine } from "solve-engine/engine";
-import { createPluginEngine } from "@app/engine/createPluginEngine";
+import { createPluginEngine, engineSettingsKey } from "@app/engine/createPluginEngine";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
 /**
@@ -14,22 +14,27 @@ import { logger } from "@app/utilities/Logger";
  */
 class EngineProvider {
 	private static _instance: ExpressionEngine | null = null;
-	private static _localeOverride: string | null = null;
+	/** The settings the instance was built from (`engineSettingsKey`). */
+	private static _key: string | null = null;
 
 	private constructor() {}
 
 	/**
 	 * Get or create the shared ExpressionEngine instance.
-	 * Re-uses existing instance if locale matches, recreates if locale changes.
+	 * Re-uses the existing instance while the settings it was built from are
+	 * unchanged, and builds a new one when any of them changes: the locale, a
+	 * limit, or a Provider Management toggle (#94). It was rebuilt on a locale
+	 * change alone, so a toggle never reached the "Evaluate expression" command.
 	 */
 	static get(): ExpressionEngine {
 		const settings = UserSettings.getInstance();
-		const locale = settings.settings.engine.locale;
+		const key = engineSettingsKey(settings);
 
-		if (!this._instance || this._localeOverride !== locale) {
-			this._localeOverride = locale;
+		if (!this._instance || this._key !== key) {
+			this._instance?.clear();
+			this._key = key;
 			this._instance = createPluginEngine(settings);
-		logger.debug(`[EngineProvider] Created new ExpressionEngine (locale=${locale})`);
+			logger.debug(`[EngineProvider] Created new ExpressionEngine (locale=${settings.settings.engine.locale})`);
 		}
 
 		return this._instance;
@@ -43,6 +48,7 @@ class EngineProvider {
 		if (this._instance) {
 			this._instance.clear();
 			this._instance = null;
+			this._key = null;
 			logger.debug("[EngineProvider] Engine reset");
 		}
 	}

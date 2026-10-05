@@ -3,6 +3,7 @@ import { FeatureFlagClass } from "@app/constants/EFeatureFlagClass";
 import { SUPPORTED_SEPARATOR_LOCALES } from "@app/constants/SupportedSeparators";
 import SolvePlugin from "@app/main";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
+import { PROVIDER_TOGGLES } from "@app/settings/ProviderToggles";
 import type { SyntaxHighlightPresetName } from "@app/settings/definition/ISyntaxHighlightSettings";
 import {
 	CATEGORY_LABELS,
@@ -244,144 +245,25 @@ export class SettingTab extends PluginSettingTab {
 	displayProviderManagementSettings() {
 		new Setting(this.containerEl)
 			.setName("Provider Management")
+			.setDesc(
+				"Each switch turns off a part of the engine, and says what goes with it. All are on by default, and a change applies to open notes straight away."
+			)
 			.setHeading();
 
-		new Setting(this.containerEl)
-			.setName("Arithmetic")
-			.setDesc(
-				`Enable the arithmetic provider e.g. 10 + 2. Default is ${DEFAULT_SETTINGS.arithmeticProvider.enabled}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.arithmeticProvider.enabled)
-					.onChange(async (value) => {
-						this.plugin.settings.arithmeticProvider.enabled = value;
+		for (const provider of PROVIDER_TOGGLES) {
+			new Setting(this.containerEl)
+				.setName(provider.name)
+				.setDesc(provider.description)
+				.addToggle((toggle) =>
+					toggle
+						.setValue(this.plugin.settings[provider.setting].enabled)
+						.onChange(async (value) => {
+							this.plugin.settings[provider.setting].enabled = value;
 
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.containerEl)
-			.setName("Function Arithmetic")
-			.setDesc(
-				`Enable the function arithmetic provider e.g. sin(), cos(). Default is ${DEFAULT_SETTINGS.functionArithmeticProvider.enabled}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(
-						this.plugin.settings.functionArithmeticProvider.enabled
-					)
-					.onChange(async (value) => {
-						this.plugin.settings.functionArithmeticProvider.enabled =
-							value;
-
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.containerEl)
-			.setName("Vector Arithmetic")
-			.setDesc(
-				`Enable the vector arithmetic provider e.g. (10, 22.3), vec3(1.0, 23, 18.3). Default is ${DEFAULT_SETTINGS.vectorArithmeticProvider.enabled}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(
-						this.plugin.settings.vectorArithmeticProvider.enabled
-					)
-					.onChange(async (value) => {
-						this.plugin.settings.vectorArithmeticProvider.enabled =
-							value;
-
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.containerEl)
-			.setName("Percentage")
-			.setDesc(
-				`Enable the percentage provider e.g. 10% of 200, increase 20 by 10%. Default is ${DEFAULT_SETTINGS.percentageArithmeticProvider.enabled}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(
-						this.plugin.settings.percentageArithmeticProvider
-							.enabled
-					)
-					.onChange(async (value) => {
-						this.plugin.settings.percentageArithmeticProvider.enabled =
-							value;
-
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.containerEl)
-			.setName("Datetime")
-			.setDesc(
-				`Enable the datetime provider e.g. today + 20 days, last monday. Default is ${DEFAULT_SETTINGS.datetimeProvider.enabled}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.datetimeProvider.enabled)
-					.onChange(async (value) => {
-						this.plugin.settings.datetimeProvider.enabled = value;
-
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.containerEl)
-			.setName("Unit of Measurement")
-			.setDesc(
-				`Enable the unit of measurement provider e.g. 10cm + 20, 200cm to m. Default is ${DEFAULT_SETTINGS.unitOfMeasurementProvider.enabled}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(
-						this.plugin.settings.unitOfMeasurementProvider.enabled
-					)
-					.onChange(async (value) => {
-						this.plugin.settings.unitOfMeasurementProvider.enabled =
-							value;
-
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.containerEl)
-			.setName("Dice")
-			.setDesc(
-				`Enable the dice provider e.g. roll(1, 100), roll between 1 and 12. Default is ${DEFAULT_SETTINGS.diceProvider.enabled}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.diceProvider.enabled)
-					.onChange(async (value) => {
-						this.plugin.settings.diceProvider.enabled = value;
-
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.containerEl)
-			.setName("Binary (BigInteger)")
-			.setDesc(
-				`Enable the binary (BigInteger) provider e.g. 0b10101 >> 4, right shift. Default is ${DEFAULT_SETTINGS.bigIntegerArithmeticProvider.enabled}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(
-						this.plugin.settings.bigIntegerArithmeticProvider
-							.enabled
-					)
-					.onChange(async (value) => {
-						this.plugin.settings.bigIntegerArithmeticProvider.enabled =
-							value;
-
-						await this.plugin.saveSettings();
-					})
-			);
+							await this.plugin.saveSettings();
+						})
+				);
+		}
 	}
 
 	displayInterfaceSettings() {

@@ -534,11 +534,14 @@ describe("EngineConfigMapper", () => {
       expect(packages).not.toContain(DICE_PACKAGE);
     });
 
-    test("excludes BIGINT_PACKAGE when bigIntegerArithmeticProvider is disabled", () => {
+    test("keeps BIGINT_PACKAGE whatever the retired bigIntegerArithmeticProvider setting says", () => {
+      // solve-engine 2.x reads binary literals, shifts and `123n` in its core,
+      // so the toggle changed nothing and was removed; a saved false is ignored.
       const settings = createMockProviderSettings({ bigIntegerArithmeticProvider: false });
       const packages = EngineConfigMapper.toPackages(settings);
 
-      expect(packages).not.toContain(BIGINT_PACKAGE);
+      expect(packages).toContain(BIGINT_PACKAGE);
+      expect(packages).toEqual(BUILTIN_PACKAGES);
     });
 
     test("excludes multiple packages when multiple providers are disabled", () => {
@@ -569,7 +572,7 @@ describe("EngineConfigMapper", () => {
       const packages = EngineConfigMapper.toPackages(settings);
 
       // Every toggle-backed package should be gone...
-      expect(packages.length).toBe(BUILTIN_PACKAGES.length - 8);
+      expect(packages.length).toBe(BUILTIN_PACKAGES.length - 7);
       // ...but every package without a toggle should still be present.
       const untoggled = BUILTIN_PACKAGES.filter(
         (pkg) =>
@@ -581,7 +584,6 @@ describe("EngineConfigMapper", () => {
             DATETIME_PACKAGE,
             UOM_PACKAGE,
             DICE_PACKAGE,
-            BIGINT_PACKAGE,
           ].includes(pkg)
       );
       for (const pkg of untoggled) {

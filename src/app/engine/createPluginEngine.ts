@@ -32,3 +32,20 @@ export function createPluginEngine(settings: UserSettings): ExpressionEngine {
 		return new ExpressionEngine({ locale: "en", config, packages });
 	}
 }
+
+/**
+ * Everything `createPluginEngine` builds an engine from, as one comparable
+ * string: the locale, the config override and the selected packages by name.
+ * Two equal keys build the same engine, so a pane compares keys to decide
+ * whether a settings change needs a new one.
+ *
+ * @param settings - The plugin's settings.
+ * @returns The key.
+ */
+export function engineSettingsKey(settings: UserSettings): string {
+	return JSON.stringify({
+		locale: settings.settings.engine.locale,
+		config: EngineConfigMapper.toEngineConfig(settings),
+		packages: EngineConfigMapper.toPackages(settings).map((pkg) => pkg.name),
+	});
+}

@@ -8,9 +8,20 @@ import {
 	DATETIME_PACKAGE,
 	UOM_PACKAGE,
 	DICE_PACKAGE,
-	BIGINT_PACKAGE,
 } from "solve-engine/packages";
 import type UserSettings from "@app/settings/UserSettings";
+import { PROVIDER_TOGGLES, type ProviderSettingKey } from "@app/settings/ProviderToggles";
+
+/** The engine package each Provider Management toggle turns off. */
+const PACKAGE_OF: Record<ProviderSettingKey, (typeof BUILTIN_PACKAGES)[number]> = {
+    arithmeticProvider: ARITHMETIC_PACKAGE,
+    functionArithmeticProvider: FUNCTION_PACKAGE,
+    vectorArithmeticProvider: VECTOR_PACKAGE,
+    percentageArithmeticProvider: PERCENTAGE_PACKAGE,
+    datetimeProvider: DATETIME_PACKAGE,
+    unitOfMeasurementProvider: UOM_PACKAGE,
+    diceProvider: DICE_PACKAGE,
+};
 
 /**
  * EngineConfigMapper — single adapter layer between Obsidian plugin settings
@@ -71,29 +82,19 @@ export class EngineConfigMapper {
      * Not part of `toEngineConfig()`'s return value: package selection is
      * the engine's separate `packages` option, documented by the engine
      * itself as the mechanism for "selective disable of built-in packages",
-     * not something the config covers at all. `EngineProvider` was constructing every
-     * engine with the default `packages` argument (i.e. `BUILTIN_PACKAGES`
-     * unfiltered), so every "Provider Management" toggle existed in the
-     * settings UI and did nothing.
+     * not something the config covers at all.
      *
-     * Only maps the 8 packages that already had a settings toggle before
-     * this. The engine ships several more built-ins (currency, matrix,
-     * map/reduce, symbolic algebra, variables, conditionals, converters,
-     * math phrases, finance, weather, lines) with no equivalent toggle —
-     * those stay unconditionally enabled, matching today's behavior for
-     * them.
+     * The toggles are `PROVIDER_TOGGLES`, seven of the engine's 47 built-in
+     * packages; the rest stay on. The eighth toggle the plugin once had,
+     * "Binary (BigInteger)", turned off a package whose forms (`0b1010`,
+     * `123n`, `0b10101 >> 4`) solve-engine 2.x reads in its core, so it
+     * changed nothing and was removed. Its saved setting is kept and ignored.
      */
     static toPackages(settings: UserSettings): typeof BUILTIN_PACKAGES {
         const disabled = new Set<(typeof BUILTIN_PACKAGES)[number]>();
-        if (!settings.arithmeticProvider.enabled) disabled.add(ARITHMETIC_PACKAGE);
-        if (!settings.functionArithmeticProvider.enabled) disabled.add(FUNCTION_PACKAGE);
-        if (!settings.vectorArithmeticProvider.enabled) disabled.add(VECTOR_PACKAGE);
-        if (!settings.percentageArithmeticProvider.enabled) disabled.add(PERCENTAGE_PACKAGE);
-        if (!settings.datetimeProvider.enabled) disabled.add(DATETIME_PACKAGE);
-        if (!settings.unitOfMeasurementProvider.enabled) disabled.add(UOM_PACKAGE);
-        if (!settings.diceProvider.enabled) disabled.add(DICE_PACKAGE);
-        if (!settings.bigIntegerArithmeticProvider.enabled) disabled.add(BIGINT_PACKAGE);
-
+        for (const toggle of PROVIDER_TOGGLES) {
+            if (!settings[toggle.setting].enabled) disabled.add(PACKAGE_OF[toggle.setting]);
+        }
         return BUILTIN_PACKAGES.filter((pkg) => !disabled.has(pkg));
     }
 

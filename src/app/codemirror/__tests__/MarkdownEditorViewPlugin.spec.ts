@@ -611,3 +611,86 @@ describe("MarkdownEditorViewPlugin — result animation settings are wired", () 
 		expect((widget as any).animation.enabled).toBe(false);
 	});
 });
+
+describe("MarkdownEditorViewPlugin — a settings change reaches an open pane (#94)", () => {
+	afterEach(() => {
+		EngineProvider.reset();
+		UserSettings.getInstance().unitOfMeasurementProvider.enabled = true;
+		UserSettings.getInstance().diceProvider.enabled = true;
+	});
+
+	/** The update a settings save produces: a reconfigure, the document unchanged. */
+	function reconfigure(view: any): any {
+		return {
+			docChanged: false,
+			viewportChanged: false,
+			view,
+			state: { doc: view.state.doc },
+			startState: { doc: view.state.doc },
+			transactions: [{ reconfigured: true }],
+			changes: { iterChanges: () => {} },
+		};
+	}
+
+	test("turning units off removes the conversion from an open note, and on again restores it", () => {
+		const view = createMockView(["5 km in miles"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		expect(firstResultWidgetText(plugin)).toBe("= 3.11 miles");
+
+		UserSettings.getInstance().unitOfMeasurementProvider.enabled = false;
+		plugin.update(reconfigure(view));
+		expect(countResultWidgets(plugin)).toBe(0);
+
+		UserSettings.getInstance().unitOfMeasurementProvider.enabled = true;
+		plugin.update(reconfigure(view));
+		expect(firstResultWidgetText(plugin)).toBe("= 3.11 miles");
+	});
+
+	test("a reconfigure with the engine's settings unchanged keeps the same engine and evaluator", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		const engine = (plugin as any).engine;
+		const evaluator = (plugin as any).evaluator;
+		plugin.update(reconfigure(view));
+		expect((plugin as any).engine).toBe(engine);
+		expect((plugin as any).evaluator).toBe(evaluator);
+	});
+
+	test("a rebuild retires the old engine's keystroke and builds a fresh one", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		const engine = (plugin as any).engine;
+		const controller = (plugin as any).keystrokeController as AbortController;
+		UserSettings.getInstance().diceProvider.enabled = false;
+		plugin.update(reconfigure(view));
+		expect((plugin as any).engine).not.toBe(engine);
+		expect(controller.signal.aborted).toBe(true);
+		expect(((plugin as any).keystrokeController as AbortController).signal.aborted).toBe(false);
+		expect(firstResultWidgetText(plugin)).toBe("= 3");
+	});
+
+	test("an ordinary edit never rebuilds, even with a changed setting waiting", () => {
+		const view = createMockView(["1 + 2"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		const engine = (plugin as any).engine;
+		UserSettings.getInstance().diceProvider.enabled = false;
+		plugin.update({
+			docChanged: true,
+			viewportChanged: true,
+			view,
+			startState: { doc: view.state.doc },
+			transactions: [{ reconfigured: false }],
+			changes: { iterChanges: (cb: any) => cb(0, 1, 0, 1, { toString: () => "2" }) },
+		} as any);
+		expect((plugin as any).engine).toBe(engine);
+	});
+
+	test("the shared engine behind the Evaluate command follows a toggle too", () => {
+		const before = EngineProvider.get();
+		expect(EngineProvider.get()).toBe(before);
+		UserSettings.getInstance().unitOfMeasurementProvider.enabled = false;
+		const after = EngineProvider.get();
+		expect(after).not.toBe(before);
+		expect(() => after.evaluateExpression("5 km in miles")).toThrow();
+	});
+});
