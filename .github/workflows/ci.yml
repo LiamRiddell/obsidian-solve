@@ -1,0 +1,41 @@
+name: CI
+
+# Builds and tests every pull request and every push to main, with the same
+# gate engine-update.yml applies to a new solve-engine release (`npm run
+# build`, then `npm run test:ci`), so a change is held to it before it merges
+# rather than only when an engine update happens to run.
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build-and-test:
+        name: Build and test
+        runs-on: ubuntu-24.04
+        timeout-minutes: 20
+
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Use Node.js
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Install
+              run: npm ci
+
+            - name: Build
+              run: npm run build
+
+            - name: Test
+              run: npm run test:ci

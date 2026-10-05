@@ -1,5 +1,5 @@
 import { ExpressionResultWidget, type ResultAnimationOptions } from "@app/codemirror/widgets/ExpressionResultWidget";
-import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
+import { createPluginEngine } from "@app/engine/createPluginEngine";
 import { FormattingSettingsMapper } from "@app/engine/FormattingSettingsMapper";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
@@ -93,11 +93,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 		MarkdownEditorViewPlugin.instances.set(view, this);
 
 		// Per-editor engine — see the field doc for why this is not shared.
-		const engine = new ExpressionEngine(
-			this.userSettings.settings.engine.locale,
-			false,
-			EngineConfigMapper.toEngineConfig(this.userSettings)
-		);
+		// Built as the shared engine is, Provider Management selection included.
+		const engine = createPluginEngine(this.userSettings);
 		this.engine = engine;
 		this.languageService = new LanguageService(engine);
 
@@ -528,7 +525,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 							const expression = trimmed.slice(0, -1).trimEnd();
 							if (expression) {
 								try {
-									const [result] = this.engine.evaluateLine(line.number, expression);
+									const result = this.engine.evaluateLine(line.number, expression);
 									if (result && result.type !== ValueType.Error) {
 										const isPending = result.type === ValueType.Pending;
 										const formattedResult = isPending ? "" : this.formatResult(result);
@@ -662,7 +659,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			if (!solve.expression.trim()) continue;
 
 			try {
-			const [result] = engine.evaluateLine(line.number, solve.expression);
+				const result = engine.evaluateLine(line.number, solve.expression);
 				if (result !== null && result !== undefined && result.type !== ValueType.Error) {
 					const isPending = result.type === ValueType.Pending;
 					const formattedResult = isPending ? "" : this.formatResult(result);
@@ -687,7 +684,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	// FIX #3: Activate evaluateLine() for on-demand evaluation
 	private evaluateLine(lineNumber: number, expression: string): string | undefined {
 		try {
-			const [value] = this.engine.evaluateLine(lineNumber, expression);
+			const value = this.engine.evaluateLine(lineNumber, expression);
 			return this.formatResult(value);
 		} catch {
 			return undefined;
@@ -698,7 +695,7 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	evaluateExpression(expression: string): Value | undefined {
 		try {
 			const engine = this.engine;
-			const [result] = engine.evaluateExpression(expression);
+			const result = engine.evaluateExpression(expression);
 			return result;
 		} catch {
 			return undefined;

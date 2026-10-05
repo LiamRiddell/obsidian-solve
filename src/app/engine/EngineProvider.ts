@@ -1,5 +1,5 @@
-import { ExpressionEngine } from "solve-engine/engine";
-import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
+import type { ExpressionEngine } from "solve-engine/engine";
+import { createPluginEngine } from "@app/engine/createPluginEngine";
 import UserSettings from "@app/settings/UserSettings";
 import { logger } from "@app/utilities/Logger";
 /**
@@ -28,11 +28,7 @@ class EngineProvider {
 
 		if (!this._instance || this._localeOverride !== locale) {
 			this._localeOverride = locale;
-		this._instance = new ExpressionEngine(locale, false,
-			EngineConfigMapper.toEngineConfig(settings),
-			undefined,
-			EngineConfigMapper.toPackages(settings)
-		);
+			this._instance = createPluginEngine(settings);
 		logger.debug(`[EngineProvider] Created new ExpressionEngine (locale=${locale})`);
 		}
 

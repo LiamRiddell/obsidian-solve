@@ -1,5 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "solve-engine/engine";
+import { BUILTIN_PACKAGES } from "solve-engine/packages";
 import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
 import type UserSettings from "@app/settings/UserSettings";
 
@@ -33,13 +34,13 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings();
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     // A simple expression should evaluate correctly
-    expect(engine.evaluateLine(1, "10 + 20")[0].toNumber()).toBe(30);
+    expect(engine.evaluateLine(1, "10 + 20").toNumber()).toBe(30);
 
     // A longer expression with many operations should also work
-    expect(engine.evaluateLine(1, "1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10")[0].toNumber()).toBe(55);
+    expect(engine.evaluateLine(1, "1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10").toNumber()).toBe(55);
   });
 
   // ── Low maxInstructions enforcement ───────────────────────────────────
@@ -49,7 +50,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxInstructions: 5 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     // "1+2+3+4+5" generates ~9 opcode dispatches (5x PUSH_NUMBER + 4x ADD)
     // which exceeds the 5-instruction limit
@@ -62,7 +63,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxInstructions: 5 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     // evaluateNumber catches errors and returns NaN
     expect(engine.evaluateNumber("1 + 2 + 3 + 4 + 5")).toBeNaN();
@@ -72,7 +73,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxInstructions: 5 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     // evaluateLines should report the instruction limit error per-line
     const results = engine.evaluateLines(["42", "1 + 2 + 3 + 4 + 5", "99"]);
@@ -94,7 +95,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxStackDepth: 1, maxInstructions: 100 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     // The mapped maxStackDepth=1 is present in config
     expect(engine.getConfig().vm.maxStackDepth).toBe(1);
@@ -109,9 +110,9 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxStackDepth: 10, maxInstructions: 100 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
-    expect(engine.evaluateLine(1, "max(1, 2, 3)")[0].toNumber()).toBe(3);
+    expect(engine.evaluateLine(1, "max(1, 2, 3)").toNumber()).toBe(3);
     expect(engine.getConfig().vm.maxStackDepth).toBe(10);
   });
 
@@ -126,7 +127,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     const engineConfig = engine.getConfig();
     expect(engineConfig.vm.maxStackDepth).toBe(customStack);
@@ -137,7 +138,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings();
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     const engineConfig = engine.getConfig();
     // Default values from DEFAULT_CONFIG
@@ -151,7 +152,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxInstructions: 777 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     const engineConfig = engine.getConfig();
     expect(engineConfig.vm.maxStackDepth).toBe(200); // default
@@ -162,7 +163,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxStackDepth: 42 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     const engineConfig = engine.getConfig();
     expect(engineConfig.vm.maxStackDepth).toBe(42); // overridden
@@ -176,7 +177,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxInstructions: 0 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     // Any expression that generates at least 1 instruction will throw
     expect(() => engine.evaluateLine(1, "42")).toThrow(/maximum of 0 instructions/i);
@@ -186,7 +187,7 @@ describe("EngineConfigMapper → ExpressionEngine integration", () => {
     const settings = createMockSettings({ maxStackDepth: 0, maxInstructions: 100 });
     const config = EngineConfigMapper.toEngineConfig(settings);
 
-    const engine = new ExpressionEngine("en", false, config);
+    const engine = new ExpressionEngine({ locale: "en", config, packages: BUILTIN_PACKAGES });
 
     // The mapped value is present in config
     expect(engine.getConfig().vm.maxStackDepth).toBe(0);

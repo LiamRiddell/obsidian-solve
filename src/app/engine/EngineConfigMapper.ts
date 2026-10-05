@@ -1,5 +1,4 @@
-import { DEFAULT_CONFIG } from "solve-engine/constants";
-import type { EngineConfig, ValidationConfig, VMConfig } from "solve-engine/constants";
+import type { EngineConfigOverride, ValidationConfig, VMConfig } from "solve-engine/constants";
 import {
 	BUILTIN_PACKAGES,
 	ARITHMETIC_PACKAGE,
@@ -34,53 +33,45 @@ import type UserSettings from "@app/settings/UserSettings";
  *
  * ```ts
  * import { EngineConfigMapper } from "@app/engine/EngineConfigMapper";
- * const engine = new ExpressionEngine(locale, false,
- *     EngineConfigMapper.toEngineConfig(UserSettings.getInstance()),
- *     undefined,
- *     EngineConfigMapper.toPackages(UserSettings.getInstance())
- * );
+ * const settings = UserSettings.getInstance();
+ * const engine = new ExpressionEngine({
+ *     locale: settings.settings.engine.locale,
+ *     config: EngineConfigMapper.toEngineConfig(settings),
+ *     packages: EngineConfigMapper.toPackages(settings),
+ * });
  * ```
  *
  * @module EngineConfigMapper
  */
 export class EngineConfigMapper {
     /**
-     * Build a `Partial<EngineConfig>` from the current Obsidian UserSettings.
+     * Build the engine's config override from the current Obsidian UserSettings.
      *
      * Only the fields that have corresponding Obsidian UI controls are mapped.
-     * Engine config sections without UI controls (date, dice, performance,
-     * worker, diagnostic) are omitted so the engine falls through to
-     * `DEFAULT_CONFIG` via its internal merge logic.
+     * solve-engine 2.x merges an override field by field within each section
+     * (`EngineConfigOverride`), so a field the plugin has no control for is
+     * simply left out and keeps the engine's own default. Sections without UI
+     * controls (date, dice, performance, worker, diagnostic) are omitted.
      *
      * @param settings - The current UserSettings singleton instance.
-     * @returns A partial engine config safe to pass to `ExpressionEngine`'s constructor.
+     * @returns The override to pass as `config` to `new ExpressionEngine({ ... })`.
      */
-    static toEngineConfig(settings: UserSettings): Partial<EngineConfig> {
-        const partial: Partial<EngineConfig> = {
+    static toEngineConfig(settings: UserSettings): EngineConfigOverride {
+        return {
             validation: this.mapValidation(settings),
             vm: this.mapVm(settings),
         };
-
-        // Each section included above is populated with every field from its
-        // corresponding mapping helper. This ensures no section is ever added
-        // as `{}`, which would override ALL defaults in that section with
-        // undefined values. Sections without UI controls (date, dice,
-        // performance, worker, diagnostic) are omitted entirely, so the
-        // engine falls through to DEFAULT_CONFIG via its merge logic.
-
-        return partial;
     }
 
     /**
-     * Build the `packages` array to pass as `ExpressionEngine`'s 5th
-     * constructor argument, filtering out any built-in package whose
-     * "Provider Management" toggle is off.
+     * Build the `packages` option to pass to `new ExpressionEngine({ ... })`,
+     * filtering out any built-in package whose "Provider Management" toggle
+     * is off.
      *
-     * Not part of `toEngineConfig()`'s `EngineConfig` return value — package
-     * selection is a separate constructor parameter (`packages?:
-     * IEnginePackage[]`), documented by the engine itself as the mechanism
-     * for "selective disable of built-in packages" — not something
-     * `EngineConfig` covers at all. `EngineProvider` was constructing every
+     * Not part of `toEngineConfig()`'s return value: package selection is
+     * the engine's separate `packages` option, documented by the engine
+     * itself as the mechanism for "selective disable of built-in packages",
+     * not something the config covers at all. `EngineProvider` was constructing every
      * engine with the default `packages` argument (i.e. `BUILTIN_PACKAGES`
      * unfiltered), so every "Provider Management" toggle existed in the
      * settings UI and did nothing.
@@ -119,7 +110,7 @@ export class EngineConfigMapper {
      * getters handle backward-compatible fallback for users whose saved
      * settings predate the `validation` field (added in Phase 1.7).
      */
-    private static mapValidation(settings: UserSettings): ValidationConfig {
+    private static mapValidation(settings: UserSettings): Partial<ValidationConfig> {
         return {
             maxExpressionLength: settings.engine.maxExpressionLength,
             maxComplexity: settings.engine.maxComplexity,
@@ -134,23 +125,15 @@ export class EngineConfigMapper {
      * Map VM limit settings from Obsidian UI to engine VMConfig.
      *
      * Uses the `EngineSettings` proxy class (settings.engine) for the same
-     * backward-compatible fallback reasons as mapValidation().
+     * backward-compatible fallback reasons as mapValidation(). The limits
+     * with no Obsidian UI control (collections, allocations, function calls,
+     * goal-seek iterations) are left out, so the engine keeps its own
+     * defaults for them and stays the one place those numbers live.
      */
-    private static mapVm(settings: UserSettings): VMConfig {
+    private static mapVm(settings: UserSettings): Partial<VMConfig> {
         return {
             maxStackDepth: settings.engine.maxStackDepth,
             maxInstructions: settings.engine.maxInstructions,
-            // Collection/allocation/function-call limits — no Obsidian UI
-            // control yet, same "future config toggle" situation as
-            // autoBalanceParens above. Fall back to the engine's own
-            // defaults rather than inventing numbers here.
-            maxCollectionSize: DEFAULT_CONFIG.vm.maxCollectionSize,
-            maxAllocatedElements: DEFAULT_CONFIG.vm.maxAllocatedElements,
-            maxFunctionCalls: DEFAULT_CONFIG.vm.maxFunctionCalls,
-            // Added by solve-engine 1.1.0, which made it a required field on
-            // VMConfig. Bounds the goal-seek search; same treatment as the
-            // three above, so the engine stays the one place the number lives.
-            maxGoalSeekIterations: DEFAULT_CONFIG.vm.maxGoalSeekIterations,
         };
     }
 }

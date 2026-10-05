@@ -7,10 +7,10 @@
 		"dev": "node esbuild.config.mjs",
 		"lint": "npx eslint --fix src",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"test": "node --expose-gc ./node_modules/.bin/jest --logHeapUsage",
-		"test:ci": "node --expose-gc ./node_modules/.bin/jest --no-coverage --logHeapUsage",
+		"test": "node --expose-gc ./node_modules/jest/bin/jest.js --logHeapUsage",
+		"test:ci": "node --expose-gc ./node_modules/jest/bin/jest.js --no-coverage --logHeapUsage",
 		"test:watch": "jest --watch",
-		"test:debug": "node --expose-gc ./node_modules/.bin/jest --no-coverage --verbose --logHeapUsage",
+		"test:debug": "node --expose-gc ./node_modules/jest/bin/jest.js --no-coverage --verbose --logHeapUsage",
 		"typecheck": "tsc --noEmit",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
@@ -40,6 +40,6 @@
 		"@tanstack/query-core": "^5.100.10",
 		"animate.css": "^4.1.1",
 		"convert": "^7.0.0",
-		"solve-engine": "1.1.0"
+		"solve-engine": "2.40.0"
 	}
 }
