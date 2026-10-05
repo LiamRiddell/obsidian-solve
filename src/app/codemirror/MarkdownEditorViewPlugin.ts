@@ -1,6 +1,7 @@
 import { ExpressionResultWidget, type ResultAnimationOptions } from "@app/codemirror/widgets/ExpressionResultWidget";
 import { createPluginEngine, engineSettingsKey } from "@app/engine/createPluginEngine";
 import { FormattingSettingsMapper } from "@app/engine/FormattingSettingsMapper";
+import { frontmatterLineCount, frontmatterResync, maskFrontmatter, maskLineChanges } from "@app/codemirror/Frontmatter";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
 import {
@@ -73,6 +74,14 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private engineKey: string;
 
 	/**
+	 * How many lines at the top of the note are frontmatter (#97). The
+	 * evaluator is given them as empty lines, and no decoration is drawn on
+	 * them, so the YAML is never read as calculation. Kept in step with every
+	 * edit, since an edit can open, close or move the block.
+	 */
+	private frontmatterLines = 0;
+
+	/**
 	 * Syntax-highlighting language service, sharing this pane's engine so it
 	 * recognizes exactly the same tokens (including any registered
 	 * package's custom ones) that real evaluation does — see
@@ -119,8 +128,10 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	 * @returns The decorations for the document as it now stands.
 	 */
 	private startDocument(view: EditorView, text: string): DecorationSet {
+		const lines = text.split("\n");
+		this.frontmatterLines = frontmatterLineCount(lines.length, (line) => lines[line - 1]);
 		this.docModel = new DocumentModel();
-		this.docModel.setDocument(text);
+		this.docModel.setDocument(maskFrontmatter(text));
 		const checkpointer = new VMCheckpointer(this.engine.getVM());
 		this.evaluator = new ThreeTierEvaluator(this.docModel, this.engine, checkpointer);
 
@@ -256,9 +267,18 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			// (which destroys all bytecode), apply only the changed lines.
 			// Unchanged lines keep their lineIds → bytecode survives → Tier 2.
 			const lineChanges = codeMirrorChangesToLineChanges(update);
+			// Frontmatter stays out of evaluation (#97): an inserted line that
+			// lands in the block reaches the evaluator empty, and when the edit
+			// moved the block itself, the lines that changed side are re-sent
+			// on their own, in the new document's line numbers.
+			const lines = documentLines(update.state?.doc ?? update.view.state.doc);
+			const frontmatterBefore = this.frontmatterLines;
+			this.frontmatterLines = frontmatterLineCount(lines.count, lines.text);
 			if (lineChanges.length > 0) {
-				this.evaluator.applyTransaction(lineChanges);
+				this.evaluator.applyTransaction(maskLineChanges(lineChanges, this.frontmatterLines));
 			}
+			const resync = frontmatterResync(frontmatterBefore, this.frontmatterLines, lines.count, lines.text);
+			if (resync) this.evaluator.applyTransaction([resync]);
 
 			// Surgical highlight-cache invalidation: evict only the lines the
 			// edit actually touched (derived from the same lineChanges just
@@ -498,6 +518,13 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 					continue;
 				}
 				seenLines.add(line.number);
+
+				// Frontmatter is metadata, not calculation (#97): no
+				// highlighting, no result, no inline solve.
+				if (line.number <= this.frontmatterLines) {
+					nextLineTextOffset += lineTextRaw.length;
+					continue;
+				}
 
 				const lineState = this.docModel.getLineAt(line.number);
 
@@ -796,6 +823,21 @@ export function solveCompletionSource(context: CompletionContext): CompletionRes
  * two new lines (`fromA === toA`, yet the surrounding text must still be
  * repartitioned around the inserted "\n").
  */
+/**
+ * A document's line count and line text, read through CodeMirror's `Text`
+ * when it has `lines` and `line()` (a real editor), or by splitting its text
+ * otherwise. Frontmatter detection reads the first line on every edit, which
+ * on a real document costs one line lookup.
+ */
+function documentLines(doc: { lines?: number; line?: (n: number) => { text: string }; toString(): string }): { count: number; text: (line: number) => string } {
+	if (typeof doc.lines === "number" && typeof doc.line === "function") {
+		const line = doc.line.bind(doc);
+		return { count: doc.lines, text: (n) => line(n).text };
+	}
+	const lines = doc.toString().split("\n");
+	return { count: lines.length, text: (n) => lines[n - 1] ?? "" };
+}
+
 export function codeMirrorChangesToLineChanges(update: ViewUpdate): LineChange[] {
 	const result: LineChange[] = [];
 	const oldDoc = update.startState.doc;

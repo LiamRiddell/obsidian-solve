@@ -7,10 +7,9 @@ import { EngineProvider } from "@app/engine/EngineProvider";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import { SettingTab } from "@app/settings/SettingsTab";
 import UserSettings from "@app/settings/UserSettings";
-import { minValueExcludingBelow } from "@app/utilities/Array";
+import { commitFullLine, commitInlineSolve } from "@app/commit/CommitLine";
 import { deepMerge } from "@app/utilities/DeepMerge";
 import { logger } from "@app/utilities/Logger";
-import { insertAtIndex } from "@app/utilities/String";
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import { autocompletion } from "@codemirror/autocomplete";
 import { Editor, Notice, Plugin } from "obsidian";
@@ -271,45 +270,12 @@ export default class SolvePlugin extends Plugin {
 			return;
 		}
 
-		const commentsBeginIndex = minValueExcludingBelow([
-			lineText.indexOf("#"),
-			lineText.indexOf("//"),
-		]);
-
-		if (commentsBeginIndex > -1) {
-			lineText = insertAtIndex(
-				lineText,
-				commentsBeginIndex,
-				` ${result} ` // Whitespace normalised for format.. Expression Result Comment
-			);
-		} else if (isInlineSolve) {
-			// Remove the equals from the result if the user does not want it.
-			const shouldIncludeEquals =
-				this.settings.inlineSolve.includeEqualsOnCommit &&
-				!this.settings.inlineSolve.includeExpressionOnCommit;
-
-			let resultString = result.toString();
-
-			resultString = shouldIncludeEquals
-				? resultString
-				: resultString.replace(/^= /, "");
-
-			// Build the replacement text, adding the source expression if required.
-			let replacementText = this.settings.inlineSolve
-				.includeExpressionOnCommit
-				? `${expression} = ${resultString}`
-				: `${resultString}`;
-
-			// Add the backticks if requested.
-			replacementText = this.settings.inlineSolve.includeBackticksOnCommit
-				? `\`${replacementText}\``
-				: replacementText;
-
-			// Build the full line replacement.
-			lineText = lineText.replace(`s\`${expression}\``, replacementText);
-		} else {
-			lineText = `${lineText?.trimEnd()} ${result}`;
-		}
+		// What a commit writes (#92): a full line keeps its value as a trailing
+		// comment, so the line and every line that reads it keep working; an
+		// inline solve replaces its span with plain text.
+		lineText = isInlineSolve
+			? commitInlineSolve(lineText, expression, result, this.settings.inlineSolve)
+			: commitFullLine(lineText, result);
 
 		this.app.workspace.activeEditor?.editor?.setLine(
 			lineNumberZeroIndexed,

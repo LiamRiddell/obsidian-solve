@@ -74,8 +74,18 @@ plugin from Community plugins.
 Each line is evaluated independently as you type. A result that resolves
 immediately, such as arithmetic, dates or units, renders inline right away.
 A result that depends on an async source, such as currency conversion or
-live weather, shows a pending state until it resolves. Click a result to
-commit it into the line as text.
+live weather, shows a pending state until it resolves.
+
+Click a result to commit it into the line. A full line keeps its value as a
+trailing comment, so `1000 + 200` becomes `1000 + 200 // = 1,200`: the line
+still evaluates, and so does every line that reads it. A line with a comment
+keeps the value inside it (`1000 + 200 // rent = 1,200`), and committing again
+replaces the earlier value. An inline solve is replaced by plain text, as its
+settings say.
+
+A note's frontmatter, the YAML properties between the `---` lines at the top,
+is never evaluated: its lines get no result and nothing to commit, and the
+lines below keep their numbers, so `line 9` still means line 9 of the note.
 
 Evaluation, caching and formatting all come from `solve-engine`. This
 repository wires that engine into Obsidian's editor (CodeMirror 6) and
