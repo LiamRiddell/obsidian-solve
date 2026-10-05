@@ -270,6 +270,21 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Interface").setHeading();
 
 		new Setting(this.containerEl)
+			.setName("Show why a line was not calculated")
+			.setDesc(
+				"A muted marker beside a calculation Solve declined, such as 5 kg to m, with the reason when you point at it or move focus to it. Prose and half-typed lines stay blank. On by default."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.interface.showRefusals)
+					.onChange(async (value) => {
+						this.plugin.settings.interface.showRefusals = value;
+
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
 			.setName("Show result at end of line")
 			.setDesc(
 				`Position results at the conclusion of lines, not text's termination. Be cautious when using this setting, as it may cause overlap between the displayed result and the text on the same line. Default is ${DEFAULT_SETTINGS.interface.renderResultEndOfLine}`

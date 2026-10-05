@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 
 	interface: {
 		renderResultEndOfLine: false,
+		showRefusals: true,
 		showStatusBarCompanion: true,
 		animateResults: true,
 		animationClass: "animate__pulse",

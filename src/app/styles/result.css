@@ -18,6 +18,22 @@
 	right: 0;
 }
 
+/*
+ * The default result colour, per theme, each at least 4.5:1 against the
+ * theme's background (WCAG AA for body text). The old default, #29ce99 at
+ * alpha e8, came to 1.9:1 on white. Style Settings' --solve-result-text still
+ * overrides both.
+ *   light: #0b7a57, 5.3:1 on #ffffff, 4.9:1 on #f6f6f6
+ *   dark:  #29ce99, 8.2:1 on #1e1e1e
+ */
+body {
+	--solve-result-text-default: #29ce99;
+}
+
+body.theme-light {
+	--solve-result-text-default: #0b7a57;
+}
+
 .os-result {
 	display: inline-flex;
 	margin: var(--solve-result-margin, 0 0 0 4px);
@@ -25,7 +41,7 @@
 	line-height: var(--line-height-normal);
 
 	/* Color Style Settings */
-	color: var(--solve-result-text, #29ce99e8);
+	color: var(--solve-result-text, var(--solve-result-text-default));
 	background-color: var(--solve-result-background, #22ce9900);
 
 	/* Font Style Settings */
@@ -49,6 +65,28 @@
 	-webkit-font-smoothing: antialiased;
 	backface-visibility: hidden;
 	transform: translate3d(0, 0, 0);
+}
+
+/*
+ * The result is a button (#98), so it can be reached and used from the
+ * keyboard; these undo the theme's button chrome so it still reads as the
+ * answer beside the line, not as a control bar.
+ */
+button.os-result {
+	appearance: none;
+	box-shadow: none;
+	height: auto;
+	min-height: 0;
+	font-weight: inherit;
+	letter-spacing: inherit;
+	vertical-align: baseline;
+	cursor: pointer;
+}
+
+.os-result:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+	text-decoration-color: var(--solve-result-hover-underline-color, currentColor);
 }
 
 .os-result:hover {
@@ -81,6 +119,13 @@
 	line-height: 1;
 }
 
+/* No spin for a reader who has asked for less motion (#98). */
+@media (prefers-reduced-motion: reduce) {
+	.os-result__spinner {
+		animation: none;
+	}
+}
+
 @keyframes os-spin {
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
@@ -88,4 +133,57 @@
 
 .os-result__pending-label {
 	font-style: italic;
+}
+
+/* ── Refusal marker (#96) ───────────────────────────────────────── */
+
+/*
+ * A muted marker beside a line Solve declined to calculate. The reason shows
+ * on pointer hover and on keyboard focus alike, never on the pointer alone.
+ */
+.os-refusal {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 6px;
+	width: 1.2em;
+	height: 1.2em;
+	border-radius: 50%;
+	border: 1px solid var(--text-faint);
+	color: var(--text-muted);
+	font-family: var(--font-interface);
+	font-size: 0.75em;
+	line-height: 1;
+	cursor: help;
+	vertical-align: middle;
+}
+
+.os-refusal:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+
+.os-refusal__message {
+	display: none;
+	position: absolute;
+	left: 0;
+	top: calc(100% + 4px);
+	z-index: var(--layer-tooltip, 40);
+	width: max-content;
+	max-width: 40ch;
+	padding: 4px 8px;
+	border-radius: var(--radius-s);
+	background-color: var(--background-secondary);
+	color: var(--text-normal);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-smaller);
+	line-height: var(--line-height-normal);
+	white-space: normal;
+	cursor: default;
+}
+
+.os-refusal:hover .os-refusal__message,
+.os-refusal:focus .os-refusal__message {
+	display: block;
 }

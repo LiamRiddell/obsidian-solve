@@ -694,3 +694,46 @@ describe("MarkdownEditorViewPlugin — a settings change reaches an open pane (#
 		expect(() => after.evaluateExpression("5 km in miles")).toThrow();
 	});
 });
+
+describe("MarkdownEditorViewPlugin — a named refusal gets a muted marker (#96)", () => {
+	afterEach(() => {
+		EngineProvider.reset();
+		UserSettings.getInstance().interface.showRefusals = true;
+	});
+
+	/** The refusal markers in a plugin's decorations, as [line, code]. */
+	function markers(plugin: MarkdownEditorViewPlugin): [number, string][] {
+		const out: [number, string][] = [];
+		(plugin.decorations as any).between(0, 1e9, (_f: number, _t: number, deco: any) => {
+			const w = deco?.spec?.widget;
+			if (w && typeof w.code === "string") out.push([w.lineNumber, w.code]);
+		});
+		return out;
+	}
+
+	test("a refusal is marked, and prose and a half-typed line are not", () => {
+		const view = createMockView(["Groceries", "5 kg to m", "Shopping list:", "1 +", "1 + 2", "5 km + 3 kg"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		expect(markers(plugin)).toEqual([[2, "INCOMPATIBLE_UNITS"], [6, "INCOMPATIBLE_UNITS"]]);
+		// A successful line keeps its result and gets no marker.
+		expect(countResultWidgets(plugin)).toBe(3);
+		plugin.destroy();
+	});
+
+	test("the setting turns markers off, and a reconfigure applies it to the open note", () => {
+		const view = createMockView(["5 kg to m"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		expect(markers(plugin)).toHaveLength(1);
+		UserSettings.getInstance().interface.showRefusals = false;
+		plugin.update({ docChanged: false, viewportChanged: false, view, state: { doc: view.state.doc }, startState: { doc: view.state.doc }, transactions: [{ reconfigured: true }], changes: { iterChanges: () => {} } } as any);
+		expect(markers(plugin)).toHaveLength(0);
+		plugin.destroy();
+	});
+
+	test("adversarial: prototype words and markup as a line are prose, not refusals", () => {
+		const view = createMockView(["constructor", "__proto__", "<script>alert(1)</script>", "toString"]);
+		const plugin = new MarkdownEditorViewPlugin(view as any);
+		expect(markers(plugin)).toEqual([]);
+		plugin.destroy();
+	});
+});
