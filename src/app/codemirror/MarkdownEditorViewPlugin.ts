@@ -1,5 +1,5 @@
 import { ExpressionResultWidget, type ResultAnimationOptions } from "@app/codemirror/widgets/ExpressionResultWidget";
-import { createPluginEngine } from "@app/engine/createPluginEngine";
+import { createPluginEngine, engineSettingsKey } from "@app/engine/createPluginEngine";
 import { FormattingSettingsMapper } from "@app/engine/FormattingSettingsMapper";
 import { EPluginEvent } from "@app/constants/EPluginEvent";
 import { pluginEventBus } from "@app/eventbus/PluginEventBus";
@@ -66,6 +66,13 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	private engine: ExpressionEngine;
 
 	/**
+	 * The settings this pane's engine was built from (`engineSettingsKey`),
+	 * so a settings change that reaches the editor rebuilds the engine only
+	 * when the engine would come out different (#94).
+	 */
+	private engineKey: string;
+
+	/**
 	 * Syntax-highlighting language service, sharing this pane's engine so it
 	 * recognizes exactly the same tokens (including any registered
 	 * package's custom ones) that real evaluation does — see
@@ -94,34 +101,69 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 
 		// Per-editor engine — see the field doc for why this is not shared.
 		// Built as the shared engine is, Provider Management selection included.
-		const engine = createPluginEngine(this.userSettings);
-		this.engine = engine;
-		this.languageService = new LanguageService(engine);
+		this.engine = createPluginEngine(this.userSettings);
+		this.engineKey = engineSettingsKey(this.userSettings);
+		this.languageService = new LanguageService(this.engine);
 
-		// ── Initialize DocumentModel + ThreeTierEvaluator ────────────
+		this.currentDoc = view.state.doc;
+		this.decorations = this.startDocument(view, view.state.doc.toString());
+	}
+
+	/**
+	 * Evaluate a document from scratch on this pane's current engine: a new
+	 * DocumentModel and evaluator over `text`, a first full evaluation, the
+	 * async event stream and result mirror, and background compiles for the
+	 * lines beyond the viewport. Shared by the constructor, a document switch
+	 * and an engine rebuild, which each start a document over.
+	 *
+	 * @returns The decorations for the document as it now stands.
+	 */
+	private startDocument(view: EditorView, text: string): DecorationSet {
 		this.docModel = new DocumentModel();
-		this.docModel.setDocument(view.state.doc.toString());
-		const checkpointer = new VMCheckpointer(engine.getVM());
-		this.evaluator = new ThreeTierEvaluator(this.docModel, engine, checkpointer);
+		this.docModel.setDocument(text);
+		const checkpointer = new VMCheckpointer(this.engine.getVM());
+		this.evaluator = new ThreeTierEvaluator(this.docModel, this.engine, checkpointer);
 
 		// First full evaluation to populate bytecode cache + checkpoints
 		this.keystrokeController = new AbortController();
 		abortLogger.keystrokeCreated();
 		this.evaluator.evaluateAll(this.keystrokeController.signal);
 
-		// Dispatch background compilation for lines beyond viewport
-		this.evaluator.dispatchBackgroundCompiles(this.getViewportFromView(view));
-
 		// Subscribe to batcher event stream — the SINGLE async resolution pipeline.
 		// Uses the Web Streams API via getEventStream().getReader() for built-in
-		// cancellation, backpressure, and proper resource cleanup.
-		const eventStream = engine.getEventStream();
-		this.eventStreamReader = eventStream.getReader();
+		// cancellation, backpressure, and proper resource cleanup. A reader left
+		// from a previous document is cancelled first: engine.clear() closes the
+		// old stream (readers get a clean done) and creates a fresh one.
+		if (this.eventStreamReader) {
+			try { this.eventStreamReader.cancel(); } catch { /* already closed */ }
+		}
+		this.eventStreamReader = this.engine.getEventStream().getReader();
 		this.startEventStreamReader(view);
 		this.wireAsyncResultMirror();
 
-		this.currentDoc = view.state.doc;
-		this.decorations = this.buildDecorations(view);
+		const decorations = this.buildDecorations(view);
+
+		// Dispatch background compilation for lines beyond viewport
+		this.evaluator.dispatchBackgroundCompiles(this.getViewportFromView(view));
+		return decorations;
+	}
+
+	/**
+	 * Replace this pane's engine with one built from the current settings and
+	 * evaluate the document again on it. A Provider Management toggle or a
+	 * limit changed in the settings tab reaches an open note this way: the
+	 * settings save reconfigures the editor, and CodeMirror keeps this view
+	 * plugin's instance across a reconfigure, so without it an open pane kept
+	 * the engine it was built with (#94).
+	 */
+	private rebuildEngine(view: EditorView): void {
+		this.abortKeystroke("Engine settings changed");
+		this.evaluator.terminateWorker();
+		this.engine.clear();
+		this.engine = createPluginEngine(this.userSettings);
+		this.engineKey = engineSettingsKey(this.userSettings);
+		this.languageService = new LanguageService(this.engine);
+		this.decorations = this.startDocument(view, view.state.doc.toString());
 	}
 
 	/**
@@ -149,6 +191,16 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 	}
 
 	update(update: ViewUpdate) {
+		// A settings save reconfigures the editor (`updateOptions`). Rebuild the
+		// engine when the settings it is built from changed, and only then: a
+		// reconfigure also follows unrelated settings, and an ordinary keystroke
+		// never reconfigures, so typing never pays for the comparison.
+		if (update.transactions?.some((tr) => tr.reconfigured) && engineSettingsKey(this.userSettings) !== this.engineKey) {
+			this.currentDoc = update.state.doc;
+			this.rebuildEngine(update.view);
+			return;
+		}
+
 		// Detect document switch — clear this pane's engine to prevent
 		// variable leaking between documents.
 		//
@@ -184,28 +236,8 @@ export class MarkdownEditorViewPlugin implements PluginValue {
 			// Terminate old evaluator's worker before recreating
 			this.evaluator.terminateWorker();
 
-			// Recreate evaluator for new document
-			this.docModel = new DocumentModel();
-			this.docModel.setDocument(newDoc.toString());
-			const checkpointer = new VMCheckpointer(this.engine.getVM());
-			this.evaluator = new ThreeTierEvaluator(this.docModel, this.engine, checkpointer);
-			this.keystrokeController = new AbortController();
-			abortLogger.keystrokeCreated();
-			this.evaluator.evaluateAll(this.keystrokeController.signal);
-
-			// Re-subscribe to the event stream — engine.clear() closes the
-			// old stream (readers get a clean done) and creates a fresh one.
-			if (this.eventStreamReader) {
-				try { this.eventStreamReader.cancel(); } catch { /* already closed */ }
-			}
-			this.eventStreamReader = this.engine.getEventStream().getReader();
-			this.startEventStreamReader(update.view);
-			this.wireAsyncResultMirror();
-
-			this.decorations = this.buildDecorations(update.view);
-
-			// Background compilation for new document
-			this.evaluator.dispatchBackgroundCompiles(this.getViewportFromView(update.view));
+			// Recreate the evaluator for the new document on the same engine.
+			this.decorations = this.startDocument(update.view, newDoc.toString());
 			return; // Skip docChanged/viewportChanged path — already handled above
 		}
 
