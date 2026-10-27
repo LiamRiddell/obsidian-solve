@@ -12,6 +12,12 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	engine: {
 		explicitMode: false,
 		locale: "en",
+		// Follows the reader's machine, so a US reader's 12/25/2026 is read
+		// month first and a UK reader's day first, rather than a line going
+		// blank for one of them.
+		dateInputOrder: "locale",
+		networkEnabled: true,
+		warmup: true,
 		validation: {
 			maxExpressionLength: 2000,
 			maxComplexity: 500,
@@ -51,10 +57,6 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 		includeEqualsOnCommit: true,
 	},
 
-	variable: {
-		renderResult: true,
-	},
-
 	// Providers
 	arithmeticProvider: {
 		enabled: true,
@@ -84,6 +86,9 @@ export const DEFAULT_SETTINGS: IPluginSettings = {
 	// Results
 	numberResult: {
 		decimalSeparatorLocale: "en-US",
+	},
+	dateResult: {
+		format: "long",
 	},
 	floatResult: {
 		enableSeperator: false,

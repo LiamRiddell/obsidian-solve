@@ -4,6 +4,8 @@ import { SUPPORTED_SEPARATOR_LOCALES } from "@app/constants/SupportedSeparators"
 import SolvePlugin from "@app/main";
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import { PROVIDER_TOGGLES } from "@app/settings/ProviderToggles";
+import type { DateInputOrder } from "@app/settings/definition/IEngineSettings";
+import type { DateOutputFormat } from "@app/settings/definition/IDateResultSettings";
 import type { SyntaxHighlightPresetName } from "@app/settings/definition/ISyntaxHighlightSettings";
 import {
 	CATEGORY_LABELS,
@@ -39,13 +41,13 @@ export class SettingTab extends PluginSettingTab {
 		// this.displaySyntaxHighlightSettings();
 		// this.displayCompletionSettings();
 		this.displayInlineSolveSettings();
-		// this.displayVariablesSettings(); — hidden for now, see note above.
 
 		// Providers Settings
 		// this.displayProviderManagementSettings(); — hidden for now, see note above.
 
 		// Reuslts
 		this.displayNumberSettings();
+		this.displayDateSettings();
 		this.displayFloatSettings();
 		this.displayPercentageSettings();
 		this.displayHexSettings();
@@ -76,6 +78,54 @@ export class SettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.engine.explicitMode = value;
 
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Date input order")
+			.setDesc(
+				"How a date written in numbers is read. 'Your computer's order' follows this machine, so 12/25/2026 works for a US reader and 25/12/2026 for a UK one. 'Automatic' reads day first and refuses a date that only works month first, with the reason shown beside the line. The others fix the order. Default is your computer's order."
+			)
+			.addDropdown((dropdown) => {
+				dropdown.addOptions({
+					locale: "Your computer's order",
+					auto: "Automatic",
+					DMY: "Day, month, year",
+					MDY: "Month, day, year",
+					YMD: "Year, month, day",
+				});
+				dropdown.setValue(this.plugin.settings.engine.dateInputOrder);
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.engine.dateInputOrder = value as DateInputOrder;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(this.containerEl)
+			.setName("Live data")
+			.setDesc(
+				`Let lines fetch live values: exchange rates, the weather and stock prices. Off, a line that needs one is refused with the reason shown, and nothing is sent anywhere. Default is ${DEFAULT_SETTINGS.engine.networkEnabled}.`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.engine.networkEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.engine.networkEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.containerEl)
+			.setName("Warm up the engine")
+			.setDesc(
+				`Run a few throwaway lines when a note opens, so the first thing you type is not the slow one. It costs a few milliseconds per note. Default is ${DEFAULT_SETTINGS.engine.warmup}.`
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.engine.warmup)
+					.onChange(async (value) => {
+						this.plugin.settings.engine.warmup = value;
 						await this.plugin.saveSettings();
 					})
 			);
@@ -217,25 +267,6 @@ export class SettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.inlineSolve.includeEqualsOnCommit =
 							value;
-
-						await this.plugin.saveSettings();
-					})
-			);
-	}
-
-	displayVariablesSettings() {
-		new Setting(this.containerEl).setName("Variable").setHeading();
-
-		new Setting(this.containerEl)
-			.setName("Show variable result")
-			.setDesc(
-				`Solve will display results at the end of variables. Default is ${DEFAULT_SETTINGS.variable.renderResult}`
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.variable.renderResult)
-					.onChange(async (value) => {
-						this.plugin.settings.variable.renderResult = value;
 
 						await this.plugin.saveSettings();
 					})
@@ -422,6 +453,29 @@ export class SettingTab extends PluginSettingTab {
 				dropdown.onChange(async (value) => {
 					this.plugin.settings.numberResult.decimalSeparatorLocale =
 						value;
+					await this.plugin.saveSettings();
+				});
+			});
+	}
+
+	displayDateSettings() {
+		new Setting(this.containerEl).setName("Date Result").setHeading();
+
+		new Setting(this.containerEl)
+			.setName("Date format")
+			.setDesc(
+				"How a date is written. The long form is 'Friday, December 25, 2026'; the numbers are 2026-12-25 (ISO), 25/12/2026 (day first) and 12/25/2026 (month first). Default is the long form."
+			)
+			.addDropdown((dropdown) => {
+				dropdown.addOptions({
+					long: "Long (Friday, December 25, 2026)",
+					iso: "ISO (2026-12-25)",
+					dmy: "Day first (25/12/2026)",
+					mdy: "Month first (12/25/2026)",
+				});
+				dropdown.setValue(this.plugin.settings.dateResult.format);
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.dateResult.format = value as DateOutputFormat;
 					await this.plugin.saveSettings();
 				});
 			});

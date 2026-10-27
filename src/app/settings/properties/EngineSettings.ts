@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from "@app/settings/PluginSettings";
 import UserSettings from "@app/settings/UserSettings";
+import { DATE_INPUT_ORDERS, type DateInputOrder } from "@app/settings/definition/IEngineSettings";
 
 export class EngineSettings {
 	constructor(private parent: UserSettings) {}
@@ -13,6 +14,33 @@ export class EngineSettings {
 
 	set explicitMode(value: boolean) {
 		this.parent.settings.engine.explicitMode = value;
+	}
+
+	get dateInputOrder(): DateInputOrder {
+		const saved = this.parent.settings.engine.dateInputOrder;
+		// A saved value that is not an order (an older or hand-edited file)
+		// falls back to the default rather than reaching the engine.
+		return DATE_INPUT_ORDERS.includes(saved) ? saved : DEFAULT_SETTINGS.engine.dateInputOrder;
+	}
+
+	set dateInputOrder(value: DateInputOrder) {
+		this.parent.settings.engine.dateInputOrder = value;
+	}
+
+	get networkEnabled(): boolean {
+		return this.parent.settings.engine.networkEnabled ?? DEFAULT_SETTINGS.engine.networkEnabled;
+	}
+
+	set networkEnabled(value: boolean) {
+		this.parent.settings.engine.networkEnabled = value;
+	}
+
+	get warmup(): boolean {
+		return this.parent.settings.engine.warmup ?? DEFAULT_SETTINGS.engine.warmup;
+	}
+
+	set warmup(value: boolean) {
+		this.parent.settings.engine.warmup = value;
 	}
 
 	get maxExpressionLength(): number {

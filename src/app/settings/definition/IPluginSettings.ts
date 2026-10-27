@@ -11,11 +11,11 @@ import { IInterfaceSettings } from "@app/settings/definition/IInterfaceSettings"
 import { ISyntaxHighlightSettings } from "@app/settings/definition/ISyntaxHighlightSettings";
 import { ICompletionSettings } from "@app/settings/definition/ICompletionSettings";
 import { INumberResultSettings } from "@app/settings/definition/INumberResultSettings";
+import { IDateResultSettings } from "@app/settings/definition/IDateResultSettings";
 import { IPercentageProviderSettings } from "@app/settings/definition/IPercentageArithmeticProviderSettings";
 import { IPercentageResultSettings } from "@app/settings/definition/IPercentageResultSettings";
 import { IUnitOfMeasurementProviderSettings } from "@app/settings/definition/IUnitOfMeasurementProviderSettings";
 import { IUnitOfMeasurementResultSettings } from "@app/settings/definition/IUnitOfMeasurementResultSettings";
-import { IVariableSettings } from "@app/settings/definition/IVariableSettings";
 import { IVectorArithmeticProviderSettings } from "@app/settings/definition/IVectorArithmeticProviderSettings";
 
 export interface IPluginSettings {
@@ -24,7 +24,6 @@ export interface IPluginSettings {
 	syntaxHighlight: ISyntaxHighlightSettings;
 	completions: ICompletionSettings;
 	inlineSolve: IInlineSolveSettings;
-	variable: IVariableSettings;
 
 	// Providers
 	arithmeticProvider: IArithmeticProviderSettings;
@@ -38,6 +37,7 @@ export interface IPluginSettings {
 
 	// Results
 	numberResult: INumberResultSettings;
+	dateResult: IDateResultSettings;
 	floatResult: IFloatResultSettings;
 	percentageResult: IPercentageResultSettings;
 	hexResult: IHexResultSettings;
