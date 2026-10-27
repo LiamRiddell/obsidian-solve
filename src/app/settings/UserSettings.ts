@@ -13,11 +13,11 @@ import { InterfaceSettings } from "@app/settings/properties/InterfaceSettings";
 import { SyntaxHighlightSettings } from "@app/settings/properties/SyntaxHighlightSettings";
 import { CompletionSettings } from "@app/settings/properties/CompletionSettings";
 import { NumberResultSettings } from "@app/settings/properties/NumberResultSettings";
+import { DateResultSettings } from "@app/settings/properties/DateResultSettings";
 import { PercentageArithmeticProviderSettings } from "@app/settings/properties/PercentageArithmeticProviderSettings";
 import { PercentageResultSettings } from "@app/settings/properties/PercentageResultSettings";
 import { UnitOfMeasurementProviderSettings } from "@app/settings/properties/UnitOfMeasurementProviderSettings";
 import { UnitOfMeasurementResultSettings } from "@app/settings/properties/UnitOfMeasurementResultSettings";
-import { VariableSettings } from "@app/settings/properties/VariableSettings";
 import { VectorArithmeticProviderSettings } from "@app/settings/properties/VectorArithmeticProviderSettings";
 
 /**
@@ -36,7 +36,6 @@ export default class UserSettings {
 	public readonly syntaxHighlight: SyntaxHighlightSettings;
 	public readonly completions: CompletionSettings;
 	public readonly inlineSolve: InlineSolveSettings;
-	public readonly variable: VariableSettings;
 
 	// Provider Settings
 	public readonly arithmeticProvider: ArithmeticProviderSettings;
@@ -50,6 +49,7 @@ export default class UserSettings {
 
 	// Result Settings
 	public readonly numberResult: NumberResultSettings;
+	public readonly dateResult: DateResultSettings;
 	public readonly floatResult: FloatResultSettings;
 	public readonly percentageResult: PercentageResultSettings;
 	public readonly hexResult: HexResultSettings;
@@ -64,7 +64,6 @@ export default class UserSettings {
 		this.syntaxHighlight = new SyntaxHighlightSettings(this);
 		this.completions = new CompletionSettings(this);
 		this.inlineSolve = new InlineSolveSettings(this);
-		this.variable = new VariableSettings(this);
 
 		// Providers
 		this.arithmeticProvider = new ArithmeticProviderSettings(this);
@@ -85,6 +84,7 @@ export default class UserSettings {
 
 		// Results
 		this.numberResult = new NumberResultSettings(this);
+		this.dateResult = new DateResultSettings(this);
 		this.floatResult = new FloatResultSettings(this);
 		this.percentageResult = new PercentageResultSettings(this);
 		this.hexResult = new HexResultSettings(this);

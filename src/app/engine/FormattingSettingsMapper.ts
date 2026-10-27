@@ -19,12 +19,12 @@ import type UserSettings from "@app/settings/UserSettings";
  *
  * `FormattingSettings` covers exactly five sections — `numberResult`,
  * `floatResult`, `percentageResult`, `hexResult`, `unitOfMeasurementResult`
- * — there is no equivalent for `integerResult` or `datetimeResult` (the
- * engine has no separate integer-formatting path — `ValueType.Number` is
- * unified, and `autoFormatIntegerOrFloat()` derives whether to show
- * decimals from the value itself — and datetime rendering is fixed/
- * locale-only). Those settings sections were removed rather than mapped
- * here; see the SettingsTab.ts history for the underlying audit.
+ * — there is no equivalent for `integerResult` (the engine has no separate
+ * integer-formatting path — `ValueType.Number` is unified, and
+ * `autoFormatIntegerOrFloat()` derives whether to show decimals from the
+ * value itself). That settings section was removed rather than mapped here.
+ * A date is written in the form `dateResult.format` names (`long`, `iso`,
+ * `dmy` or `mdy`), which the engine reads from a sixth section.
  *
  * ### Usage
  *
@@ -51,6 +51,9 @@ export class FormattingSettingsMapper {
 			},
 			unitOfMeasurementResult: {
 				decimalPlaces: settings.unitOfMeasurementResult.decimalPlaces,
+			},
+			dateResult: {
+				format: settings.dateResult.format,
 			},
 		};
 	}

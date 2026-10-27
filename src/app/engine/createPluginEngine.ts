@@ -25,11 +25,12 @@ export function createPluginEngine(settings: UserSettings): ExpressionEngine {
 	const config = EngineConfigMapper.toEngineConfig(settings);
 	const packages = EngineConfigMapper.toPackages(settings);
 	const locale = settings.settings.engine.locale;
+	const warmup = settings.engine.warmup;
 	try {
-		return new ExpressionEngine({ locale, config, packages });
+		return new ExpressionEngine({ locale, config, packages, warmup });
 	} catch (error) {
 		logger.warn(`[Solve] The engine could not be built with the locale ${JSON.stringify(locale)}, so English is used: ${(error as Error).message}`);
-		return new ExpressionEngine({ locale: "en", config, packages });
+		return new ExpressionEngine({ locale: "en", config, packages, warmup });
 	}
 }
 
@@ -47,5 +48,6 @@ export function engineSettingsKey(settings: UserSettings): string {
 		locale: settings.settings.engine.locale,
 		config: EngineConfigMapper.toEngineConfig(settings),
 		packages: EngineConfigMapper.toPackages(settings).map((pkg) => pkg.name),
+		warmup: settings.engine.warmup,
 	});
 }

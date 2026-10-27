@@ -90,7 +90,9 @@ describe("an engine built the plugin's way", () => {
 
 	test("the override names only the fields the plugin sets", () => {
 		const override = EngineConfigMapper.toEngineConfig(settingsWith());
-		expect(Object.keys(override).sort()).toEqual(["validation", "vm"]);
+		expect(Object.keys(override).sort()).toEqual(["date", "network", "validation", "vm"]);
+		expect(Object.keys(override.date ?? {})).toEqual(["inputOrder"]);
+		expect(Object.keys(override.network ?? {})).toEqual(["enabled"]);
 		expect(Object.keys(override.vm ?? {}).sort()).toEqual(["maxInstructions", "maxStackDepth"]);
 	});
 });

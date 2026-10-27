@@ -58,11 +58,13 @@ export class EngineConfigMapper {
     /**
      * Build the engine's config override from the current Obsidian UserSettings.
      *
-     * Only the fields that have corresponding Obsidian UI controls are mapped.
-     * solve-engine 2.x merges an override field by field within each section
-     * (`EngineConfigOverride`), so a field the plugin has no control for is
-     * simply left out and keeps the engine's own default. Sections without UI
-     * controls (date, dice, performance, worker, diagnostic) are omitted.
+     * Only the fields that have corresponding Obsidian UI controls are mapped:
+     * the safety limits, the order a numeric date is read in, and whether live
+     * lookups may fetch. solve-engine 2.x merges an override field by field
+     * within each section (`EngineConfigOverride`), so a field the plugin has
+     * no control for is simply left out and keeps the engine's own default.
+     * Sections without UI controls (dice, performance, worker, diagnostic) are
+     * omitted.
      *
      * @param settings - The current UserSettings singleton instance.
      * @returns The override to pass as `config` to `new ExpressionEngine({ ... })`.
@@ -71,6 +73,8 @@ export class EngineConfigMapper {
         return {
             validation: this.mapValidation(settings),
             vm: this.mapVm(settings),
+            date: { inputOrder: settings.engine.dateInputOrder },
+            network: { enabled: settings.engine.networkEnabled },
         };
     }
 

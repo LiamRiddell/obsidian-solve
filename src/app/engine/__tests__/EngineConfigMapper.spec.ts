@@ -48,9 +48,13 @@ function createMockSettings(overrides?: {
   maxNestingDepth?: number;
   maxStackDepth?: number;
   maxInstructions?: number;
+  dateInputOrder?: string;
+  networkEnabled?: boolean;
 }): UserSettings {
   return {
     engine: {
+      dateInputOrder: overrides?.dateInputOrder ?? "locale",
+      networkEnabled: overrides?.networkEnabled ?? true,
       maxExpressionLength: overrides?.maxExpressionLength ?? 2000,
       maxComplexity: overrides?.maxComplexity ?? 500,
       maxNestingDepth: overrides?.maxNestingDepth ?? 50,
@@ -135,6 +139,14 @@ function createBackwardCompatMockSettings(sections: {
       },
       get maxInstructions() {
         return engineData.vm?.maxInstructions ?? DEFAULT_SETTINGS.engine.vm.maxInstructions;
+      },
+      // Settings that predate the date order and live-data options carry
+      // neither; the proxy answers the defaults.
+      get dateInputOrder() {
+        return DEFAULT_SETTINGS.engine.dateInputOrder;
+      },
+      get networkEnabled() {
+        return DEFAULT_SETTINGS.engine.networkEnabled;
       },
     },
   } as unknown as UserSettings;
@@ -221,11 +233,10 @@ describe("EngineConfigMapper", () => {
 
     // ── Isolation ─────────────────────────────────────────────────────
 
-    test("does not include non-mapped engine config sections (date, dice, etc.)", () => {
+    test("does not include non-mapped engine config sections (dice, etc.)", () => {
       const settings = createMockSettings();
       const config = EngineConfigMapper.toEngineConfig(settings);
 
-      expect(config).not.toHaveProperty("date");
       expect(config).not.toHaveProperty("dice");
       expect(config).not.toHaveProperty("performance");
       expect(config).not.toHaveProperty("worker");
@@ -266,12 +277,23 @@ describe("EngineConfigMapper", () => {
 
     // ── Return shape ──────────────────────────────────────────────────
 
-    test("returns only the two mapped sections (validation, vm)", () => {
+    test("returns only the mapped sections (validation, vm, date, network)", () => {
       const settings = createMockSettings();
       const config = EngineConfigMapper.toEngineConfig(settings);
 
       const keys = Object.keys(config);
-      expect(keys).toEqual(["validation", "vm"]);
+      expect(keys).toEqual(["validation", "vm", "date", "network"]);
+    });
+
+    test("the date and network sections name only the one field each, so the engine keeps the rest", () => {
+      const config = EngineConfigMapper.toEngineConfig(createMockSettings({ dateInputOrder: "MDY", networkEnabled: false }));
+
+      expect(config.date).toEqual({ inputOrder: "MDY" });
+      expect(config.network).toEqual({ enabled: false });
+    });
+
+    test.each(["auto", "locale", "DMY", "MDY", "YMD"])("the date order %s reaches the engine's config as it is", (order) => {
+      expect(EngineConfigMapper.toEngineConfig(createMockSettings({ dateInputOrder: order })).date?.inputOrder).toBe(order);
     });
 
     test("return value is a Partial<EngineConfig> — not the full EngineConfig", () => {
