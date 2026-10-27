@@ -1,12 +1,21 @@
 name: Pick up a new solve-engine release
 
-# Two ways in:
-#   · repository_dispatch, fired by solve-engine's own publish workflow once
-#     a release has actually finished publishing to npm (see that repo's
-#     .github/workflows/publish.yml) - the normal path.
-#   · workflow_dispatch, for testing this workflow directly without needing
+# Three ways in:
+#   · schedule, once a day: the normal path. It installs whatever solve-engine
+#     is latest on npm and does nothing when that is already the installed
+#     version, so a quiet day costs a minute and changes nothing. The engine
+#     used to tell this repository when it released (a repository_dispatch from
+#     its publish workflow), but that notification failed with a 403 on every
+#     release and was removed from the engine on 2026-08-30 (solve-engine
+#     #267), so nothing starts this workflow when a release lands any more.
+#   · repository_dispatch, kept for the day the engine sends one again. It
+#     carries the version to install.
+#   · workflow_dispatch, for running this by hand, or for testing it without
 #     a real solve-engine release. Leave `version` blank to pick up
 #     whatever's currently on the npm registry.
+#
+# Every solve-engine release that passes the gate below becomes a patch
+# release of the plugin, minors and majors included.
 #
 # This only gets as far as bumping obsidian-solve's own version and pushing
 # a tag if `npm run build` and the test suite both pass against the newly
@@ -19,6 +28,9 @@ name: Pick up a new solve-engine release
 # release itself. If it did, both this job and release.yml would race to
 # create the same one and whichever lost would fail the run.
 on:
+    schedule:
+        # Not on the hour, when scheduled runs are most likely to be delayed.
+        - cron: "23 5 * * *"
     repository_dispatch:
         types: [solve-engine-released]
     workflow_dispatch:
